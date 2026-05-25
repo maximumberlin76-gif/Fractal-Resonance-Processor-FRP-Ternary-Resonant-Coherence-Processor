@@ -150,6 +150,22 @@ where:
 
 If dissipative extraction exceeds coherence accumulation, stable mode retention becomes impossible and the system drifts toward fragmentation or instability.
 
+## Current Development State
+
+FPR is an active research and engineering framework focused on resonance-based dynamic computation and coherence-driven processing architectures.
+
+The current repository contains:
+
+- architectural principles,
+- synchronization models,
+- dynamic stability logic,
+- coherence accumulation mechanisms,
+- and initial simulation results.
+
+The project is intended as a foundation for future development of resonance-based computational systems, adaptive synchronization processors, and dynamic coherence control architectures.
+
+Sensitive implementation layers and restricted operational parameters are intentionally excluded from the public repository.
+
 ## Limitations and Scope
 
 FPR is currently a theoretical and experimental architecture.
