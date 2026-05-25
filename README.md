@@ -19,3 +19,15 @@ In this framework, resonance is not treated only as amplification. It is treated
 This repository contains only the public theoretical and architectural layer.
 
 Sensitive frequency maps, closed synthesis parameters, private resonance anchors, and locked project bodies are intentionally excluded.
+
+## Architecture
+
+The FPR architecture consists of five core layers:
+
+1. Signal input and spectral decomposition
+2. Selective resonance interaction
+3. Phase synchronization and coherence accumulation
+4. Feedback-based stabilization
+5. Stable coherent state output
+
+The processor does not force all states equally. It selectively supports compatible modes and suppresses unstable or dissipative patterns.
