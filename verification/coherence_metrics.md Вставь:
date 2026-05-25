@@ -1,0 +1,60 @@
+# Coherence Metrics
+
+This document describes the primary coherence and synchronization metrics used within the Fractal Resonance Processor (FPR) framework.
+
+## 1. Global Order Parameter
+
+The primary synchronization metric is the Kuramoto order parameter:
+
+`R = |(1/N) · Σ exp(i · φ_j)|`
+
+where:
+
+- `R → 1` indicates strong global coherence
+- `R → 0` indicates incoherent or fragmented dynamics
+
+This parameter is used to evaluate the degree of phase synchronization within interacting oscillator systems.
+
+## 2. Coherence Accumulation
+
+Within the FPR framework, coherence is treated as a dynamic accumulated property rather than a static state.
+
+Coherence accumulation reflects the ability of the system to sustain stable phase relationships over time under dissipative conditions.
+
+## 3. Dynamic Stability Condition
+
+The primary stability condition is:
+
+`C(t) > P(t)`
+
+where:
+
+- `C(t)` represents accumulated coherence and regenerative synchronization capacity
+- `P(t)` represents dissipative losses and destabilizing extraction processes
+
+Stable coherent retention becomes possible only when coherence accumulation exceeds total dissipative degradation over time.
+
+## 4. Convergence Dynamics
+
+Convergence behavior is evaluated through:
+
+- coherence growth rate,
+- synchronization time,
+- phase stability,
+- fluctuation resistance,
+- and retention duration of coherent states.
+
+## 5. Resonance Compatibility
+
+The framework assumes that synchronization efficiency depends on resonance compatibility between interacting phase structures.
+
+Compatible phase interactions increase coherence accumulation, while incompatible interactions increase dissipative fragmentation.
+
+## 6. Verification Objective
+
+The purpose of these metrics is to provide measurable and reproducible indicators of:
+
+- synchronization quality,
+- dynamic stability,
+- coherence retention,
+- and resonance-driven convergence behavior within nonlinear interacting systems.
