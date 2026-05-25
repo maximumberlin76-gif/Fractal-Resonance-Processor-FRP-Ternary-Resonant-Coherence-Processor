@@ -83,3 +83,13 @@ FPR operates as a dynamic coherence loop:
 6. Retain the stable coherent state as the computational output
 
 In this model, computation is not a single static operation. It is a time-dependent process of convergence toward a dynamically stable configuration.
+
+## Key Features
+
+- Selective resonance-based mode support
+- Phase synchronization and coherence accumulation
+- Feedback-driven stabilization
+- Dissipative loss balancing
+- Dynamic convergence instead of static state enumeration
+- Compatibility with Kuramoto-type synchronization models
+- Public-layer architecture with sensitive parameters excluded
