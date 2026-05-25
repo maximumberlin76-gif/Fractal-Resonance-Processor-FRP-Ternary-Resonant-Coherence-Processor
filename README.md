@@ -134,3 +134,18 @@ FPR is conceptually grounded in:
 - and coherence-driven stabilization mechanisms.
 
 The architecture treats dynamic stability as an emergent property of sustained phase coherence within open interacting systems.
+
+## Dynamic Stability Principle
+
+Within the FPR framework, stable computation is possible only when coherence accumulation exceeds dissipative degradation over time.
+
+The fundamental stability condition is expressed as:
+
+`C(t) > P(t)`
+
+where:
+
+- `C(t)` represents accumulated coherence and regenerative synchronization capacity
+- `P(t)` represents dissipative losses and destabilizing processes
+
+If dissipative extraction exceeds coherence accumulation, stable mode retention becomes impossible and the system drifts toward fragmentation or instability.
