@@ -34,7 +34,7 @@ The processor does not force all states equally. It selectively supports compati
 
 ## Mathematical Foundation
 
-The initial mathematical layer of FPR is based on phase synchronization dynamics and Kuramoto-type interaction models.
+The initial mathematical layer of FPR is based on nonlinear phase synchronization dynamics and Kuramoto-type interaction models.
 
 A simplified phase interaction model can be written as:
 
@@ -47,11 +47,17 @@ The global coherence of the system is measured by the order parameter:
 where:
 
 - `φ_i` is the phase of oscillator `i`
+
 - `ω_i` is its natural frequency
+
 - `K` is the coupling strength
+
 - `F_ext` is the external driving force
+
 - `ω_ext` is the external driving frequency
+
 - `η` represents noise or fluctuation
+
 - `R ∈ [0, 1]` measures the degree of synchronization
 
 In the FPR framework, computation is interpreted as the controlled evolution of phase relations toward coherent and dynamically stable states.
@@ -76,10 +82,15 @@ This result supports the core FPR assumption: selective external driving can acc
 FPR operates as a dynamic coherence loop:
 
 1. Receive an input signal or state distribution
+
 2. Decompose it into spectral or phase components
+
 3. Identify compatible modes through selective resonance
-4. Increase coherence through synchronization and feedback
+
+4. Increase coherence through phase synchronization and feedback
+
 5. Suppress unstable or highly dissipative patterns
+
 6. Retain the stable coherent state as the computational output
 
 In this model, computation is not a single static operation. It is a time-dependent process of convergence toward a dynamically stable configuration.
@@ -87,11 +98,17 @@ In this model, computation is not a single static operation. It is a time-depend
 ## Key Features
 
 - Selective resonance-based mode support
+
 - Phase synchronization and coherence accumulation
+
 - Feedback-driven stabilization
+
 - Dissipative loss balancing
-- Dynamic convergence instead of static state enumeration
+
+- Dynamic phase convergence instead of static state enumeration
+
 - Compatibility with Kuramoto-type synchronization models
+
 - Public-layer architecture with sensitive parameters excluded
 
 ## Potential Applications
