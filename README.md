@@ -121,3 +121,16 @@ Instead, computation is interpreted as a dynamic process of:
 - and selective retention of dynamically compatible states.
 
 Within this framework, stable computation emerges from sustained coherence and controlled dissipation balancing over time.
+
+## Conceptual Foundation
+
+FPR is conceptually grounded in:
+
+- nonlinear dynamics,
+- resonance physics,
+- phase synchronization theory,
+- dissipative system dynamics,
+- adaptive feedback processes,
+- and coherence-driven stabilization mechanisms.
+
+The architecture treats dynamic stability as an emergent property of sustained phase coherence within open interacting systems.
