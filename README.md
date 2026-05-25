@@ -166,23 +166,6 @@ The project is intended as a foundation for future development of resonance-base
 
 Sensitive implementation layers and restricted operational parameters are intentionally excluded from the public repository.
 
-## Limitations and Scope
-
-FPR is currently a theoretical and experimental architecture.
-
-The framework does not claim to replace conventional digital computation, quantum mechanics, or existing physical models.
-
-Instead, it proposes an additional dynamic perspective focused on:
-
-- selective resonance,
-- phase synchronization,
-- coherence accumulation,
-- and dissipative stability management.
-
-The current repository represents the public conceptual and simulation layer only.
-
-Practical implementation, hardware realization, and experimental validation remain open research directions.
-
 ## Repository Structure
 
 The repository is organized into several core layers:
