@@ -31,3 +31,27 @@ The FPR architecture consists of five core layers:
 5. Stable coherent state output
 
 The processor does not force all states equally. It selectively supports compatible modes and suppresses unstable or dissipative patterns.
+
+## Mathematical Foundation
+
+The initial mathematical layer of FPR is based on phase synchronization dynamics and Kuramoto-type interaction models.
+
+A simplified phase interaction model can be written as:
+
+`dφ_i/dt = ω_i + (K/N) · Σ sin(φ_j - φ_i) + F_ext · sin(ω_ext · t - φ_i) + η`
+
+The global coherence of the system is measured by the order parameter:
+
+`R = |(1/N) · Σ exp(i · φ_j)|`
+
+where:
+
+- `φ_i` is the phase of oscillator `i`
+- `ω_i` is its natural frequency
+- `K` is the coupling strength
+- `F_ext` is the external driving force
+- `ω_ext` is the external driving frequency
+- `η` represents noise or fluctuation
+- `R ∈ [0, 1]` measures the degree of synchronization
+
+In the FPR framework, computation is interpreted as the controlled evolution of phase relations toward coherent and dynamically stable states.
