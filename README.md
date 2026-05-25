@@ -182,3 +182,16 @@ Instead, it proposes an additional dynamic perspective focused on:
 The current repository represents the public conceptual and simulation layer only.
 
 Practical implementation, hardware realization, and experimental validation remain open research directions.
+
+## Repository Structure
+
+The repository is organized into several core layers:
+
+- theoretical foundations,
+- synchronization models,
+- coherence dynamics,
+- simulation experiments,
+- architectural concepts,
+- and public verification structures.
+
+Sensitive implementation-specific components are intentionally excluded from the public layer.
