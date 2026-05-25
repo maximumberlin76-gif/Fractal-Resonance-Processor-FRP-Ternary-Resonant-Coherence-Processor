@@ -149,3 +149,20 @@ where:
 - `P(t)` represents dissipative losses and destabilizing processes
 
 If dissipative extraction exceeds coherence accumulation, stable mode retention becomes impossible and the system drifts toward fragmentation or instability.
+
+## Limitations and Scope
+
+FPR is currently a theoretical and experimental architecture.
+
+The framework does not claim to replace conventional digital computation, quantum mechanics, or existing physical models.
+
+Instead, it proposes an additional dynamic perspective focused on:
+
+- selective resonance,
+- phase synchronization,
+- coherence accumulation,
+- and dissipative stability management.
+
+The current repository represents the public conceptual and simulation layer only.
+
+Practical implementation, hardware realization, and experimental validation remain open research directions.
