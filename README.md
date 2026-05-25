@@ -107,3 +107,17 @@ The FPR framework may be applicable to:
 - Nonlinear control systems
 - Resonance-based information processing
 - Complex system stability analysis
+
+## System Perspective
+
+FPR does not treat computation as isolated symbolic manipulation.
+
+Instead, computation is interpreted as a dynamic process of:
+
+- interaction,
+- phase synchronization,
+- coherence formation,
+- feedback stabilization,
+- and selective retention of dynamically compatible states.
+
+Within this framework, stable computation emerges from sustained coherence and controlled dissipation balancing over time.
