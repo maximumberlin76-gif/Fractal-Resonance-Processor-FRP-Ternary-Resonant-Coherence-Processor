@@ -20,6 +20,18 @@ This repository contains only the public theoretical and architectural layer.
 
 Sensitive frequency maps, closed synthesis parameters, private resonance anchors, and locked project bodies are intentionally excluded.
 
+## Quick Start
+
+Recommended reading order:
+
+1. Read the core principle: `C(t) > P(t)`
+2. Review the architecture layers
+3. Check the mathematical foundation
+4. Examine the initial simulation result
+5. Explore the repository structure
+
+The repository should be read as a dynamic coherence framework, not as a conventional linear computing model.
+
 ## Architecture
 
 The FPR architecture consists of five core layers:
