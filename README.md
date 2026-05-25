@@ -70,3 +70,16 @@ A preliminary Kuramoto-type simulation showed that external resonant driving can
 The resonant scenario reduced convergence time from `3.35` to `1.42`, corresponding to an acceleration factor of approximately `2.36x`.
 
 This result supports the core FPR assumption: selective external driving can accelerate coherence formation and improve dynamic stabilization.
+
+## Core Workflow
+
+FPR operates as a dynamic coherence loop:
+
+1. Receive an input signal or state distribution
+2. Decompose it into spectral or phase components
+3. Identify compatible modes through selective resonance
+4. Increase coherence through synchronization and feedback
+5. Suppress unstable or highly dissipative patterns
+6. Retain the stable coherent state as the computational output
+
+In this model, computation is not a single static operation. It is a time-dependent process of convergence toward a dynamically stable configuration.
