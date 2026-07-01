@@ -1,0 +1,173 @@
+name: FRP Structured Output
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  structured-output:
+    name: Validate FRP v0.9.4 structured output
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile FRP v0.9.4 prototype
+        run: |
+          python -m py_compile frp_prototype_v0_9_4.py
+
+      - name: Run text self-test
+        run: |
+          python frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 > frp_self_test_text_v0_9_4.txt
+          grep "FRP SELF TEST v0.9.4" frp_self_test_text_v0_9_4.txt
+          grep "failures=0" frp_self_test_text_v0_9_4.txt
+          grep "result=PASS" frp_self_test_text_v0_9_4.txt
+
+      - name: Run text benchmark
+        run: |
+          python frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 > frp_benchmark_text_v0_9_4.txt
+          grep "FRP BENCHMARK v0.9.4" frp_benchmark_text_v0_9_4.txt
+          grep "binary_style_forced_switch" frp_benchmark_text_v0_9_4.txt
+          grep "direct_ternary_commit" frp_benchmark_text_v0_9_4.txt
+          grep "distributed_neutral_ternary" frp_benchmark_text_v0_9_4.txt
+          grep "frp_distributed_resonant" frp_benchmark_text_v0_9_4.txt
+
+      - name: Run JSON self-test
+        run: |
+          python frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json > frp_self_test_v0_9_4.json
+
+      - name: Validate JSON self-test
+        run: |
+          python - <<'PY'
+          import json
+
+          with open("frp_self_test_v0_9_4.json", "r", encoding="utf-8") as f:
+              data = json.load(f)
+
+          assert data["schema"] == "frp.structured_output.v0.9.4"
+          assert data["project"] == "Fractal Resonance Processor"
+          assert data["version"] == "v0.9.4"
+          assert data["kind"] == "self_test"
+          assert data["result"] == "PASS"
+          assert data["failures"] == 0
+          assert data["metrics"]["actual_direct_events"] == 0
+          assert data["metrics"]["C_minus_P_min"] > 0.0
+
+          print("JSON self-test validation PASS")
+          PY
+
+      - name: Run JSON benchmark
+        run: |
+          python frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json > frp_benchmark_v0_9_4.json
+
+      - name: Validate JSON benchmark
+        run: |
+          python - <<'PY'
+          import json
+
+          with open("frp_benchmark_v0_9_4.json", "r", encoding="utf-8") as f:
+              data = json.load(f)
+
+          assert data["schema"] == "frp.structured_output.v0.9.4"
+          assert data["project"] == "Fractal Resonance Processor"
+          assert data["version"] == "v0.9.4"
+          assert data["kind"] == "benchmark"
+
+          expected = {
+              "binary_style_forced_switch",
+              "direct_ternary_commit",
+              "distributed_neutral_ternary",
+              "frp_distributed_resonant",
+          }
+
+          got = {row["architecture"] for row in data["architectures"]}
+
+          assert expected.issubset(got)
+
+          print("JSON benchmark validation PASS")
+          PY
+
+      - name: Run JSON demo
+        run: |
+          python frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json > frp_demo_v0_9_4.json
+
+      - name: Validate JSON demo
+        run: |
+          python - <<'PY'
+          import json
+
+          with open("frp_demo_v0_9_4.json", "r", encoding="utf-8") as f:
+              data = json.load(f)
+
+          assert data["schema"] == "frp.structured_output.v0.9.4"
+          assert data["project"] == "Fractal Resonance Processor"
+          assert data["version"] == "v0.9.4"
+          assert data["kind"] == "demo"
+          assert isinstance(data["log"], list)
+          assert isinstance(data["final_report"], dict)
+
+          print("JSON demo validation PASS")
+          PY
+
+      - name: Run JSON telemetry demo
+        run: |
+          python frp_prototype_v0_9_4.py --mode demo --N 16 --steps 32 --cycle-mode 7/1 --output json --include-telemetry > frp_demo_telemetry_v0_9_4.json
+
+      - name: Validate JSON telemetry demo
+        run: |
+          python - <<'PY'
+          import json
+
+          with open("frp_demo_telemetry_v0_9_4.json", "r", encoding="utf-8") as f:
+              data = json.load(f)
+
+          assert data["schema"] == "frp.structured_output.v0.9.4"
+          assert data["project"] == "Fractal Resonance Processor"
+          assert data["version"] == "v0.9.4"
+          assert data["kind"] == "demo"
+
+          telemetry_found = False
+
+          for row in data["log"]:
+              result = row.get("result")
+              if not result:
+                  continue
+
+              telemetry = result.get("telemetry")
+              if telemetry:
+                  telemetry_found = True
+                  first = telemetry[0]
+
+                  assert "tick" in first
+                  assert "phase" in first
+                  assert "R" in first
+                  assert "phi" in first
+                  assert "C" in first
+                  assert "P" in first
+                  assert "C_minus_P" in first
+
+                  break
+
+          assert telemetry_found
+
+          print("JSON telemetry validation PASS")
+          PY
