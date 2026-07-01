@@ -79,6 +79,7 @@ The `docs/` directory contains the public technical documentation layer.
 | docs/architecture.md | current architecture description |
 | docs/benchmark_interpretation.md | benchmark interpretation and claim boundary |
 | docs/limitations.md | limitations and simulation-only boundary |
+| docs/output_schema.md | console output fields, test output markers, benchmark output markers, CI output checks, and future JSON output direction |
 
 The documentation layer should remain aligned with the current prototype, test report, and release notes.
 
