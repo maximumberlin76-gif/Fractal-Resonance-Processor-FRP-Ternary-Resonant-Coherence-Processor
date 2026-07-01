@@ -16,11 +16,18 @@ Test report:
 
 Current public release scope:
 
-    Python simulation layer, documentation layer, reproducibility layer, benchmark layer, and CI verification layer.
+    software validation layer, documentation layer, reproducibility layer, benchmark layer, CI verification layer, and hardware-facing documentation pathway
 
 Engineering trajectory:
 
-    software validation → architecture stabilization → hardware-facing specification → FPGA/ASIC mapping → chip-oriented implementation research → physical validation planning
+    software validation
+    → architecture stabilization
+    → hardware-facing specification
+    → FPGA mapping study
+    → ASIC mapping study
+    → chip-oriented implementation research
+    → physical validation planning
+    → partner and funding package
 
 ## 1. Core Prototype
 
@@ -191,7 +198,7 @@ Engineering meaning:
 
     The FRP software layer has been executed and verified on general-purpose computing infrastructure.
 
-This provides the current executable basis for future hardware-facing specification and implementation-layer work.
+This provides the current executable basis for hardware-facing specification and implementation-layer work.
 
 Status:
 
@@ -207,6 +214,7 @@ Status:
 | CHANGELOG.md | complete |
 | RELEASE_NOTES_v0_9_3.md | complete |
 | RELEASE_CHECKLIST_v0_9_3.md | complete |
+| ROADMAP.md | complete |
 | PROJECT_STRUCTURE.md | complete |
 | INSTALL.md | complete |
 | USAGE.md | complete |
@@ -232,6 +240,8 @@ Status:
 | docs/benchmark_interpretation.md | complete |
 | docs/limitations.md | complete |
 | docs/output_schema.md | complete |
+| docs/hardware_pathway.md | complete |
+| docs/implementation_layers.md | complete |
 
 ## 11. Verification Files
 
@@ -289,7 +299,52 @@ Status:
 
     complete
 
-## 16. Release Readiness
+## 16. Software Validation Package
+
+Current validated package includes:
+
+- executable Python prototype
+- documented candidate invariants
+- standard self-test
+- heavy self-test
+- benchmark execution
+- reproducibility commands
+- output schema documentation
+- CI workflow verification
+- release checklist
+- release notes
+- roadmap
+- project structure guide
+- hardware pathway documentation
+- implementation layer documentation
+
+Current role:
+
+    establish the executable reference model for the FRP architecture
+
+Status:
+
+    complete
+
+## 17. Hardware-Facing Documentation Pathway
+
+Current hardware-facing documentation files:
+
+| File | Role | Status |
+|---|---|---|
+| docs/hardware_pathway.md | defines the path from software validation toward hardware-facing specification, FPGA/ASIC mapping, chip-oriented implementation research, and physical validation planning | complete |
+| docs/implementation_layers.md | defines the staged layer structure from conceptual architecture through software execution, validation, CI, documentation, hardware-facing specification, FPGA/ASIC studies, physical validation, and funding preparation | complete |
+| ROADMAP.md | places the hardware-facing pathway into the staged project roadmap | complete |
+
+Current role:
+
+    connect the validated software layer with hardware-facing specification and implementation-layer research
+
+Status:
+
+    complete
+
+## 18. Release Readiness
 
 | Category | Status |
 |---|---|
@@ -302,34 +357,39 @@ Status:
 | reproducibility documented | complete |
 | release scope documented | complete |
 | engineering trajectory documented | complete |
+| hardware pathway documented | complete |
+| implementation layers documented | complete |
 | release notes present | complete |
 | changelog present | complete |
+| roadmap present | complete |
+| project structure documented | complete |
 | citation metadata present | complete |
 | license present | complete |
 | notice present | complete |
 | security policy present | complete |
 | contribution guide present | complete |
 | code of conduct present | complete |
-| project structure documented | complete |
 | output schema documented | complete |
 
-## 17. Next Engineering Layers
+## 19. Next Engineering Layers
 
-The current public repository package establishes the software validation layer.
+The current public repository package establishes the software validation layer and initiates the hardware-facing documentation pathway.
 
 Next engineering layers may include:
 
-- hardware-facing specification
+- hardware-facing specification package
 - FPGA mapping study
 - ASIC mapping study
-- chip-oriented implementation research
+- chip-oriented implementation research plan
 - physical validation protocol
-- implementation-layer documentation
+- implementation-layer documentation expansion
 - extended benchmark suite
 - structured JSON output
 - additional reproducibility profiles
+- funding brief
+- partner technical package
 
-## 18. Remaining Before Archival Release
+## 20. Remaining Before Archival Release
 
 Before creating an archival release or Zenodo DOI:
 
@@ -343,7 +403,7 @@ Before creating an archival release or Zenodo DOI:
 - add DOI to CITATION.cff after DOI assignment
 - update README with DOI badge after DOI assignment
 
-## 19. Current Status
+## 21. Current Status
 
 FRP v0.9.3-mobile is ready as a public candidate software validation package.
 
@@ -355,6 +415,9 @@ It is suitable for:
 - continuous integration verification
 - documentation inspection
 - release preparation
-- future archival packaging
+- archival packaging
 - hardware-facing specification planning
+- FPGA and ASIC mapping study preparation
+- physical validation planning
 - implementation-layer research planning
+- funding and partner preparation
