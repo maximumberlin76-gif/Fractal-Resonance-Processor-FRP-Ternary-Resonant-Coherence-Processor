@@ -1,209 +1,328 @@
-# Fractal Resonance Processor (FPR)
+# Fractal Resonance Processor (FRP)
 
-**Dynamic Coherence Architecture for Resonant Computing**
+**Ternary Resonant Coherence Processor — Python Simulation Prototype**
 
-A nonlinear dynamic computing architecture based on selective resonance, coherence accumulation, and dynamic stability in open dissipative systems.
+Version: v0.9.3-mobile  
+Status: candidate prototype  
+Type: single-file Python simulation prototype  
+License: Apache-2.0
 
-FPR treats computation not as linear enumeration of states, but as a dynamic process of selective mode excitation, phase synchronization, coherence formation, and stable mode retention over time.
+## Overview
 
-## Core Principle
+Fractal Resonance Processor (FRP) is a nonlinear dynamic computing architecture based on balanced ternary states, selective resonance, phase convergence, coherence retention, and dynamic stability in open dissipative systems.
 
-A system becomes dynamically stable when its internal coherence and regenerative capacity exceed dissipative losses over time:
+FRP treats computation not as forced binary state enumeration, but as a dynamic process of resonance selection, ternary neutral balancing, phase convergence, coherence accumulation, distributed state transition, and stable mode retention.
 
-`C(t) > P(t)`
+The current repository contains a working Python simulation prototype. It is not a hardware implementation.
 
-In this framework, resonance is not treated only as amplification. It is treated as selective support of compatible modes, allowing the system to reduce losses, accelerate convergence, and retain coherent computational states.
+## Current Prototype
 
-## Public Layer Notice
+Main prototype file: `frp_prototype_v0_9_3_mobile.py`
 
-This repository contains only the public theoretical and architectural layer.
+Current test report: `TEST_REPORT_v0_9_3.md`
 
-Sensitive frequency maps, closed synthesis parameters, private resonance anchors, and locked project bodies are intentionally excluded.
+The prototype implements:
 
-## Quick Start
+- balanced ternary states: `-1`, `0`, `1`
+- neutral `0` as balancing, damping, and transition state
+- forbidden direct `-1 ↔ 1` transition
+- distributed ternary commit
+- Kuramoto-Sakaguchi phase coupling
+- cubic saturation
+- nonlinear compression
+- independent logic and coupling delay buffers
+- per-tick telemetry
+- scheduler modes: `free`, `7/1`, `1/7`
+- register file
+- processor instruction layer
+- self-test mode
+- benchmark mode
 
-Recommended reading order:
+## Core Ternary Principle
 
-1. Read the core principle: `C(t) > P(t)`
-2. Review the architecture layers
-3. Check the mathematical foundation
-4. Examine the initial simulation result
-5. Explore the repository structure
+FRP uses balanced ternary states:
 
-The repository should be read as a dynamic coherence framework, not as a conventional linear computing model.
+| State | Meaning |
+|---|---|
+| `-1` | negative / inhibitory / counter-phase / suppressive potential |
+| `0` | neutral balancing state |
+| `1` | positive / excitatory / phase-supporting / constructive potential |
 
-## Architecture
+The direct transition `-1 ↔ 1` is forbidden in the FRP operational model.
 
-The FPR architecture consists of five core layers:
+A conflicting transition must pass through the neutral state:
 
-1. Signal input and spectral decomposition
-2. Selective resonance interaction
-3. Phase synchronization and coherence accumulation
-4. Feedback-based stabilization
-5. Stable coherent state output
+- `-1 → 0 → 1`
+- `1 → 0 → -1`
 
-The processor does not force all states equally. It selectively supports compatible modes and suppresses unstable or dissipative patterns.
+The neutral state `0` is not treated as absence. It acts as:
 
-## Mathematical Foundation
-
-The initial mathematical layer of FPR is based on nonlinear phase synchronization dynamics and Kuramoto-type interaction models.
-
-A simplified phase interaction model can be written as:
-
-`dφ_i/dt = ω_i + (K/N) · Σ sin(φ_j - φ_i) + F_ext · sin(ω_ext · t - φ_i) + η`
-
-The global coherence of the system is measured by the order parameter:
-
-`R = |(1/N) · Σ exp(i · φ_j)|`
-
-where:
-
-- `φ_i` is the phase of oscillator `i`
-
-- `ω_i` is its natural frequency
-
-- `K` is the coupling strength
-
-- `F_ext` is the external driving force
-
-- `ω_ext` is the external driving frequency
-
-- `η` represents noise or fluctuation
-
-- `R ∈ [0, 1]` measures the degree of synchronization
-
-In the FPR framework, computation is interpreted as the controlled evolution of phase relations toward coherent and dynamically stable states.
-
-## Initial Simulation Result
-
-A preliminary Kuramoto-type simulation showed that external resonant driving can significantly accelerate convergence toward a coherent state.
-
-| Scenario | R_final | R_max | Convergence Time |
-|---|---:|---:|---:|
-| Baseline | 0.980 | 0.980 | 3.35 |
-| Resonance | 0.997 | 0.997 | 1.42 |
-| Off-resonance | 0.996 | 0.996 | 1.38 |
-| Pulsed | 0.986 | 0.992 | 2.65 |
-
-The resonant scenario reduced convergence time from `3.35` to `1.42`, corresponding to an acceleration factor of approximately `2.36x`.
-
-This result supports the core FPR assumption: selective external driving can accelerate coherence formation and improve dynamic stabilization.
-
-## Core Workflow
-
-FPR operates as a dynamic coherence loop:
-
-1. Receive an input signal or state distribution
-
-2. Decompose it into spectral or phase components
-
-3. Identify compatible modes through selective resonance
-
-4. Increase coherence through phase synchronization and feedback
-
-5. Suppress unstable or highly dissipative patterns
-
-6. Retain the stable coherent state as the computational output
-
-In this model, computation is not a single static operation. It is a time-dependent process of convergence toward a dynamically stable configuration.
-
-## Key Features
-
-- Selective resonance-based mode support
-
-- Phase synchronization and coherence accumulation
-
-- Feedback-driven stabilization
-
-- Dissipative loss balancing
-
-- Dynamic phase convergence instead of static state enumeration
-
-- Compatibility with Kuramoto-type synchronization models
-
-- Public-layer architecture with sensitive parameters excluded
-
-## Potential Applications
-
-The FPR framework may be applicable to:
-
-- Resonant computing systems
-- Adaptive signal processing
-- Plasma synchronization and stabilization
-- Dynamic optimization systems
-- Coherence-driven AI architectures
-- Distributed synchronization networks
-- Nonlinear control systems
-- Resonance-based information processing
-- Complex system stability analysis
-
-## System Perspective
-
-FPR does not treat computation as isolated symbolic manipulation.
-
-Instead, computation is interpreted as a dynamic process of:
-
-- interaction,
-- phase synchronization,
-- coherence formation,
-- feedback stabilization,
-- and selective retention of dynamically compatible states.
-
-Within this framework, stable computation emerges from sustained coherence and controlled dissipation balancing over time.
-
-## Conceptual Foundation
-
-FPR is conceptually grounded in:
-
-- nonlinear dynamics,
-- resonance physics,
-- phase synchronization theory,
-- dissipative system dynamics,
-- adaptive feedback processes,
-- and coherence-driven stabilization mechanisms.
-
-The architecture treats dynamic stability as an emergent property of sustained phase coherence within open interacting systems.
+- logical neutral
+- phase damper
+- transition buffer
+- conflict neutralizer
+- switching-load guard
 
 ## Dynamic Stability Principle
 
-Within the FPR framework, stable computation is possible only when coherence accumulation exceeds dissipative degradation over time.
-
-The fundamental stability condition is expressed as:
+The core stability condition is:
 
 `C(t) > P(t)`
 
 where:
 
-- `C(t)` represents accumulated coherence and regenerative synchronization capacity
-- `P(t)` represents dissipative losses and destabilizing processes
+- `C(t)` = operational coherence
+- `P(t)` = heat + switch_load
 
-If dissipative extraction exceeds coherence accumulation, stable mode retention becomes impossible and the system drifts toward fragmentation or instability.
+In the current prototype, stable execution requires:
 
-## Current Development State
+`C_minus_P = C(t) - P(t) > 0`
 
-FPR is an active research and engineering framework focused on resonance-based dynamic computation and coherence-driven processing architectures.
+The prototype tracks this condition per tick.
 
-The current repository contains:
+## Operational Domain
 
-- architectural principles,
-- synchronization models,
-- dynamic stability logic,
-- coherence accumulation mechanisms,
-- and initial simulation results.
+The tested operational domain is:
 
-The project is intended as a foundation for future development of resonance-based computational systems, adaptive synchronization processors, and dynamic coherence control architectures.
+`N >= 8`
 
-Sensitive implementation layers and restricted operational parameters are intentionally excluded from the public repository.
+Smaller values such as `N = 2` or `N = 3` may be used only as micro-tests of ternary logic. They are not representative operational workloads.
+
+Default operational parameter:
+
+`transition_fraction = 0.25`
+
+This limits the maximum distributed state transition load per tick.
+
+## Scheduler Modes
+
+FRP currently supports three scheduler modes:
+
+| Mode | Tick Behavior |
+|---|---|
+| `free` | every tick = commit |
+| `7/1` | ticks `0..6` = balance, tick `7` = commit |
+| `1/7` | tick `0` = excite, ticks `1..7` = neutralize |
+
+The scheduler is validated by internal tick counts.
+
+## Per-Tick Telemetry
+
+Per-tick telemetry is mandatory in the v0.9.3 candidate.
+
+The prototype records:
+
+- `tick`
+- `phase`
+- `R`
+- `phi`
+- `neutral`
+- `positive`
+- `negative`
+- `heat`
+- `thermal_scale`
+- `switch_load`
+- `actual_direct_events_delta`
+- `prevented_direct_events_delta`
+- `neutralized_conflicts_delta`
+- `logical_match`
+- `transition_debt`
+- `direct_conflict_fraction`
+- `C`
+- `P`
+- `C_minus_P`
+
+Skipping telemetry ticks is not allowed in the release candidate because it may hide transient instability.
+
+## Processor Layer
+
+The current processor layer includes:
+
+- register file
+- instruction execution
+- demo program
+- self-test mode
+- benchmark mode
+
+Supported instructions:
+
+- `load`
+- `rand`
+- `zero`
+- `mov`
+- `neg`
+- `add`
+- `sub`
+- `compare`
+- `consensus`
+- `halt`
+
+Balanced ternary ALU operations:
+
+- `neg`
+- `add`
+- `sub`
+- `compare`
+- `consensus`
+
+## Quick Start
+
+Run demo:
+
+`python3 frp_prototype_v0_9_3_mobile.py --mode demo --N 16 --steps 128 --cycle-mode 7/1`
+
+Run standard self-test:
+
+`python3 frp_prototype_v0_9_3_mobile.py --mode test --steps 128 --seeds 5`
+
+Run heavy self-test:
+
+`python3 frp_prototype_v0_9_3_mobile.py --mode test --steps 256 --seeds 10`
+
+Run benchmark:
+
+`python3 frp_prototype_v0_9_3_mobile.py --mode bench --steps 128 --seeds 5`
+
+## Test Status
+
+Current candidate result:
+
+`v0.9.3-mobile: PASS as candidate prototype`
+
+### Standard Self-Test
+
+| Parameter | Value |
+|---|---|
+| N | 8, 16, 32, 64 |
+| seeds | 0..4 |
+| cycle modes | free, 7/1, 1/7 |
+| operations | neg, add, sub, compare, consensus |
+| runs | 300 |
+| steps | 128 |
+
+| Metric | Value |
+|---|---:|
+| runs | 300 |
+| C_minus_P_min | 0.14475 |
+| heat_peak | 0.10700 |
+| switch_load_peak | 0.25 |
+| actual_direct_events | 0 |
+| prevented_direct_events | 3820 |
+| neutralized_conflicts | 2392 |
+| failures | 0 |
+| result | PASS |
+
+### Heavy Self-Test
+
+| Parameter | Value |
+|---|---|
+| N | 8, 16, 32, 64 |
+| seeds | 0..9 |
+| cycle modes | free, 7/1, 1/7 |
+| operations | neg, add, sub, compare, consensus |
+| runs | 600 |
+| steps | 256 |
+
+| Metric | Value |
+|---|---:|
+| runs | 600 |
+| C_minus_P_min | 0.14475 |
+| heat_peak | 0.10700 |
+| switch_load_peak | 0.25 |
+| actual_direct_events | 0 |
+| prevented_direct_events | 7913 |
+| neutralized_conflicts | 4921 |
+| failures | 0 |
+| result | PASS |
+
+## Benchmark Summary
+
+Benchmark architectures:
+
+- `frp_distributed_resonant`
+- `direct_ternary_commit`
+- `distributed_neutral_ternary`
+- `binary_style_forced_switch`
+
+| Architecture | Match | C-P_min | Heat Peak | Switch Peak | Actual Direct | Prevented Direct | Neutralized |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| binary_style_forced_switch | 1.000 | -0.551000 | 0.051000 | 1.000000 | 2052 | 0 | 0 |
+| direct_ternary_commit | 1.000 | -0.551000 | 0.051000 | 1.000000 | 2052 | 0 | 0 |
+| distributed_neutral_ternary | 1.000 | 0.174750 | 0.003250 | 0.250000 | 0 | 0 | 2052 |
+| frp_distributed_resonant | 1.000 | 0.144750 | 0.107000 | 0.250000 | 0 | 3820 | 2392 |
+
+## Benchmark Interpretation
+
+The direct ternary and binary-style forced switching baselines reach the target result, but they allow actual direct `-1 ↔ 1` transitions and reach `switch_load_peak = 1.000000`.
+
+The distributed neutral ternary baseline prevents actual direct transitions and keeps `switch_load_peak = 0.25`. It is colder than FRP in this simulation because it does not include the Kuramoto-Sakaguchi resonant phase layer, nonlinear saturation, compression, delay dynamics, or resonant phase evolution.
+
+FRP distributed resonant mode preserves:
+
+- `match = 1.000`
+- `actual_direct_events = 0`
+- `C_minus_P_min > 0`
+- `switch_load_peak = 0.25`
+
+## Correct Technical Claim
+
+The current prototype supports the following claim:
+
+> FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct `-1 ↔ 1` transitions in the tested operational domain.
+
+The following claim is not supported by the current benchmark:
+
+> FRP is always colder than distributed neutral ternary switching.
+
+The distributed neutral baseline is colder in the current simulation because it does not include the resonant phase layer.
+
+## Historical Context
+
+Balanced ternary computing has historical precedent in ternary digital computer research, including Setun.
+
+FRP is not presented as the first ternary computer.
+
+| System | Description |
+|---|---|
+| Setun | ternary digital computer |
+| FRP | ternary resonant coherence processor simulation architecture |
+
+FRP combines ternary logic with resonance-driven phase dynamics, distributed neutral transitions, per-tick operational coherence, and dynamic stability tracking.
 
 ## Repository Structure
 
-The repository is organized into several core layers:
+Recommended structure:
 
-- theoretical foundations,
-- synchronization models,
-- coherence dynamics,
-- simulation experiments,
-- architectural concepts,
-- and public verification structures.
+- `README.md`
+- `LICENSE`
+- `frp_prototype_v0_9_3_mobile.py`
+- `TEST_REPORT_v0_9_3.md`
+- `docs/architecture.md`
+- `docs/benchmark_interpretation.md`
+- `docs/limitations.md`
 
-Sensitive implementation-specific components are intentionally excluded from the public layer.
+## Limitations
+
+1. This is a Python simulation prototype, not a hardware implementation.
+2. Heat is a model variable, not a physical temperature measurement.
+3. Switching load is a simulated transition-load metric, not measured electrical switching energy.
+4. Kuramoto-Sakaguchi phase dynamics are simulated numerically.
+5. Hardware-level thermal, electrical, timing, fabrication, and performance claims are not established.
+6. Current claims are limited to the tested simulation domain.
+
+## Current Development State
+
+FRP v0.9.3-mobile is a working candidate prototype suitable for repository packaging.
+
+The next engineering steps are:
+
+1. freeze v0.9.3-mobile source
+2. publish `TEST_REPORT_v0_9_3.md`
+3. add architecture documentation
+4. add benchmark interpretation
+5. add limitations document
+6. prepare next development branch after candidate freeze
+
+## License
+
+Apache-2.0
