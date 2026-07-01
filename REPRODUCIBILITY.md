@@ -1,131 +1,115 @@
-# Reproducibility
+# Reproducibility — Fractal Resonance Processor (FRP)
 
-This document defines how to reproduce the current reported results for the Fractal Resonance Processor (FRP) simulation prototype.
+This document defines the reproducibility procedure for the Fractal Resonance Processor (FRP) prototype.
 
-Current candidate version:
+Current structured-output version:
 
-    v0.9.3-mobile
+    v0.9.4
 
-Main prototype file:
+Current prototype file:
+
+    frp_prototype_v0_9_4.py
+
+Previous reference prototype:
 
     frp_prototype_v0_9_3_mobile.py
 
-Dependency file:
+Current schema marker:
 
-    requirements.txt
+    frp.structured_output.v0.9.4
 
-Test report:
+## 1. Purpose
 
-    TEST_REPORT_v0_9_3.md
+FRP v0.9.4 adds structured machine-readable output to the existing reproducibility workflow.
 
-FRP is currently implemented as a Python simulation prototype of a ternary resonant coherence processor.
+The purpose of this document is to make the current FRP results reproducible through:
 
-It is not a hardware implementation.
+- installation commands
+- text self-test execution
+- text benchmark execution
+- JSON self-test execution
+- JSON benchmark execution
+- JSON schema inspection
+- telemetry export checks
+- CI-oriented validation commands
 
-## 1. Reproducibility Scope
+The v0.9.4 reproducibility layer preserves the v0.9.3 processor logic while adding structured output for automated validation and future hardware-facing comparison.
 
-This document covers reproducibility for:
+## 2. Environment
 
-- standard self-test
-- heavy self-test
-- benchmark comparison
-- candidate invariants
-- simulation-level numerical summaries
+Recommended environment:
 
-All results are limited to the documented Python simulation domain.
-
-## 2. Required Environment
-
-Required:
-
-- Python 3.10 or newer
-- pip
-- numpy
+    Python 3.10 or newer
 
 Install dependencies from the repository root:
 
     pip install -r requirements.txt
 
-Current external dependency:
+Current dependency:
 
     numpy>=1.26.0
 
-## 3. Prototype File
+## 3. Files Required
 
-All reproducibility commands use:
+Required files for v0.9.4 reproducibility:
+
+    frp_prototype_v0_9_4.py
+    requirements.txt
+    docs/output_schema.md
+    USAGE.md
+    REPRODUCIBILITY.md
+
+Reference validation files:
 
     frp_prototype_v0_9_3_mobile.py
+    TEST_REPORT_v0_9_3.md
 
-Run commands from the repository root.
+## 4. Reproducibility Scope
 
-If `python3` is not available, use `python` instead.
+Current reproducibility scope:
 
-## 4. Standard Self-Test Command
+    software validation layer
+    structured output layer
+    benchmark layer
+    CI verification layer
+    telemetry export layer
+
+The current reproducibility package verifies:
+
+- executable Python reference model
+- balanced ternary state behavior
+- neutral transition routing
+- direct polarity transition safety
+- distributed commit behavior
+- Kuramoto-Sakaguchi resonant phase layer
+- nonlinear saturation
+- nonlinear compression
+- delay dynamics
+- scheduler modes
+- per-tick telemetry
+- self-test result
+- benchmark result
+- JSON output parsing
+- schema marker
+- machine-readable validation markers
+
+## 5. Standard Text Self-Test
 
 Run:
 
-    python3 frp_prototype_v0_9_3_mobile.py --mode test --steps 128 --seeds 5
+    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5
 
-Expected result:
+Expected text markers:
 
+    FRP SELF TEST v0.9.4
+    failures=0
     result=PASS
 
-Expected standard summary:
+Expected candidate result:
 
-| Metric | Value |
-|---|---:|
-| runs | 300 |
-| C_minus_P_min | 0.14475 |
-| heat_peak | 0.10700 |
-| switch_load_peak | 0.25 |
-| actual_direct_events | 0 |
-| prevented_direct_events | 3820 |
-| neutralized_conflicts | 2392 |
-| failures | 0 |
-| result | PASS |
+    PASS
 
-## 5. Heavy Self-Test Command
-
-Run:
-
-    python3 frp_prototype_v0_9_3_mobile.py --mode test --steps 256 --seeds 10
-
-Expected result:
-
-    result=PASS
-
-Expected heavy summary:
-
-| Metric | Value |
-|---|---:|
-| runs | 600 |
-| C_minus_P_min | 0.14475 |
-| heat_peak | 0.10700 |
-| switch_load_peak | 0.25 |
-| actual_direct_events | 0 |
-| prevented_direct_events | 7913 |
-| neutralized_conflicts | 4921 |
-| failures | 0 |
-| result | PASS |
-
-## 6. Benchmark Command
-
-Run:
-
-    python3 frp_prototype_v0_9_3_mobile.py --mode bench --steps 128 --seeds 5
-
-Expected benchmark summary:
-
-| Architecture | Match | C-P_min | Heat Peak | Switch Peak | Actual Direct | Prevented Direct | Neutralized |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| binary_style_forced_switch | 1.000 | -0.551000 | 0.051000 | 1.000000 | 2052 | 0 | 0 |
-| direct_ternary_commit | 1.000 | -0.551000 | 0.051000 | 1.000000 | 2052 | 0 | 0 |
-| distributed_neutral_ternary | 1.000 | 0.174750 | 0.003250 | 0.250000 | 0 | 0 | 2052 |
-| frp_distributed_resonant | 1.000 | 0.144750 | 0.107000 | 0.250000 | 0 | 3820 | 2392 |
-
-## 7. Candidate Invariants
-
-The current candidate must satisfy the following invariants:
+Expected invariant state:
 
 | Invariant | Required Result |
 |---|---|
@@ -136,145 +120,335 @@ The current candidate must satisfy the following invariants:
 | telemetry | ticks_recorded = steps |
 | scheduler | counts match selected cycle mode |
 
-A final ternary vector alone is not sufficient.
+## 6. Heavy Text Self-Test
 
-The transition path must also satisfy direct-transition safety, distributed switching, telemetry, and stability conditions.
+Run:
 
-## 8. Direct Transition Safety
+    python3 frp_prototype_v0_9_4.py --mode test --steps 256 --seeds 10
 
-FRP forbids direct transition between -1 and 1.
+Expected text markers:
 
-Forbidden transition:
+    FRP SELF TEST v0.9.4
+    failures=0
+    result=PASS
 
-    -1 ↔ 1
+Expected candidate result:
 
-Allowed transition paths:
+    PASS
 
-    -1 → 0 → 1
-     1 → 0 → -1
+This command provides a heavier validation profile over more steps and seeds.
 
-The required invariant is:
+## 7. Standard Text Benchmark
 
-    actual_direct_events = 0
+Run:
 
-This invariant must hold across the tested operational domain.
+    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5
 
-## 9. Distributed Commit Boundary
+Expected text marker:
 
-The default transition cap is:
+    FRP BENCHMARK v0.9.4
 
-    transition_fraction = 0.25
+Expected benchmark architecture labels:
 
-The required condition is:
+    binary_style_forced_switch
+    direct_ternary_commit
+    distributed_neutral_ternary
+    frp_distributed_resonant
 
-    switch_load_peak <= transition_fraction
+The benchmark compares FRP distributed resonant behavior against baseline transition architectures.
 
-This prevents full-vector forced switching under default settings.
+## 8. JSON Self-Test
 
-## 10. Stability Boundary
+Run:
 
-The prototype tracks:
+    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json
 
-    C_minus_P = C - P
+Expected JSON markers:
 
-where:
+    "schema": "frp.structured_output.v0.9.4"
+    "version": "v0.9.4"
+    "kind": "self_test"
+    "failures": 0
+    "result": "PASS"
 
-| Symbol | Meaning |
+Expected JSON metric conditions:
+
+    metrics.actual_direct_events = 0
+    metrics.C_minus_P_min > 0
+    metrics.switch_load_peak <= transition_fraction
+
+## 9. JSON Benchmark
+
+Run:
+
+    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json
+
+Expected JSON markers:
+
+    "schema": "frp.structured_output.v0.9.4"
+    "version": "v0.9.4"
+    "kind": "benchmark"
+
+Expected architecture labels inside `architectures`:
+
+    binary_style_forced_switch
+    direct_ternary_commit
+    distributed_neutral_ternary
+    frp_distributed_resonant
+
+Expected benchmark-supported technical position:
+
+    FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct -1 <-> 1 transitions in the tested operational domain.
+
+## 10. JSON Demo
+
+Run:
+
+    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json
+
+Expected JSON markers:
+
+    "schema": "frp.structured_output.v0.9.4"
+    "version": "v0.9.4"
+    "kind": "demo"
+
+Expected top-level demo fields:
+
+    schema
+    project
+    version
+    kind
+    parameters
+    log
+    final_report
+
+## 11. JSON Demo With Telemetry
+
+Run:
+
+    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json --include-telemetry
+
+Expected behavior:
+
+    operation results inside the demo log include telemetry arrays where applicable
+
+Telemetry fields include:
+
+- tick
+- phase
+- R
+- phi
+- neutral
+- positive
+- negative
+- heat
+- thermal_scale
+- switch_load
+- actual_direct_events_delta
+- prevented_direct_events_delta
+- neutralized_conflicts_delta
+- logical_match
+- transition_debt
+- direct_conflict_fraction
+- C
+- P
+- C_minus_P
+
+Telemetry role:
+
+    Python model
+    → JSON telemetry
+    → benchmark export
+    → hardware-facing signal map
+    → FPGA register map
+    → testbench comparison
+
+## 12. JSON File Export
+
+Export self-test JSON:
+
+    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json > frp_self_test_v0_9_4.json
+
+Inspect self-test JSON:
+
+    python3 -m json.tool frp_self_test_v0_9_4.json
+
+Export benchmark JSON:
+
+    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json > frp_benchmark_v0_9_4.json
+
+Inspect benchmark JSON:
+
+    python3 -m json.tool frp_benchmark_v0_9_4.json
+
+Export demo telemetry JSON:
+
+    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json --include-telemetry > frp_demo_telemetry_v0_9_4.json
+
+Inspect demo telemetry JSON:
+
+    python3 -m json.tool frp_demo_telemetry_v0_9_4.json
+
+## 13. Machine-Readable Self-Test Validation
+
+A successful self-test JSON output must satisfy:
+
+| Field | Required Value |
 |---|---|
-| C | operational coherence |
-| P | destabilizing load |
-| C_minus_P | stability margin |
+| `schema` | `frp.structured_output.v0.9.4` |
+| `version` | `v0.9.4` |
+| `kind` | `self_test` |
+| `result` | `PASS` |
+| `failures` | `0` |
+| `metrics.actual_direct_events` | `0` |
+| `metrics.C_minus_P_min` | greater than `0` |
 
-In the current prototype:
+The following command can be used for manual inspection:
 
-    P = heat + switch_load
+    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json
 
-The required condition is:
+## 14. Machine-Readable Benchmark Validation
 
-    C_minus_P_min > 0
+A successful benchmark JSON output must satisfy:
 
-## 11. Operational Domain
+| Field | Required Value |
+|---|---|
+| `schema` | `frp.structured_output.v0.9.4` |
+| `version` | `v0.9.4` |
+| `kind` | `benchmark` |
 
-The tested operational domain is:
+The benchmark architecture list must contain:
+
+    binary_style_forced_switch
+    direct_ternary_commit
+    distributed_neutral_ternary
+    frp_distributed_resonant
+
+The following command can be used for manual inspection:
+
+    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json
+
+## 15. Scheduler Reproducibility
+
+Scheduler modes:
+
+| Mode | Behavior |
+|---|---|
+| `free` | commit every tick |
+| `7/1` | seven balance ticks and one commit tick |
+| `1/7` | one excite tick and seven neutralize ticks |
+
+The self-test checks scheduler counts against expected scheduler behavior.
+
+For a selected number of steps, expected scheduler counts are computed internally and compared with observed counts.
+
+Scheduler mismatch is reported as a failure.
+
+## 16. Operational Domain
+
+The tested operational domain remains:
 
     N >= 8
 
-Smaller values such as N = 2 or N = 3 may be used only as micro-tests of ternary logic.
+The standard self-test uses:
 
-They are not representative operational workloads.
+    N = 8, 16, 32, 64
 
-## 12. Determinism and Seeds
+Default transition fraction:
 
-The standard test and benchmark use explicit seed counts.
+    transition_fraction = 0.25
 
-Standard self-test:
+Default Kuramoto-Sakaguchi phase shift:
 
-    --seeds 5
+    gamma = 0.30 pi
 
-Heavy self-test:
+Default telemetry interval:
 
-    --seeds 10
+    telemetry_every = 1
 
-Benchmark:
+Telemetry rule:
 
-    --seeds 5
+    per-tick telemetry is mandatory in the internal model
 
-The reported summaries are tied to the current prototype implementation, the specified command parameters, and the current dependency boundary.
+Output rule:
 
-## 13. Supported Claim
+    --include-telemetry controls whether telemetry is emitted in JSON output
 
-The current supported claim is:
+## 17. Baseline Comparison
 
-    FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct -1 ↔ 1 transitions in the tested operational domain.
+The benchmark compares:
 
-## 14. Unsupported Claims
+| Architecture | Role |
+|---|---|
+| `binary_style_forced_switch` | binary-style forced switch baseline |
+| `direct_ternary_commit` | direct ternary commit baseline |
+| `distributed_neutral_ternary` | distributed neutral ternary baseline |
+| `frp_distributed_resonant` | FRP distributed resonant mode |
 
-The current prototype does not support the claim:
+Benchmark-supported technical position:
 
-    FRP is always colder than distributed neutral ternary switching.
+    FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct -1 <-> 1 transitions in the tested operational domain.
 
-The current prototype also does not establish:
+## 18. Expected v0.9.4 Role
 
-- hardware thermal efficiency
-- physical electrical switching energy reduction
-- fabrication-level performance
-- hardware timing behavior
-- measured physical heat
-- measured physical power consumption
-- universal superiority over all transition baselines
+FRP v0.9.4 provides the M2 structured output layer.
 
-## 15. Simulation Boundary
+This release stage adds:
 
-All current results are simulation results.
+- JSON self-test output
+- JSON benchmark output
+- JSON demo output
+- optional telemetry export
+- machine-readable schema marker
+- reproducibility inspection commands
+- CI-oriented JSON validation path
 
-They are produced by the Python model.
+The v0.9.4 layer prepares the project for:
 
-They are not hardware measurements.
+- expanded benchmark profiles
+- automated result comparison
+- structured telemetry export
+- hardware-facing signal mapping
+- FPGA register mapping
+- testbench comparison
 
-The current prototype should be described as:
+## 19. Recommended Reproducibility Sequence
 
-    Python simulation prototype
+Run the following sequence from the repository root:
 
-It should not be described as:
+    pip install -r requirements.txt
 
-- fabricated hardware processor
-- production-ready computing device
-- hardware-validated chip architecture
-- measured thermal processor
-- measured electrical switching-energy device
+    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5
 
-## 16. Related Files
+    python3 frp_prototype_v0_9_4.py --mode test --steps 256 --seeds 10
 
-This reproducibility guide is aligned with:
+    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5
 
-- frp_prototype_v0_9_3_mobile.py
-- TEST_REPORT_v0_9_3.md
-- README.md
-- INSTALL.md
-- USAGE.md
-- requirements.txt
-- docs/architecture.md
-- docs/benchmark_interpretation.md
-- docs/limitations.md
-- verification/README.md
-- verification/coherence_metrics.md
+    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json
+
+    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json
+
+    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json --include-telemetry
+
+Expected overall result:
+
+    text self-test PASS
+    heavy text self-test PASS
+    benchmark architecture labels present
+    JSON self-test parses successfully
+    JSON benchmark parses successfully
+    JSON demo telemetry parses successfully
+
+## 20. Current Status
+
+FRP v0.9.4 reproducibility confirms the structured output layer.
+
+Current reproducibility path supports:
+
+- text validation
+- JSON validation
+- benchmark inspection
+- telemetry export
+- schema marker inspection
+- CI-oriented structured checks
+- future hardware-facing comparison workflow
