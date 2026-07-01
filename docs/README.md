@@ -1,14 +1,14 @@
-# Documentation Layer
+# Documentation Layer — Fractal Resonance Processor (FRP)
 
 This directory contains the public documentation layer for the Fractal Resonance Processor (FRP) project.
-
-FRP is currently implemented as a Python simulation prototype of a ternary resonant coherence processor.
-
-It is not a hardware implementation.
 
 Current candidate version:
 
     v0.9.3-mobile
+
+Current public repository package:
+
+    software validation layer, documentation layer, reproducibility layer, benchmark layer, and CI verification layer
 
 Main prototype file:
 
@@ -18,60 +18,139 @@ Current test report:
 
     ../TEST_REPORT_v0_9_3.md
 
-## Documentation Scope
+## 1. Purpose
 
-The documentation layer explains the public architecture, behavior, limitations, benchmark interpretation, verification metrics, and output structure of the current FRP simulation prototype.
+The purpose of this documentation layer is to make the current FRP repository reviewable, reproducible, inspectable, citable, and ready for staged engineering development.
 
-It covers:
+The documentation layer explains:
 
-- balanced ternary state logic
-- neutral transition routing
-- forbidden direct -1 ↔ 1 transition prevention
-- distributed ternary commit
-- Kuramoto-Sakaguchi resonant phase dynamics
-- nonlinear saturation and compression
-- independent logic and coupling delay buffers
-- scheduler modes: free, 7/1, 1/7
-- per-tick telemetry
-- C_minus_P stability tracking
+- FRP core principles
+- current architecture
+- resonance computation
 - benchmark interpretation
 - output schema
-- simulation limitations
-- public claim boundaries
+- verification metrics
+- repository structure
+- release readiness
+- hardware-facing pathway
+- implementation-layer structure
+- future engineering trajectory
 
-## Current Documentation Files
+The current documentation package supports the transition from software validation toward hardware-facing specification, FPGA mapping, ASIC mapping, chip-oriented implementation research, physical validation planning, and funding or partner preparation.
+
+## 2. Current Documentation Position
+
+FRP v0.9.3-mobile establishes the public software validation layer of the project.
+
+The current repository provides:
+
+- executable Python source code
+- reproducibility commands
+- benchmark output
+- automated CI workflows
+- technical documentation
+- release checklist
+- roadmap
+- hardware pathway documentation
+- implementation layer documentation
+- citation metadata
+- Apache-2.0 license
+
+The current software layer has been executed and verified on general-purpose computing infrastructure.
+
+This software validation layer provides the executable reference model for the next engineering layers.
+
+## 3. Documentation Files
 
 | File | Purpose |
 |---|---|
 | README.md | documentation layer index |
 | core_principles.md | core FRP principles |
 | resonance_computation.md | resonance computation explanation |
-| architecture.md | architecture description for FRP v0.9.3-mobile |
-| benchmark_interpretation.md | interpretation of benchmark results and baseline comparison |
-| limitations.md | simulation limitations and claim boundaries |
+| architecture.md | FRP v0.9.3-mobile architecture |
+| benchmark_interpretation.md | benchmark interpretation and evidence scope |
+| limitations.md | current simulation evidence boundaries and scope notes |
 | output_schema.md | console output fields, test markers, benchmark markers, CI checks, and future JSON output direction |
+| hardware_pathway.md | path from software validation toward hardware-facing specification, FPGA/ASIC mapping, chip-oriented implementation research, and physical validation planning |
+| implementation_layers.md | layered structure from conceptual architecture through software execution, validation, CI, documentation, hardware-facing specification, FPGA/ASIC studies, physical validation, and funding preparation |
 
-## Primary Documentation Priority
+## 4. Related Root Files
 
-The active documentation priority is:
+| File | Purpose |
+|---|---|
+| ../README.md | main public project overview |
+| ../frp_prototype_v0_9_3_mobile.py | current executable Python prototype |
+| ../TEST_REPORT_v0_9_3.md | current candidate test report |
+| ../INSTALL.md | installation guide |
+| ../USAGE.md | usage guide |
+| ../REPRODUCIBILITY.md | reproducibility guide |
+| ../CI.md | continuous integration documentation |
+| ../PROJECT_STRUCTURE.md | repository structure guide |
+| ../ROADMAP.md | staged project roadmap |
+| ../RELEASE_NOTES_v0_9_3.md | release notes for v0.9.3-mobile |
+| ../RELEASE_CHECKLIST_v0_9_3.md | release readiness checklist |
+| ../CHANGELOG.md | version history |
+| ../CITATION.cff | citation metadata |
+| ../LICENSE | Apache-2.0 license text |
+| ../NOTICE | project notice |
 
-1. architecture.md
-2. benchmark_interpretation.md
-3. limitations.md
-4. output_schema.md
-5. core_principles.md
-6. resonance_computation.md
+## 5. Documentation Layer Structure
 
-These files should align with:
+The current documentation layer is organized into the following groups.
 
-- ../README.md
-- ../TEST_REPORT_v0_9_3.md
-- ../REPRODUCIBILITY.md
-- ../USAGE.md
-- ../CI.md
-- ../frp_prototype_v0_9_3_mobile.py
+### 5.1 Core Architecture Documents
 
-## Candidate Invariants
+| File | Role |
+|---|---|
+| core_principles.md | defines FRP state logic, neutral routing, distributed transition, coherence, and stability principles |
+| resonance_computation.md | explains the resonance computation layer and phase-dynamic behavior |
+| architecture.md | describes the current v0.9.3-mobile architecture |
+
+### 5.2 Validation and Output Documents
+
+| File | Role |
+|---|---|
+| benchmark_interpretation.md | explains benchmark behavior, comparative table interpretation, and evidence scope |
+| limitations.md | documents the current simulation evidence scope and validation boundary |
+| output_schema.md | defines output fields, test markers, benchmark markers, CI checks, and future structured-output direction |
+
+### 5.3 Hardware-Facing Development Documents
+
+| File | Role |
+|---|---|
+| hardware_pathway.md | defines the path from validated software behavior toward hardware-facing specification and implementation-layer research |
+| implementation_layers.md | defines the staged implementation structure of FRP across software, validation, hardware-facing, FPGA, ASIC, physical validation, and funding layers |
+
+## 6. Current Software Validation Layer
+
+The current software validation layer includes:
+
+- balanced ternary states: -1, 0, 1
+- neutral transition routing
+- direct polarity transition safety
+- distributed commit
+- Kuramoto-Sakaguchi resonant phase layer
+- nonlinear cubic saturation
+- nonlinear compression
+- delay buffers
+- scheduler modes
+- per-tick telemetry
+- register file
+- processor instruction layer
+- demonstration mode
+- self-test mode
+- benchmark mode
+- command-line interface
+
+Current validated execution path:
+
+    Python source execution
+    → reproducibility commands
+    → benchmark execution
+    → CI workflow execution
+    → documented candidate result
+
+## 7. Candidate Invariants
 
 The current candidate is organized around the following invariants:
 
@@ -84,68 +163,81 @@ The current candidate is organized around the following invariants:
 | telemetry | ticks_recorded = steps |
 | scheduler | counts match selected cycle mode |
 
-A final ternary vector alone is not sufficient.
+These invariants connect the executable software layer with verification, benchmark interpretation, CI, release readiness, and future implementation-layer work.
 
-The transition path must also satisfy direct-transition safety, distributed switching, telemetry, scheduler, and stability conditions.
+## 8. Engineering Trajectory
 
-## Important Claim Boundary
+The FRP documentation layer follows the project engineering trajectory:
 
-The current FRP repository describes a Python simulation prototype.
+    software validation
+    → architecture stabilization
+    → hardware-facing specification
+    → FPGA mapping study
+    → ASIC mapping study
+    → chip-oriented implementation research
+    → physical validation planning
+    → partner and funding package
 
-It does not claim hardware implementation.
+The current documentation package records the software validation layer and initiates the hardware-facing documentation path.
 
-The following claims are allowed:
+## 9. Hardware-Facing Documentation Path
 
-- FRP demonstrates a working Python simulation prototype.
-- FRP uses balanced ternary states -1, 0, 1.
-- FRP uses neutral 0 as an active transition, damping, and balancing state.
-- FRP prevents actual direct -1 ↔ 1 transitions in the tested operational domain.
-- FRP routes conflicting transitions through neutral 0.
-- FRP uses distributed commit with transition_fraction = 0.25.
-- FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of distributed neutral ternary transition logic.
-- FRP tracks C_minus_P, heat, switch_load, transition debt, and direct transition events.
-- FRP self-test and benchmark commands are covered by GitHub Actions CI.
+The hardware-facing documentation path begins with:
 
-The following claims are not established:
+| File | Current Role |
+|---|---|
+| hardware_pathway.md | defines how the software validation layer supports hardware-facing specification and implementation-layer work |
+| implementation_layers.md | defines the staged layer structure from software execution through hardware-facing, FPGA, ASIC, physical validation, and funding preparation |
 
-- hardware thermal efficiency
-- physical electrical switching-energy reduction
-- fabrication-level performance
-- hardware timing behavior
-- measured physical heat
-- measured physical power consumption
-- universal superiority over all neutral transition baselines
-- proof that FRP is always colder than distributed neutral ternary switching
+Future hardware-facing documents may include:
 
-## Operational Domain
+- fpga_mapping_study.md
+- asic_mapping_study.md
+- physical_validation_plan.md
+- telemetry_mapping.md
+- benchmark_to_hardware_translation.md
+- funding_brief.md
 
-The tested operational domain is:
+## 10. Documentation Update Rule
 
-    N >= 8
+When the prototype, benchmark, release package, or engineering trajectory changes, review the following files:
 
-Smaller values such as N = 2 or N = 3 may be used only as micro-tests of ternary logic.
-
-They are not representative operational workloads.
-
-## Update Rule
-
-When the prototype changes, review whether the following documentation files must also change:
-
-- architecture.md
-- benchmark_interpretation.md
-- limitations.md
-- output_schema.md
+- ../README.md
 - ../TEST_REPORT_v0_9_3.md
 - ../REPRODUCIBILITY.md
 - ../USAGE.md
 - ../CI.md
+- ../PROJECT_STRUCTURE.md
+- ../ROADMAP.md
 - ../RELEASE_NOTES_v0_9_3.md
-- ../CHANGELOG.md
+- ../RELEASE_CHECKLIST_v0_9_3.md
+- README.md
+- architecture.md
+- benchmark_interpretation.md
+- output_schema.md
+- hardware_pathway.md
+- implementation_layers.md
+- ../verification/coherence_metrics.md
 
-Documentation must remain aligned with executable behavior.
+Documentation should remain aligned with executable behavior, benchmark output, CI status, release readiness, and the current engineering path.
 
-## Current Status
+## 11. Current Documentation Status
 
-The documentation layer is aligned with the FRP v0.9.3-mobile candidate prototype.
+The documentation layer currently includes:
 
-All current documentation remains limited to the Python simulation domain.
+- core FRP principles
+- resonance computation explanation
+- current architecture description
+- benchmark interpretation
+- simulation evidence scope notes
+- output schema
+- hardware pathway
+- implementation layers
+
+Current status:
+
+    active and aligned with FRP v0.9.3-mobile
+
+Current documentation role:
+
+    support repository review, reproducibility testing, benchmark inspection, CI verification, archival preparation, hardware-facing planning, and funding or partner preparation
