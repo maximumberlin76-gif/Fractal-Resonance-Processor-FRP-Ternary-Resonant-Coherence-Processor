@@ -1,0 +1,37 @@
+name: FRP Benchmark Smoke Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  frp-benchmark-smoke:
+    name: Run FRP benchmark smoke test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run FRP benchmark smoke test
+        run: |
+          python frp_prototype_v0_9_3_mobile.py --mode bench --steps 128 --seeds 5 | tee frp_benchmark_smoke_output.txt
+          grep "frp_distributed_resonant" frp_benchmark_smoke_output.txt
+          grep "distributed_neutral_ternary" frp_benchmark_smoke_output.txt
+          grep "direct_ternary_commit" frp_benchmark_smoke_output.txt
+          grep "binary_style_forced_switch" frp_benchmark_smoke_output.txt
