@@ -1,0 +1,34 @@
+cff-version: 1.2.0
+message: "If you use this project, please cite it as described in this file."
+
+title: "Fractal Resonance Processor (FRP): Ternary Resonant Coherence Processor"
+
+authors:
+  - family-names: "Marnov"
+    given-names: "Maksym"
+
+version: "v0.9.3-mobile"
+date-released: "2026-07-01"
+
+license: "Apache-2.0"
+
+repository-code: "https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor"
+
+keywords:
+  - "Fractal Resonance Processor"
+  - "FRP"
+  - "balanced ternary"
+  - "ternary computing"
+  - "resonant coherence"
+  - "Kuramoto-Sakaguchi"
+  - "neutral transition routing"
+  - "simulation prototype"
+
+abstract: >-
+  Fractal Resonance Processor (FRP) is a Python simulation prototype of a
+  ternary resonant coherence processor architecture. The v0.9.3-mobile
+  candidate models balanced ternary states, neutral transition routing,
+  distributed commit, Kuramoto-Sakaguchi phase coupling, nonlinear saturation,
+  per-tick telemetry, and C_minus_P stability tracking. Current claims are
+  limited to the documented Python simulation domain and do not represent
+  hardware-validated performance.
