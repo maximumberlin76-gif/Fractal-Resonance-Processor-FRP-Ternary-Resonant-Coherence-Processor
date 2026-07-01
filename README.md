@@ -1,5 +1,7 @@
 # Fractal Resonance Processor (FRP)
 
+[![FRP Self Test](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml)
+
 **Ternary Resonant Coherence Processor — Python Simulation Prototype**
 
 Version: v0.9.3-mobile  
