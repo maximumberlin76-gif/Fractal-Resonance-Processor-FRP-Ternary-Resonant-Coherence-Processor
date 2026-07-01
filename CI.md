@@ -1,181 +1,469 @@
-# Continuous Integration
+# CI — Fractal Resonance Processor (FRP)
 
-This document describes the GitHub Actions continuous integration checks used by the Fractal Resonance Processor (FRP) repository.
+This document defines the current Continuous Integration validation path for the Fractal Resonance Processor (FRP) prototype.
 
-Current candidate version:
+Current structured-output version:
 
-    v0.9.3-mobile
+    v0.9.4
 
-Main prototype file:
+Current prototype file:
+
+    frp_prototype_v0_9_4.py
+
+Previous reference prototype:
 
     frp_prototype_v0_9_3_mobile.py
 
-FRP is currently implemented as a Python simulation prototype of a ternary resonant coherence processor.
+Current schema marker:
 
-It is not a hardware implementation.
+    frp.structured_output.v0.9.4
 
-## 1. CI Purpose
+## 1. Purpose
 
-The CI layer verifies that the public repository remains executable after changes.
+FRP v0.9.4 adds structured machine-readable output to the CI validation path.
 
-The current CI checks cover:
+The CI layer validates:
 
+- executable Python prototype
 - dependency installation
-- standard self-test execution
-- benchmark command execution
-- workflow status visibility through README badges
+- text self-test execution
+- text benchmark execution
+- JSON self-test execution
+- JSON benchmark execution
+- JSON parsing
+- schema marker consistency
+- version marker consistency
+- self-test PASS result
+- zero failure count
+- direct transition safety
+- positive stability margin
+- benchmark architecture labels
 
-CI does not validate hardware behavior.
+The v0.9.4 CI layer does not change the processor logic.
 
-CI does not establish physical thermal performance or electrical switching-energy reduction.
+It adds machine-readable validation around the existing FRP model.
 
-## 2. Active Workflows
+## 2. CI Validation Layers
 
-The repository currently uses two GitHub Actions workflows:
+Current CI validation layers:
 
-| Workflow | File | Purpose |
-|---|---|---|
-| FRP Self Test | .github/workflows/frp-self-test.yml | runs the standard FRP self-test |
-| FRP Benchmark Smoke Test | .github/workflows/frp-benchmark-smoke.yml | verifies benchmark execution and expected architecture labels |
+| Layer | Role |
+|---|---|
+| dependency layer | installs Python dependencies |
+| syntax layer | verifies Python file execution |
+| text self-test layer | checks console self-test output |
+| text benchmark layer | checks console benchmark output |
+| JSON self-test layer | checks machine-readable self-test output |
+| JSON benchmark layer | checks machine-readable benchmark output |
+| schema layer | checks structured output marker |
+| invariant layer | checks critical validation markers |
 
-## 3. FRP Self Test Workflow
+## 3. Required Files
 
-Workflow file:
+Current CI-relevant files:
 
-    .github/workflows/frp-self-test.yml
-
-The workflow runs on:
-
-- push to main
-- pull request to main
-- manual workflow dispatch
-
-The workflow installs dependencies and runs:
-
-    python frp_prototype_v0_9_3_mobile.py --mode test --steps 128 --seeds 5
-
-Expected output condition:
-
-    result=PASS
-
-The workflow checks for:
-
-    result=PASS
-
-If this string is not present in the output, the workflow fails.
-
-## 4. FRP Benchmark Smoke Test Workflow
-
-Workflow file:
-
-    .github/workflows/frp-benchmark-smoke.yml
-
-The workflow runs on:
-
-- push to main
-- pull request to main
-- manual workflow dispatch
-
-The workflow installs dependencies and runs:
-
-    python frp_prototype_v0_9_3_mobile.py --mode bench --steps 128 --seeds 5
-
-The benchmark smoke test verifies that the output includes all four comparison architectures:
-
-- frp_distributed_resonant
-- distributed_neutral_ternary
-- direct_ternary_commit
-- binary_style_forced_switch
-
-This workflow verifies that benchmark execution works.
-
-It does not enforce exact numerical benchmark values line by line.
-
-## 5. README Badges
-
-The root README.md displays CI status badges for:
-
-- FRP Self Test
-- FRP Benchmark Smoke Test
-
-A green passing badge means that the latest workflow run completed successfully.
-
-A failing badge means that the corresponding workflow failed and the logs should be inspected.
-
-## 6. Required Dependency File
-
-Both workflows install dependencies from:
-
+    frp_prototype_v0_9_4.py
     requirements.txt
+    USAGE.md
+    REPRODUCIBILITY.md
+    docs/output_schema.md
+    CI.md
 
-Current external dependency:
+Reference files:
+
+    frp_prototype_v0_9_3_mobile.py
+    TEST_REPORT_v0_9_3.md
+
+Expected workflow directory:
+
+    .github/workflows/
+
+## 4. Dependency Installation
+
+CI should install dependencies from the repository root:
+
+    pip install -r requirements.txt
+
+Current dependency:
 
     numpy>=1.26.0
 
-Python standard-library modules are not listed in requirements.txt.
+Recommended Python version:
 
-## 7. Candidate Invariants Checked by CI
+    Python 3.10 or newer
 
-The self-test workflow checks the current standard self-test command.
+## 5. Text Self-Test Check
 
-The candidate invariants covered by the standard test include:
+Command:
+
+    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5
+
+Expected markers:
+
+    FRP SELF TEST v0.9.4
+    failures=0
+    result=PASS
+
+Required CI conditions:
+
+- process exits with code 0
+- output contains `FRP SELF TEST v0.9.4`
+- output contains `failures=0`
+- output contains `result=PASS`
+
+## 6. Heavy Text Self-Test Check
+
+Command:
+
+    python3 frp_prototype_v0_9_4.py --mode test --steps 256 --seeds 10
+
+Expected markers:
+
+    FRP SELF TEST v0.9.4
+    failures=0
+    result=PASS
+
+Required CI conditions:
+
+- process exits with code 0
+- output contains `FRP SELF TEST v0.9.4`
+- output contains `failures=0`
+- output contains `result=PASS`
+
+## 7. Text Benchmark Check
+
+Command:
+
+    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5
+
+Expected marker:
+
+    FRP BENCHMARK v0.9.4
+
+Expected benchmark architecture labels:
+
+    binary_style_forced_switch
+    direct_ternary_commit
+    distributed_neutral_ternary
+    frp_distributed_resonant
+
+Required CI conditions:
+
+- process exits with code 0
+- output contains `FRP BENCHMARK v0.9.4`
+- output contains all four benchmark architecture labels
+
+## 8. JSON Self-Test Check
+
+Command:
+
+    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json
+
+Expected JSON markers:
+
+    "schema": "frp.structured_output.v0.9.4"
+    "version": "v0.9.4"
+    "kind": "self_test"
+    "failures": 0
+    "result": "PASS"
+
+Required CI conditions:
+
+- process exits with code 0
+- output parses as JSON
+- `schema` equals `frp.structured_output.v0.9.4`
+- `version` equals `v0.9.4`
+- `kind` equals `self_test`
+- `result` equals `PASS`
+- `failures` equals `0`
+- `metrics.actual_direct_events` equals `0`
+- `metrics.C_minus_P_min` is greater than `0`
+
+## 9. JSON Benchmark Check
+
+Command:
+
+    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json
+
+Expected JSON markers:
+
+    "schema": "frp.structured_output.v0.9.4"
+    "version": "v0.9.4"
+    "kind": "benchmark"
+
+Expected benchmark architecture labels:
+
+    binary_style_forced_switch
+    direct_ternary_commit
+    distributed_neutral_ternary
+    frp_distributed_resonant
+
+Required CI conditions:
+
+- process exits with code 0
+- output parses as JSON
+- `schema` equals `frp.structured_output.v0.9.4`
+- `version` equals `v0.9.4`
+- `kind` equals `benchmark`
+- `architectures` contains all four benchmark architecture labels
+
+## 10. JSON Demo Check
+
+Command:
+
+    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json
+
+Expected JSON markers:
+
+    "schema": "frp.structured_output.v0.9.4"
+    "version": "v0.9.4"
+    "kind": "demo"
+
+Required CI conditions:
+
+- process exits with code 0
+- output parses as JSON
+- `schema` equals `frp.structured_output.v0.9.4`
+- `version` equals `v0.9.4`
+- `kind` equals `demo`
+- `log` exists
+- `final_report` exists
+
+## 11. JSON Telemetry Check
+
+Command:
+
+    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 32 --cycle-mode 7/1 --output json --include-telemetry
+
+Expected JSON markers:
+
+    "schema": "frp.structured_output.v0.9.4"
+    "version": "v0.9.4"
+    "kind": "demo"
+
+Expected telemetry behavior:
+
+    operation results include telemetry arrays where applicable
+
+Required CI conditions:
+
+- process exits with code 0
+- output parses as JSON
+- at least one operation result contains telemetry
+- telemetry records contain `tick`
+- telemetry records contain `phase`
+- telemetry records contain `R`
+- telemetry records contain `C_minus_P`
+
+## 12. Candidate Invariants Checked by CI
+
+Current candidate invariants:
 
 | Invariant | Required Result |
 |---|---|
-| target match | match = 1.000 |
-| direct transition safety | actual_direct_events = 0 |
-| stability | C_minus_P_min > 0 |
-| transition load | switch_load_peak <= transition_fraction |
-| telemetry | ticks_recorded = steps |
+| target match | `match = 1.000` |
+| direct transition safety | `actual_direct_events = 0` |
+| stability | `C_minus_P_min > 0` |
+| transition load | `switch_load_peak <= transition_fraction` |
+| telemetry | `ticks_recorded = steps` |
 | scheduler | counts match selected cycle mode |
 
-## 8. CI Boundary
+The text self-test checks these internally.
 
-The CI layer confirms that the current Python simulation commands run successfully in GitHub Actions.
+The JSON self-test exposes the relevant aggregate markers for machine-readable inspection.
 
-CI does not establish:
+## 13. Recommended GitHub Actions Workflow
 
-- hardware thermal efficiency
-- physical electrical switching-energy reduction
-- fabrication-level performance
-- hardware timing behavior
-- measured physical heat
-- measured physical power consumption
-- production readiness
+Recommended workflow file:
 
-All CI results remain limited to the documented Python simulation domain.
+    .github/workflows/frp-structured-output.yml
 
-## 9. When to Update CI
+Recommended workflow name:
 
-Update CI workflow files when changing:
+    FRP Structured Output
 
-- prototype filename
-- command-line interface
-- dependency list
-- test command
-- benchmark command
-- expected output markers
-- workflow names
-- supported Python version
+Recommended workflow jobs:
 
-If the prototype version changes, update this file together with:
+- checkout repository
+- set up Python
+- install dependencies
+- run text self-test
+- run text benchmark
+- run JSON self-test
+- validate JSON self-test markers
+- run JSON benchmark
+- validate JSON benchmark markers
+- run JSON demo
+- validate JSON demo markers
+- run JSON telemetry demo
+- validate telemetry markers
 
-- README.md
-- REPRODUCIBILITY.md
-- RELEASE_NOTES file
-- TEST_REPORT file
-- CHANGELOG.md
+## 14. Minimal CI Commands
 
-## 10. Current Status
+Minimal command set:
 
-The current CI layer is aligned with:
+    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5
 
-- FRP v0.9.3-mobile
-- frp_prototype_v0_9_3_mobile.py
-- requirements.txt
-- README.md
-- REPRODUCIBILITY.md
-- RELEASE_NOTES_v0_9_3.md
-- TEST_REPORT_v0_9_3.md
-- .github/workflows/frp-self-test.yml
-- .github/workflows/frp-benchmark-smoke.yml
+    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5
+
+    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json
+
+    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json
+
+    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json
+
+## 15. Recommended CI Validation Script Snippets
+
+Self-test JSON validation:
+
+    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json > frp_self_test_v0_9_4.json
+
+    python3 - <<'PY'
+    import json
+
+    with open("frp_self_test_v0_9_4.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    assert data["schema"] == "frp.structured_output.v0.9.4"
+    assert data["version"] == "v0.9.4"
+    assert data["kind"] == "self_test"
+    assert data["result"] == "PASS"
+    assert data["failures"] == 0
+    assert data["metrics"]["actual_direct_events"] == 0
+    assert data["metrics"]["C_minus_P_min"] > 0.0
+
+    print("self-test JSON validation PASS")
+    PY
+
+Benchmark JSON validation:
+
+    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json > frp_benchmark_v0_9_4.json
+
+    python3 - <<'PY'
+    import json
+
+    with open("frp_benchmark_v0_9_4.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    assert data["schema"] == "frp.structured_output.v0.9.4"
+    assert data["version"] == "v0.9.4"
+    assert data["kind"] == "benchmark"
+
+    expected = {
+        "binary_style_forced_switch",
+        "direct_ternary_commit",
+        "distributed_neutral_ternary",
+        "frp_distributed_resonant",
+    }
+
+    got = {row["architecture"] for row in data["architectures"]}
+
+    assert expected.issubset(got)
+
+    print("benchmark JSON validation PASS")
+    PY
+
+Demo JSON validation:
+
+    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json > frp_demo_v0_9_4.json
+
+    python3 - <<'PY'
+    import json
+
+    with open("frp_demo_v0_9_4.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    assert data["schema"] == "frp.structured_output.v0.9.4"
+    assert data["version"] == "v0.9.4"
+    assert data["kind"] == "demo"
+    assert isinstance(data["log"], list)
+    assert isinstance(data["final_report"], dict)
+
+    print("demo JSON validation PASS")
+    PY
+
+Telemetry JSON validation:
+
+    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 32 --cycle-mode 7/1 --output json --include-telemetry > frp_demo_telemetry_v0_9_4.json
+
+    python3 - <<'PY'
+    import json
+
+    with open("frp_demo_telemetry_v0_9_4.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    assert data["schema"] == "frp.structured_output.v0.9.4"
+    assert data["version"] == "v0.9.4"
+    assert data["kind"] == "demo"
+
+    telemetry_found = False
+
+    for row in data["log"]:
+        result = row.get("result")
+        if not result:
+            continue
+
+        telemetry = result.get("telemetry")
+        if telemetry:
+            telemetry_found = True
+            first = telemetry[0]
+            assert "tick" in first
+            assert "phase" in first
+            assert "R" in first
+            assert "C_minus_P" in first
+            break
+
+    assert telemetry_found
+
+    print("telemetry JSON validation PASS")
+    PY
+
+## 16. Current Workflow Relationship
+
+Existing v0.9.3 workflows may continue to validate the previous reference prototype.
+
+The v0.9.4 structured-output workflow should validate:
+
+    frp_prototype_v0_9_4.py
+
+Recommended workflow separation:
+
+| Workflow | Prototype | Role |
+|---|---|---|
+| FRP Self Test | v0.9.3 or current reference | text self-test |
+| FRP Benchmark Smoke Test | v0.9.3 or current reference | benchmark smoke check |
+| FRP Structured Output | v0.9.4 | JSON and structured-output validation |
+
+## 17. Release Gate for v0.9.4
+
+Before publishing v0.9.4, CI should confirm:
+
+- text self-test passes
+- heavy text self-test passes
+- text benchmark runs
+- JSON self-test parses
+- JSON self-test passes
+- JSON benchmark parses
+- JSON benchmark contains all architecture labels
+- JSON demo parses
+- JSON telemetry demo contains telemetry records
+- documentation references v0.9.4 consistently
+
+Recommended release gate:
+
+    all v0.9.4 structured-output checks pass on GitHub Actions
+
+## 18. Current Status
+
+FRP v0.9.4 CI validates the M2 structured output layer.
+
+Current CI path supports:
+
+- text validation
+- JSON validation
+- schema marker validation
+- version marker validation
+- self-test invariant inspection
+- benchmark architecture inspection
+- telemetry export inspection
+- future hardware-facing testbench comparison path
