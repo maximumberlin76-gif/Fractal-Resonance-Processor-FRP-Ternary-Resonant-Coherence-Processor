@@ -16,18 +16,22 @@ Test report:
 
 Current public release scope:
 
-    software validation layer, documentation layer, reproducibility layer, benchmark layer, CI verification layer, and hardware-facing documentation pathway
+    software validation layer, documentation layer, reproducibility layer, benchmark layer, CI verification layer, hardware-facing documentation pathway, milestone structure, and funding brief
 
 Engineering trajectory:
 
     software validation
     → architecture stabilization
+    → archival release
+    → structured output
+    → expanded benchmark layer
     → hardware-facing specification
     → FPGA mapping study
     → ASIC mapping study
     → chip-oriented implementation research
     → physical validation planning
     → partner and funding package
+    → stable public software architecture release
 
 ## 1. Core Prototype
 
@@ -215,6 +219,8 @@ Status:
 | RELEASE_NOTES_v0_9_3.md | complete |
 | RELEASE_CHECKLIST_v0_9_3.md | complete |
 | ROADMAP.md | complete |
+| MILESTONES.md | complete |
+| funding_brief.md | complete |
 | PROJECT_STRUCTURE.md | complete |
 | INSTALL.md | complete |
 | USAGE.md | complete |
@@ -242,6 +248,9 @@ Status:
 | docs/output_schema.md | complete |
 | docs/hardware_pathway.md | complete |
 | docs/implementation_layers.md | complete |
+| docs/fpga_mapping_study.md | complete |
+| docs/asic_mapping_study.md | complete |
+| docs/physical_validation_plan.md | complete |
 
 ## 11. Verification Files
 
@@ -314,9 +323,14 @@ Current validated package includes:
 - release checklist
 - release notes
 - roadmap
+- milestones
+- funding brief
 - project structure guide
 - hardware pathway documentation
 - implementation layer documentation
+- FPGA mapping study
+- ASIC mapping study
+- physical validation plan
 
 Current role:
 
@@ -334,17 +348,37 @@ Current hardware-facing documentation files:
 |---|---|---|
 | docs/hardware_pathway.md | defines the path from software validation toward hardware-facing specification, FPGA/ASIC mapping, chip-oriented implementation research, and physical validation planning | complete |
 | docs/implementation_layers.md | defines the staged layer structure from conceptual architecture through software execution, validation, CI, documentation, hardware-facing specification, FPGA/ASIC studies, physical validation, and funding preparation | complete |
-| ROADMAP.md | places the hardware-facing pathway into the staged project roadmap | complete |
+| docs/fpga_mapping_study.md | defines the FPGA-oriented mapping study from the validated software reference model toward programmable-hardware implementation planning | complete |
+| docs/asic_mapping_study.md | defines the ASIC-oriented mapping study from the validated software reference model toward chip-oriented implementation research | complete |
+| docs/physical_validation_plan.md | defines the physical validation planning structure for measurement, benchmark repeatability, telemetry comparison, and comparison against the Python reference model | complete |
 
 Current role:
 
-    connect the validated software layer with hardware-facing specification and implementation-layer research
+    connect the validated software layer with hardware-facing specification, implementation-layer research, and physical validation planning
 
 Status:
 
     complete
 
-## 18. Release Readiness
+## 18. Funding and Partner Package
+
+Current funding and partner files:
+
+| File | Role | Status |
+|---|---|---|
+| funding_brief.md | partner and funding-facing technical brief | complete |
+| MILESTONES.md | staged engineering milestones, deliverables, acceptance criteria, and suggested GitHub milestones | complete |
+| ROADMAP.md | staged project roadmap | complete |
+
+Current role:
+
+    connect validated assets, implementation-layer milestones, resource planning, partner review, and funding-oriented technical presentation
+
+Status:
+
+    complete
+
+## 19. Release Readiness
 
 | Category | Status |
 |---|---|
@@ -359,6 +393,11 @@ Status:
 | engineering trajectory documented | complete |
 | hardware pathway documented | complete |
 | implementation layers documented | complete |
+| FPGA mapping study documented | complete |
+| ASIC mapping study documented | complete |
+| physical validation plan documented | complete |
+| funding brief documented | complete |
+| milestones documented | complete |
 | release notes present | complete |
 | changelog present | complete |
 | roadmap present | complete |
@@ -371,25 +410,63 @@ Status:
 | code of conduct present | complete |
 | output schema documented | complete |
 
-## 19. Next Engineering Layers
+## 20. Milestone Readiness
 
-The current public repository package establishes the software validation layer and initiates the hardware-facing documentation pathway.
+Current milestone structure:
 
-Next engineering layers may include:
+| Milestone | Name | Status |
+|---|---|---|
+| M0 | Repository Stabilization | defined |
+| M1 | Archival Release and DOI | defined |
+| M2 | Structured Output | defined |
+| M3 | Extended Benchmark Layer | defined |
+| M4 | FPGA Mapping Package | defined |
+| M5 | ASIC Mapping Package | defined |
+| M6 | Physical Validation Protocol | defined |
+| M7 | Funding and Partner Package | defined |
+| M8 | v1.0.0 Public Software Architecture Release | defined |
 
-- hardware-facing specification package
-- FPGA mapping study
-- ASIC mapping study
-- chip-oriented implementation research plan
-- physical validation protocol
-- implementation-layer documentation expansion
-- extended benchmark suite
-- structured JSON output
-- additional reproducibility profiles
-- funding brief
-- partner technical package
+Milestone document:
 
-## 20. Remaining Before Archival Release
+    MILESTONES.md
+
+Status:
+
+    complete
+
+## 21. Review Package Readiness
+
+Current review package includes:
+
+- README.md
+- funding_brief.md
+- MILESTONES.md
+- ROADMAP.md
+- TEST_REPORT_v0_9_3.md
+- RELEASE_NOTES_v0_9_3.md
+- RELEASE_CHECKLIST_v0_9_3.md
+- PROJECT_STRUCTURE.md
+- docs/hardware_pathway.md
+- docs/implementation_layers.md
+- docs/fpga_mapping_study.md
+- docs/asic_mapping_study.md
+- docs/physical_validation_plan.md
+- docs/benchmark_interpretation.md
+- docs/output_schema.md
+- REPRODUCIBILITY.md
+- CI.md
+- CITATION.cff
+- LICENSE
+
+Review package role:
+
+    support repository-level review, technical partner review, laboratory collaboration discussion, grant preparation, investor-facing technical evaluation, and milestone-based resource planning
+
+Status:
+
+    complete
+
+## 22. Remaining Before Archival Release
 
 Before creating an archival release or Zenodo DOI:
 
@@ -403,21 +480,21 @@ Before creating an archival release or Zenodo DOI:
 - add DOI to CITATION.cff after DOI assignment
 - update README with DOI badge after DOI assignment
 
-## 21. Current Status
+## 23. Current Status
 
 FRP v0.9.3-mobile is ready as a public candidate software validation package.
 
-It is suitable for:
+The current release checklist confirms:
 
-- repository-level review
-- reproducibility testing
-- benchmark verification
-- continuous integration verification
-- documentation inspection
-- release preparation
-- archival packaging
-- hardware-facing specification planning
-- FPGA and ASIC mapping study preparation
-- physical validation planning
-- implementation-layer research planning
-- funding and partner preparation
+- software validation layer
+- reproducibility and benchmark layer
+- CI verification layer
+- documentation layer
+- hardware-facing documentation pathway
+- FPGA mapping study
+- ASIC mapping study
+- physical validation plan
+- milestone structure
+- funding and partner-facing brief
+- release readiness package
+- review package structure
