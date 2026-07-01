@@ -1,52 +1,20 @@
 # Fractal Resonance Processor (FRP)
 
-[FRP Self Test](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml)
+[![FRP Self Test](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml)
 
-[FRP Benchmark Smoke Test](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-benchmark-smoke.yml)
+[![FRP Benchmark Smoke Test](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-benchmark-smoke.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-benchmark-smoke.yml)
 
-[FRP Structured Output](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-structured-output.yml)
+[![FRP Structured Output](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-structured-output.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-structured-output.yml)
 
-**Ternary Resonant Coherence Processor**
+**Ternary Resonant Coherence Processor — Structured Output Prototype**
 
-Current candidate version:
-
-`v0.9.4`
-
-Current milestone:
-
-`M2 — Structured Output`
-
-Current structured-output schema:
-
-`frp.structured_output.v0.9.4`
-
-Current public repository package:
-
-`software validation layer, documentation layer, reproducibility layer, benchmark layer, structured output layer, CI verification layer, telemetry export layer, and hardware-facing documentation pathway`
-
-Main prototype file:
-
-`frp_prototype_v0_9_4.py`
-
-Previous archived reference prototype:
-
-`frp_prototype_v0_9_3_mobile.py`
-
-Current test report:
-
-`TEST_REPORT_v0_9_4.md`
-
-Previous archived test report:
-
-`TEST_REPORT_v0_9_3.md`
-
-Archived DOI:
-
-`https://doi.org/10.5281/zenodo.21112439`
-
-DOI:
-
-`10.5281/zenodo.21112439`
+Version: `v0.9.4`  
+Status: `candidate prototype`  
+Type: `single-file Python simulation with structured JSON output`  
+Milestone: `M2 — Structured Output`  
+Schema: `frp.structured_output.v0.9.4`  
+License: `Apache License 2.0`  
+Archived DOI: [`10.5281/zenodo.21112439`](https://doi.org/10.5281/zenodo.21112439)
 
 ## 1. Overview
 
