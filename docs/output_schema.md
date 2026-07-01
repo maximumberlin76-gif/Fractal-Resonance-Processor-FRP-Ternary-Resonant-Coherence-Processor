@@ -1,379 +1,535 @@
-# Output Schema
+# Output Schema — Fractal Resonance Processor (FRP)
 
-This document describes the current output structure of the Fractal Resonance Processor (FRP) v0.9.3-mobile Python simulation prototype.
+This document defines the current console and structured output schema for the Fractal Resonance Processor (FRP) prototype.
 
-Current candidate version:
+Current structured-output version:
 
-    v0.9.3-mobile
+    v0.9.4
 
-Main prototype file:
+Current schema marker:
 
-    ../frp_prototype_v0_9_3_mobile.py
+    frp.structured_output.v0.9.4
 
-FRP is currently implemented as a Python simulation prototype of a ternary resonant coherence processor.
+Current prototype file:
 
-It is not a hardware implementation.
+    frp_prototype_v0_9_4.py
 
-## 1. Scope
+Previous reference prototype:
 
-The current prototype produces console output.
+    frp_prototype_v0_9_3_mobile.py
 
-It does not yet provide a formal JSON output mode.
+## 1. Purpose
 
-This document describes:
+FRP v0.9.4 adds machine-readable structured output while preserving the existing console workflow.
 
-- current command output structure
-- expected output fields
-- test output markers
-- benchmark output markers
-- candidate invariant fields
-- future JSON output direction
+The purpose of the structured output layer is to make FRP execution results usable for:
 
-## 2. Command Modes
+- automated validation
+- reproducibility checks
+- benchmark inspection
+- telemetry export
+- CI verification
+- external tooling
+- future hardware-facing signal mapping
+- future FPGA testbench comparison
+- future ASIC validation comparison
 
-The prototype supports three command modes:
+The v0.9.4 structured output layer does not change the processor logic.
 
-| Mode | Purpose |
-|---|---|
-| demo | run a small processor demonstration program |
-| test | run self-test verification |
-| bench | run benchmark comparison |
+It adds output control around the existing FRP model.
 
-General command format:
+## 2. Output Modes
 
-    python3 ../frp_prototype_v0_9_3_mobile.py --mode <mode> [options]
+The prototype supports two output formats:
 
-## 3. Common Command Options
-
-| Option | Meaning |
-|---|---|
-| --mode | execution mode |
-| --N | number of ternary nodes |
-| --steps | internal simulation ticks |
-| --seeds | number of random seeds for test or benchmark |
-| --cycle-mode | scheduler mode |
-
-Supported scheduler modes:
-
-| Mode | Behavior |
-|---|---|
-| free | every tick is commit |
-| 7/1 | ticks 0..6 are balance, tick 7 is commit |
-| 1/7 | tick 0 is excite, ticks 1..7 are neutralize |
-
-## 4. Demo Output
-
-Demo command:
-
-    python3 ../frp_prototype_v0_9_3_mobile.py --mode demo --N 16 --steps 128 --cycle-mode 7/1
-
-Demo output is intended for human-readable inspection.
-
-It may include:
-
-- program execution summary
-- register operation results
-- target-oriented ternary execution
-- telemetry summary
-- final state information
-
-Demo output is not currently treated as the authoritative verification output.
-
-For reproducibility and release validation, use test mode and benchmark mode.
-
-## 5. Test Output
-
-Standard self-test command:
-
-    python3 ../frp_prototype_v0_9_3_mobile.py --mode test --steps 128 --seeds 5
-
-Required final marker:
-
-    result=PASS
-
-The GitHub Actions self-test workflow checks for:
-
-    result=PASS
-
-If this marker is missing, the CI self-test fails.
-
-## 6. Standard Test Expected Fields
-
-The standard test summary should include the following fields:
-
-| Field | Meaning |
-|---|---|
-| runs | number of executed test runs |
-| C_minus_P_min | minimum observed stability margin |
-| heat_peak | maximum simulated heat metric |
-| switch_load_peak | maximum transition load |
-| actual_direct_events | actual forbidden direct -1 ↔ 1 events |
-| prevented_direct_events | direct conflicts prevented by transition logic |
-| neutralized_conflicts | conflicts routed through neutral 0 |
-| failures | failed test cases |
-| result | PASS or FAIL |
-
-Expected standard summary:
-
-| Field | Expected Value |
-|---|---:|
-| runs | 300 |
-| C_minus_P_min | 0.14475 |
-| heat_peak | 0.10700 |
-| switch_load_peak | 0.25 |
-| actual_direct_events | 0 |
-| prevented_direct_events | 3820 |
-| neutralized_conflicts | 2392 |
-| failures | 0 |
-| result | PASS |
-
-## 7. Heavy Test Output
-
-Heavy self-test command:
-
-    python3 ../frp_prototype_v0_9_3_mobile.py --mode test --steps 256 --seeds 10
-
-Required final marker:
-
-    result=PASS
-
-Expected heavy summary:
-
-| Field | Expected Value |
-|---|---:|
-| runs | 600 |
-| C_minus_P_min | 0.14475 |
-| heat_peak | 0.10700 |
-| switch_load_peak | 0.25 |
-| actual_direct_events | 0 |
-| prevented_direct_events | 7913 |
-| neutralized_conflicts | 4921 |
-| failures | 0 |
-| result | PASS |
-
-## 8. Benchmark Output
-
-Benchmark command:
-
-    python3 ../frp_prototype_v0_9_3_mobile.py --mode bench --steps 128 --seeds 5
-
-The benchmark output must include all four comparison architectures:
-
-- frp_distributed_resonant
-- distributed_neutral_ternary
-- direct_ternary_commit
-- binary_style_forced_switch
-
-The GitHub Actions benchmark smoke test checks for these architecture labels.
-
-## 9. Benchmark Fields
-
-The benchmark summary uses the following fields:
-
-| Field | Meaning |
-|---|---|
-| Architecture | compared architecture or transition model |
-| Match | final target match |
-| C-P_min | minimum observed C_minus_P value |
-| Heat Peak | maximum simulated heat metric |
-| Switch Peak | maximum transition load |
-| Actual Direct | actual forbidden direct -1 ↔ 1 events |
-| Prevented Direct | direct conflicts prevented by transition logic |
-| Neutralized | conflicts routed through neutral 0 |
-
-Expected benchmark summary:
-
-| Architecture | Match | C-P_min | Heat Peak | Switch Peak | Actual Direct | Prevented Direct | Neutralized |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| binary_style_forced_switch | 1.000 | -0.551000 | 0.051000 | 1.000000 | 2052 | 0 | 0 |
-| direct_ternary_commit | 1.000 | -0.551000 | 0.051000 | 1.000000 | 2052 | 0 | 0 |
-| distributed_neutral_ternary | 1.000 | 0.174750 | 0.003250 | 0.250000 | 0 | 0 | 2052 |
-| frp_distributed_resonant | 1.000 | 0.144750 | 0.107000 | 0.250000 | 0 | 3820 | 2392 |
-
-## 10. Candidate Invariant Fields
-
-The current output fields support the following candidate invariants:
-
-| Invariant | Field | Required Result |
+| Output Mode | CLI Option | Role |
 |---|---|---|
-| target match | match / Match | 1.000 |
-| direct transition safety | actual_direct_events / Actual Direct | 0 |
-| stability | C_minus_P_min / C-P_min | greater than 0 |
-| transition load | switch_load_peak / Switch Peak | less than or equal to transition_fraction |
-| telemetry | ticks_recorded | equal to steps |
-| scheduler | scheduler counts | match selected cycle mode |
+| text | `--output text` | human-readable console output |
+| json | `--output json` | machine-readable structured output |
 
-## 11. Direct Transition Safety Output
+Default mode:
 
-The most important safety field is:
+    --output text
 
-    actual_direct_events
+Structured output mode:
 
-Required value:
+    --output json
 
-    0
+Optional telemetry inclusion:
 
-Meaning:
+    --include-telemetry
 
-    no actual direct -1 ↔ 1 transitions occurred during execution
+## 3. Command-Line Output Controls
 
-Related fields:
+Current output-related CLI arguments:
 
-| Field | Meaning |
+| Argument | Values | Default | Role |
+|---|---|---|---|
+| `--output` | `text`, `json` | `text` | selects console or structured output |
+| `--include-telemetry` | flag | disabled | includes per-tick telemetry in JSON where applicable |
+
+Example:
+
+    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json
+
+Example with telemetry:
+
+    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json --include-telemetry
+
+## 4. Shared JSON Envelope
+
+All JSON outputs use a shared top-level structure.
+
+Common top-level fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `schema` | string | structured output schema marker |
+| `project` | string | project name |
+| `version` | string | prototype version |
+| `kind` | string | output kind |
+| `parameters` | object | command-line execution parameters |
+
+Current schema value:
+
+    frp.structured_output.v0.9.4
+
+Current project value:
+
+    Fractal Resonance Processor
+
+Current version value:
+
+    v0.9.4
+
+Possible `kind` values:
+
+| Kind | Mode |
 |---|---|
-| prevented_direct_events | direct polarity conflicts prevented before direct transition occurred |
-| neutralized_conflicts | polarity conflicts routed through neutral 0 |
+| `demo` | `--mode demo` |
+| `self_test` | `--mode test` |
+| `benchmark` | `--mode bench` |
 
-## 12. Stability Output
+## 5. Parameters Object
 
-The stability margin is reported as:
+The `parameters` object records the execution profile.
 
-    C_minus_P_min
+Current fields:
 
-or in benchmark tables as:
+| Field | Type | Meaning |
+|---|---|---|
+| `mode` | string | selected execution mode |
+| `N` | integer | number of ternary cells for demo mode |
+| `steps` | integer | number of execution ticks |
+| `seeds` | integer | number of seeds for test and benchmark modes |
+| `seed` | integer | seed for demo mode |
+| `amp` | number | external drive amplitude |
+| `cycle_mode` | string | scheduler mode |
+| `gamma` | number | Kuramoto-Sakaguchi phase shift |
+| `logic_delay_ticks` | integer or null | logic delay buffer length override |
+| `coupling_delay_ticks` | integer or null | coupling delay buffer length override |
+| `saturation_beta` | number | nonlinear cubic saturation parameter |
+| `compression_gain` | number | nonlinear compression gain |
+| `transition_fraction` | number | maximum transition fraction per tick |
+| `telemetry_every` | integer | telemetry interval, currently required to be 1 |
+| `output` | string | selected output mode |
+| `include_telemetry` | boolean | telemetry inclusion flag |
+| `stop_on_fail` | boolean | stop self-test on first failure |
 
-    C-P_min
+Current scheduler values:
 
-Required condition:
+| Value | Meaning |
+|---|---|
+| `free` | commit every tick |
+| `7/1` | seven balance ticks and one commit tick |
+| `1/7` | one excite tick and seven neutralize ticks |
 
-    C_minus_P_min > 0
+Current default phase shift:
 
-Interpretation:
+    gamma = 0.30 pi
 
-    operational coherence remains above destabilizing load during the tested run
-
-In the current prototype:
-
-    P = heat + switch_load
-
-## 13. Transition Load Output
-
-The transition load is reported as:
-
-    switch_load_peak
-
-or in benchmark tables as:
-
-    Switch Peak
-
-Default transition cap:
+Current default transition fraction:
 
     transition_fraction = 0.25
 
-Required condition:
+## 6. Demo JSON Output
 
-    switch_load_peak <= transition_fraction
+Command:
 
-Expected value in the current candidate:
+    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json
 
-    0.25
+Top-level demo fields:
 
-## 14. Current CI Output Checks
+| Field | Type | Meaning |
+|---|---|---|
+| `schema` | string | schema marker |
+| `project` | string | project name |
+| `version` | string | prototype version |
+| `kind` | string | `demo` |
+| `parameters` | object | execution parameters |
+| `log` | array | processor instruction execution log |
+| `final_report` | object | final processor report |
 
-Current CI workflows do not enforce every numerical value line by line.
+Demo `log` entries contain:
 
-Current CI checks:
+| Field | Type | Meaning |
+|---|---|---|
+| `pc` | integer | program counter |
+| `instruction` | object | executed instruction |
+| `status` | string | instruction status |
+| `failures` | array | instruction-level failures |
+| `result` | object or null | FRP operation result |
 
-| Workflow | Output Check |
+Instruction object fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `op` | string | instruction operation |
+| `dst` | string | destination register |
+| `src_a` | string | first source register |
+| `src_b` | string | second source register |
+| `imm` | array or null | immediate ternary vector |
+| `comment` | string | optional instruction comment |
+
+Supported processor instructions:
+
+- `load`
+- `rand`
+- `zero`
+- `mov`
+- `neg`
+- `add`
+- `sub`
+- `compare`
+- `consensus`
+- `halt`
+
+Demo `final_report` fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `instructions_executed` | integer | number of executed instructions |
+| `failures` | integer | number of failed instructions |
+| `halted` | boolean | halt status |
+| `registers` | object | register snapshot |
+
+## 7. Operation Result Object
+
+Operation results appear inside demo instruction logs and failure diagnostics.
+
+Current fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `op` | string | operation name |
+| `target` | array | expected ternary target vector |
+| `output` | array | produced ternary output vector |
+| `overflow` | integer | balanced ternary carry / overflow marker |
+| `compare` | integer or null | compare result |
+| `match` | number | fraction of target cells matched |
+| `summary` | object | aggregate execution summary |
+| `diag` | object | final diagnostic state |
+| `telemetry` | array | optional per-tick telemetry |
+
+The `telemetry` field is included only when requested with:
+
+    --include-telemetry
+
+## 8. Summary Object
+
+The `summary` object records aggregate execution metrics.
+
+Current fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `ticks_recorded` | integer | number of telemetry records |
+| `C_minus_P_min` | number | minimum observed stability margin |
+| `C_minus_P_avg` | number | average stability margin |
+| `heat_peak` | number | maximum observed heat |
+| `heat_avg` | number | average heat |
+| `switch_load_peak` | number | maximum transition load |
+| `switch_load_avg` | number | average transition load |
+| `neutral_peak` | number | maximum neutral-state fraction |
+| `neutral_avg` | number | average neutral-state fraction |
+| `logical_match_final` | number | final logical match |
+| `logical_match_avg` | number | average logical match |
+| `actual_direct_events_total` | integer | total actual direct polarity transitions |
+| `prevented_direct_events_total` | integer | total prevented direct polarity transitions |
+| `neutralized_conflicts_total` | integer | total neutralized conflicts |
+
+Primary candidate invariant fields:
+
+| Field | Required Condition |
 |---|---|
-| FRP Self Test | checks for result=PASS |
-| FRP Benchmark Smoke Test | checks for all four benchmark architecture labels |
+| `ticks_recorded` | equals requested `steps` |
+| `C_minus_P_min` | greater than 0 |
+| `switch_load_peak` | less than or equal to `transition_fraction` |
+| `logical_match_final` | equals 1.000 |
+| `actual_direct_events_total` | equals 0 |
 
-Workflow files:
+## 9. Diagnostic Object
 
-- ../.github/workflows/frp-self-test.yml
-- ../.github/workflows/frp-benchmark-smoke.yml
+The `diag` object records the final diagnostic state of one FRP operation.
 
-## 15. Future JSON Output Direction
+Current fields:
 
-A future prototype version may add a formal JSON output mode.
+| Field | Type | Meaning |
+|---|---|---|
+| `C` | number | final operational coherence |
+| `P` | number | final destabilizing load |
+| `C_minus_P` | number | final stability margin |
+| `R` | number | final Kuramoto order parameter |
+| `logical_match` | number | final logical match |
+| `actual_direct_events` | integer | accumulated actual direct events |
+| `prevented_direct_events` | integer | accumulated prevented direct events |
+| `neutralized_conflicts` | integer | accumulated neutralized conflicts |
+| `commits` | integer | commit tick count |
+| `excites` | integer | excite tick count |
+| `balances` | integer | balance tick count |
+| `neutralizes` | integer | neutralize tick count |
 
-Possible command:
+Scheduler counts are checked against the selected cycle mode.
 
-    python3 ../frp_prototype_v0_9_3_mobile.py --mode test --steps 128 --seeds 5 --json
+## 10. Telemetry Object
 
-This mode does not exist in the current v0.9.3-mobile candidate.
+Per-tick telemetry is available through:
 
-A future JSON test output may use a structure similar to:
+    --include-telemetry
 
-    {
-      "version": "v0.9.3-mobile",
-      "mode": "test",
-      "steps": 128,
-      "seeds": 5,
-      "runs": 300,
-      "C_minus_P_min": 0.14475,
-      "heat_peak": 0.10700,
-      "switch_load_peak": 0.25,
-      "actual_direct_events": 0,
-      "prevented_direct_events": 3820,
-      "neutralized_conflicts": 2392,
-      "failures": 0,
-      "result": "PASS"
-    }
+Telemetry is recorded once per tick.
 
-A future JSON benchmark output may use a structure similar to:
+Current telemetry fields:
 
-    {
-      "version": "v0.9.3-mobile",
-      "mode": "bench",
-      "steps": 128,
-      "seeds": 5,
-      "architectures": [
-        {
-          "name": "frp_distributed_resonant",
-          "match": 1.000,
-          "C_minus_P_min": 0.144750,
-          "heat_peak": 0.107000,
-          "switch_peak": 0.250000,
-          "actual_direct": 0,
-          "prevented_direct": 3820,
-          "neutralized": 2392
-        }
-      ]
-    }
+| Field | Type | Meaning |
+|---|---|---|
+| `tick` | integer | tick index |
+| `phase` | string | scheduler phase |
+| `R` | number | Kuramoto order parameter |
+| `phi` | number | mean phase angle |
+| `neutral` | number | neutral-state fraction |
+| `positive` | number | positive-state fraction |
+| `negative` | number | negative-state fraction |
+| `heat` | number | current heat |
+| `thermal_scale` | number | thermal scaling factor |
+| `switch_load` | number | current transition load |
+| `actual_direct_events_delta` | integer | actual direct events on the tick |
+| `prevented_direct_events_delta` | integer | prevented direct events on the tick |
+| `neutralized_conflicts_delta` | integer | neutralized conflicts on the tick |
+| `logical_match` | number | current logical match |
+| `transition_debt` | number | fraction not yet at target |
+| `direct_conflict_fraction` | number | direct conflict fraction |
+| `C` | number | operational coherence |
+| `P` | number | destabilizing load |
+| `C_minus_P` | number | stability margin |
 
-These JSON examples are forward-looking schema sketches.
+Telemetry supports the future mapping path:
 
-They are not current CLI output.
+    Python model
+    → JSON telemetry
+    → benchmark export
+    → hardware-facing signal map
+    → FPGA register map
+    → testbench comparison
 
-## 16. Output Boundary
+## 11. Self-Test JSON Output
 
-Current output values are simulation values.
+Command:
 
-They do not represent:
+    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json
 
-- measured physical heat
-- measured physical power consumption
-- physical electrical switching energy
-- hardware timing behavior
-- chip fabrication performance
-- production deployment metrics
+Top-level self-test fields:
 
-All current output interpretation remains limited to the Python simulation domain.
+| Field | Type | Meaning |
+|---|---|---|
+| `schema` | string | schema marker |
+| `project` | string | project name |
+| `version` | string | prototype version |
+| `kind` | string | `self_test` |
+| `parameters` | object | execution parameters |
+| `metrics` | object | aggregate self-test metrics |
+| `failures` | integer | failure count |
+| `first_failure` | object or null | first failure details |
+| `result` | string | `PASS` or `FAIL` |
 
-## 17. Update Rule
+Self-test `metrics` fields:
 
-This file must be updated if any of the following change:
+| Field | Type | Meaning |
+|---|---|---|
+| `runs` | integer | number of test cases |
+| `C_minus_P_min` | number | minimum stability margin |
+| `heat_peak` | number | maximum heat |
+| `switch_load_peak` | number | maximum transition load |
+| `actual_direct_events` | integer | total actual direct events |
+| `prevented_direct_events` | integer | total prevented direct events |
+| `neutralized_conflicts` | integer | total neutralized conflicts |
 
-- command-line output format
-- field names
-- benchmark architecture labels
-- test summary format
-- CI output checks
-- result marker
-- prototype version
-- JSON output support
-- telemetry export behavior
+Expected standard self-test result:
 
-## 18. Current Status
+    result = PASS
 
-The current output schema documentation is aligned with:
+Expected standard self-test metrics for v0.9.4 remain aligned with the v0.9.3 validation baseline when executed with the same parameters.
 
-- ../frp_prototype_v0_9_3_mobile.py
-- ../TEST_REPORT_v0_9_3.md
-- ../REPRODUCIBILITY.md
-- ../USAGE.md
-- ../CI.md
-- ../.github/workflows/frp-self-test.yml
-- ../.github/workflows/frp-benchmark-smoke.yml
+## 12. First Failure Object
+
+When a self-test failure occurs, `first_failure` records the first observed failing case.
+
+Fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `N` | integer | vector size |
+| `seed` | integer | random seed |
+| `mode` | string | scheduler mode |
+| `op` | string | tested operation |
+| `fail` | array | failure labels |
+| `summary` | object | operation summary |
+| `diag` | object | operation diagnostics |
+| `telemetry` | array | optional telemetry if requested |
+
+Possible failure labels:
+
+| Label | Meaning |
+|---|---|
+| `match < 1.0` | target output was not fully matched |
+| `actual direct event` | direct -1 to 1 or 1 to -1 transition occurred |
+| `C-P <= 0` | stability margin reached non-positive value |
+| `tick mismatch` | telemetry length did not match requested steps |
+| `scheduler mismatch` | scheduler counts did not match expected mode counts |
+
+## 13. Benchmark JSON Output
+
+Command:
+
+    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json
+
+Top-level benchmark fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `schema` | string | schema marker |
+| `project` | string | project name |
+| `version` | string | prototype version |
+| `kind` | string | `benchmark` |
+| `parameters` | object | execution parameters |
+| `architectures` | array | benchmark architecture summaries |
+| `benchmark_supported_position` | string | benchmark-supported technical position |
+
+Benchmark architecture fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `architecture` | string | architecture name |
+| `cases` | integer | number of benchmark cases |
+| `match` | number | minimum match |
+| `C_minus_P_min` | number | minimum stability margin |
+| `heat_peak` | number | maximum heat |
+| `switch_load_peak` | number | maximum transition load |
+| `actual_direct_events_total` | integer | total actual direct events |
+| `prevented_direct_events_total` | integer | total prevented direct events |
+| `neutralized_conflicts_total` | integer | total neutralized conflicts |
+
+Current benchmark architectures:
+
+- `binary_style_forced_switch`
+- `direct_ternary_commit`
+- `distributed_neutral_ternary`
+- `frp_distributed_resonant`
+
+Current benchmark-supported technical position:
+
+    FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct -1 <-> 1 transitions in the tested operational domain.
+
+## 14. Text Output Compatibility
+
+The default text output remains available.
+
+Standard text self-test command:
+
+    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5
+
+The text self-test output preserves the key markers used by the previous CI workflow:
+
+    FRP SELF TEST v0.9.4
+    failures=0
+    result=PASS
+
+Standard text benchmark command:
+
+    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5
+
+The text benchmark output preserves architecture labels:
+
+    binary_style_forced_switch
+    direct_ternary_commit
+    distributed_neutral_ternary
+    frp_distributed_resonant
+
+This keeps the console workflow readable while adding JSON output for machine-readable validation.
+
+## 15. JSON Validation Markers
+
+Useful JSON validation markers:
+
+| Marker | Expected Value |
+|---|---|
+| `schema` | `frp.structured_output.v0.9.4` |
+| `version` | `v0.9.4` |
+| `kind` | `self_test`, `benchmark`, or `demo` |
+| `result` | `PASS` for successful self-test |
+| `failures` | `0` for successful self-test |
+| `architectures[].architecture` | benchmark architecture labels |
+
+Recommended CI checks for self-test JSON:
+
+- JSON parses successfully
+- `schema` equals `frp.structured_output.v0.9.4`
+- `version` equals `v0.9.4`
+- `kind` equals `self_test`
+- `result` equals `PASS`
+- `failures` equals `0`
+- `metrics.actual_direct_events` equals `0`
+- `metrics.C_minus_P_min` is greater than `0`
+
+Recommended CI checks for benchmark JSON:
+
+- JSON parses successfully
+- `schema` equals `frp.structured_output.v0.9.4`
+- `version` equals `v0.9.4`
+- `kind` equals `benchmark`
+- architecture list contains all four benchmark architecture labels
+
+## 16. Candidate Invariants
+
+The current candidate invariants remain:
+
+| Invariant | Required Result |
+|---|---|
+| target match | `match = 1.000` |
+| direct transition safety | `actual_direct_events = 0` |
+| stability | `C_minus_P_min > 0` |
+| transition load | `switch_load_peak <= transition_fraction` |
+| telemetry | `ticks_recorded = steps` |
+| scheduler | counts match selected cycle mode |
+
+In v0.9.4, these invariants can now be inspected through both console output and structured JSON output.
+
+## 17. Current Status
+
+FRP v0.9.4 adds the M2 structured output layer.
+
+The current output schema supports:
+
+- text output
+- JSON output
+- self-test JSON summary
+- benchmark JSON summary
+- demo JSON execution log
+- optional telemetry export
+- machine-readable schema marker
+- CI-oriented JSON validation
+- future hardware-facing telemetry mapping
+
+Current role:
+
+    provide machine-readable validation output for reproducibility, benchmark inspection, CI verification, and future FPGA/testbench comparison work
