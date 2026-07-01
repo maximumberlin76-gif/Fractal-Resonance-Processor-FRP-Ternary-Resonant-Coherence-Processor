@@ -8,7 +8,7 @@ Current candidate version:
 
 Current public repository package:
 
-    software validation layer, documentation layer, reproducibility layer, benchmark layer, and CI verification layer
+    software validation layer, documentation layer, reproducibility layer, benchmark layer, CI verification layer, and hardware-facing documentation pathway
 
 Main prototype file:
 
@@ -41,6 +41,10 @@ The current repository provides:
 - GitHub Actions CI workflows
 - documentation package
 - release checklist
+- project structure guide
+- output schema documentation
+- hardware pathway documentation
+- implementation layers documentation
 - citation metadata
 - Apache-2.0 license
 
@@ -91,6 +95,8 @@ Completed components:
 - verification layer
 - example layer
 - model and simulation background layer
+- hardware pathway documentation
+- implementation layers documentation
 - Apache-2.0 license
 - citation metadata
 - notice file
@@ -124,6 +130,9 @@ Tasks:
 - confirm release checklist is aligned with current repository state
 - confirm CITATION.cff is accurate
 - confirm PROJECT_STRUCTURE.md is aligned with current file tree
+- confirm docs/README.md includes current documentation files
+- confirm docs/hardware_pathway.md is linked from documentation indexes
+- confirm docs/implementation_layers.md is linked from documentation indexes
 - confirm documentation files are internally consistent
 - confirm benchmark interpretation matches TEST_REPORT_v0_9_3.md
 - confirm ROADMAP.md reflects the current engineering trajectory
@@ -210,6 +219,7 @@ Candidate requirements:
 - stable output schema
 - stable benchmark profile
 - stable documentation layer
+- stable hardware-facing documentation pathway
 - stable release checklist
 - DOI-ready repository metadata
 - complete citation metadata
@@ -230,13 +240,18 @@ Purpose:
 
     translate the validated FRP software layer into hardware-facing architectural terms
 
-Candidate documents:
+Current foundation documents:
 
 - docs/hardware_pathway.md
 - docs/implementation_layers.md
+
+Candidate future documents:
+
 - docs/fpga_mapping_study.md
 - docs/asic_mapping_study.md
 - docs/physical_validation_plan.md
+- docs/telemetry_mapping.md
+- docs/benchmark_to_hardware_translation.md
 
 Core topics:
 
@@ -320,6 +335,8 @@ Candidate validation categories:
 - noise response
 - scheduler behavior
 - benchmark repeatability
+- telemetry consistency
+- comparison against the software reference model
 
 Expected output:
 
@@ -341,6 +358,7 @@ Candidate package:
 - benchmark summary
 - development trajectory
 - hardware-facing pathway
+- implementation layer structure
 - required next resources
 - engineering milestones
 - risk and validation plan
@@ -349,14 +367,17 @@ Candidate package:
 
 Core message:
 
-    FRP already has a validated public software layer and a defined pathway toward hardware-facing specification and implementation-layer research.
+    FRP already has a validated public software layer and a defined pathway toward hardware-facing specification, FPGA/ASIC mapping, chip-oriented implementation research, and physical validation planning.
 
 ## 13. Documentation Growth Plan
 
+Current hardware-facing documentation foundation:
+
+- docs/hardware_pathway.md
+- docs/implementation_layers.md
+
 Future documentation may include:
 
-- hardware pathway
-- implementation layers
 - FPGA mapping study
 - ASIC mapping study
 - physical validation plan
@@ -366,6 +387,7 @@ Future documentation may include:
 - structured output guide
 - telemetry interpretation guide
 - release process guide
+- partner technical brief
 
 Documentation rule:
 
@@ -392,17 +414,24 @@ Current priority:
 
     final repository stabilization before archival release
 
-Next working files:
+Current synchronization files:
 
-1. RELEASE_NOTES_v0_9_3.md
-2. ROADMAP.md
-3. docs/hardware_pathway.md
-4. docs/implementation_layers.md
-5. funding_brief.md
+1. docs/README.md
+2. PROJECT_STRUCTURE.md
+3. RELEASE_CHECKLIST_v0_9_3.md
+4. RELEASE_NOTES_v0_9_3.md
+5. ROADMAP.md
+
+Next engineering documents:
+
+1. docs/fpga_mapping_study.md
+2. docs/asic_mapping_study.md
+3. docs/physical_validation_plan.md
+4. funding_brief.md
 
 ## 16. Roadmap Status
 
-FRP v0.9.3-mobile is ready as a public candidate software validation package.
+FRP v0.9.3-mobile is ready as a public candidate software validation package with an initiated hardware-facing documentation pathway.
 
 The project is positioned for:
 
