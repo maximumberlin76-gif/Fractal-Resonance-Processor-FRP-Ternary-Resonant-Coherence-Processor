@@ -305,5 +305,3 @@ Current repository packaging includes:
 - security policy
 - contribution guide
 - code of conduct
-
-The next practical development step is archival preparation after final review.
