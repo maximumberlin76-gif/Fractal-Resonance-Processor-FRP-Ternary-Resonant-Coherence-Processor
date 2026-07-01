@@ -1,14 +1,12 @@
 # Release Notes — FRP v0.9.3-mobile
 
-## Release Type
-
-Candidate release.
-
-This release documents the current public candidate state of the Fractal Resonance Processor (FRP) simulation prototype.
-
-Current candidate version:
+Release candidate:
 
     v0.9.3-mobile
+
+Project:
+
+    FRP — Fractal Resonance Processor
 
 Main prototype file:
 
@@ -18,118 +16,87 @@ Test report:
 
     TEST_REPORT_v0_9_3.md
 
-FRP is currently implemented as a Python simulation prototype of a ternary resonant coherence processor.
+Current public release scope:
 
-It is not a hardware implementation.
+    software validation layer, documentation layer, reproducibility layer, benchmark layer, CI verification layer, and hardware-facing documentation pathway
+
+Engineering trajectory:
+
+    software validation
+    → architecture stabilization
+    → hardware-facing specification
+    → FPGA mapping study
+    → ASIC mapping study
+    → chip-oriented implementation research
+    → physical validation planning
+    → partner and funding package
 
 ## 1. Release Summary
 
-FRP v0.9.3-mobile introduces a working single-file Python simulation prototype for a ternary resonant coherence processor architecture.
+FRP v0.9.3-mobile establishes the public software validation package for the Fractal Resonance Processor architecture.
 
-The prototype combines:
+This release candidate provides:
 
-- balanced ternary states
-- active neutral transition routing
-- distributed ternary commit
+- executable Python prototype
+- balanced ternary state logic
+- neutral transition routing
+- direct polarity transition safety
+- distributed commit behavior
+- Kuramoto-Sakaguchi resonant phase layer
+- nonlinear cubic saturation
+- nonlinear compression
+- delay dynamics
+- scheduler modes
+- per-tick telemetry
+- processor instruction layer
+- demonstration mode
+- self-test mode
+- benchmark mode
+- reproducibility commands
+- benchmark output
+- automated GitHub Actions verification
+- documentation package
+- release checklist
+- project roadmap
+- hardware pathway documentation
+- implementation layers documentation
+- citation metadata
+- Apache-2.0 license
+
+The current software layer has been executed and verified on general-purpose computing infrastructure through Python execution, reproducibility commands, benchmark execution, and CI workflows.
+
+## 2. Main Prototype
+
+Primary executable prototype:
+
+    frp_prototype_v0_9_3_mobile.py
+
+The prototype implements:
+
+- balanced ternary states: `-1`, `0`, `1`
+- neutral `0` as active balancing, damping, and transition state
+- direct polarity transition safety
+- transition routing through neutral state
+- distributed commit
 - Kuramoto-Sakaguchi phase coupling
 - nonlinear cubic saturation
 - nonlinear compression
 - independent logic and coupling delay buffers
-- scheduler modes
+- scheduler modes: `free`, `7/1`, `1/7`
 - per-tick telemetry
-- C_minus_P stability tracking
-- self-test verification
-- benchmark comparison
+- register file
+- processor instruction layer
+- command-line interface
 
-## 2. Core State Model
+Supported execution modes:
 
-FRP uses balanced ternary states:
+- `demo`
+- `test`
+- `bench`
 
-| State | Meaning |
-|---|---|
-| -1 | negative / inhibitory / counter-phase / suppressive potential |
-| 0 | neutral balancing / damping / transition state |
-| 1 | positive / excitatory / phase-supporting / constructive potential |
+## 3. Candidate Invariants
 
-The neutral state 0 is active.
-
-It is used for:
-
-- transition routing
-- damping
-- conflict neutralization
-- safe polarity change
-- distributed state update
-
-## 3. Direct Transition Safety
-
-FRP forbids direct transition between -1 and 1.
-
-Forbidden transition:
-
-    -1 ↔ 1
-
-Allowed transition paths:
-
-    -1 → 0 → 1
-     1 → 0 → -1
-
-The required invariant is:
-
-    actual_direct_events = 0
-
-## 4. Distributed Commit
-
-The default transition cap is:
-
-    transition_fraction = 0.25
-
-This means that no more than 25 percent of the ternary state vector may change during one tick under default settings.
-
-Required condition:
-
-    switch_load_peak <= transition_fraction
-
-## 5. Resonant Phase Layer
-
-The current prototype adds a Kuramoto-Sakaguchi resonant phase layer around the neutral ternary transition logic.
-
-Default phase lag:
-
-    gamma = 0.30π
-
-The phase layer supports dynamic phase evolution.
-
-It does not replace ternary logic.
-
-## 6. Scheduler Modes
-
-The prototype supports three scheduler modes:
-
-| Mode | Behavior |
-|---|---|
-| free | every tick is commit |
-| 7/1 | ticks 0..6 are balance, tick 7 is commit |
-| 1/7 | tick 0 is excite, ticks 1..7 are neutralize |
-
-## 7. Supported Instructions
-
-The current processor layer supports:
-
-- load
-- rand
-- zero
-- mov
-- neg
-- add
-- sub
-- compare
-- consensus
-- halt
-
-## 8. Candidate Invariants
-
-The current candidate must satisfy:
+The current candidate is organized around the following invariants:
 
 | Invariant | Required Result |
 |---|---|
@@ -140,19 +107,13 @@ The current candidate must satisfy:
 | telemetry | ticks_recorded = steps |
 | scheduler | counts match selected cycle mode |
 
-A final ternary vector alone is not sufficient.
+These invariants define the behavioral baseline for the v0.9.3-mobile software validation package.
 
-The transition path must also satisfy direct-transition safety, distributed switching, telemetry, and stability conditions.
-
-## 9. Standard Self-Test
+## 4. Standard Self-Test Result
 
 Command:
 
     python3 frp_prototype_v0_9_3_mobile.py --mode test --steps 128 --seeds 5
-
-Expected result:
-
-    result=PASS
 
 Observed candidate summary:
 
@@ -168,15 +129,15 @@ Observed candidate summary:
 | failures | 0 |
 | result | PASS |
 
-## 10. Heavy Self-Test
+Status:
+
+    complete
+
+## 5. Heavy Self-Test Result
 
 Command:
 
     python3 frp_prototype_v0_9_3_mobile.py --mode test --steps 256 --seeds 10
-
-Expected result:
-
-    result=PASS
 
 Observed candidate summary:
 
@@ -192,7 +153,11 @@ Observed candidate summary:
 | failures | 0 |
 | result | PASS |
 
-## 11. Benchmark
+Status:
+
+    complete
+
+## 6. Benchmark Result
 
 Command:
 
@@ -207,146 +172,306 @@ Benchmark summary:
 | distributed_neutral_ternary | 1.000 | 0.174750 | 0.003250 | 0.250000 | 0 | 0 | 2052 |
 | frp_distributed_resonant | 1.000 | 0.144750 | 0.107000 | 0.250000 | 0 | 3820 | 2392 |
 
-## 12. Benchmark Interpretation
+Status:
 
-The benchmark supports the following interpretation:
+    complete
 
-- direct ternary commit reaches target match but produces actual direct -1 ↔ 1 transitions
-- binary-style forced switching also produces actual direct transitions and full switch load
-- distributed neutral ternary switching eliminates actual direct transitions and reduces switching load
-- FRP distributed resonant switching preserves zero actual direct transitions while adding the resonant phase layer
-- FRP is not the lowest-heat model in this benchmark
-- FRP remains inside the positive C_minus_P stability domain under the tested settings
+## 7. Benchmark-Supported Technical Position
 
-## 13. Supported Claim
-
-The current supported claim is:
+The v0.9.3-mobile benchmark supports the following technical position:
 
     FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct -1 ↔ 1 transitions in the tested operational domain.
 
-## 14. Unsupported Claims
+Current benchmark interpretation:
 
-The current prototype does not support the claim:
+- FRP distributed resonant mode preserves match = 1.000
+- FRP distributed resonant mode preserves actual_direct_events = 0
+- FRP distributed resonant mode preserves C_minus_P_min > 0
+- FRP distributed resonant mode preserves switch_load_peak = 0.25
+- distributed_neutral_ternary has heat_peak = 0.003250 in the current benchmark table
+- frp_distributed_resonant has heat_peak = 0.107000 in the current benchmark table
+- FRP includes the Kuramoto-Sakaguchi resonant phase layer
+- FRP includes nonlinear saturation
+- FRP includes compression dynamics
+- FRP includes delay dynamics
+- FRP includes resonant phase evolution
 
-    FRP is always colder than distributed neutral ternary switching.
+The current benchmark evidence separates safe distributed neutral ternary transition behavior from the FRP distributed resonant mode, which includes the additional resonant phase layer and nonlinear dynamics.
 
-The current prototype also does not establish:
+## 8. Continuous Integration
 
-- hardware thermal efficiency
-- physical electrical switching energy reduction
-- fabrication-level performance
-- hardware timing behavior
-- measured physical heat
-- measured physical power consumption
-- universal superiority over all transition baselines
+This release candidate includes two GitHub Actions workflows.
 
-## 15. Operational Domain
+| Workflow | File | Current Role |
+|---|---|---|
+| FRP Self Test | .github/workflows/frp-self-test.yml | runs standard self-test and verifies PASS result |
+| FRP Benchmark Smoke Test | .github/workflows/frp-benchmark-smoke.yml | runs benchmark smoke test and verifies benchmark architecture labels |
 
-The tested operational domain is:
+Current CI coverage:
 
-    N >= 8
+- dependency installation from `requirements.txt`
+- standard self-test execution
+- `result=PASS` verification
+- benchmark command execution
+- benchmark architecture label verification
 
-Smaller values such as N = 2 or N = 3 may be used only as micro-tests of ternary logic.
+Current CI status:
 
-They are not representative operational workloads.
+    passing
 
-## 16. Simulation Boundary
+## 9. General-Purpose Hardware Execution
 
-All current results are simulation results.
+The FRP software layer has been executed and verified on general-purpose computing infrastructure.
 
-They are produced by the Python model.
+Validated through:
 
-They are not hardware measurements.
+- local Python execution path
+- reproducibility commands
+- benchmark execution
+- GitHub Actions workflow execution
+- CI status verification
 
-The current prototype should be described as:
+Engineering role:
 
-    Python simulation prototype
+    establish an executable software reference model for hardware-facing specification and implementation-layer research
 
-It should not be described as:
+## 10. Software Validation Package
 
-- fabricated hardware processor
-- production-ready computing device
-- hardware-validated chip architecture
-- measured thermal processor
-- measured electrical switching-energy device
+The v0.9.3-mobile release candidate establishes the current public software validation package.
 
-## 17. Known Boundaries
+Current validated package includes:
 
-Current boundaries:
+- executable prototype source
+- documented candidate invariants
+- standard self-test
+- heavy self-test
+- benchmark execution
+- reproducibility commands
+- output schema documentation
+- CI workflow verification
+- release checklist
+- release notes
+- roadmap
+- project structure guide
+- hardware pathway documentation
+- implementation layer documentation
 
-- no hardware implementation
-- no chip fabrication result
-- no physical thermal measurement
-- no physical electrical energy measurement
-- no production runtime environment
-- no external package interface
-- no automated CI workflow yet
-- no Zenodo DOI yet
+Current role:
 
-## 18. Files Added or Aligned for This Candidate
+    provide the executable reference model for the FRP architecture
 
-Core files:
+## 11. Hardware-Facing Documentation Pathway
 
-- README.md
-- CHANGELOG.md
-- LICENSE
-- NOTICE
-- CITATION.cff
-- SECURITY.md
-- requirements.txt
-- .gitignore
-- INSTALL.md
-- USAGE.md
-- REPRODUCIBILITY.md
-- CONTRIBUTING.md
-- CODE_OF_CONDUCT.md
-- TEST_REPORT_v0_9_3.md
-- frp_prototype_v0_9_3_mobile.py
+This release candidate initiates the hardware-facing documentation pathway.
 
-Documentation files:
+Current hardware-facing documents:
 
-- docs/README.md
-- docs/core_principles.md
-- docs/resonance_computation.md
-- docs/architecture.md
-- docs/benchmark_interpretation.md
-- docs/limitations.md
+| File | Role |
+|---|---|
+| docs/hardware_pathway.md | defines the path from software validation toward hardware-facing specification, FPGA/ASIC mapping, chip-oriented implementation research, and physical validation planning |
+| docs/implementation_layers.md | defines the staged layer structure from conceptual architecture through software execution, validation, CI, documentation, hardware-facing specification, FPGA/ASIC studies, physical validation, and funding preparation |
+| ROADMAP.md | places the hardware-facing pathway into the staged project roadmap |
 
-Verification files:
+The current hardware-facing documentation pathway connects the validated software layer with future implementation-layer work.
 
-- verification/README.md
-- verification/coherence_metrics.md
+## 12. Files Added or Aligned
 
-Simulation and model files:
+### 12.1 Root Files
 
-- simulations/README.md
-- simulations/initial_kuramoto_result.md
-- models/README.md
-- models/kuramoto_frp_background_model.md
+| File | Status |
+|---|---|
+| README.md | aligned |
+| frp_prototype_v0_9_3_mobile.py | present |
+| TEST_REPORT_v0_9_3.md | present |
+| CHANGELOG.md | aligned |
+| RELEASE_NOTES_v0_9_3.md | aligned |
+| RELEASE_CHECKLIST_v0_9_3.md | aligned |
+| ROADMAP.md | aligned |
+| PROJECT_STRUCTURE.md | aligned |
+| INSTALL.md | present |
+| USAGE.md | present |
+| REPRODUCIBILITY.md | present |
+| CI.md | present |
+| requirements.txt | present |
+| .gitignore | present |
+| LICENSE | present |
+| NOTICE | present |
+| CITATION.cff | present |
+| SECURITY.md | present |
+| CONTRIBUTING.md | present |
+| CODE_OF_CONDUCT.md | present |
 
-Example files:
+### 12.2 Documentation Files
 
-- examples/README.md
-- examples/resonance_convergence_example.md
+| File | Status |
+|---|---|
+| docs/README.md | aligned |
+| docs/core_principles.md | present |
+| docs/resonance_computation.md | present |
+| docs/architecture.md | present |
+| docs/benchmark_interpretation.md | present |
+| docs/limitations.md | present |
+| docs/output_schema.md | present |
+| docs/hardware_pathway.md | present |
+| docs/implementation_layers.md | present |
 
-## 19. Next Development Steps
+### 12.3 Verification Files
 
-Recommended next steps:
+| File | Status |
+|---|---|
+| verification/README.md | present |
+| verification/coherence_metrics.md | present |
 
-- add ROADMAP.md
-- add GitHub Actions CI workflow
-- add automated standard self-test job
-- add automated benchmark smoke test
-- add structured JSON output option
-- add additional benchmark seeds
-- add versioned test reports for future candidates
-- prepare archival release metadata
-- create Zenodo release after repository stabilization
+### 12.4 Example, Model, and Simulation Files
 
-## 20. Current Status
+| File | Status |
+|---|---|
+| examples/README.md | present |
+| examples/resonance_convergence_example.md | present |
+| models/README.md | present |
+| models/kuramoto_frp_background_model.md | present |
+| simulations/README.md | present |
+| simulations/initial_kuramoto_result.md | present |
 
-FRP v0.9.3-mobile is a public candidate simulation prototype.
+### 12.5 CI Files
 
-The release is suitable for repository-level review, reproducibility testing, documentation inspection, and future archival preparation.
+| File | Status |
+|---|---|
+| .github/workflows/frp-self-test.yml | present |
+| .github/workflows/frp-benchmark-smoke.yml | present |
 
-It is not a hardware release.
+## 13. Documentation Growth in This Candidate
+
+This candidate now includes a documentation path from current software validation toward hardware-facing development.
+
+Documentation layers now include:
+
+- core principles
+- resonance computation
+- current architecture
+- benchmark interpretation
+- output schema
+- hardware pathway
+- implementation layers
+- roadmap
+- release checklist
+- project structure
+
+The documentation package now supports:
+
+- repository-level review
+- reproducibility testing
+- benchmark inspection
+- CI verification
+- archival release preparation
+- hardware-facing specification planning
+- FPGA mapping study preparation
+- ASIC mapping study preparation
+- physical validation planning
+- funding and partner preparation
+
+## 14. Current Engineering Trajectory
+
+The current engineering trajectory is:
+
+    software validation
+    → architecture stabilization
+    → hardware-facing specification
+    → FPGA mapping study
+    → ASIC mapping study
+    → chip-oriented implementation research
+    → physical validation planning
+    → partner and funding package
+
+The current repository position is:
+
+    public software validation package with initiated hardware-facing documentation pathway
+
+## 15. Release Readiness
+
+The v0.9.3-mobile candidate is ready as a public software validation package.
+
+Current readiness state:
+
+| Category | Status |
+|---|---|
+| prototype present | complete |
+| tests documented | complete |
+| benchmark documented | complete |
+| CI passing | complete |
+| installation documented | complete |
+| usage documented | complete |
+| reproducibility documented | complete |
+| release scope documented | complete |
+| engineering trajectory documented | complete |
+| hardware pathway documented | complete |
+| implementation layers documented | complete |
+| release notes present | complete |
+| changelog present | complete |
+| roadmap present | complete |
+| project structure documented | complete |
+| citation metadata present | complete |
+| license present | complete |
+| notice present | complete |
+| security policy present | complete |
+| contribution guide present | complete |
+| code of conduct present | complete |
+| output schema documented | complete |
+
+## 16. Remaining Before Archival Release
+
+Before creating an archival release or Zenodo DOI:
+
+- confirm all CI workflows are passing
+- confirm README badges are passing
+- confirm repository file names are final
+- confirm release notes are final
+- confirm CITATION.cff is accurate
+- create GitHub release tag
+- create Zenodo archival release
+- add DOI to CITATION.cff after DOI assignment
+- update README with DOI badge after DOI assignment
+
+## 17. Recommended Next Engineering Documents
+
+Recommended next documents:
+
+- docs/fpga_mapping_study.md
+- docs/asic_mapping_study.md
+- docs/physical_validation_plan.md
+- funding_brief.md
+
+Recommended next development target:
+
+    v0.9.4 — structured output and extended reproducibility
+
+Candidate v0.9.4 focus:
+
+- structured JSON output option
+- machine-readable test summary
+- machine-readable benchmark summary
+- reproducibility profiles
+- expanded seed configuration
+- benchmark export files
+- telemetry export mode
+- updated output schema documentation
+- updated CI validation
+
+## 18. Current Status
+
+FRP v0.9.3-mobile establishes the public software validation layer and the initial hardware-facing documentation pathway.
+
+The current repository package is suitable for:
+
+- repository-level review
+- reproducibility testing
+- benchmark verification
+- continuous integration verification
+- documentation inspection
+- release preparation
+- archival packaging
+- hardware-facing specification planning
+- FPGA and ASIC mapping study preparation
+- physical validation planning
+- implementation-layer research planning
+- funding and partner preparation
