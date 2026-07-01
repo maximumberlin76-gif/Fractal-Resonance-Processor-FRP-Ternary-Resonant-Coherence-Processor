@@ -1,28 +1,48 @@
-# Python
+# Python bytecode
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 
-# Virtual environments
+# Python virtual environments
+.venv/
 venv/
-.env/
+env/
+ENV/
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Test and coverage output
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
 
 # Logs
 *.log
 
 # Temporary files
 *.tmp
-*.bak
+*.temp
 
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE
-.vscode/
-.idea/
-
-# Sensitive local layers
-/private/
-_locked/
-frequency_maps/
-anchors/
+# Local environment files
+.env
+.env.*
+!.env.example
