@@ -1,14 +1,10 @@
 # Roadmap — Fractal Resonance Processor (FRP)
 
-This roadmap describes the staged development path of the Fractal Resonance Processor (FRP) project after the v0.9.3-mobile candidate.
+This roadmap defines the staged development path for the Fractal Resonance Processor (FRP) project.
 
 Current candidate version:
 
     v0.9.3-mobile
-
-Current public repository package:
-
-    software validation layer, documentation layer, reproducibility layer, benchmark layer, CI verification layer, and hardware-facing documentation pathway
 
 Main prototype file:
 
@@ -18,199 +14,628 @@ Current test report:
 
     TEST_REPORT_v0_9_3.md
 
-## 1. Current Project Position
+Current public repository package:
 
-FRP v0.9.3-mobile establishes the public software validation layer of the Fractal Resonance Processor architecture.
+    software validation layer, documentation layer, reproducibility layer, benchmark layer, CI verification layer, hardware-facing documentation pathway, milestone structure, and funding brief
 
-The current repository provides:
+## 1. Purpose
 
-- executable Python source code
-- balanced ternary state logic
-- neutral transition routing
-- distributed commit behavior
-- Kuramoto-Sakaguchi resonant phase layer
-- nonlinear saturation
-- nonlinear compression
-- delay dynamics
-- scheduler modes
-- per-tick telemetry
-- standard self-test
-- heavy self-test
-- benchmark mode
-- reproducibility commands
-- GitHub Actions CI workflows
-- documentation package
-- release checklist
-- project structure guide
-- output schema documentation
-- hardware pathway documentation
-- implementation layers documentation
-- citation metadata
-- Apache-2.0 license
+The purpose of this roadmap is to define the staged engineering trajectory of FRP from the current validated software reference model toward structured output, expanded benchmarks, hardware-facing specification, FPGA mapping, ASIC mapping, physical validation planning, funding preparation, and stable public software architecture release.
 
-The current software layer has been executed and verified on general-purpose computing infrastructure through Python execution, benchmark runs, reproducibility commands, and automated CI workflows.
-
-## 2. Engineering Trajectory
-
-The FRP development trajectory is organized as:
+The roadmap connects:
 
     software validation
     → architecture stabilization
+    → archival release
+    → structured output
+    → expanded benchmark layer
     → hardware-facing specification
     → FPGA mapping study
     → ASIC mapping study
     → chip-oriented implementation research
     → physical validation planning
     → partner and funding package
+    → stable public software architecture release
 
-This roadmap treats the current software layer as the executable foundation for later hardware-facing and implementation-layer work.
+## 2. Current Foundation
 
-## 3. v0.9.3-mobile — Current Candidate
+FRP v0.9.3-mobile establishes the current public software validation layer.
 
-Status:
+Current validated foundation:
 
-    complete as public candidate software validation package
-
-Purpose:
-
-    establish a reproducible public software validation layer for FRP
-
-Completed components:
-
-- root README
-- current Python prototype
-- standard self-test
-- heavy self-test
-- benchmark execution
-- test report
-- installation guide
-- usage guide
-- reproducibility guide
-- continuous integration documentation
-- project structure guide
-- release notes
-- release checklist
-- output schema documentation
-- documentation layer
-- verification layer
-- example layer
-- model and simulation background layer
-- hardware pathway documentation
-- implementation layers documentation
-- Apache-2.0 license
-- citation metadata
-- notice file
-- security policy
-- contribution guide
-- code of conduct
-- GitHub Actions self-test workflow
-- GitHub Actions benchmark smoke-test workflow
-
-Current validated execution layer:
-
-- local Python execution path
+- executable Python prototype
+- balanced ternary state logic
+- neutral transition routing
+- direct polarity transition safety
+- distributed commit behavior
+- Kuramoto-Sakaguchi resonant phase layer
+- nonlinear cubic saturation
+- nonlinear compression
+- delay dynamics
+- scheduler modes
+- per-tick telemetry
+- processor instruction layer
+- demonstration mode
+- self-test mode
+- benchmark mode
 - reproducibility commands
-- benchmark execution
-- CI execution on general-purpose computing infrastructure
+- benchmark output
+- GitHub Actions CI workflows
+- documentation package
+- release checklist
+- release notes
+- project structure guide
+- milestone structure
+- funding brief
+- hardware pathway document
+- implementation layers document
+- FPGA mapping study document
+- ASIC mapping study document
+- physical validation plan
+- citation metadata
+- Apache-2.0 license
 
 Current candidate result:
 
     PASS
 
-## 4. Immediate Repository Stabilization
+## 3. Current Candidate Invariants
 
-The next repository-level work is final stabilization before archival release.
+The current candidate is organized around the following invariants:
 
-Tasks:
+| Invariant | Required Result |
+|---|---|
+| target match | match = 1.000 |
+| direct transition safety | actual_direct_events = 0 |
+| stability | C_minus_P_min > 0 |
+| transition load | switch_load_peak <= transition_fraction |
+| telemetry | ticks_recorded = steps |
+| scheduler | counts match selected cycle mode |
 
-- confirm both GitHub Actions workflows are passing
-- confirm README badges are passing
-- confirm repository file names are final
-- confirm release notes are aligned with current repository state
-- confirm release checklist is aligned with current repository state
-- confirm CITATION.cff is accurate
-- confirm PROJECT_STRUCTURE.md is aligned with current file tree
-- confirm docs/README.md includes current documentation files
-- confirm docs/hardware_pathway.md is linked from documentation indexes
-- confirm docs/implementation_layers.md is linked from documentation indexes
-- confirm documentation files are internally consistent
-- confirm benchmark interpretation matches TEST_REPORT_v0_9_3.md
-- confirm ROADMAP.md reflects the current engineering trajectory
+These invariants define the current behavioral baseline and provide the reference point for future software, benchmark, hardware-facing, FPGA, ASIC, and physical validation stages.
 
-Expected output:
+## 4. Current Validation Evidence
 
-    repository ready for GitHub release tag and archival packaging
+Standard self-test command:
 
-## 5. v0.9.4 Target — Structured Output and Extended Reproducibility
+    python3 frp_prototype_v0_9_3_mobile.py --mode test --steps 128 --seeds 5
 
-Purpose:
+Standard self-test result:
 
-    improve machine-readable output, reproducibility depth, and benchmark inspection
+    PASS
 
-Candidate features:
+Heavy self-test command:
 
-- structured JSON output option
-- machine-readable test summary
+    python3 frp_prototype_v0_9_3_mobile.py --mode test --steps 256 --seeds 10
+
+Heavy self-test result:
+
+    PASS
+
+Benchmark command:
+
+    python3 frp_prototype_v0_9_3_mobile.py --mode bench --steps 128 --seeds 5
+
+Benchmark-supported technical position:
+
+    FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct -1 ↔ 1 transitions in the tested operational domain.
+
+## 5. Current Repository Position
+
+Current repository position:
+
+    public software validation package with hardware-facing documentation pathway, milestone structure, and funding brief
+
+The current software layer has been executed and verified on general-purpose computing infrastructure.
+
+Validated through:
+
+- local Python execution path
+- reproducibility commands
+- benchmark execution
+- GitHub Actions workflow execution
+- CI status verification
+
+Engineering role:
+
+    establish an executable software reference model for hardware-facing specification and implementation-layer work
+
+## 6. Roadmap Overview
+
+| Stage | Target | Primary Output |
+|---|---|---|
+| Stage 0 | v0.9.3-mobile | repository stabilization and public software validation package |
+| Stage 1 | archival release | GitHub release, Zenodo archive, DOI |
+| Stage 2 | v0.9.4 | structured output and machine-readable summaries |
+| Stage 3 | v0.9.5 | expanded benchmark layer |
+| Stage 4 | FPGA mapping package | programmable-hardware mapping package |
+| Stage 5 | ASIC mapping package | chip-oriented implementation research package |
+| Stage 6 | physical validation protocol | measurement and validation planning package |
+| Stage 7 | funding and partner package | review package for partners, labs, grants, and investors |
+| Stage 8 | v1.0.0 | stable public software architecture release |
+
+## 7. Stage 0 — v0.9.3-mobile Repository Stabilization
+
+Current status:
+
+    active candidate package
+
+Objective:
+
+    stabilize the current public software validation package and align all repository navigation, release, milestone, and funding documents
+
+Primary outputs:
+
+- executable prototype
+- test report
+- benchmark output
+- CI workflows
+- release notes
+- release checklist
+- roadmap
+- milestones
+- funding brief
+- project structure guide
+- documentation index
+- hardware pathway documentation
+- implementation layer documentation
+- FPGA mapping study
+- ASIC mapping study
+- physical validation plan
+
+Acceptance criteria:
+
+- standard self-test documented
+- heavy self-test documented
+- benchmark documented
+- CI workflows passing
+- README badges passing
+- release checklist complete
+- release notes aligned
+- roadmap aligned
+- milestones aligned
+- funding brief present
+- project structure aligned
+- docs index aligned
+- repository ready for archival release preparation
+
+Related files:
+
+- README.md
+- TEST_REPORT_v0_9_3.md
+- RELEASE_NOTES_v0_9_3.md
+- RELEASE_CHECKLIST_v0_9_3.md
+- ROADMAP.md
+- MILESTONES.md
+- funding_brief.md
+- PROJECT_STRUCTURE.md
+- docs/README.md
+- docs/hardware_pathway.md
+- docs/implementation_layers.md
+- docs/fpga_mapping_study.md
+- docs/asic_mapping_study.md
+- docs/physical_validation_plan.md
+
+## 8. Stage 1 — Archival Release and DOI
+
+Target:
+
+    archival release of v0.9.3-mobile
+
+Objective:
+
+    create a citable archival release of the current FRP software validation package
+
+Planned outputs:
+
+- GitHub release tag
+- GitHub release description
+- Zenodo archival release
+- DOI assignment
+- updated CITATION.cff
+- README DOI badge
+- updated changelog
+- updated release notes
+- archival metadata review
+
+Acceptance criteria:
+
+- GitHub release created
+- Zenodo record created
+- DOI assigned
+- CITATION.cff updated
+- README DOI badge added
+- changelog updated
+- release notes aligned with archival record
+
+Related files:
+
+- CITATION.cff
+- README.md
+- CHANGELOG.md
+- RELEASE_NOTES_v0_9_3.md
+- RELEASE_CHECKLIST_v0_9_3.md
+
+Project value:
+
+    makes the FRP software validation package citable, archive-ready, and externally referenceable
+
+## 9. Stage 2 — v0.9.4 Structured Output
+
+Target candidate:
+
+    v0.9.4
+
+Objective:
+
+    add machine-readable output for tests, benchmarks, reproducibility workflows, and external inspection
+
+Planned outputs:
+
+- JSON output mode
+- machine-readable self-test summary
+- machine-readable heavy self-test summary
 - machine-readable benchmark summary
-- reproducibility profiles
-- extended seed configuration
-- expanded benchmark table export
-- telemetry export mode
+- structured telemetry export option
 - optional CSV output
-- stronger command-line output consistency
-- documentation update for structured outputs
+- updated output schema documentation
+- updated usage guide
+- updated reproducibility guide
+- updated CI validation for structured output
 
-Expected files:
+Candidate command direction:
 
-- updated prototype file or new candidate prototype file
-- updated TEST_REPORT
-- updated REPRODUCIBILITY.md
-- updated USAGE.md
-- updated docs/output_schema.md
-- updated RELEASE_NOTES
-- updated CHANGELOG
+    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json
 
-Expected validation:
+    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json
 
-- standard self-test passing
-- heavy self-test passing
-- benchmark smoke test passing
-- JSON output validation
-- CI workflow update
+Acceptance criteria:
 
-## 6. v0.9.5 Target — Expanded Benchmark Layer
+- test mode produces structured summary
+- benchmark mode produces structured summary
+- JSON fields match docs/output_schema.md
+- CI validates structured output markers
+- reproducibility guide includes structured output commands
+- test report updated for v0.9.4
 
-Purpose:
+Related files:
 
-    strengthen comparative analysis and benchmark reproducibility
+- docs/output_schema.md
+- USAGE.md
+- REPRODUCIBILITY.md
+- CI.md
+- TEST_REPORT
+- RELEASE_NOTES
+- CHANGELOG
 
-Candidate features:
+Project value:
+
+    improves automated inspection, benchmark reproducibility, partner review, and integration readiness
+
+## 10. Stage 3 — v0.9.5 Extended Benchmark Layer
+
+Target candidate:
+
+    v0.9.5
+
+Objective:
+
+    expand the benchmark layer for stronger comparative analysis and reproducibility
+
+Planned outputs:
 
 - additional benchmark seeds
 - additional vector sizes
-- additional scheduler comparisons
-- extended distributed-neutral baseline comparison
-- transition debt analysis
-- direct conflict fraction analysis
-- heat and switch-load trajectory summaries
+- additional scheduler profiles
+- expanded transition metrics
+- transition debt summaries
+- direct conflict fraction summaries
+- heat trajectory summaries
+- switch-load trajectory summaries
 - coherence trajectory summaries
 - benchmark export files
-- benchmark interpretation update
-
-Expected validation:
-
-- benchmark execution across multiple profiles
-- stable target match
-- stable direct transition safety
-- documented C_minus_P behavior
-- documented transition load behavior
+- benchmark profile guide
 - updated benchmark interpretation
 
-## 7. v1.0.0 Target — Public Software Architecture Release
+Candidate benchmark dimensions:
 
-Purpose:
+- seed count
+- vector size
+- step count
+- scheduler mode
+- transition fraction
+- delay depth
+- gamma parameter
+- coupling strength
+- damping strength
+- compression profile
+
+Acceptance criteria:
+
+- benchmark profiles reproducible through documented commands
+- benchmark exports generated consistently
+- benchmark interpretation aligned with expanded output
+- CI runs benchmark smoke validation
+- documentation reflects expanded benchmark layer
+- release notes include benchmark expansion
+
+Related files:
+
+- docs/benchmark_interpretation.md
+- docs/output_schema.md
+- REPRODUCIBILITY.md
+- USAGE.md
+- CI.md
+- TEST_REPORT
+- RELEASE_NOTES
+- CHANGELOG
+
+Project value:
+
+    strengthens comparative evidence and supports technical review by partners, labs, and funding reviewers
+
+## 11. Stage 4 — FPGA Mapping Package
+
+Target:
+
+    FPGA-oriented implementation package
+
+Objective:
+
+    translate the validated FRP software reference behavior into programmable-hardware implementation planning
+
+Current foundation:
+
+- docs/hardware_pathway.md
+- docs/implementation_layers.md
+- docs/fpga_mapping_study.md
+- software reference model
+- candidate invariants
+- benchmark output
+
+Planned outputs:
+
+- FPGA state encoding proposal
+- neutral transition controller proposal
+- distributed commit scheduler proposal
+- register file mapping proposal
+- delay buffer mapping proposal
+- phase approximation proposal
+- nonlinear block approximation proposal
+- telemetry register proposal
+- FPGA testbench plan
+- Python-reference comparison plan
+- FPGA prototype planning structure
+
+Acceptance criteria:
+
+- FPGA mapping references current software behavior
+- candidate invariants mapped to FPGA validation criteria
+- telemetry mapping defined
+- testbench comparison structure defined
+- FPGA package documented
+- partner review package includes FPGA mapping summary
+
+Related files:
+
+- docs/fpga_mapping_study.md
+- docs/hardware_pathway.md
+- docs/implementation_layers.md
+- docs/physical_validation_plan.md
+- MILESTONES.md
+- funding_brief.md
+
+Project value:
+
+    creates the first programmable-hardware bridge from the software validation layer toward implementation-layer research
+
+## 12. Stage 5 — ASIC Mapping Package
+
+Target:
+
+    ASIC-oriented implementation research package
+
+Objective:
+
+    translate the validated FRP software reference behavior into chip-oriented architectural study
+
+Current foundation:
+
+- docs/hardware_pathway.md
+- docs/implementation_layers.md
+- docs/fpga_mapping_study.md
+- docs/asic_mapping_study.md
+- software reference model
+- candidate invariants
+- benchmark output
+
+Planned outputs:
+
+- ternary state representation proposal
+- neutral routing cell proposal
+- local transition controller proposal
+- distributed commit timing proposal
+- scheduler control proposal
+- state storage proposal
+- phase approximation proposal
+- nonlinear response proposal
+- coherence and load tracking proposal
+- telemetry and test interface proposal
+- ASIC testbench plan
+- Python-reference comparison plan
+- chip-oriented implementation research structure
+
+Acceptance criteria:
+
+- ASIC mapping references current software behavior
+- candidate invariants mapped to ASIC validation criteria
+- neutral routing cell structure defined
+- distributed commit timing structure defined
+- telemetry and test interface defined
+- chip-oriented implementation research package documented
+
+Related files:
+
+- docs/asic_mapping_study.md
+- docs/fpga_mapping_study.md
+- docs/hardware_pathway.md
+- docs/implementation_layers.md
+- docs/physical_validation_plan.md
+- MILESTONES.md
+- funding_brief.md
+
+Project value:
+
+    establishes a chip-oriented implementation research path grounded in the validated software reference layer
+
+## 13. Stage 6 — Physical Validation Protocol
+
+Target:
+
+    physical validation protocol package
+
+Objective:
+
+    define how future physical FRP implementations can be measured and compared against the software reference model
+
+Current foundation:
+
+- docs/physical_validation_plan.md
+- docs/fpga_mapping_study.md
+- docs/asic_mapping_study.md
+- software reference model
+- benchmark output
+- candidate invariants
+
+Planned outputs:
+
+- physical validation protocol
+- measurement setup structure
+- logical correctness test plan
+- direct transition safety test plan
+- neutral routing test plan
+- distributed commit test plan
+- scheduler validation plan
+- telemetry consistency plan
+- timing measurement plan
+- switching activity measurement plan
+- energy measurement plan
+- thermal measurement plan
+- benchmark repeatability plan
+- Python-reference comparison report structure
+
+Acceptance criteria:
+
+- validation categories defined
+- measurement protocol structure defined
+- benchmark repeatability structure defined
+- reference comparison structure defined
+- validation deliverables listed
+- partner and lab review path documented
+
+Related files:
+
+- docs/physical_validation_plan.md
+- docs/hardware_pathway.md
+- docs/implementation_layers.md
+- docs/fpga_mapping_study.md
+- docs/asic_mapping_study.md
+- MILESTONES.md
+- funding_brief.md
+
+Project value:
+
+    prepares FRP for measurable physical implementation review and laboratory collaboration
+
+## 14. Stage 7 — Funding and Partner Package
+
+Target:
+
+    partner and funding review package
+
+Objective:
+
+    prepare FRP for engineering partner review, laboratory collaboration, grant review, or investor-facing technical evaluation
+
+Current foundation:
+
+- funding_brief.md
+- MILESTONES.md
+- ROADMAP.md
+- README.md
+- TEST_REPORT_v0_9_3.md
+- hardware pathway documentation
+- implementation layer documentation
+- FPGA mapping study
+- ASIC mapping study
+- physical validation plan
+
+Planned outputs:
+
+- executive summary
+- validated asset list
+- software validation evidence summary
+- benchmark evidence summary
+- CI verification summary
+- hardware-facing pathway summary
+- FPGA mapping summary
+- ASIC mapping summary
+- physical validation summary
+- funding milestone table
+- resource needs table
+- partner profile
+- review package checklist
+- presentation-ready technical summary
+
+Acceptance criteria:
+
+- funding brief complete
+- milestones complete
+- review package file list complete
+- project value proposition clear
+- engineering trajectory clear
+- technical assets documented
+- resource needs documented
+- partner review pathway documented
+
+Related files:
+
+- funding_brief.md
+- MILESTONES.md
+- README.md
+- ROADMAP.md
+- TEST_REPORT_v0_9_3.md
+- RELEASE_NOTES_v0_9_3.md
+- RELEASE_CHECKLIST_v0_9_3.md
+- docs/hardware_pathway.md
+- docs/implementation_layers.md
+- docs/fpga_mapping_study.md
+- docs/asic_mapping_study.md
+- docs/physical_validation_plan.md
+
+Project value:
+
+    creates a coherent package for funding, partnerships, laboratory collaboration, and technical due diligence
+
+## 15. Stage 8 — v1.0.0 Public Software Architecture Release
+
+Target candidate:
+
+    v1.0.0
+
+Objective:
 
     establish the first stable public software architecture release of FRP
+
+Planned foundation:
+
+- stabilized v0.9.3-mobile package
+- structured output layer
+- expanded benchmark layer
+- hardware-facing documentation pathway
+- milestone structure
+- funding package
+- archival release metadata
 
 Candidate requirements:
 
@@ -219,227 +644,149 @@ Candidate requirements:
 - stable output schema
 - stable benchmark profile
 - stable documentation layer
-- stable hardware-facing documentation pathway
 - stable release checklist
-- DOI-ready repository metadata
-- complete citation metadata
+- stable citation metadata
+- stable roadmap
+- stable milestone structure
 - GitHub release tag
 - archival release package
 
-Expected public status:
+Acceptance criteria:
 
-    stable software validation release
+- v1.0.0 candidate source finalized
+- test report finalized
+- benchmark report finalized
+- documentation package finalized
+- release notes finalized
+- release checklist finalized
+- citation metadata finalized
+- GitHub release created
+- archival package created
 
-Expected archival status:
+Related files:
 
-    DOI-ready release package
-
-## 8. Hardware-Facing Specification Layer
-
-Purpose:
-
-    translate the validated FRP software layer into hardware-facing architectural terms
-
-Current foundation documents:
-
+- README.md
+- ROADMAP.md
+- MILESTONES.md
+- TEST_REPORT
+- RELEASE_NOTES
+- RELEASE_CHECKLIST
+- CITATION.cff
+- docs/README.md
+- docs/output_schema.md
+- docs/benchmark_interpretation.md
 - docs/hardware_pathway.md
 - docs/implementation_layers.md
 
-Candidate future documents:
+Project value:
 
+    establishes a stable public software architecture release ready for citation, review, and staged implementation-layer development
+
+## 16. Milestone Mapping
+
+| Roadmap Stage | Project Milestone |
+|---|---|
+| Stage 0 — v0.9.3-mobile Repository Stabilization | M0 |
+| Stage 1 — Archival Release and DOI | M1 |
+| Stage 2 — v0.9.4 Structured Output | M2 |
+| Stage 3 — v0.9.5 Extended Benchmark Layer | M3 |
+| Stage 4 — FPGA Mapping Package | M4 |
+| Stage 5 — ASIC Mapping Package | M5 |
+| Stage 6 — Physical Validation Protocol | M6 |
+| Stage 7 — Funding and Partner Package | M7 |
+| Stage 8 — v1.0.0 Public Software Architecture Release | M8 |
+
+Milestone document:
+
+    MILESTONES.md
+
+## 17. Review Package Path
+
+Current review package files:
+
+- README.md
+- funding_brief.md
+- MILESTONES.md
+- ROADMAP.md
+- TEST_REPORT_v0_9_3.md
+- RELEASE_NOTES_v0_9_3.md
+- RELEASE_CHECKLIST_v0_9_3.md
+- PROJECT_STRUCTURE.md
+- docs/hardware_pathway.md
+- docs/implementation_layers.md
 - docs/fpga_mapping_study.md
 - docs/asic_mapping_study.md
 - docs/physical_validation_plan.md
-- docs/telemetry_mapping.md
-- docs/benchmark_to_hardware_translation.md
+- docs/benchmark_interpretation.md
+- docs/output_schema.md
+- REPRODUCIBILITY.md
+- CI.md
+- CITATION.cff
+- LICENSE
 
-Core topics:
+Review package role:
 
-- ternary state representation
-- neutral transition routing in hardware-facing form
-- distributed commit timing
-- transition fraction as hardware scheduling constraint
-- resonant phase layer mapping
-- delay buffer mapping
-- telemetry mapping
-- C_minus_P metric translation
-- switching-load interpretation
-- benchmark-to-hardware translation assumptions
-- physical validation requirements
+    support repository-level review, technical partner review, laboratory collaboration discussion, grant preparation, investor-facing technical evaluation, and milestone-based resource planning
 
-Expected output:
+## 18. Release and Archival Path
 
-    hardware-facing specification package
+Recommended archival sequence:
 
-## 9. FPGA Mapping Study
+1. complete repository synchronization
+2. confirm CI workflows passing
+3. confirm README badges passing
+4. confirm release checklist
+5. confirm release notes
+6. confirm CITATION.cff metadata
+7. create GitHub release tag
+8. create Zenodo archival release
+9. obtain DOI
+10. update CITATION.cff with DOI
+11. update README with DOI badge
+12. update CHANGELOG with DOI reference
+13. prepare partner and funding package for external review
 
-Purpose:
+## 19. Documentation Alignment Rule
 
-    explore how FRP logic can be mapped into programmable hardware architecture
+When a roadmap stage changes, review whether the following files require updates:
 
-Candidate topics:
-
-- ternary state encoding
-- neutral routing logic
-- distributed commit controller
-- scheduler implementation
-- register file representation
-- phase layer approximation
-- delay buffer implementation
-- telemetry counters
-- benchmark harness
-- validation strategy on FPGA development boards
-
-Expected output:
-
-    FPGA mapping study document and prototype planning notes
-
-## 10. ASIC Mapping Study
-
-Purpose:
-
-    explore chip-oriented implementation research for FRP architecture
-
-Candidate topics:
-
-- ternary logic cell representation
-- transition-safe state machinery
-- neutral routing gates
-- distributed commit timing network
-- resonant phase approximation
-- local coherence tracking
-- switching-load monitoring
-- test harness design
-- physical measurement planning
-- fabrication-facing abstraction layer
-
-Expected output:
-
-    ASIC mapping study document and chip-oriented research plan
-
-## 11. Physical Validation Planning
-
-Purpose:
-
-    define how future physical implementations can be evaluated
-
-Candidate validation categories:
-
-- logical correctness
-- transition safety
-- switching activity
-- energy behavior
-- thermal behavior
-- timing behavior
-- stability behavior
-- noise response
-- scheduler behavior
-- benchmark repeatability
-- telemetry consistency
-- comparison against the software reference model
-
-Expected output:
-
-    physical validation protocol draft
-
-## 12. Funding and Partner Package
-
-Purpose:
-
-    prepare the project for financing, engineering partnership, grant review, or laboratory collaboration
-
-Candidate package:
-
-- executive summary
-- technical overview
-- current validated assets
-- software validation evidence
-- CI evidence
-- benchmark summary
-- development trajectory
-- hardware-facing pathway
-- implementation layer structure
-- required next resources
-- engineering milestones
-- risk and validation plan
-- IP and licensing summary
-- archival DOI reference after release
-
-Core message:
-
-    FRP already has a validated public software layer and a defined pathway toward hardware-facing specification, FPGA/ASIC mapping, chip-oriented implementation research, and physical validation planning.
-
-## 13. Documentation Growth Plan
-
-Current hardware-facing documentation foundation:
-
+- README.md
+- ROADMAP.md
+- MILESTONES.md
+- funding_brief.md
+- PROJECT_STRUCTURE.md
+- RELEASE_NOTES_v0_9_3.md
+- RELEASE_CHECKLIST_v0_9_3.md
+- CHANGELOG.md
+- docs/README.md
+- docs/output_schema.md
+- docs/benchmark_interpretation.md
 - docs/hardware_pathway.md
 - docs/implementation_layers.md
+- docs/fpga_mapping_study.md
+- docs/asic_mapping_study.md
+- docs/physical_validation_plan.md
+- REPRODUCIBILITY.md
+- USAGE.md
+- CI.md
 
-Future documentation may include:
+Documentation should remain aligned with executable behavior, benchmark output, CI status, release readiness, milestones, funding structure, and current engineering trajectory.
 
-- FPGA mapping study
-- ASIC mapping study
-- physical validation plan
-- funding brief
-- architecture diagrams
-- benchmark profile guide
-- structured output guide
-- telemetry interpretation guide
-- release process guide
-- partner technical brief
+## 20. Current Status
 
-Documentation rule:
+FRP v0.9.3-mobile currently establishes:
 
-    each document must describe the confirmed layer it belongs to and its relation to the next engineering layer
+- public software validation layer
+- reproducibility and benchmark layer
+- CI verification layer
+- documentation layer
+- hardware-facing documentation pathway
+- FPGA mapping study path
+- ASIC mapping study path
+- physical validation planning structure
+- milestone structure
+- funding and partner-facing brief
 
-## 14. Release Process
+Current repository role:
 
-Recommended release sequence:
-
-1. stabilize current repository
-2. confirm CI passing
-3. confirm release checklist
-4. create GitHub release tag
-5. create Zenodo archival release
-6. obtain DOI
-7. update CITATION.cff
-8. update README with DOI badge
-9. prepare partner and funding package
-10. open next development candidate
-
-## 15. Current Priority
-
-Current priority:
-
-    final repository stabilization before archival release
-
-Current synchronization files:
-
-1. docs/README.md
-2. PROJECT_STRUCTURE.md
-3. RELEASE_CHECKLIST_v0_9_3.md
-4. RELEASE_NOTES_v0_9_3.md
-5. ROADMAP.md
-
-Next engineering documents:
-
-1. docs/fpga_mapping_study.md
-2. docs/asic_mapping_study.md
-3. docs/physical_validation_plan.md
-4. funding_brief.md
-
-## 16. Roadmap Status
-
-FRP v0.9.3-mobile is ready as a public candidate software validation package with an initiated hardware-facing documentation pathway.
-
-The project is positioned for:
-
-- archival release preparation
-- DOI registration
-- expanded reproducibility work
-- structured output development
-- hardware-facing specification
-- FPGA and ASIC mapping studies
-- physical validation planning
-- partner and funding preparation
+    provide a validated public software reference package for staged engineering development, archival release preparation, hardware-facing specification planning, partner review, and funding preparation
