@@ -14,9 +14,13 @@ Test report:
 
     TEST_REPORT_v0_9_3.md
 
-Current release scope:
+Current public release scope:
 
-    Python simulation prototype of a ternary resonant coherence processor
+    Python simulation layer, documentation layer, reproducibility layer, benchmark layer, and CI verification layer.
+
+Engineering trajectory:
+
+    software validation → architecture stabilization → hardware-facing specification → FPGA/ASIC mapping → chip-oriented implementation research → physical validation planning
 
 ## 1. Core Prototype
 
@@ -37,6 +41,8 @@ Current release scope:
 | delay buffers implemented | complete |
 | scheduler modes implemented | complete |
 | per-tick telemetry implemented | complete |
+| register file implemented | complete |
+| processor instruction layer implemented | complete |
 
 ## 2. Candidate Invariants
 
@@ -124,7 +130,31 @@ Status:
 
     complete
 
-## 6. Continuous Integration
+## 6. Benchmark-Supported Technical Position
+
+Confirmed public technical position:
+
+    FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct -1 ↔ 1 transitions in the tested operational domain.
+
+Current benchmark interpretation:
+
+- FRP distributed resonant mode preserves match = 1.000
+- FRP distributed resonant mode preserves actual_direct_events = 0
+- FRP distributed resonant mode preserves C_minus_P_min > 0
+- FRP distributed resonant mode preserves switch_load_peak = 0.25
+- distributed_neutral_ternary has heat_peak = 0.003250 in the current benchmark table
+- frp_distributed_resonant has heat_peak = 0.107000 in the current benchmark table
+- FRP includes the Kuramoto-Sakaguchi resonant phase layer
+- FRP includes nonlinear saturation
+- FRP includes compression dynamics
+- FRP includes delay dynamics
+- FRP includes resonant phase evolution
+
+Status:
+
+    complete
+
+## 7. Continuous Integration
 
 | Workflow | File | Status |
 |---|---|---|
@@ -143,7 +173,31 @@ Status:
 
     complete
 
-## 7. Root Repository Files
+## 8. General-Purpose Hardware Execution
+
+Current execution layer:
+
+    general-purpose computing infrastructure
+
+Validated through:
+
+- local Python execution path
+- reproducibility commands
+- benchmark execution
+- GitHub Actions workflow execution
+- CI status verification
+
+Engineering meaning:
+
+    The FRP software layer has been executed and verified on general-purpose computing infrastructure.
+
+This provides the current executable basis for future hardware-facing specification and implementation-layer work.
+
+Status:
+
+    complete
+
+## 9. Root Repository Files
 
 | File | Status |
 |---|---|
@@ -167,7 +221,7 @@ Status:
 | CONTRIBUTING.md | complete |
 | CODE_OF_CONDUCT.md | complete |
 
-## 8. Documentation Files
+## 10. Documentation Files
 
 | File | Status |
 |---|---|
@@ -179,14 +233,14 @@ Status:
 | docs/limitations.md | complete |
 | docs/output_schema.md | complete |
 
-## 9. Verification Files
+## 11. Verification Files
 
 | File | Status |
 |---|---|
 | verification/README.md | complete |
 | verification/coherence_metrics.md | complete |
 
-## 10. Simulation and Model Files
+## 12. Simulation and Model Files
 
 | File | Status |
 |---|---|
@@ -195,14 +249,14 @@ Status:
 | models/README.md | complete |
 | models/kuramoto_frp_background_model.md | complete |
 
-## 11. Example Files
+## 13. Example Files
 
 | File | Status |
 |---|---|
 | examples/README.md | complete |
 | examples/resonance_convergence_example.md | complete |
 
-## 12. Metadata and Policy Files
+## 14. Metadata and Policy Files
 
 | File | Status |
 |---|---|
@@ -213,7 +267,7 @@ Status:
 | CONTRIBUTING.md | complete |
 | CODE_OF_CONDUCT.md | complete |
 
-## 13. Naming Check
+## 15. Naming Check
 
 Required active project name:
 
@@ -235,44 +289,6 @@ Status:
 
     complete
 
-## 14. Public Claim Scope
-
-Confirmed public technical claim:
-
-    FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct -1 ↔ 1 transitions in the tested operational domain.
-
-Current benchmark interpretation:
-
-- FRP distributed resonant mode preserves match = 1.000
-- FRP distributed resonant mode preserves actual_direct_events = 0
-- FRP distributed resonant mode preserves C_minus_P_min > 0
-- FRP distributed resonant mode preserves switch_load_peak = 0.25
-- distributed_neutral_ternary has lower heat_peak in the current benchmark table
-- FRP includes the resonant phase layer, nonlinear saturation, compression, delay dynamics, and resonant phase evolution
-
-Status:
-
-    complete
-
-## 15. Release Scope Check
-
-Current release scope:
-
-    Python simulation prototype
-
-Current validated domain:
-
-- repository-level source review
-- reproducibility testing
-- continuous integration verification
-- benchmark execution
-- documentation inspection
-- archival preparation
-
-Status:
-
-    complete
-
 ## 16. Release Readiness
 
 | Category | Status |
@@ -284,7 +300,8 @@ Status:
 | installation documented | complete |
 | usage documented | complete |
 | reproducibility documented | complete |
-| scope boundaries documented | complete |
+| release scope documented | complete |
+| engineering trajectory documented | complete |
 | release notes present | complete |
 | changelog present | complete |
 | citation metadata present | complete |
@@ -296,7 +313,23 @@ Status:
 | project structure documented | complete |
 | output schema documented | complete |
 
-## 17. Remaining Before Archival Release
+## 17. Next Engineering Layers
+
+The current public repository package establishes the software validation layer.
+
+Next engineering layers may include:
+
+- hardware-facing specification
+- FPGA mapping study
+- ASIC mapping study
+- chip-oriented implementation research
+- physical validation protocol
+- implementation-layer documentation
+- extended benchmark suite
+- structured JSON output
+- additional reproducibility profiles
+
+## 18. Remaining Before Archival Release
 
 Before creating an archival release or Zenodo DOI:
 
@@ -310,15 +343,18 @@ Before creating an archival release or Zenodo DOI:
 - add DOI to CITATION.cff after DOI assignment
 - update README with DOI badge after DOI assignment
 
-## 18. Current Status
+## 19. Current Status
 
-FRP v0.9.3-mobile is ready as a public candidate simulation prototype.
+FRP v0.9.3-mobile is ready as a public candidate software validation package.
 
 It is suitable for:
 
 - repository-level review
 - reproducibility testing
+- benchmark verification
 - continuous integration verification
 - documentation inspection
 - release preparation
 - future archival packaging
+- hardware-facing specification planning
+- implementation-layer research planning
