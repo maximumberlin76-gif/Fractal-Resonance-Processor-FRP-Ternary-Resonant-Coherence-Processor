@@ -1,26 +1,52 @@
 # Fractal Resonance Processor (FRP)
 
-[![FRP Self Test](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml)
+[FRP Self Test](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml)
 
-[![FRP Benchmark Smoke Test](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-benchmark-smoke.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-benchmark-smoke.yml)
+[FRP Benchmark Smoke Test](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-benchmark-smoke.yml)
+
+[FRP Structured Output](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-structured-output.yml)
 
 **Ternary Resonant Coherence Processor**
 
 Current candidate version:
 
-    v0.9.3-mobile
+`v0.9.4`
+
+Current milestone:
+
+`M2 — Structured Output`
+
+Current structured-output schema:
+
+`frp.structured_output.v0.9.4`
 
 Current public repository package:
 
-    software validation layer, documentation layer, reproducibility layer, benchmark layer, CI verification layer, and hardware-facing documentation pathway
+`software validation layer, documentation layer, reproducibility layer, benchmark layer, structured output layer, CI verification layer, telemetry export layer, and hardware-facing documentation pathway`
 
 Main prototype file:
 
-    frp_prototype_v0_9_3_mobile.py
+`frp_prototype_v0_9_4.py`
+
+Previous archived reference prototype:
+
+`frp_prototype_v0_9_3_mobile.py`
 
 Current test report:
 
-    TEST_REPORT_v0_9_3.md
+`TEST_REPORT_v0_9_4.md`
+
+Previous archived test report:
+
+`TEST_REPORT_v0_9_3.md`
+
+Archived DOI:
+
+`https://doi.org/10.5281/zenodo.21112439`
+
+DOI:
+
+`10.5281/zenodo.21112439`
 
 ## 1. Overview
 
@@ -32,21 +58,27 @@ FRP is based on:
 - neutral transition routing
 - distributed commit behavior
 - resonant phase dynamics
+- Kuramoto-Sakaguchi phase coupling
+- nonlinear cubic saturation
+- nonlinear compression
+- delay dynamics
+- scheduler modes
 - operational coherence tracking
 - stability-bound execution
 - per-tick telemetry
+- structured machine-readable output
 - reproducible benchmark execution
 - staged hardware-facing documentation pathway
 
 FRP treats computation as a dynamic process of target-oriented ternary transition, neutral conflict routing, resonance-supported phase evolution, distributed commit, and retained coherent output.
 
-The current repository establishes the public software validation layer of the FRP architecture.
+The current repository establishes the public software validation and structured-output layer of the FRP architecture.
 
-This layer provides the executable reference model for hardware-facing specification, FPGA mapping study, ASIC mapping study, physical validation planning, and partner or funding preparation.
+This layer provides the executable reference model for hardware-facing specification, FPGA mapping study, ASIC mapping study, physical validation planning, partner review, funding preparation, and later testbench comparison work.
 
 ## 2. Current Repository Position
 
-FRP v0.9.3-mobile currently provides:
+FRP v0.9.4 currently provides:
 
 - executable Python source code
 - balanced ternary state logic
@@ -61,10 +93,19 @@ FRP v0.9.3-mobile currently provides:
 - processor instruction layer
 - self-test mode
 - benchmark mode
+- structured JSON output
+- machine-readable schema marker
+- JSON demo output
+- JSON self-test output
+- JSON benchmark output
+- optional telemetry export
 - reproducibility commands
 - benchmark output
 - GitHub Actions CI verification
+- structured-output GitHub Actions workflow
 - documentation package
+- release notes
+- test report
 - release checklist
 - roadmap
 - milestone structure
@@ -77,40 +118,53 @@ FRP v0.9.3-mobile currently provides:
 - citation metadata
 - Apache-2.0 license
 
-The current software layer has been executed and verified on general-purpose computing infrastructure through Python execution, reproducibility commands, benchmark execution, and automated CI workflows.
+The current software layer has been executed and verified on general-purpose computing infrastructure through Python execution, reproducibility commands, benchmark execution, structured JSON validation, telemetry export checks, and automated CI workflows.
 
 ## 3. Engineering Trajectory
 
 The FRP development trajectory is organized as:
 
-    software validation
-    → architecture stabilization
-    → archival release
-    → structured output
-    → expanded benchmark layer
-    → hardware-facing specification
-    → FPGA mapping study
-    → ASIC mapping study
-    → chip-oriented implementation research
-    → physical validation planning
-    → partner and funding package
-    → stable public software architecture release
+`software validation → architecture stabilization → archival release → structured output → expanded benchmark layer → hardware-facing specification → FPGA mapping study → ASIC mapping study → chip-oriented implementation research → physical validation planning → partner and funding package → stable public software architecture release`
 
-The current repository package establishes the first validated public software foundation for this trajectory.
+The current repository package establishes the validated public software and structured-output foundation for this trajectory.
+
+Current milestone position:
+
+`M2 — Structured Output`
+
+Next planned technical direction:
+
+`M3 — Extended Benchmark Layer`
+
+Hardware-facing trajectory after structured benchmark stabilization:
+
+`M4 — FPGA Mapping Package`
 
 ## 4. Current Prototype
 
 The active prototype file is:
 
-    frp_prototype_v0_9_3_mobile.py
+`frp_prototype_v0_9_4.py`
+
+The previous archived reference prototype file is:
+
+`frp_prototype_v0_9_3_mobile.py`
 
 The active test report file is:
 
-    TEST_REPORT_v0_9_3.md
+`TEST_REPORT_v0_9_4.md`
+
+The previous archived test report file is:
+
+`TEST_REPORT_v0_9_3.md`
 
 The active candidate version is:
 
-    v0.9.3-mobile
+`v0.9.4`
+
+The current structured-output schema is:
+
+`frp.structured_output.v0.9.4`
 
 The prototype implements:
 
@@ -130,47 +184,69 @@ The prototype implements:
 - demonstration mode
 - self-test mode
 - benchmark mode
+- structured JSON output
+- optional telemetry export
 - command-line interface
 
 ## 5. Installation
 
 Install dependencies from the repository root:
 
-    pip install -r requirements.txt
+`pip install -r requirements.txt`
 
 The current external Python dependency is:
 
-    numpy>=1.26.0
+`numpy>=1.26.0`
 
 For detailed installation instructions, see:
 
-    INSTALL.md
+`INSTALL.md`
+
+Recommended Python version:
+
+`Python 3.10 or newer`
 
 ## 6. Quick Start
 
 Run a demonstration:
 
-    python3 frp_prototype_v0_9_3_mobile.py --mode demo --N 16 --steps 128 --cycle-mode 7/1
+`python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1`
 
 Run the standard self-test:
 
-    python3 frp_prototype_v0_9_3_mobile.py --mode test --steps 128 --seeds 5
+`python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5`
 
 Run the heavier self-test:
 
-    python3 frp_prototype_v0_9_3_mobile.py --mode test --steps 256 --seeds 10
+`python3 frp_prototype_v0_9_4.py --mode test --steps 256 --seeds 10`
 
 Run the benchmark:
 
-    python3 frp_prototype_v0_9_3_mobile.py --mode bench --steps 128 --seeds 5
+`python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5`
+
+Run the standard self-test as JSON:
+
+`python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json`
+
+Run the benchmark as JSON:
+
+`python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json`
+
+Run a demo with JSON telemetry:
+
+`python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json --include-telemetry`
 
 For detailed usage instructions, see:
 
-    USAGE.md
+`USAGE.md`
 
 For reproducibility instructions, see:
 
-    REPRODUCIBILITY.md
+`REPRODUCIBILITY.md`
+
+For structured output schema details, see:
+
+`docs/output_schema.md`
 
 ## 7. Core Ternary Principle
 
@@ -186,8 +262,9 @@ The direct polarity transition is routed through the neutral state.
 
 Reference transition paths:
 
-    -1 → 0 → 1
-     1 → 0 → -1
+`-1 → 0 → 1`
+
+`1 → 0 → -1`
 
 The neutral state `0` acts as:
 
@@ -199,11 +276,15 @@ The neutral state `0` acts as:
 - polarity bridge
 - scheduling control point
 
+In FRP, `0` is not treated as a passive empty value.
+
+It is an active transition and stabilization state.
+
 ## 8. Dynamic Stability Principle
 
 The core stability condition is:
 
-    C(t) > P(t)
+`C(t) > P(t)`
 
 where:
 
@@ -214,27 +295,49 @@ where:
 
 In the current prototype:
 
-    P(t) = heat + switch_load
+`P(t) = heat + switch_load`
 
 Stable execution requires:
 
-    C_minus_P = C(t) - P(t) > 0
+`C_minus_P = C(t) - P(t) > 0`
 
 The prototype tracks this condition during execution.
+
+The processor does not only check whether the final ternary target state was reached.
+
+It also checks whether the transition path preserved:
+
+- direct transition safety
+- distributed switching limits
+- scheduler consistency
+- telemetry completeness
+- positive operational stability
 
 ## 9. Operational Domain
 
 The tested operational domain is:
 
-    N >= 8
+`N >= 8`
 
 Smaller values such as `N = 2` or `N = 3` may be used as micro-tests of ternary logic.
 
 Default transition cap:
 
-    transition_fraction = 0.25
+`transition_fraction = 0.25`
 
 This limits the maximum distributed state transition load per tick under default settings.
+
+Default Kuramoto-Sakaguchi phase shift:
+
+`gamma = 0.30 pi`
+
+Default telemetry interval:
+
+`telemetry_every = 1`
+
+Per-tick telemetry is mandatory inside the model.
+
+The `--include-telemetry` flag controls whether telemetry is emitted in JSON output.
 
 ## 10. Scheduler Modes
 
@@ -248,7 +351,83 @@ FRP currently supports three scheduler modes:
 
 The scheduler is validated by internal tick counts.
 
-## 11. Processor Layer
+### 10.1 Free Mode
+
+In `free` mode, commit behavior is allowed every tick.
+
+Role:
+
+`simple execution mode for comparison and inspection`
+
+### 10.2 7/1 Mode
+
+The `7/1` mode is an eight-tick operating cycle:
+
+`seven balance ticks`
+
+`one commit tick`
+
+Ticks `0..6` are used for:
+
+- balance
+- stabilization
+- phase adjustment
+- neutral routing
+- transition preparation
+
+Tick `7` is used as the commit tick.
+
+Purpose:
+
+`separate preparation from commitment`
+
+### 10.3 1/7 Mode
+
+The `1/7` mode is the complementary operating cycle:
+
+`one excite tick`
+
+`seven neutralize ticks`
+
+One tick introduces excitation or transition pressure.
+
+The following seven ticks are used for:
+
+- neutralization
+- damping
+- stabilization
+- coherence recovery
+
+Purpose:
+
+`separate excitation from recovery`
+
+## 11. Kuramoto-Sakaguchi Resonant Phase Layer
+
+FRP includes a resonant phase-coupling layer based on a Kuramoto-Sakaguchi model.
+
+Each processor cell has a phase.
+
+The phase field evolves through coupled oscillator dynamics.
+
+The Sakaguchi phase shift introduces asymmetric phase coupling.
+
+Current default phase shift:
+
+`gamma = 0.30 pi`
+
+This resonant phase layer separates FRP from a purely logical ternary transition model.
+
+FRP combines:
+
+- ternary state logic
+- resonant phase coupling
+- nonlinear shaping
+- delayed interaction
+- scheduler-controlled transition
+- operational coherence tracking
+
+## 12. Processor Layer
 
 The current processor layer includes:
 
@@ -279,7 +458,9 @@ Balanced ternary arithmetic and logical operations:
 - `compare`
 - `consensus`
 
-## 12. Per-Tick Telemetry
+The processor layer uses the FRP core to execute ternary operations while tracking transition safety, stability, scheduler behavior, and telemetry.
+
+## 13. Per-Tick Telemetry
 
 Per-tick telemetry is part of the current candidate.
 
@@ -311,11 +492,65 @@ Telemetry supports:
 - candidate invariant verification
 - benchmark interpretation
 - output schema documentation
-- future structured output
+- structured output
 - hardware-facing telemetry mapping
 - physical validation planning
+- future FPGA register mapping
+- future testbench comparison
 
-## 13. Candidate Invariants
+Telemetry path:
+
+`Python model → JSON telemetry → benchmark export → hardware-facing signal map → FPGA register map → testbench comparison`
+
+## 14. Structured Output
+
+FRP v0.9.4 adds structured machine-readable output.
+
+New output controls:
+
+`--output text`
+
+`--output json`
+
+`--include-telemetry`
+
+Default output mode:
+
+`--output text`
+
+Structured output mode:
+
+`--output json`
+
+Optional telemetry export:
+
+`--include-telemetry`
+
+Current schema marker:
+
+`frp.structured_output.v0.9.4`
+
+Supported JSON output kinds:
+
+| Kind | Mode |
+|---|---|
+| `demo` | `--mode demo` |
+| `self_test` | `--mode test` |
+| `benchmark` | `--mode bench` |
+
+Common JSON envelope fields:
+
+- `schema`
+- `project`
+- `version`
+- `kind`
+- `parameters`
+
+For the detailed structured output schema, see:
+
+`docs/output_schema.md`
+
+## 15. Candidate Invariants
 
 The current candidate is organized around the following invariants:
 
@@ -332,65 +567,96 @@ A final ternary vector alone is not sufficient.
 
 The transition path must also satisfy safety, stability, telemetry, scheduler, and distributed transition conditions.
 
-## 14. Test Status
+In v0.9.4 these invariants can be inspected through both text output and structured JSON output.
+
+## 16. Test Status
 
 Current candidate result:
 
-    v0.9.3-mobile: PASS
+`v0.9.4: PASS`
 
-### 14.1 Standard Self-Test
+Structured-output milestone result:
 
-Command:
+`M2 — PASS`
 
-    python3 frp_prototype_v0_9_3_mobile.py --mode test --steps 128 --seeds 5
-
-Expected result:
-
-    result=PASS
-
-Observed candidate summary:
-
-| Metric | Value |
-|---|---:|
-| runs | 300 |
-| C_minus_P_min | 0.14475 |
-| heat_peak | 0.10700 |
-| switch_load_peak | 0.25 |
-| actual_direct_events | 0 |
-| prevented_direct_events | 3820 |
-| neutralized_conflicts | 2392 |
-| failures | 0 |
-| result | PASS |
-
-### 14.2 Heavy Self-Test
+### 16.1 Standard Self-Test
 
 Command:
 
-    python3 frp_prototype_v0_9_3_mobile.py --mode test --steps 256 --seeds 10
+`python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5`
 
 Expected result:
 
-    result=PASS
+`result=PASS`
 
-Observed candidate summary:
+Expected text markers:
 
-| Metric | Value |
-|---|---:|
-| runs | 600 |
-| C_minus_P_min | 0.14475 |
-| heat_peak | 0.10700 |
-| switch_load_peak | 0.25 |
-| actual_direct_events | 0 |
-| prevented_direct_events | 7913 |
-| neutralized_conflicts | 4921 |
-| failures | 0 |
-| result | PASS |
+`FRP SELF TEST v0.9.4`
 
-## 15. Benchmark Summary
+`failures=0`
+
+`result=PASS`
+
+Expected candidate properties:
+
+- no self-test failures
+- zero actual direct transition events
+- positive C_minus_P stability margin
+- telemetry length equals requested steps
+- scheduler counts match selected cycle mode
+- target match reaches `1.000` in tested operations
+
+### 16.2 Heavy Self-Test
+
+Command:
+
+`python3 frp_prototype_v0_9_4.py --mode test --steps 256 --seeds 10`
+
+Expected result:
+
+`result=PASS`
+
+Expected text markers:
+
+`FRP SELF TEST v0.9.4`
+
+`failures=0`
+
+`result=PASS`
+
+### 16.3 JSON Self-Test
+
+Command:
+
+`python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json`
+
+Expected JSON markers:
+
+`"schema": "frp.structured_output.v0.9.4"`
+
+`"version": "v0.9.4"`
+
+`"kind": "self_test"`
+
+`"failures": 0`
+
+`"result": "PASS"`
+
+Expected JSON metric conditions:
+
+`metrics.actual_direct_events = 0`
+
+`metrics.C_minus_P_min > 0`
+
+## 17. Benchmark Summary
 
 Benchmark command:
 
-    python3 frp_prototype_v0_9_3_mobile.py --mode bench --steps 128 --seeds 5
+`python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5`
+
+JSON benchmark command:
+
+`python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json`
 
 Benchmark architectures:
 
@@ -399,40 +665,43 @@ Benchmark architectures:
 - `distributed_neutral_ternary`
 - `binary_style_forced_switch`
 
-Benchmark summary:
+Expected benchmark architecture labels:
 
-| Architecture | Match | C-P_min | Heat Peak | Switch Peak | Actual Direct | Prevented Direct | Neutralized |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| binary_style_forced_switch | 1.000 | -0.551000 | 0.051000 | 1.000000 | 2052 | 0 | 0 |
-| direct_ternary_commit | 1.000 | -0.551000 | 0.051000 | 1.000000 | 2052 | 0 | 0 |
-| distributed_neutral_ternary | 1.000 | 0.174750 | 0.003250 | 0.250000 | 0 | 0 | 2052 |
-| frp_distributed_resonant | 1.000 | 0.144750 | 0.107000 | 0.250000 | 0 | 3820 | 2392 |
+| Architecture |
+|---|
+| `binary_style_forced_switch` |
+| `direct_ternary_commit` |
+| `distributed_neutral_ternary` |
+| `frp_distributed_resonant` |
 
-## 16. Benchmark-Supported Technical Position
+The benchmark compares FRP distributed resonant behavior against baseline transition architectures.
+
+In v0.9.4, benchmark output is available in both console and structured JSON form.
+
+## 18. Benchmark-Supported Technical Position
 
 The current benchmark supports the following technical position:
 
-    FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct -1 ↔ 1 transitions in the tested operational domain.
+`FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct -1 ↔ 1 transitions in the tested operational domain.`
 
 Current benchmark interpretation:
 
 - FRP distributed resonant mode preserves `match = 1.000`
 - FRP distributed resonant mode preserves `actual_direct_events = 0`
 - FRP distributed resonant mode preserves `C_minus_P_min > 0`
-- FRP distributed resonant mode preserves `switch_load_peak = 0.25`
-- distributed_neutral_ternary has `heat_peak = 0.003250` in the current benchmark table
-- frp_distributed_resonant has `heat_peak = 0.107000` in the current benchmark table
+- FRP distributed resonant mode preserves distributed transition load under the configured transition fraction
 - FRP includes the Kuramoto-Sakaguchi resonant phase layer
 - FRP includes nonlinear saturation
 - FRP includes compression dynamics
 - FRP includes delay dynamics
 - FRP includes resonant phase evolution
+- FRP emits structured benchmark JSON in v0.9.4
 
 For detailed benchmark interpretation, see:
 
-    docs/benchmark_interpretation.md
+`docs/benchmark_interpretation.md`
 
-## 17. General-Purpose Hardware Execution
+## 19. General-Purpose Hardware Execution
 
 The FRP software layer has been executed and verified on general-purpose computing infrastructure.
 
@@ -441,39 +710,40 @@ Validated through:
 - local Python execution path
 - reproducibility commands
 - benchmark execution
+- JSON structured output execution
+- telemetry export execution
 - GitHub Actions workflow execution
 - CI status verification
 
 Engineering role:
 
-    establish an executable software reference model for hardware-facing specification and implementation-layer work
+`establish an executable software reference model for hardware-facing specification and implementation-layer work`
 
-## 18. Hardware-Facing Development Path
+## 20. Hardware-Facing Development Path
 
 The current hardware-facing development path is organized as:
 
-    software validation
-    → hardware-facing specification
-    → FPGA mapping study
-    → ASIC mapping study
-    → chip-oriented implementation research
-    → physical validation planning
+`software validation → structured output → benchmark export → hardware-facing specification → FPGA mapping study → ASIC mapping study → chip-oriented implementation research → physical validation planning`
 
 Current hardware-facing documents:
 
 | File | Role |
 |---|---|
-| docs/hardware_pathway.md | defines the path from software validation toward hardware-facing specification, FPGA/ASIC mapping, chip-oriented implementation research, and physical validation planning |
-| docs/implementation_layers.md | defines the staged layer structure of FRP |
-| docs/fpga_mapping_study.md | defines the FPGA-oriented mapping study |
-| docs/asic_mapping_study.md | defines the ASIC-oriented mapping study |
-| docs/physical_validation_plan.md | defines the physical validation planning structure |
+| `docs/hardware_pathway.md` | defines the path from software validation toward hardware-facing specification, FPGA/ASIC mapping, chip-oriented implementation research, and physical validation planning |
+| `docs/implementation_layers.md` | defines the staged layer structure of FRP |
+| `docs/fpga_mapping_study.md` | defines the FPGA-oriented mapping study |
+| `docs/asic_mapping_study.md` | defines the ASIC-oriented mapping study |
+| `docs/physical_validation_plan.md` | defines the physical validation planning structure |
 
-## 19. Funding and Partner Package
+Current structured-output bridge toward hardware-facing work:
+
+`Python model → JSON telemetry → benchmark export → hardware-facing signal map → FPGA register map → testbench comparison`
+
+## 21. Funding and Partner Package
 
 Current funding and partner document:
 
-    funding_brief.md
+`funding_brief.md`
 
 The funding brief provides:
 
@@ -481,6 +751,7 @@ The funding brief provides:
 - current validated asset list
 - software validation evidence
 - benchmark summary
+- structured-output validation evidence
 - general-purpose hardware execution summary
 - hardware-facing development path
 - funding objective
@@ -493,19 +764,19 @@ The funding brief provides:
 
 Core funding-facing technical message:
 
-    FRP has a validated public software reference layer, reproducibility commands, benchmark output, CI verification, and a documented pathway toward FPGA mapping, ASIC mapping, chip-oriented implementation research, and physical validation planning.
+`FRP has a validated public software reference layer, reproducibility commands, benchmark output, structured JSON output, CI verification, and a documented pathway toward FPGA mapping, ASIC mapping, chip-oriented implementation research, and physical validation planning.`
 
-## 20. Project Milestones
+## 22. Project Milestones
 
 Current milestone document:
 
-    MILESTONES.md
+`MILESTONES.md`
 
 The milestone structure defines:
 
 | Milestone | Name | Primary Output |
 |---|---|---|
-| M0 | Repository Stabilization | stable v0.9.3-mobile repository package |
+| M0 | Repository Stabilization | stable repository package |
 | M1 | Archival Release and DOI | GitHub release, Zenodo archive, DOI |
 | M2 | Structured Output | JSON and machine-readable summaries |
 | M3 | Extended Benchmark Layer | expanded benchmark profiles and exports |
@@ -515,119 +786,148 @@ The milestone structure defines:
 | M7 | Funding and Partner Package | review package for partners, labs, grants, and investors |
 | M8 | v1.0.0 Public Software Architecture Release | stable public software architecture release |
 
-## 21. Repository Navigation
+Current active milestone:
 
-### 21.1 Core Root Files
+`M2 — Structured Output`
 
-| File | Purpose |
-|---|---|
-| README.md | main public project overview |
-| frp_prototype_v0_9_3_mobile.py | current executable Python prototype |
-| TEST_REPORT_v0_9_3.md | current candidate test report |
-| CHANGELOG.md | version history |
-| RELEASE_NOTES_v0_9_3.md | release notes for v0.9.3-mobile |
-| RELEASE_CHECKLIST_v0_9_3.md | release readiness checklist |
-| ROADMAP.md | staged project roadmap |
-| MILESTONES.md | staged project milestones |
-| funding_brief.md | partner and funding-facing technical brief |
-| PROJECT_STRUCTURE.md | repository structure guide |
-| INSTALL.md | installation guide |
-| USAGE.md | usage guide |
-| REPRODUCIBILITY.md | reproducibility guide |
-| CI.md | continuous integration documentation |
-| requirements.txt | Python dependency list |
-| CITATION.cff | citation metadata |
-| LICENSE | Apache-2.0 license text |
-| NOTICE | project notice |
-| SECURITY.md | security policy |
-| CONTRIBUTING.md | contribution guide |
-| CODE_OF_CONDUCT.md | code of conduct |
+Current milestone status:
 
-### 21.2 Documentation Files
+`PASS`
+
+## 23. Repository Navigation
+
+### 23.1 Core Root Files
 
 | File | Purpose |
 |---|---|
-| docs/README.md | documentation layer index |
-| docs/core_principles.md | core FRP principles |
-| docs/resonance_computation.md | resonance computation explanation |
-| docs/architecture.md | FRP v0.9.3-mobile architecture |
-| docs/benchmark_interpretation.md | benchmark interpretation and evidence scope |
-| docs/limitations.md | current simulation evidence boundaries and scope notes |
-| docs/output_schema.md | console output fields, test markers, benchmark markers, CI checks, and future JSON output direction |
-| docs/hardware_pathway.md | hardware-facing development pathway |
-| docs/implementation_layers.md | staged implementation layer structure |
-| docs/fpga_mapping_study.md | FPGA-oriented mapping study |
-| docs/asic_mapping_study.md | ASIC-oriented mapping study |
-| docs/physical_validation_plan.md | physical validation planning structure |
+| `README.md` | main public project overview |
+| `frp_prototype_v0_9_4.py` | current executable Python prototype with structured output |
+| `frp_prototype_v0_9_3_mobile.py` | previous archived reference prototype |
+| `TEST_REPORT_v0_9_4.md` | current candidate test report |
+| `TEST_REPORT_v0_9_3.md` | previous archived test report |
+| `CHANGELOG.md` | version history |
+| `RELEASE_NOTES_v0_9_4.md` | release notes for v0.9.4 |
+| `RELEASE_NOTES_v0_9_3.md` | release notes for v0.9.3-mobile |
+| `RELEASE_CHECKLIST_v0_9_3.md` | release readiness checklist for v0.9.3 |
+| `ROADMAP.md` | staged project roadmap |
+| `MILESTONES.md` | staged project milestones |
+| `funding_brief.md` | partner and funding-facing technical brief |
+| `PROJECT_STRUCTURE.md` | repository structure guide |
+| `INSTALL.md` | installation guide |
+| `USAGE.md` | usage guide |
+| `REPRODUCIBILITY.md` | reproducibility guide |
+| `CI.md` | continuous integration documentation |
+| `requirements.txt` | Python dependency list |
+| `CITATION.cff` | citation metadata |
+| `LICENSE` | Apache-2.0 license text |
+| `NOTICE` | project notice |
+| `SECURITY.md` | security policy |
+| `CONTRIBUTING.md` | contribution guide |
+| `CODE_OF_CONDUCT.md` | code of conduct |
 
-### 21.3 Verification Files
-
-| File | Purpose |
-|---|---|
-| verification/README.md | verification layer overview |
-| verification/coherence_metrics.md | operational coherence and metric definitions |
-
-### 21.4 Examples
-
-| File | Purpose |
-|---|---|
-| examples/README.md | examples overview |
-| examples/resonance_convergence_example.md | resonance convergence example |
-
-### 21.5 Models and Simulations
+### 23.2 Documentation Files
 
 | File | Purpose |
 |---|---|
-| models/README.md | model layer overview |
-| models/kuramoto_frp_background_model.md | background Kuramoto-type model context |
-| simulations/README.md | simulation layer overview |
-| simulations/initial_kuramoto_result.md | preliminary Kuramoto background result |
+| `docs/README.md` | documentation layer index |
+| `docs/core_principles.md` | core FRP principles |
+| `docs/resonance_computation.md` | resonance computation explanation |
+| `docs/architecture.md` | FRP architecture documentation |
+| `docs/benchmark_interpretation.md` | benchmark interpretation and evidence scope |
+| `docs/limitations.md` | current simulation evidence boundaries and scope notes |
+| `docs/output_schema.md` | structured output schema, JSON fields, test markers, benchmark markers, telemetry fields, and CI checks |
+| `docs/hardware_pathway.md` | hardware-facing development pathway |
+| `docs/implementation_layers.md` | staged implementation layer structure |
+| `docs/fpga_mapping_study.md` | FPGA-oriented mapping study |
+| `docs/asic_mapping_study.md` | ASIC-oriented mapping study |
+| `docs/physical_validation_plan.md` | physical validation planning structure |
 
-### 21.6 Continuous Integration
+### 23.3 Verification Files
 
 | File | Purpose |
 |---|---|
-| .github/workflows/frp-self-test.yml | automated standard FRP self-test |
-| .github/workflows/frp-benchmark-smoke.yml | automated benchmark smoke test |
+| `verification/README.md` | verification layer overview |
+| `verification/coherence_metrics.md` | operational coherence and metric definitions |
 
-## 22. Continuous Integration
+### 23.4 Examples
 
-The repository currently has two GitHub Actions workflows:
+| File | Purpose |
+|---|---|
+| `examples/README.md` | examples overview |
+| `examples/resonance_convergence_example.md` | resonance convergence example |
+
+### 23.5 Models and Simulations
+
+| File | Purpose |
+|---|---|
+| `models/README.md` | model layer overview |
+| `models/kuramoto_frp_background_model.md` | background Kuramoto-type model context |
+| `simulations/README.md` | simulation layer overview |
+| `simulations/initial_kuramoto_result.md` | preliminary Kuramoto background result |
+
+### 23.6 Continuous Integration
+
+| File | Purpose |
+|---|---|
+| `.github/workflows/frp-self-test.yml` | automated standard FRP self-test |
+| `.github/workflows/frp-benchmark-smoke.yml` | automated benchmark smoke test |
+| `.github/workflows/frp-structured-output.yml` | automated v0.9.4 structured-output validation |
+
+## 24. Continuous Integration
+
+The repository currently has three GitHub Actions workflows:
 
 | Workflow | Purpose | Status |
 |---|---|---|
 | FRP Self Test | runs the standard FRP self-test | passing |
 | FRP Benchmark Smoke Test | runs the benchmark smoke test | passing |
+| FRP Structured Output | validates v0.9.4 structured JSON output and telemetry export | passing |
 
 The self-test workflow runs:
 
-    python frp_prototype_v0_9_3_mobile.py --mode test --steps 128 --seeds 5
+`python frp_prototype_v0_9_3_mobile.py --mode test --steps 128 --seeds 5`
 
 The benchmark smoke test workflow runs:
 
-    python frp_prototype_v0_9_3_mobile.py --mode bench --steps 128 --seeds 5
+`python frp_prototype_v0_9_3_mobile.py --mode bench --steps 128 --seeds 5`
+
+The structured output workflow validates:
+
+`python frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json`
+
+`python frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json`
+
+`python frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json`
+
+`python frp_prototype_v0_9_4.py --mode demo --N 16 --steps 32 --cycle-mode 7/1 --output json --include-telemetry`
 
 For detailed continuous integration documentation, see:
 
-    CI.md
+`CI.md`
 
-## 23. Release Readiness
+## 25. Release Readiness
 
 Current release readiness files:
 
-- RELEASE_NOTES_v0_9_3.md
-- RELEASE_CHECKLIST_v0_9_3.md
-- ROADMAP.md
-- MILESTONES.md
-- funding_brief.md
-- PROJECT_STRUCTURE.md
+- `RELEASE_NOTES_v0_9_4.md`
+- `TEST_REPORT_v0_9_4.md`
+- `CHANGELOG.md`
+- `ROADMAP.md`
+- `MILESTONES.md`
+- `funding_brief.md`
+- `PROJECT_STRUCTURE.md`
+- `docs/output_schema.md`
 
 Current readiness state:
 
 - prototype present
 - tests documented
 - benchmark documented
+- structured output documented
+- JSON output documented
+- telemetry export documented
 - CI passing
+- structured-output CI passing
 - installation documented
 - usage documented
 - reproducibility documented
@@ -648,31 +948,130 @@ Current readiness state:
 - code of conduct present
 - output schema documented
 
-## 24. Archival Path
+Current release preparation target:
 
-Recommended archival sequence:
+`GitHub Release v0.9.4`
+
+Current archival status:
+
+`v0.9.3 DOI exists`
+
+Existing archived DOI:
+
+`https://doi.org/10.5281/zenodo.21112439`
+
+## 26. Archival Path
+
+Current archival status:
+
+`FRP v0.9.3 has a Zenodo DOI`
+
+Archived DOI:
+
+`https://doi.org/10.5281/zenodo.21112439`
+
+Recommended v0.9.4 archival sequence:
 
 1. final repository stabilization
 2. confirm CI passing
-3. confirm release checklist
-4. create GitHub release tag
-5. create Zenodo archival release
-6. obtain DOI
-7. update CITATION.cff
-8. update README with DOI badge
-9. update release notes and changelog
-10. prepare partner and funding package for external review
+3. confirm structured-output workflow passing
+4. confirm release notes
+5. confirm test report
+6. confirm changelog
+7. create GitHub release tag `v0.9.4`
+8. create Zenodo archival version record
+9. update DOI metadata if a new version DOI is issued
+10. update `CITATION.cff` if needed
+11. update README citation section if needed
+12. prepare next milestone branch or release path
 
-## 25. License
+## 27. Release History
+
+### v0.9.4 — Structured Output and Machine-Readable Validation
+
+Release title:
+
+`Fractal Resonance Processor (FRP) v0.9.4 — Structured Output and Machine-Readable Validation`
+
+Milestone:
+
+`M2 — Structured Output`
+
+Main prototype:
+
+`frp_prototype_v0_9_4.py`
+
+Schema marker:
+
+`frp.structured_output.v0.9.4`
+
+Added:
+
+- structured JSON output
+- `--output text`
+- `--output json`
+- `--include-telemetry`
+- JSON demo output
+- JSON self-test output
+- JSON benchmark output
+- optional telemetry export
+- structured-output GitHub Actions workflow
+- machine-readable validation layer
+
+Status:
+
+`PASS`
+
+### v0.9.3 — Ternary Resonant Coherence Processor
+
+Release title:
+
+`Fractal Resonance Processor (FRP) v0.9.3 — Ternary Resonant Coherence Processor`
+
+Main prototype:
+
+`frp_prototype_v0_9_3_mobile.py`
+
+Archived DOI:
+
+`https://doi.org/10.5281/zenodo.21112439`
+
+DOI:
+
+`10.5281/zenodo.21112439`
+
+Role:
+
+`executable software reference model and public validation baseline`
+
+Status:
+
+`PASS`
+
+## 28. License
 
 Apache License 2.0.
 
 See the full license text in:
 
-    LICENSE
+`LICENSE`
 
-## 26. Citation
+## 29. Citation
 
 Citation metadata is available in:
 
-    CITATION.cff
+`CITATION.cff`
+
+Current archived DOI:
+
+`https://doi.org/10.5281/zenodo.21112439`
+
+DOI:
+
+`10.5281/zenodo.21112439`
+
+Recommended citation:
+
+`Maksym Marnov. Fractal Resonance Processor (FRP) v0.9.3 — Ternary Resonant Coherence Processor. Zenodo. DOI: 10.5281/zenodo.21112439`
+
+The v0.9.4 archival version record should be created after publishing the GitHub Release v0.9.4.
