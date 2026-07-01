@@ -1,271 +1,416 @@
-# Roadmap
+# Roadmap — Fractal Resonance Processor (FRP)
 
-This document defines the public development roadmap for the Fractal Resonance Processor (FRP) project.
+This roadmap describes the staged development path of the Fractal Resonance Processor (FRP) project after the v0.9.3-mobile candidate.
 
 Current candidate version:
 
     v0.9.3-mobile
 
+Current public repository package:
+
+    software validation layer, documentation layer, reproducibility layer, benchmark layer, and CI verification layer
+
 Main prototype file:
 
     frp_prototype_v0_9_3_mobile.py
 
-FRP is currently implemented as a Python simulation prototype of a ternary resonant coherence processor.
+Current test report:
 
-It is not a hardware implementation.
+    TEST_REPORT_v0_9_3.md
 
-## 1. Current Status
+## 1. Current Project Position
 
-FRP v0.9.3-mobile is a public candidate simulation prototype.
+FRP v0.9.3-mobile establishes the public software validation layer of the Fractal Resonance Processor architecture.
 
-Current repository state includes:
+The current repository provides:
 
-- working Python simulation prototype
-- balanced ternary state model
+- executable Python source code
+- balanced ternary state logic
 - neutral transition routing
-- forbidden direct -1 ↔ 1 transition prevention
-- distributed commit
+- distributed commit behavior
 - Kuramoto-Sakaguchi resonant phase layer
-- nonlinear cubic saturation
+- nonlinear saturation
 - nonlinear compression
-- delay buffers
+- delay dynamics
 - scheduler modes
 - per-tick telemetry
-- self-test mode
+- standard self-test
+- heavy self-test
 - benchmark mode
-- reproducibility documentation
-- release notes
+- reproducibility commands
+- GitHub Actions CI workflows
+- documentation package
+- release checklist
 - citation metadata
 - Apache-2.0 license
-- public security and contribution policies
 
-## 2. Stable Candidate Invariants
+The current software layer has been executed and verified on general-purpose computing infrastructure through Python execution, benchmark runs, reproducibility commands, and automated CI workflows.
 
-Future development should preserve the current candidate invariants unless the prototype version, test report, and documentation are explicitly updated.
+## 2. Engineering Trajectory
 
-Required invariants:
+The FRP development trajectory is organized as:
 
-| Invariant | Required Result |
-|---|---|
-| target match | match = 1.000 |
-| direct transition safety | actual_direct_events = 0 |
-| stability | C_minus_P_min > 0 |
-| transition load | switch_load_peak <= transition_fraction |
-| telemetry | ticks_recorded = steps |
-| scheduler | counts match selected cycle mode |
+    software validation
+    → architecture stabilization
+    → hardware-facing specification
+    → FPGA mapping study
+    → ASIC mapping study
+    → chip-oriented implementation research
+    → physical validation planning
+    → partner and funding package
 
-## 3. Immediate Next Steps
+This roadmap treats the current software layer as the executable foundation for later hardware-facing and implementation-layer work.
 
-Priority tasks for the next candidate layer:
+## 3. v0.9.3-mobile — Current Candidate
 
-- add GitHub Actions CI workflow
-- run the standard self-test automatically
-- add benchmark smoke test automation
-- add structured JSON output option
-- add version field to CLI output
-- add explicit `--json` mode
-- improve test report generation
-- add reproducible output snapshots
-- verify documentation consistency after each prototype change
+Status:
 
-## 4. v0.9.4 Target
+    complete as public candidate software validation package
 
-Planned focus:
+Purpose:
 
-    automated verification
+    establish a reproducible public software validation layer for FRP
 
-Expected additions:
+Completed components:
 
-- GitHub Actions workflow
-- automated dependency installation
-- automated standard self-test
-- automated benchmark smoke test
-- CI badge in README
-- failure boundary documentation
-- CI reproducibility notes
-
-Required result:
-
-    CI must pass the standard self-test.
-
-## 5. v0.9.5 Target
-
-Planned focus:
-
-    structured output and reproducible reporting
-
-Expected additions:
-
-- JSON output mode
-- machine-readable test summaries
-- machine-readable benchmark summaries
-- saved report examples
-- clearer telemetry export structure
-- stable output schema documentation
-
-Possible files:
-
-- docs/output_schema.md
-- examples/json_output_example.md
-- reports/
-
-## 6. v0.9.6 Target
-
-Planned focus:
-
-    expanded benchmark discipline
-
-Expected additions:
-
-- additional seed ranges
-- larger N tests
-- benchmark matrix by N
-- benchmark matrix by scheduler mode
-- comparison of transition_fraction values
-- clearer heat metric boundary
-- clearer C_minus_P interpretation
-
-Possible benchmark axes:
-
-| Axis | Values |
-|---|---|
-| N | 8, 16, 32, 64 |
-| steps | 128, 256, 512 |
-| seeds | 5, 10, 20 |
-| cycle-mode | free, 7/1, 1/7 |
-| transition_fraction | 0.125, 0.25, 0.5 |
-
-## 7. v0.9.7 Target
-
-Planned focus:
-
-    internal architecture cleanup
-
-Expected additions:
-
-- separate prototype modules
-- clearer class boundaries
-- separated telemetry module
-- separated benchmark module
-- separated baseline models
-- separated CLI entry point
-- preserved single-file mobile prototype as reference
-
-Possible structure:
-
-    frp/
-      core.py
-      processor.py
-      telemetry.py
-      benchmark.py
-      baselines.py
-      cli.py
-
-## 8. v1.0.0 Target
-
-Planned focus:
-
-    stable public simulation release
-
-Expected requirements:
-
-- all public documentation aligned
-- CI workflow passing
-- reproducibility file updated
-- release notes finalized
-- citation metadata updated
-- changelog updated
-- test report regenerated
-- benchmark report regenerated
-- Zenodo archival release prepared
-- DOI added after archival release
-
-v1.0.0 should remain a simulation release unless hardware validation exists.
-
-## 9. Research Directions
-
-Future research directions may include:
-
-- deeper ternary logic analysis
-- alternative neutral transition schedules
-- additional resonant phase coupling models
-- stability comparison across nonlinear coupling forms
-- expanded operational coherence metrics
-- larger benchmark domains
-- additional baseline models
-- formal transition safety proofs
-- deterministic replay mode
-- report generation pipeline
-
-## 10. Hardware Boundary
-
-The current roadmap does not claim hardware validation.
-
-Before any hardware-related claim is made, the project would require:
-
-- separate hardware specification
-- physical implementation model
-- measurable electrical assumptions
-- testable switching-energy model
-- physical thermal measurement protocol
-- fabrication or emulation evidence
-- external validation boundary
-
-Until then, all current claims remain limited to:
-
-    Python simulation prototype
-
-## 11. Documentation Roadmap
-
-Documentation should remain aligned with:
-
-- README.md
-- INSTALL.md
-- USAGE.md
-- REPRODUCIBILITY.md
-- TEST_REPORT_v0_9_3.md
-- RELEASE_NOTES_v0_9_3.md
-- CHANGELOG.md
-- docs/architecture.md
-- docs/benchmark_interpretation.md
-- docs/limitations.md
-- verification/coherence_metrics.md
-
-Any code change that alters results must update:
-
-- TEST_REPORT file
-- REPRODUCIBILITY.md
-- RELEASE_NOTES file
-- benchmark interpretation where needed
-
-## 12. Release Discipline
-
-Each future candidate should include:
-
-- version label
+- root README
+- current Python prototype
+- standard self-test
+- heavy self-test
+- benchmark execution
 - test report
+- installation guide
+- usage guide
+- reproducibility guide
+- continuous integration documentation
+- project structure guide
 - release notes
-- changelog entry
+- release checklist
+- output schema documentation
+- documentation layer
+- verification layer
+- example layer
+- model and simulation background layer
+- Apache-2.0 license
+- citation metadata
+- notice file
+- security policy
+- contribution guide
+- code of conduct
+- GitHub Actions self-test workflow
+- GitHub Actions benchmark smoke-test workflow
+
+Current validated execution layer:
+
+- local Python execution path
 - reproducibility commands
-- supported claims
-- unsupported claims
-- simulation boundary
-- known limitations
+- benchmark execution
+- CI execution on general-purpose computing infrastructure
 
-## 13. Current Development Priority
+Current candidate result:
 
-The next practical repository task is:
+    PASS
 
-    add GitHub Actions CI workflow
+## 4. Immediate Repository Stabilization
 
-Target workflow:
+The next repository-level work is final stabilization before archival release.
 
-    .github/workflows/frp-self-test.yml
+Tasks:
 
-The workflow should install dependencies and run:
+- confirm both GitHub Actions workflows are passing
+- confirm README badges are passing
+- confirm repository file names are final
+- confirm release notes are aligned with current repository state
+- confirm release checklist is aligned with current repository state
+- confirm CITATION.cff is accurate
+- confirm PROJECT_STRUCTURE.md is aligned with current file tree
+- confirm documentation files are internally consistent
+- confirm benchmark interpretation matches TEST_REPORT_v0_9_3.md
+- confirm ROADMAP.md reflects the current engineering trajectory
 
-    python3 frp_prototype_v0_9_3_mobile.py --mode test --steps 128 --seeds 5
+Expected output:
 
-Expected result:
+    repository ready for GitHub release tag and archival packaging
 
-    result=PASS
+## 5. v0.9.4 Target — Structured Output and Extended Reproducibility
+
+Purpose:
+
+    improve machine-readable output, reproducibility depth, and benchmark inspection
+
+Candidate features:
+
+- structured JSON output option
+- machine-readable test summary
+- machine-readable benchmark summary
+- reproducibility profiles
+- extended seed configuration
+- expanded benchmark table export
+- telemetry export mode
+- optional CSV output
+- stronger command-line output consistency
+- documentation update for structured outputs
+
+Expected files:
+
+- updated prototype file or new candidate prototype file
+- updated TEST_REPORT
+- updated REPRODUCIBILITY.md
+- updated USAGE.md
+- updated docs/output_schema.md
+- updated RELEASE_NOTES
+- updated CHANGELOG
+
+Expected validation:
+
+- standard self-test passing
+- heavy self-test passing
+- benchmark smoke test passing
+- JSON output validation
+- CI workflow update
+
+## 6. v0.9.5 Target — Expanded Benchmark Layer
+
+Purpose:
+
+    strengthen comparative analysis and benchmark reproducibility
+
+Candidate features:
+
+- additional benchmark seeds
+- additional vector sizes
+- additional scheduler comparisons
+- extended distributed-neutral baseline comparison
+- transition debt analysis
+- direct conflict fraction analysis
+- heat and switch-load trajectory summaries
+- coherence trajectory summaries
+- benchmark export files
+- benchmark interpretation update
+
+Expected validation:
+
+- benchmark execution across multiple profiles
+- stable target match
+- stable direct transition safety
+- documented C_minus_P behavior
+- documented transition load behavior
+- updated benchmark interpretation
+
+## 7. v1.0.0 Target — Public Software Architecture Release
+
+Purpose:
+
+    establish the first stable public software architecture release of FRP
+
+Candidate requirements:
+
+- stable source layout
+- stable command interface
+- stable output schema
+- stable benchmark profile
+- stable documentation layer
+- stable release checklist
+- DOI-ready repository metadata
+- complete citation metadata
+- GitHub release tag
+- archival release package
+
+Expected public status:
+
+    stable software validation release
+
+Expected archival status:
+
+    DOI-ready release package
+
+## 8. Hardware-Facing Specification Layer
+
+Purpose:
+
+    translate the validated FRP software layer into hardware-facing architectural terms
+
+Candidate documents:
+
+- docs/hardware_pathway.md
+- docs/implementation_layers.md
+- docs/fpga_mapping_study.md
+- docs/asic_mapping_study.md
+- docs/physical_validation_plan.md
+
+Core topics:
+
+- ternary state representation
+- neutral transition routing in hardware-facing form
+- distributed commit timing
+- transition fraction as hardware scheduling constraint
+- resonant phase layer mapping
+- delay buffer mapping
+- telemetry mapping
+- C_minus_P metric translation
+- switching-load interpretation
+- benchmark-to-hardware translation assumptions
+- physical validation requirements
+
+Expected output:
+
+    hardware-facing specification package
+
+## 9. FPGA Mapping Study
+
+Purpose:
+
+    explore how FRP logic can be mapped into programmable hardware architecture
+
+Candidate topics:
+
+- ternary state encoding
+- neutral routing logic
+- distributed commit controller
+- scheduler implementation
+- register file representation
+- phase layer approximation
+- delay buffer implementation
+- telemetry counters
+- benchmark harness
+- validation strategy on FPGA development boards
+
+Expected output:
+
+    FPGA mapping study document and prototype planning notes
+
+## 10. ASIC Mapping Study
+
+Purpose:
+
+    explore chip-oriented implementation research for FRP architecture
+
+Candidate topics:
+
+- ternary logic cell representation
+- transition-safe state machinery
+- neutral routing gates
+- distributed commit timing network
+- resonant phase approximation
+- local coherence tracking
+- switching-load monitoring
+- test harness design
+- physical measurement planning
+- fabrication-facing abstraction layer
+
+Expected output:
+
+    ASIC mapping study document and chip-oriented research plan
+
+## 11. Physical Validation Planning
+
+Purpose:
+
+    define how future physical implementations can be evaluated
+
+Candidate validation categories:
+
+- logical correctness
+- transition safety
+- switching activity
+- energy behavior
+- thermal behavior
+- timing behavior
+- stability behavior
+- noise response
+- scheduler behavior
+- benchmark repeatability
+
+Expected output:
+
+    physical validation protocol draft
+
+## 12. Funding and Partner Package
+
+Purpose:
+
+    prepare the project for financing, engineering partnership, grant review, or laboratory collaboration
+
+Candidate package:
+
+- executive summary
+- technical overview
+- current validated assets
+- software validation evidence
+- CI evidence
+- benchmark summary
+- development trajectory
+- hardware-facing pathway
+- required next resources
+- engineering milestones
+- risk and validation plan
+- IP and licensing summary
+- archival DOI reference after release
+
+Core message:
+
+    FRP already has a validated public software layer and a defined pathway toward hardware-facing specification and implementation-layer research.
+
+## 13. Documentation Growth Plan
+
+Future documentation may include:
+
+- hardware pathway
+- implementation layers
+- FPGA mapping study
+- ASIC mapping study
+- physical validation plan
+- funding brief
+- architecture diagrams
+- benchmark profile guide
+- structured output guide
+- telemetry interpretation guide
+- release process guide
+
+Documentation rule:
+
+    each document must describe the confirmed layer it belongs to and its relation to the next engineering layer
+
+## 14. Release Process
+
+Recommended release sequence:
+
+1. stabilize current repository
+2. confirm CI passing
+3. confirm release checklist
+4. create GitHub release tag
+5. create Zenodo archival release
+6. obtain DOI
+7. update CITATION.cff
+8. update README with DOI badge
+9. prepare partner and funding package
+10. open next development candidate
+
+## 15. Current Priority
+
+Current priority:
+
+    final repository stabilization before archival release
+
+Next working files:
+
+1. RELEASE_NOTES_v0_9_3.md
+2. ROADMAP.md
+3. docs/hardware_pathway.md
+4. docs/implementation_layers.md
+5. funding_brief.md
+
+## 16. Roadmap Status
+
+FRP v0.9.3-mobile is ready as a public candidate software validation package.
+
+The project is positioned for:
+
+- archival release preparation
+- DOI registration
+- expanded reproducibility work
+- structured output development
+- hardware-facing specification
+- FPGA and ASIC mapping studies
+- physical validation planning
+- partner and funding preparation
