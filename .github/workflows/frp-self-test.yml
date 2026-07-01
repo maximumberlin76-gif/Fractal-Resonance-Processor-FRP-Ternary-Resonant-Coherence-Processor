@@ -1,0 +1,34 @@
+name: FRP Self Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  frp-self-test:
+    name: Run FRP v0.9.3 self-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run standard FRP self-test
+        run: |
+          python frp_prototype_v0_9_3_mobile.py --mode test --steps 128 --seeds 5 | tee frp_self_test_output.txt
+          grep "result=PASS" frp_self_test_output.txt
