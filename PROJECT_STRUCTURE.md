@@ -12,11 +12,9 @@ Main prototype file:
 
 FRP is currently implemented as a Python simulation prototype of a ternary resonant coherence processor.
 
-It is not a hardware implementation.
-
 ## 1. Repository Root
 
-The repository root contains the main project files, public metadata, installation instructions, usage instructions, reproducibility documentation, release notes, and the current Python prototype.
+The repository root contains the main project files, public metadata, installation instructions, usage instructions, reproducibility documentation, release notes, release checklist, continuous integration documentation, and the current Python prototype.
 
 | File | Purpose |
 |---|---|
@@ -25,11 +23,12 @@ The repository root contains the main project files, public metadata, installati
 | TEST_REPORT_v0_9_3.md | current candidate test report |
 | CHANGELOG.md | version history and release chronology |
 | RELEASE_NOTES_v0_9_3.md | release notes for the current candidate |
+| RELEASE_CHECKLIST_v0_9_3.md | release readiness checklist for the current candidate |
+| PROJECT_STRUCTURE.md | repository structure guide |
 | INSTALL.md | installation instructions |
 | USAGE.md | usage guide and command reference |
 | REPRODUCIBILITY.md | reproducibility instructions for reported results |
 | CI.md | continuous integration documentation |
-| PROJECT_STRUCTURE.md | repository structure guide |
 | requirements.txt | Python dependency list |
 | .gitignore | ignored local development files |
 | LICENSE | Apache License 2.0 text |
@@ -57,6 +56,7 @@ It includes:
 - delay buffer logic
 - telemetry tracking
 - processor instruction layer
+- demonstration mode
 - standard self-test mode
 - benchmark mode
 - command-line interface
@@ -81,7 +81,7 @@ The `docs/` directory contains the public technical documentation layer.
 | docs/limitations.md | limitations and simulation-only boundary |
 | docs/output_schema.md | console output fields, test output markers, benchmark output markers, CI output checks, and future JSON output direction |
 
-The documentation layer should remain aligned with the current prototype, test report, and release notes.
+The documentation layer should remain aligned with the current prototype, test report, release notes, release checklist, CI documentation, and reproducibility documentation.
 
 ## 4. Verification Directory
 
@@ -198,6 +198,7 @@ Release and metadata files:
 |---|---|
 | CHANGELOG.md | historical version record |
 | RELEASE_NOTES_v0_9_3.md | current candidate release description |
+| RELEASE_CHECKLIST_v0_9_3.md | current candidate release readiness checklist |
 | CITATION.cff | citation metadata |
 | LICENSE | Apache-2.0 full license text |
 | NOTICE | project notice |
@@ -205,7 +206,7 @@ Release and metadata files:
 | CONTRIBUTING.md | contribution rules |
 | CODE_OF_CONDUCT.md | conduct rules |
 
-These files define the public repository identity and release boundary.
+These files define the public repository identity, release boundary, and candidate readiness state.
 
 ## 11. Current Candidate Invariants
 
@@ -220,7 +221,7 @@ The current candidate is organized around the following invariants:
 | telemetry | ticks_recorded = steps |
 | scheduler | counts match selected cycle mode |
 
-Any future structural change must preserve these invariants or update the version, test report, release notes, and reproducibility documentation.
+Any future structural change must preserve these invariants or update the version, test report, release notes, release checklist, and reproducibility documentation.
 
 ## 12. Naming Discipline
 
@@ -266,13 +267,16 @@ When changing the prototype, check whether the following files also need updates
 - REPRODUCIBILITY.md
 - USAGE.md
 - RELEASE_NOTES_v0_9_3.md
+- RELEASE_CHECKLIST_v0_9_3.md
 - CHANGELOG.md
+- CI.md
+- PROJECT_STRUCTURE.md
+- docs/README.md
 - docs/architecture.md
 - docs/benchmark_interpretation.md
 - docs/limitations.md
+- docs/output_schema.md
 - verification/coherence_metrics.md
-- CI.md
-- PROJECT_STRUCTURE.md
 
 Documentation must stay aligned with executable behavior.
 
@@ -280,6 +284,26 @@ Documentation must stay aligned with executable behavior.
 
 The repository structure is aligned with the FRP v0.9.3-mobile candidate prototype.
 
-The next practical development step is to add a release checklist for the current candidate:
+Current repository packaging includes:
 
-    RELEASE_CHECKLIST_v0_9_3.md
+- root README
+- prototype source file
+- test report
+- release notes
+- release checklist
+- project structure guide
+- installation guide
+- usage guide
+- reproducibility guide
+- CI documentation
+- output schema documentation
+- GitHub Actions self-test workflow
+- GitHub Actions benchmark smoke test workflow
+- citation metadata
+- Apache-2.0 license
+- notice file
+- security policy
+- contribution guide
+- code of conduct
+
+The next practical development step is archival preparation after final review.
