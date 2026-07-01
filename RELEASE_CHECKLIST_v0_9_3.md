@@ -14,9 +14,9 @@ Test report:
 
     TEST_REPORT_v0_9_3.md
 
-FRP is currently implemented as a Python simulation prototype of a ternary resonant coherence processor.
+Current release scope:
 
-It is not a hardware implementation.
+    Python simulation prototype of a ternary resonant coherence processor
 
 ## 1. Core Prototype
 
@@ -24,12 +24,12 @@ It is not a hardware implementation.
 |---|---|
 | main prototype file exists | complete |
 | command-line interface exists | complete |
-| demo mode exists | complete |
-| test mode exists | complete |
+| demonstration mode exists | complete |
+| self-test mode exists | complete |
 | benchmark mode exists | complete |
 | balanced ternary states implemented | complete |
 | neutral transition routing implemented | complete |
-| forbidden direct -1 ↔ 1 transition prevention implemented | complete |
+| direct polarity transition safety implemented | complete |
 | distributed commit implemented | complete |
 | Kuramoto-Sakaguchi phase layer implemented | complete |
 | nonlinear cubic saturation implemented | complete |
@@ -128,12 +128,8 @@ Status:
 
 | Workflow | File | Status |
 |---|---|---|
-| FRP Self Test | .github/workflows/frp-self-test.yml | complete |
-| FRP Benchmark Smoke Test | .github/workflows/frp-benchmark-smoke.yml | complete |
-
-Required CI status:
-
-    passing
+| FRP Self Test | .github/workflows/frp-self-test.yml | passing |
+| FRP Benchmark Smoke Test | .github/workflows/frp-benchmark-smoke.yml | passing |
 
 Current CI coverage:
 
@@ -239,44 +235,39 @@ Status:
 
     complete
 
-## 14. Claim Boundary Check
+## 14. Public Claim Scope
 
-Supported claim:
+Confirmed public technical claim:
 
     FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct -1 ↔ 1 transitions in the tested operational domain.
 
-Unsupported claim:
+Current benchmark interpretation:
 
-    FRP is always colder than distributed neutral ternary switching.
-
-The repository must not claim:
-
-- hardware thermal efficiency
-- physical electrical switching-energy reduction
-- fabrication-level performance
-- hardware timing behavior
-- measured physical heat
-- measured physical power consumption
-- universal superiority over all transition baselines
+- FRP distributed resonant mode preserves match = 1.000
+- FRP distributed resonant mode preserves actual_direct_events = 0
+- FRP distributed resonant mode preserves C_minus_P_min > 0
+- FRP distributed resonant mode preserves switch_load_peak = 0.25
+- distributed_neutral_ternary has lower heat_peak in the current benchmark table
+- FRP includes the resonant phase layer, nonlinear saturation, compression, delay dynamics, and resonant phase evolution
 
 Status:
 
     complete
 
-## 15. Simulation Boundary Check
+## 15. Release Scope Check
 
-The current release is:
+Current release scope:
 
     Python simulation prototype
 
-It is not:
+Current validated domain:
 
-- fabricated hardware processor
-- production-ready computing device
-- hardware-validated chip architecture
-- measured thermal processor
-- measured electrical switching-energy device
-- deployment-ready hardware platform
+- repository-level source review
+- reproducibility testing
+- continuous integration verification
+- benchmark execution
+- documentation inspection
+- archival preparation
 
 Status:
 
@@ -293,7 +284,7 @@ Status:
 | installation documented | complete |
 | usage documented | complete |
 | reproducibility documented | complete |
-| limitations documented | complete |
+| scope boundaries documented | complete |
 | release notes present | complete |
 | changelog present | complete |
 | citation metadata present | complete |
@@ -303,6 +294,7 @@ Status:
 | contribution guide present | complete |
 | code of conduct present | complete |
 | project structure documented | complete |
+| output schema documented | complete |
 
 ## 17. Remaining Before Archival Release
 
@@ -326,9 +318,7 @@ It is suitable for:
 
 - repository-level review
 - reproducibility testing
-- CI verification
+- continuous integration verification
 - documentation inspection
 - release preparation
 - future archival packaging
-
-It is not a hardware release.
