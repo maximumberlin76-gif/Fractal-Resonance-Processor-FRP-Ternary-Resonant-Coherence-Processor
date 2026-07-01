@@ -181,6 +181,7 @@ Status:
 | docs/architecture.md | complete |
 | docs/benchmark_interpretation.md | complete |
 | docs/limitations.md | complete |
+| docs/output_schema.md | complete |
 
 ## 9. Verification Files
 
