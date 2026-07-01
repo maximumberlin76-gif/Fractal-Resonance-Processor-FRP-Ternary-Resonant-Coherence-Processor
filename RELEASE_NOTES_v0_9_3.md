@@ -18,18 +18,22 @@ Test report:
 
 Current public release scope:
 
-    software validation layer, documentation layer, reproducibility layer, benchmark layer, CI verification layer, and hardware-facing documentation pathway
+    software validation layer, documentation layer, reproducibility layer, benchmark layer, CI verification layer, hardware-facing documentation pathway, milestone structure, and funding brief
 
 Engineering trajectory:
 
     software validation
     → architecture stabilization
+    → archival release
+    → structured output
+    → expanded benchmark layer
     → hardware-facing specification
     → FPGA mapping study
     → ASIC mapping study
     → chip-oriented implementation research
     → physical validation planning
     → partner and funding package
+    → stable public software architecture release
 
 ## 1. Release Summary
 
@@ -58,8 +62,13 @@ This release candidate provides:
 - documentation package
 - release checklist
 - project roadmap
+- milestone structure
+- funding brief
 - hardware pathway documentation
 - implementation layers documentation
+- FPGA mapping study
+- ASIC mapping study
+- physical validation plan
 - citation metadata
 - Apache-2.0 license
 
@@ -252,9 +261,14 @@ Current validated package includes:
 - release checklist
 - release notes
 - roadmap
+- milestone structure
+- funding brief
 - project structure guide
 - hardware pathway documentation
 - implementation layer documentation
+- FPGA mapping study
+- ASIC mapping study
+- physical validation plan
 
 Current role:
 
@@ -262,7 +276,7 @@ Current role:
 
 ## 11. Hardware-Facing Documentation Pathway
 
-This release candidate initiates the hardware-facing documentation pathway.
+This release candidate includes the current hardware-facing documentation pathway.
 
 Current hardware-facing documents:
 
@@ -270,13 +284,73 @@ Current hardware-facing documents:
 |---|---|
 | docs/hardware_pathway.md | defines the path from software validation toward hardware-facing specification, FPGA/ASIC mapping, chip-oriented implementation research, and physical validation planning |
 | docs/implementation_layers.md | defines the staged layer structure from conceptual architecture through software execution, validation, CI, documentation, hardware-facing specification, FPGA/ASIC studies, physical validation, and funding preparation |
+| docs/fpga_mapping_study.md | defines the FPGA-oriented mapping study from the validated software reference model toward programmable-hardware implementation planning |
+| docs/asic_mapping_study.md | defines the ASIC-oriented mapping study from the validated software reference model toward chip-oriented implementation research |
+| docs/physical_validation_plan.md | defines the physical validation planning structure for measurement, benchmark repeatability, telemetry comparison, and comparison against the Python reference model |
 | ROADMAP.md | places the hardware-facing pathway into the staged project roadmap |
+| MILESTONES.md | converts the pathway into project milestones and acceptance criteria |
+| funding_brief.md | translates the pathway into partner and funding-facing language |
 
 The current hardware-facing documentation pathway connects the validated software layer with future implementation-layer work.
 
-## 12. Files Added or Aligned
+## 12. Milestone Structure
 
-### 12.1 Root Files
+This release candidate includes a project milestone structure.
+
+Milestone document:
+
+    MILESTONES.md
+
+Current milestones:
+
+| Milestone | Name | Primary Output |
+|---|---|---|
+| M0 | Repository Stabilization | stable v0.9.3-mobile repository package |
+| M1 | Archival Release and DOI | GitHub release, Zenodo archive, DOI |
+| M2 | Structured Output | JSON and machine-readable summaries |
+| M3 | Extended Benchmark Layer | expanded benchmark profiles and exports |
+| M4 | FPGA Mapping Package | FPGA-oriented implementation package |
+| M5 | ASIC Mapping Package | chip-oriented implementation research package |
+| M6 | Physical Validation Protocol | measurement and validation protocol package |
+| M7 | Funding and Partner Package | review package for partners, labs, grants, and investors |
+| M8 | v1.0.0 Public Software Architecture Release | stable public software architecture release |
+
+Current role:
+
+    provide project-level milestone structure for repository management, funding planning, engineering coordination, and GitHub milestone creation
+
+## 13. Funding and Partner Brief
+
+This release candidate includes a partner and funding-facing technical brief.
+
+Funding brief file:
+
+    funding_brief.md
+
+The funding brief provides:
+
+- executive summary
+- current validated asset list
+- software validation evidence
+- candidate invariants
+- self-test and benchmark summaries
+- general-purpose hardware execution
+- hardware-facing development path
+- funding objective
+- proposed funding milestones
+- resource needs
+- partner profile
+- technical value proposition
+- review package structure
+- funding-facing technical message
+
+Current role:
+
+    support engineering partner review, laboratory collaboration discussion, grant preparation, investor-facing technical evaluation, and milestone-based resource planning
+
+## 14. Files Added or Aligned
+
+### 14.1 Root Files
 
 | File | Status |
 |---|---|
@@ -287,6 +361,8 @@ The current hardware-facing documentation pathway connects the validated softwar
 | RELEASE_NOTES_v0_9_3.md | aligned |
 | RELEASE_CHECKLIST_v0_9_3.md | aligned |
 | ROADMAP.md | aligned |
+| MILESTONES.md | present |
+| funding_brief.md | present |
 | PROJECT_STRUCTURE.md | aligned |
 | INSTALL.md | present |
 | USAGE.md | present |
@@ -301,7 +377,7 @@ The current hardware-facing documentation pathway connects the validated softwar
 | CONTRIBUTING.md | present |
 | CODE_OF_CONDUCT.md | present |
 
-### 12.2 Documentation Files
+### 14.2 Documentation Files
 
 | File | Status |
 |---|---|
@@ -314,15 +390,18 @@ The current hardware-facing documentation pathway connects the validated softwar
 | docs/output_schema.md | present |
 | docs/hardware_pathway.md | present |
 | docs/implementation_layers.md | present |
+| docs/fpga_mapping_study.md | present |
+| docs/asic_mapping_study.md | present |
+| docs/physical_validation_plan.md | present |
 
-### 12.3 Verification Files
+### 14.3 Verification Files
 
 | File | Status |
 |---|---|
 | verification/README.md | present |
 | verification/coherence_metrics.md | present |
 
-### 12.4 Example, Model, and Simulation Files
+### 14.4 Example, Model, and Simulation Files
 
 | File | Status |
 |---|---|
@@ -333,16 +412,16 @@ The current hardware-facing documentation pathway connects the validated softwar
 | simulations/README.md | present |
 | simulations/initial_kuramoto_result.md | present |
 
-### 12.5 CI Files
+### 14.5 CI Files
 
 | File | Status |
 |---|---|
 | .github/workflows/frp-self-test.yml | present |
 | .github/workflows/frp-benchmark-smoke.yml | present |
 
-## 13. Documentation Growth in This Candidate
+## 15. Documentation Growth in This Candidate
 
-This candidate now includes a documentation path from current software validation toward hardware-facing development.
+This candidate includes a documentation path from current software validation toward hardware-facing development and milestone-based project planning.
 
 Documentation layers now include:
 
@@ -353,11 +432,16 @@ Documentation layers now include:
 - output schema
 - hardware pathway
 - implementation layers
+- FPGA mapping study
+- ASIC mapping study
+- physical validation plan
 - roadmap
+- milestones
+- funding brief
 - release checklist
 - project structure
 
-The documentation package now supports:
+The documentation package supports:
 
 - repository-level review
 - reproducibility testing
@@ -368,26 +452,31 @@ The documentation package now supports:
 - FPGA mapping study preparation
 - ASIC mapping study preparation
 - physical validation planning
+- milestone tracking
 - funding and partner preparation
 
-## 14. Current Engineering Trajectory
+## 16. Current Engineering Trajectory
 
 The current engineering trajectory is:
 
     software validation
     → architecture stabilization
+    → archival release
+    → structured output
+    → expanded benchmark layer
     → hardware-facing specification
     → FPGA mapping study
     → ASIC mapping study
     → chip-oriented implementation research
     → physical validation planning
     → partner and funding package
+    → stable public software architecture release
 
 The current repository position is:
 
-    public software validation package with initiated hardware-facing documentation pathway
+    public software validation package with hardware-facing documentation pathway, milestone structure, and funding brief
 
-## 15. Release Readiness
+## 17. Release Readiness
 
 The v0.9.3-mobile candidate is ready as a public software validation package.
 
@@ -406,6 +495,11 @@ Current readiness state:
 | engineering trajectory documented | complete |
 | hardware pathway documented | complete |
 | implementation layers documented | complete |
+| FPGA mapping study documented | complete |
+| ASIC mapping study documented | complete |
+| physical validation plan documented | complete |
+| funding brief documented | complete |
+| milestones documented | complete |
 | release notes present | complete |
 | changelog present | complete |
 | roadmap present | complete |
@@ -418,7 +512,35 @@ Current readiness state:
 | code of conduct present | complete |
 | output schema documented | complete |
 
-## 16. Remaining Before Archival Release
+## 18. Review Package
+
+Current review package includes:
+
+- README.md
+- funding_brief.md
+- MILESTONES.md
+- ROADMAP.md
+- TEST_REPORT_v0_9_3.md
+- RELEASE_NOTES_v0_9_3.md
+- RELEASE_CHECKLIST_v0_9_3.md
+- PROJECT_STRUCTURE.md
+- docs/hardware_pathway.md
+- docs/implementation_layers.md
+- docs/fpga_mapping_study.md
+- docs/asic_mapping_study.md
+- docs/physical_validation_plan.md
+- docs/benchmark_interpretation.md
+- docs/output_schema.md
+- REPRODUCIBILITY.md
+- CI.md
+- CITATION.cff
+- LICENSE
+
+Review package role:
+
+    support repository-level review, technical partner review, laboratory collaboration discussion, grant preparation, investor-facing technical evaluation, and milestone-based resource planning
+
+## 19. Remaining Before Archival Release
 
 Before creating an archival release or Zenodo DOI:
 
@@ -432,14 +554,7 @@ Before creating an archival release or Zenodo DOI:
 - add DOI to CITATION.cff after DOI assignment
 - update README with DOI badge after DOI assignment
 
-## 17. Recommended Next Engineering Documents
-
-Recommended next documents:
-
-- docs/fpga_mapping_study.md
-- docs/asic_mapping_study.md
-- docs/physical_validation_plan.md
-- funding_brief.md
+## 20. Recommended Next Development Target
 
 Recommended next development target:
 
@@ -457,9 +572,9 @@ Candidate v0.9.4 focus:
 - updated output schema documentation
 - updated CI validation
 
-## 18. Current Status
+## 21. Current Status
 
-FRP v0.9.3-mobile establishes the public software validation layer and the initial hardware-facing documentation pathway.
+FRP v0.9.3-mobile establishes the public software validation layer, hardware-facing documentation pathway, milestone structure, and funding brief.
 
 The current repository package is suitable for:
 
@@ -474,4 +589,5 @@ The current repository package is suitable for:
 - FPGA and ASIC mapping study preparation
 - physical validation planning
 - implementation-layer research planning
+- milestone tracking
 - funding and partner preparation
