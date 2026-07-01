@@ -1,33 +1,69 @@
 # Security Policy
 
-The Fractal Resonance Processor (FPR) repository contains only the public architectural and research layer of the framework.
+The Fractal Resonance Processor (FRP) repository contains the public simulation, documentation, and verification layer of the project.
 
-Sensitive implementation parameters, restricted resonance maps, private anchors, and operationally sensitive components are intentionally excluded from the public repository.
+The current repository describes a Python simulation prototype of a ternary resonant coherence processor architecture.
 
-## Public Layer Policy
+It is not a hardware implementation.
+
+## Public Repository Scope
 
 The public repository may contain:
 
-- architectural concepts,
-- synchronization models,
-- simulation results,
-- coherence metrics,
-- and public verification structures.
+- public architecture documentation
+- Python simulation prototype code
+- reproducible test commands
+- benchmark reports
+- verification summaries
+- simulation-level metrics
+- documentation of model limitations
 
-The public repository does NOT contain:
+## Excluded Material
 
-- restricted operational parameters,
-- private resonance anchors,
-- sensitive frequency maps,
-- closed synthesis configurations,
-- or deployment-critical implementation layers.
+The public repository must not contain:
+
+- non-public implementation parameters
+- deployment-sensitive operational details
+- private access-control material
+- credentials, tokens, keys, or secrets
+- private identity or authentication data
+- unpublished restricted design layers
+- hardware deployment instructions that have not been validated for public release
+- any material that would compromise safety, privacy, or responsible disclosure boundaries
+
+## Simulation Boundary
+
+The FRP v0.9.3-mobile candidate is a simulation prototype.
+
+Repository content should not be presented as:
+
+- a fabricated hardware processor
+- a production-ready computing device
+- a hardware-validated chip architecture
+- measured physical thermal performance
+- measured electrical switching-energy reduction
+- deployment-ready infrastructure
+
+All current technical claims are limited to the documented Python simulation domain.
 
 ## Responsible Use
 
-This repository is intended for research, educational, and engineering purposes.
+This repository is intended for research, educational, and engineering documentation purposes.
 
-Users are responsible for ensuring safe, ethical, and lawful use of any concepts, simulations, or implementations derived from this framework.
+Users are responsible for ensuring that any derived work is used safely, ethically, and lawfully.
 
-## Reporting
+## Reporting Security Issues
 
-Security-related concerns or repository issues should be handled through responsible disclosure and direct communication with the repository maintainer.
+Security-related issues should be reported responsibly to the repository maintainer.
+
+Do not disclose sensitive issues publicly before the maintainer has had a reasonable opportunity to review them.
+
+## Current Status
+
+This security policy is aligned with:
+
+- FRP v0.9.3-mobile
+- frp_prototype_v0_9_3_mobile.py
+- TEST_REPORT_v0_9_3.md
+- README.md
+- docs/limitations.md
