@@ -1,5 +1,7 @@
 # Fractal Resonance Processor (FRP)
 
+[![FRP M8 Production Release Package](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m8-production-release.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m8-production-release.yml)
+
 [![FRP M7 FPGA Synthesis and Timing Scaffold](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m7-fpga-synthesis.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m7-fpga-synthesis.yml)
 
 [![FRP M6 Formal Verification and Equivalence Scaffold](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m6-formal-verification.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m6-formal-verification.yml)
@@ -19,6 +21,218 @@
 **Ternary Resonant Coherence Processor — Structured Output Prototype**
 
 ## Current Release Layer
+
+**Current version:** `FRP v1.0.0`
+
+**Current milestone:** `M8 — Production Release Package and Stable Interface Freeze`
+
+**Main executable reference file:** `frp_prototype_v1_0_0.py`
+
+FRP v1.0.0 establishes the M8 Production Release Package and Stable Interface Freeze layer.
+
+This release consolidates the validated M3 through M7 milestone stack into the first stable production release package of the Fractal Resonance Processor reference architecture.
+
+The v1.0.0 release freezes the public interface boundary for the current FRP release line and prepares the next architecture layer:
+
+`M9 — Silicon and Heterogeneous Implementation Architecture`
+
+## M8 Export Layers
+
+FRP v1.0.0 defines four M8 export layers:
+
+- `production_release_manifest`;
+
+- `stable_interface_contract`;
+
+- `artifact_package_index`;
+
+- `release_freeze_checklist`.
+
+## M8 Export Commands
+
+Production release manifest export:
+
+`python frp_prototype_v1_0_0.py --export-production-release-manifest`
+
+Stable interface contract export:
+
+`python frp_prototype_v1_0_0.py --export-stable-interface-contract`
+
+Artifact package index export:
+
+`python frp_prototype_v1_0_0.py --export-artifact-package-index`
+
+Release freeze checklist export:
+
+`python frp_prototype_v1_0_0.py --export-release-freeze-checklist`
+
+Benchmark matrix export:
+
+`python frp_prototype_v1_0_0.py --export-benchmark-matrix`
+
+## M8 Schemas
+
+Structured output schema:
+
+`frp.structured_output.v1.0.0`
+
+Benchmark matrix schema:
+
+`frp.m3.benchmark_matrix.v1.0.0`
+
+Production release manifest schema:
+
+`frp.m8.production_release_manifest.v1.0.0`
+
+Stable interface contract schema:
+
+`frp.m8.stable_interface_contract.v1.0.0`
+
+Artifact package index schema:
+
+`frp.m8.artifact_package_index.v1.0.0`
+
+Release freeze checklist schema:
+
+`frp.m8.release_freeze_checklist.v1.0.0`
+
+## M8 Validation Status
+
+Observed status:
+
+`PASS`
+
+Validation environment:
+
+`GitHub Actions hardware-backed CI execution`
+
+Validated workflows:
+
+- FRP Self Test;
+
+- FRP Benchmark Smoke Test;
+
+- FRP Structured Output;
+
+- FRP M8 Production Release Package.
+
+Validated M8 workflow stages:
+
+- compile FRP v1.0.0 executable reference file;
+
+- generate M8 JSON artifacts;
+
+- validate M8 schemas and invariants;
+
+- validate M8 documentation markers.
+
+## Stable v1.0.0 CLI Command Set
+
+Stable v1.0.0 commands:
+
+- `--mode demo --output json`;
+
+- `--mode self-test --output json`;
+
+- `--mode benchmark`;
+
+- `--export-benchmark-matrix`;
+
+- `--export-production-release-manifest`;
+
+- `--export-stable-interface-contract`;
+
+- `--export-artifact-package-index`;
+
+- `--export-release-freeze-checklist`.
+
+## Stable v1.0.0 Artifact Layers
+
+Stable v1.0.0 artifact layers:
+
+- `benchmark_matrix`;
+
+- `hardware_signal_mapping`;
+
+- `hdl_trace`;
+
+- `vcd_trace`;
+
+- `signal_fixture`;
+
+- `verilog_testbench_scaffold`;
+
+- `rtl_interface_contract`;
+
+- `assertion_manifest`;
+
+- `rtl_signal_binding`;
+
+- `assertion_harness_scaffold`;
+
+- `formal_property_set`;
+
+- `equivalence_trace_map`;
+
+- `bounded_verification_config`;
+
+- `formal_harness_scaffold`;
+
+- `fpga_synthesis_manifest`;
+
+- `timing_constraint_profile`;
+
+- `resource_estimate_map`;
+
+- `implementation_handoff_scaffold`;
+
+- `production_release_manifest`;
+
+- `stable_interface_contract`;
+
+- `artifact_package_index`;
+
+- `release_freeze_checklist`.
+
+## M8 Production Release Files
+
+M8 documentation file:
+
+- `docs/m8_production_release_package.md`.
+
+Release-facing files:
+
+- `RELEASE_NOTES_v1_0_0.md`;
+
+- `TEST_REPORT_v1_0_0.md`;
+
+- `FRP_PRODUCTION_RELEASE_MANIFEST_v1_0_0.md`;
+
+- `FRP_VALIDATION_INDEX_v0_9_9.md`;
+
+- `CHANGELOG.md`.
+
+## Stable Interface Freeze
+
+The v1.0.0 release freezes the following public interface categories:
+
+- CLI command names;
+
+- JSON schema identifiers;
+
+- export artifact names;
+
+- signal group names;
+
+- invariant marker names;
+
+- workflow names;
+
+- documentation file paths;
+
+- release file paths.
+
+## Previous Release Layer — FRP v0.9.9 / M7
 
 **Current version:** `FRP v0.9.9`
 
