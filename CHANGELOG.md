@@ -2,6 +2,136 @@
 
 All notable changes to the Fractal Resonance Processor (FRP) project are documented in this file.
 
+## v0.9.5 — M3 Benchmark Export and Hardware Signal Mapping
+
+FRP v0.9.5 establishes the M3 Benchmark Export and Hardware Signal Mapping layer.
+
+This release extends the v0.9.4 structured-output layer into benchmark export, hardware-facing signal mapping, FPGA register-map drafting, and testbench comparison preparation.
+
+### Added
+
+- Added `frp_prototype_v0_9_5.py`.
+
+- Added benchmark matrix export:
+
+  `python frp_prototype_v0_9_5.py --export-benchmark-matrix`
+
+- Added hardware-facing signal map export:
+
+  `python frp_prototype_v0_9_5.py --export-signal-map`
+
+- Added FPGA register map draft export:
+
+  `python frp_prototype_v0_9_5.py --export-register-map`
+
+- Added testbench vector export:
+
+  `python frp_prototype_v0_9_5.py --export-testbench-vector`
+
+- Added M3 benchmark matrix documentation:
+
+  `docs/benchmark_matrix.md`
+
+- Added M3 hardware signal mapping documentation:
+
+  `docs/hardware_signal_mapping.md`
+
+- Added M3 FPGA register map draft documentation:
+
+  `docs/fpga_register_map_draft.md`
+
+- Added M3 testbench comparison plan:
+
+  `docs/testbench_comparison_plan.md`
+
+- Added M3 validation targets:
+
+  `docs/m3_validation_targets.md`
+
+- Added GitHub Actions workflow:
+
+  `.github/workflows/frp-m3-benchmark-signal-map.yml`
+
+- Added release notes:
+
+  `RELEASE_NOTES_v0_9_5.md`
+
+- Added test report:
+
+  `TEST_REPORT_v0_9_5.md`
+
+### Structured Output
+
+The structured-output schema was advanced to:
+
+`frp.structured_output.v0.9.5`
+
+The following execution modes remain supported:
+
+- `--mode demo`;
+
+- `--mode self-test`;
+
+- `--mode benchmark`.
+
+The following output modes remain supported:
+
+- `--output text`;
+
+- `--output json`.
+
+Optional telemetry export remains supported:
+
+`--include-telemetry`
+
+### M3 Export Schemas
+
+FRP v0.9.5 defines the following M3 export schemas:
+
+`frp.m3.benchmark_matrix.v0.9.5`
+
+`frp.m3.hardware_signal_map.v0.9.5`
+
+`frp.m3.fpga_register_map_draft.v0.9.5`
+
+`frp.m3.testbench_vector.v0.9.5`
+
+### Preserved Candidate Invariants
+
+FRP v0.9.5 preserves the following candidate invariant markers:
+
+`match = 1.000`
+
+`actual_direct_events = 0`
+
+`C_minus_P_min > 0`
+
+`switch_load_peak <= transition_fraction`
+
+`ticks_recorded = steps`
+
+`scheduler counts match selected cycle mode`
+
+### Validation
+
+Validated GitHub Actions workflows:
+
+- FRP Self Test;
+
+- FRP Benchmark Smoke Test;
+
+- FRP Structured Output;
+
+- FRP M3 Benchmark and Signal Map.
+
+Observed validation status:
+
+`PASS`
+
+### Technical Position
+
+`FRP v0.9.5 extends the structured-output layer into benchmark export and hardware-facing signal mapping. The release defines machine-readable benchmark matrices, signal-map fields, register-map draft structures, and testbench comparison vectors for future FPGA, ASIC, and external architecture comparison workflows.`
+
 ## v0.9.4 — Structured Output and Machine-Readable Validation
 
 Release title:
