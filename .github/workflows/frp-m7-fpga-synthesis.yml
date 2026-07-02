@@ -1,0 +1,176 @@
+name: FRP M7 FPGA Synthesis and Timing Scaffold
+
+on:
+  push:
+    paths:
+      - "frp_prototype_v0_9_9.py"
+      - "docs/m7_fpga_synthesis_timing.md"
+      - ".github/workflows/frp-m7-fpga-synthesis.yml"
+  pull_request:
+    paths:
+      - "frp_prototype_v0_9_9.py"
+      - "docs/m7_fpga_synthesis_timing.md"
+      - ".github/workflows/frp-m7-fpga-synthesis.yml"
+  workflow_dispatch:
+
+jobs:
+  m7-fpga-synthesis-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Compile FRP v0.9.9 executable reference file
+        run: |
+          python -m py_compile frp_prototype_v0_9_9.py
+
+      - name: Generate M7 JSON artifacts
+        run: |
+          mkdir -p m7_artifacts
+
+          python frp_prototype_v0_9_9.py --mode demo --output json > m7_artifacts/structured_output.json
+          python frp_prototype_v0_9_9.py --mode self-test --output json > m7_artifacts/self_test.json
+          python frp_prototype_v0_9_9.py --mode benchmark > m7_artifacts/benchmark_matrix.json
+
+          python frp_prototype_v0_9_9.py --export-benchmark-matrix > m7_artifacts/export_benchmark_matrix.json
+          python frp_prototype_v0_9_9.py --export-fpga-synthesis-manifest > m7_artifacts/fpga_synthesis_manifest.json
+          python frp_prototype_v0_9_9.py --export-timing-constraint-profile > m7_artifacts/timing_constraint_profile.json
+          python frp_prototype_v0_9_9.py --export-resource-estimate-map > m7_artifacts/resource_estimate_map.json
+          python frp_prototype_v0_9_9.py --export-implementation-handoff > m7_artifacts/implementation_handoff_scaffold.json
+
+      - name: Validate M7 schemas and invariants
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("m7_artifacts")
+
+          structured = json.loads((root / "structured_output.json").read_text())
+          self_test = json.loads((root / "self_test.json").read_text())
+          benchmark = json.loads((root / "benchmark_matrix.json").read_text())
+          exported_benchmark = json.loads((root / "export_benchmark_matrix.json").read_text())
+          manifest = json.loads((root / "fpga_synthesis_manifest.json").read_text())
+          timing = json.loads((root / "timing_constraint_profile.json").read_text())
+          resources = json.loads((root / "resource_estimate_map.json").read_text())
+          handoff = json.loads((root / "implementation_handoff_scaffold.json").read_text())
+
+          assert structured["schema"] == "frp.structured_output.v0.9.9"
+          assert self_test["schema"] == "frp.structured_output.v0.9.9"
+          assert self_test["status"] == "PASS"
+
+          summary = self_test["summary"]
+
+          assert summary["actual_direct_events"] == 0
+          assert summary["match"] == 1.0
+          assert summary["C_minus_P_min"] > 0
+          assert summary["switch_load_peak"] <= summary["transition_fraction"]
+          assert summary["ticks_recorded"] == summary["steps"]
+          assert sum(summary["scheduler_counts"].values()) == summary["steps"]
+
+          assert benchmark["schema"] == "frp.m3.benchmark_matrix.v0.9.9"
+          assert exported_benchmark["schema"] == "frp.m3.benchmark_matrix.v0.9.9"
+
+          assert manifest["schema"] == "frp.m7.fpga_synthesis_manifest.v0.9.9"
+          assert timing["schema"] == "frp.m7.timing_constraint_profile.v0.9.9"
+          assert resources["schema"] == "frp.m7.resource_estimate_map.v0.9.9"
+          assert handoff["schema"] == "frp.m7.implementation_handoff_scaffold.v0.9.9"
+
+          assert manifest["top_module"] == "frp_top_v0_9_9"
+
+          required_signal_groups = {
+              "clock_and_reset",
+              "scheduler_control",
+              "ternary_cell_state",
+              "phase_telemetry_q16",
+              "transition_routing_counters",
+              "stability_telemetry_q16",
+              "phase_order_telemetry_q16",
+              "benchmark_invariant_outputs",
+          }
+          assert required_signal_groups.issubset(set(manifest["rtl_signal_groups"]))
+
+          required_assertion_groups = {
+              "direct_transition_safety",
+              "match_marker_invariant",
+              "C_minus_P_stability",
+              "switch_load_bound",
+              "trace_depth_accounting",
+              "scheduler_accounting",
+              "neutral_routing_path",
+          }
+          assert required_assertion_groups.issubset(set(manifest["assertion_groups"]))
+
+          markers = manifest["candidate_invariant_markers"]
+          assert markers["match"] == 1.0
+          assert markers["actual_direct_events"] == 0
+          assert markers["C_minus_P_min"] > 0
+          assert markers["switch_load_peak"] <= markers["transition_fraction"]
+          assert markers["ticks_recorded"] == markers["steps"]
+          assert sum(markers["scheduler_counts"].values()) == markers["steps"]
+
+          timing_ids = {item["id"] for item in timing["constraints"]}
+          required_timing_ids = {
+              "T_PRIMARY_CLOCK_PERIOD",
+              "T_RESET_RELEASE_WINDOW",
+              "T_BOUNDED_STEP_COUNTER",
+              "T_SCHEDULER_STATE",
+              "T_PHASE_TELEMETRY_Q16",
+              "T_STABILITY_TELEMETRY_Q16",
+              "T_TRANSITION_COUNTERS",
+              "T_EQUIVALENCE_TRACE_SAMPLING",
+          }
+          assert required_timing_ids.issubset(timing_ids)
+
+          resource_ids = {item["id"] for item in resources["categories"]}
+          required_resource_ids = {
+              "R_TERNARY_CELL_STATE_REGISTERS",
+              "R_PHASE_Q16_REGISTERS",
+              "R_SCHEDULER_REGISTERS",
+              "R_TRANSITION_COUNTER_REGISTERS",
+              "R_STABILITY_TELEMETRY_REGISTERS",
+              "R_PHASE_ORDER_TELEMETRY_REGISTERS",
+              "R_ASSERTION_COMPARISON_LOGIC",
+              "R_EQUIVALENCE_TRACE_COMPARISON_LOGIC",
+              "R_BOUNDED_STEP_COUNTER_LOGIC",
+              "R_FORMAL_HARNESS_SUPPORT_LOGIC",
+          }
+          assert required_resource_ids.issubset(resource_ids)
+          assert resources["total_structural_width_bits"] > 0
+
+          handoff_body = handoff["handoff"]
+          assert handoff_body["top_module_target"] == "frp_top_v0_9_9"
+          assert "primary_clock_constraints" in handoff_body["constraint_file_groups"]
+          assert "T_PRIMARY_CLOCK_PERIOD" in handoff_body["timing_profile_references"]
+          assert "R_TERNARY_CELL_STATE_REGISTERS" in handoff_body["resource_estimate_references"]
+          assert "validate candidate invariant markers" in handoff_body["validation_checklist"]
+
+          scaffold = handoff["scaffold_text"]
+          assert "FRP v0.9.9 Implementation Handoff Scaffold" in scaffold
+          assert "Top module target: frp_top_v0_9_9" in scaffold
+          assert "T_PRIMARY_CLOCK_PERIOD" in scaffold
+          assert "T_EQUIVALENCE_TRACE_SAMPLING" in scaffold
+          assert "R_TERNARY_CELL_STATE_REGISTERS" in scaffold
+          assert "R_FORMAL_HARNESS_SUPPORT_LOGIC" in scaffold
+          assert "validate documentation markers" in scaffold
+
+          print("FRP v0.9.9 M7 schema and invariant validation PASS")
+          PY
+
+      - name: Validate M7 documentation markers
+        run: |
+          test -f docs/m7_fpga_synthesis_timing.md
+
+          grep -q "FRP v0.9.9" docs/m7_fpga_synthesis_timing.md
+          grep -q "M7 FPGA Synthesis Package and Timing Constraint Scaffold" docs/m7_fpga_synthesis_timing.md
+
+          grep -q "frp.m7.fpga_synthesis_manifest.v0.9.9" docs/m7_fpga_synthesis_timing.md
+          grep -q "frp.m7.timing_constraint_profile.v0.9.9" docs/m7_fpga_synthesis_timing.md
+          grep -q "frp.m7.resource_estimate_map.v0.9.9" docs/m7_fpga_synthesis_timing.md
+          grep -q "frp.m7.implementation_handoff_scaffold.v0.9.9" docs/m7_fpga_synthesis_timing.md
