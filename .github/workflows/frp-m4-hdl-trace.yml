@@ -1,0 +1,158 @@
+name: FRP M4 HDL Trace and Testbench
+
+on:
+  push:
+    paths:
+      - "frp_prototype_v0_9_6.py"
+      - "docs/m4_hdl_trace_testbench.md"
+      - ".github/workflows/frp-m4-hdl-trace.yml"
+  pull_request:
+    paths:
+      - "frp_prototype_v0_9_6.py"
+      - "docs/m4_hdl_trace_testbench.md"
+      - ".github/workflows/frp-m4-hdl-trace.yml"
+  workflow_dispatch:
+
+jobs:
+  m4-hdl-trace-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Compile FRP v0.9.6 prototype
+        run: |
+          python -m py_compile frp_prototype_v0_9_6.py
+
+      - name: Generate M4 JSON artifacts
+        run: |
+          mkdir -p m4_artifacts
+
+          python frp_prototype_v0_9_6.py --mode demo --output json > m4_artifacts/demo.json
+          python frp_prototype_v0_9_6.py --mode self-test --output json > m4_artifacts/self_test.json
+          python frp_prototype_v0_9_6.py --mode benchmark > m4_artifacts/benchmark_matrix.json
+
+          python frp_prototype_v0_9_6.py --export-benchmark-matrix > m4_artifacts/export_benchmark_matrix.json
+          python frp_prototype_v0_9_6.py --export-hdl-trace > m4_artifacts/hdl_trace.json
+          python frp_prototype_v0_9_6.py --export-vcd-trace > m4_artifacts/vcd_trace.json
+          python frp_prototype_v0_9_6.py --export-signal-fixture > m4_artifacts/signal_fixture.json
+          python frp_prototype_v0_9_6.py --export-verilog-testbench > m4_artifacts/verilog_testbench.json
+
+      - name: Validate M4 schemas and invariants
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("m4_artifacts")
+
+          def load(name):
+              with open(root / name, "r", encoding="utf-8") as f:
+                  return json.load(f)
+
+          demo = load("demo.json")
+          self_test = load("self_test.json")
+          benchmark = load("benchmark_matrix.json")
+          export_benchmark = load("export_benchmark_matrix.json")
+          hdl = load("hdl_trace.json")
+          vcd = load("vcd_trace.json")
+          fixture = load("signal_fixture.json")
+          verilog = load("verilog_testbench.json")
+
+          assert demo["schema"] == "frp.structured_output.v0.9.6"
+          assert demo["version"] == "0.9.6"
+
+          assert self_test["schema"] == "frp.structured_output.v0.9.6"
+          assert self_test["status"] == "PASS"
+          assert self_test["checks"]["actual_direct_events_zero"] is True
+          assert self_test["checks"]["match_equals_one"] is True
+          assert self_test["checks"]["C_minus_P_positive"] is True
+          assert self_test["checks"]["switch_load_within_transition_fraction"] is True
+          assert self_test["checks"]["ticks_recorded_equals_steps"] is True
+          assert self_test["checks"]["scheduler_counts_sum_equals_steps"] is True
+
+          assert benchmark["schema"] == "frp.m3.benchmark_matrix.v0.9.6"
+          assert len(benchmark["rows"]) == 4
+
+          assert export_benchmark["schema"] == "frp.m3.benchmark_matrix.v0.9.6"
+          frp_row = [row for row in export_benchmark["rows"] if row["architecture"] == "frp_distributed_resonant"][0]
+          assert frp_row["actual_direct_events"] == 0
+          assert frp_row["match"] == 1.0
+          assert frp_row["C_minus_P_min"] > 0
+          assert frp_row["switch_load_peak"] <= export_benchmark["configuration"]["transition_fraction"]
+
+          assert hdl["schema"] == "frp.m4.hdl_trace.v0.9.6"
+          assert hdl["kind"] == "hdl_trace"
+          assert len(hdl["records"]) == hdl["configuration"]["steps"]
+          assert hdl["summary"]["actual_direct_events"] == 0
+          assert hdl["summary"]["match"] == 1.0
+          assert hdl["summary"]["C_minus_P_min"] > 0
+
+          required_signal_groups = {
+              "ternary_cell_state",
+              "phase_state_q16",
+              "scheduler_state",
+              "transition_routing_counters",
+              "stability_telemetry_q16",
+              "phase_order_telemetry_q16",
+          }
+          assert required_signal_groups.issubset(set(hdl["signal_groups"]))
+
+          first_record = hdl["records"][0]
+          required_record_fields = {
+              "tick",
+              "scheduler_state",
+              "cell_state",
+              "phase_q16",
+              "phase_order_R_q16",
+              "switch_load_q16",
+              "heat_q16",
+              "C_minus_P_q16",
+              "actual_direct_events",
+              "prevented_direct_events",
+              "neutralized_conflicts",
+          }
+          assert required_record_fields.issubset(set(first_record.keys()))
+
+          assert vcd["schema"] == "frp.m4.vcd_trace.v0.9.6"
+          assert vcd["kind"] == "vcd_trace"
+          assert "$timescale 1ns $end" in vcd["vcd_text"]
+          assert "$enddefinitions $end" in vcd["vcd_text"]
+          assert "C_minus_P_q16" in vcd["vcd_text"]
+          assert "#0" in vcd["vcd_text"]
+
+          assert fixture["schema"] == "frp.m4.signal_fixture.v0.9.6"
+          assert fixture["kind"] == "signal_fixture"
+          assert fixture["expected_output"]["actual_direct_events"] == 0
+          assert fixture["expected_output"]["match"] == 1.0
+          assert fixture["expected_output"]["C_minus_P_min_positive"] is True
+          assert fixture["expected_output"]["ticks_recorded"] == fixture["input_fixture"]["steps"]
+
+          assert verilog["schema"] == "frp.m4.verilog_testbench_scaffold.v0.9.6"
+          assert verilog["kind"] == "verilog_testbench_scaffold"
+          assert "module tb_frp_v0_9_6;" in verilog["scaffold_text"]
+          assert "localparam integer CELLS" in verilog["scaffold_text"]
+          assert "reg clk;" in verilog["scaffold_text"]
+          assert "reg rst;" in verilog["scaffold_text"]
+          assert "Expected actual_direct_events: 0" in verilog["scaffold_text"]
+          assert verilog["candidate_invariants"]["actual_direct_events"] == 0
+          assert verilog["candidate_invariants"]["match"] == 1.0
+
+          print("FRP v0.9.6 M4 validation PASS")
+          PY
+
+      - name: Validate M4 documentation markers
+        run: |
+          test -f docs/m4_hdl_trace_testbench.md
+          grep -q "FRP v0.9.6" docs/m4_hdl_trace_testbench.md
+          grep -q "M4 HDL Trace Export and Testbench Scaffold" docs/m4_hdl_trace_testbench.md
+          grep -q "frp.m4.hdl_trace.v0.9.6" docs/m4_hdl_trace_testbench.md
+          grep -q "frp.m4.vcd_trace.v0.9.6" docs/m4_hdl_trace_testbench.md
+          grep -q "frp.m4.signal_fixture.v0.9.6" docs/m4_hdl_trace_testbench.md
+          grep -q "frp.m4.verilog_testbench_scaffold.v0.9.6" docs/m4_hdl_trace_testbench.md
