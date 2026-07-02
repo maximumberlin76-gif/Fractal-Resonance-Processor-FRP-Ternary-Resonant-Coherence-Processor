@@ -1,5 +1,7 @@
 # Fractal Resonance Processor (FRP)
 
+[![FRP M6 Formal Verification and Equivalence Scaffold](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m6-formal-verification.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m6-formal-verification.yml)
+
 [![FRP M5 RTL Interface and Assertion Harness](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m5-rtl-assertion-harness.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m5-rtl-assertion-harness.yml)
 
 [![FRP M4 HDL Trace and Testbench](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m4-hdl-trace.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m4-hdl-trace.yml)
@@ -13,6 +15,160 @@
 [![FRP Structured Output](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-structured-output.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-structured-output.yml)
 
 **Ternary Resonant Coherence Processor — Structured Output Prototype**
+
+## Current Release Layer
+
+**Current version:** `FRP v0.9.8`
+
+**Current milestone:** `M6 — Formal Verification Hooks and Equivalence Scaffold`
+
+**Main executable reference file:** `frp_prototype_v0_9_8.py`
+
+FRP v0.9.8 establishes the M6 Formal Verification Hooks and Equivalence Scaffold layer.
+
+This release extends the M5 RTL interface contract and assertion harness layer into formal property records, equivalence trace mapping, bounded verification configuration, and formal harness scaffold generation.
+
+## M6 Export Layers
+
+FRP v0.9.8 defines four M6 export layers:
+
+- `formal_property_set`;
+
+- `equivalence_trace_map`;
+
+- `bounded_verification_config`;
+
+- `formal_harness_scaffold`.
+
+## M6 Export Commands
+
+Formal property set export:
+
+`python frp_prototype_v0_9_8.py --export-formal-property-set`
+
+Equivalence trace map export:
+
+`python frp_prototype_v0_9_8.py --export-equivalence-trace-map`
+
+Bounded verification config export:
+
+`python frp_prototype_v0_9_8.py --export-bounded-verification-config`
+
+Formal harness scaffold export:
+
+`python frp_prototype_v0_9_8.py --export-formal-harness`
+
+Benchmark matrix export:
+
+`python frp_prototype_v0_9_8.py --export-benchmark-matrix`
+
+## M6 Schemas
+
+Structured output schema:
+
+`frp.structured_output.v0.9.8`
+
+Formal property set schema:
+
+`frp.m6.formal_property_set.v0.9.8`
+
+Equivalence trace map schema:
+
+`frp.m6.equivalence_trace_map.v0.9.8`
+
+Bounded verification config schema:
+
+`frp.m6.bounded_verification_config.v0.9.8`
+
+Formal harness scaffold schema:
+
+`frp.m6.formal_harness_scaffold.v0.9.8`
+
+## M6 Validation Status
+
+Observed status:
+
+`PASS`
+
+Validation environment:
+
+`GitHub Actions hardware-backed CI execution`
+
+Validated workflows:
+
+- FRP Self Test;
+
+- FRP Benchmark Smoke Test;
+
+- FRP Structured Output;
+
+- FRP M6 Formal Verification and Equivalence Scaffold.
+
+Validated M6 workflow stages:
+
+- compile FRP v0.9.8 executable reference file;
+
+- generate M6 JSON artifacts;
+
+- validate M6 schemas and invariants;
+
+- validate M6 documentation markers.
+
+## M6 Formal Property Targets
+
+Validated formal property targets:
+
+- `P_DIRECT_EVENTS_ZERO`;
+
+- `P_MATCH_EQUALS_ONE`;
+
+- `P_C_MINUS_P_POSITIVE`;
+
+- `P_SWITCH_LOAD_WITHIN_TRANSITION_FRACTION`;
+
+- `P_TICKS_RECORDED_EQUALS_STEPS`;
+
+- `P_SCHEDULER_COUNTS_SUM_EQUALS_STEPS`;
+
+- `P_NEUTRAL_ROUTED_TRANSITION_PATH`.
+
+## M6 Equivalence Trace Mapping
+
+Validated equivalence trace mappings:
+
+- `cell_state` to `frp_cell_state`;
+
+- `phase_q16` to `frp_phase_q16`;
+
+- `scheduler_state` to `frp_scheduler_state`;
+
+- `switch_load_q16` to `frp_switch_load_q16`;
+
+- `heat_q16` to `frp_heat_q16`;
+
+- `C_minus_P_q16` to `frp_C_minus_P_q16`;
+
+- `phase_order_R_q16` to `frp_phase_order_R_q16`;
+
+- `actual_direct_events` to `frp_actual_direct_events`;
+
+- `prevented_direct_events` to `frp_prevented_direct_events`;
+
+- `neutralized_conflicts` to `frp_neutralized_conflicts`.
+
+## M6 Documentation
+
+M6 documentation file:
+
+- `docs/m6_formal_verification_equivalence.md`.
+
+Release-facing files:
+
+- `RELEASE_NOTES_v0_9_8.md`;
+
+- `TEST_REPORT_v0_9_8.md`;
+
+- `CHANGELOG.md`.
 
 ## Current Release Layer
 
