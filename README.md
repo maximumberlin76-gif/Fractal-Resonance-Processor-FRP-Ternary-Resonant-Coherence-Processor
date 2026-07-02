@@ -1,5 +1,7 @@
 # Fractal Resonance Processor (FRP)
 
+[![FRP M5 RTL Interface and Assertion Harness](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m5-rtl-assertion-harness.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m5-rtl-assertion-harness.yml)
+
 [![FRP M4 HDL Trace and Testbench](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m4-hdl-trace.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m4-hdl-trace.yml)
 
 [![FRP M3 Benchmark and Signal Map](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m3-benchmark-signal-map.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m3-benchmark-signal-map.yml)
@@ -13,6 +15,118 @@
 **Ternary Resonant Coherence Processor — Structured Output Prototype**
 
 ## Current Release Layer
+
+**Current version:** `FRP v0.9.7`
+
+**Current milestone:** `M5 — RTL Interface Contract and Assertion Harness`
+
+**Main executable reference file:** `frp_prototype_v0_9_7.py`
+
+FRP v0.9.7 establishes the M5 RTL Interface Contract and Assertion Harness layer.
+
+This release extends the M4 HDL trace and testbench scaffold layer into RTL-facing signal contract definition, deterministic interface records, assertion target mapping, RTL signal binding, and machine-readable assertion harness preparation.
+
+## M5 Export Layers
+
+FRP v0.9.7 defines four M5 export layers:
+
+- `rtl_interface_contract`;
+
+- `assertion_manifest`;
+
+- `rtl_signal_binding`;
+
+- `assertion_harness_scaffold`.
+
+## M5 Export Commands
+
+RTL interface contract export:
+
+`python frp_prototype_v0_9_7.py --export-rtl-interface-contract`
+
+Assertion manifest export:
+
+`python frp_prototype_v0_9_7.py --export-assertion-manifest`
+
+RTL signal binding export:
+
+`python frp_prototype_v0_9_7.py --export-rtl-signal-binding`
+
+Assertion harness scaffold export:
+
+`python frp_prototype_v0_9_7.py --export-assertion-harness`
+
+Benchmark matrix export:
+
+`python frp_prototype_v0_9_7.py --export-benchmark-matrix`
+
+## M5 Schemas
+
+Structured output schema:
+
+`frp.structured_output.v0.9.7`
+
+RTL interface contract schema:
+
+`frp.m5.rtl_interface_contract.v0.9.7`
+
+Assertion manifest schema:
+
+`frp.m5.assertion_manifest.v0.9.7`
+
+RTL signal binding schema:
+
+`frp.m5.rtl_signal_binding.v0.9.7`
+
+Assertion harness scaffold schema:
+
+`frp.m5.assertion_harness_scaffold.v0.9.7`
+
+## M5 Validation Status
+
+Observed status:
+
+`PASS`
+
+Validation environment:
+
+`GitHub Actions hardware-backed CI execution`
+
+Validated workflows:
+
+- FRP Self Test;
+
+- FRP Benchmark Smoke Test;
+
+- FRP Structured Output;
+
+- FRP M5 RTL Interface and Assertion Harness.
+
+Validated M5 workflow stages:
+
+- compile FRP v0.9.7 executable reference file;
+
+- generate M5 JSON artifacts;
+
+- validate M5 schemas and invariants;
+
+- validate M5 documentation markers.
+
+## M5 Documentation
+
+M5 documentation file:
+
+- `docs/m5_rtl_interface_assertion_harness.md`.
+
+Release-facing files:
+
+- `RELEASE_NOTES_v0_9_7.md`;
+
+- `TEST_REPORT_v0_9_7.md`;
+
+- `CHANGELOG.md`.
+
+## Previous Release Layer — FRP v0.9.6 / M4
 
 **Current version:** `FRP v0.9.6`
 
