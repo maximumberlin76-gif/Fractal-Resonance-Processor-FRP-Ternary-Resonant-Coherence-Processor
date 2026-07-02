@@ -1,5 +1,7 @@
 # Fractal Resonance Processor (FRP)
 
+[![FRP M3 Benchmark and Signal Map](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m3-benchmark-signal-map.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m3-benchmark-signal-map.yml)
+
 [![FRP Self Test](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml)
 
 [![FRP Benchmark Smoke Test](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-benchmark-smoke.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-benchmark-smoke.yml)
@@ -7,6 +9,76 @@
 [![FRP Structured Output](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-structured-output.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-structured-output.yml)
 
 **Ternary Resonant Coherence Processor — Structured Output Prototype**
+
+## Current Release Layer
+
+**Current version:** `FRP v0.9.5`
+
+**Current milestone:** `M3 — Benchmark Export and Hardware Signal Mapping`
+
+**Main prototype:** `frp_prototype_v0_9_5.py`
+
+FRP v0.9.5 extends the structured-output layer into benchmark export and hardware-facing signal mapping.
+
+This release defines machine-readable benchmark matrices, signal-map fields, FPGA register-map draft structures, and testbench comparison vectors for future FPGA, ASIC, and external architecture comparison workflows.
+
+## M3 Export Layers
+
+- `benchmark_matrix`;
+
+- `hardware_signal_map`;
+
+- `fpga_register_map_draft`;
+
+- `testbench_vector`.
+
+## M3 Export Commands
+
+Benchmark matrix export:
+
+`python frp_prototype_v0_9_5.py --export-benchmark-matrix`
+
+Hardware signal map export:
+
+`python frp_prototype_v0_9_5.py --export-signal-map`
+
+FPGA register map draft export:
+
+`python frp_prototype_v0_9_5.py --export-register-map`
+
+Testbench vector export:
+
+`python frp_prototype_v0_9_5.py --export-testbench-vector`
+
+## M3 Validation Status
+
+Validated GitHub Actions workflow:
+
+`FRP M3 Benchmark and Signal Map`
+
+Observed status:
+
+`PASS`
+
+## M3 Documentation
+
+- `docs/benchmark_matrix.md`;
+
+- `docs/hardware_signal_mapping.md`;
+
+- `docs/fpga_register_map_draft.md`;
+
+- `docs/testbench_comparison_plan.md`;
+
+- `docs/m3_validation_targets.md`.
+
+Release-facing files:
+
+- `RELEASE_NOTES_v0_9_5.md`;
+
+- `TEST_REPORT_v0_9_5.md`;
+
+- `CHANGELOG.md`.
 
 Version: `v0.9.4`  
 Status: `candidate prototype`  
