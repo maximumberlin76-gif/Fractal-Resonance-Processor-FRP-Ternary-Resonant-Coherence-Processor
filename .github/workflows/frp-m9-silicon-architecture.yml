@@ -1,0 +1,270 @@
+name: FRP M9 Silicon and Heterogeneous Architecture
+
+on:
+  push:
+    paths:
+      - "frp_prototype_v1_1_0.py"
+      - "docs/m9_silicon_heterogeneous_architecture.md"
+      - ".github/workflows/frp-m9-silicon-architecture.yml"
+  pull_request:
+    paths:
+      - "frp_prototype_v1_1_0.py"
+      - "docs/m9_silicon_heterogeneous_architecture.md"
+      - ".github/workflows/frp-m9-silicon-architecture.yml"
+  workflow_dispatch:
+
+jobs:
+  m9-silicon-architecture-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Compile FRP v1.1.0 architecture reference file
+        run: |
+          python -m py_compile frp_prototype_v1_1_0.py
+
+      - name: Generate M9 JSON artifacts
+        run: |
+          mkdir -p m9_artifacts
+
+          python frp_prototype_v1_1_0.py --mode demo --output json > m9_artifacts/structured_output.json
+          python frp_prototype_v1_1_0.py --mode self-test --output json > m9_artifacts/self_test.json
+          python frp_prototype_v1_1_0.py --mode benchmark > m9_artifacts/benchmark_matrix.json
+
+          python frp_prototype_v1_1_0.py --export-benchmark-matrix > m9_artifacts/export_benchmark_matrix.json
+          python frp_prototype_v1_1_0.py --export-silicon-interface-model > m9_artifacts/silicon_interface_model.json
+          python frp_prototype_v1_1_0.py --export-heterogeneous-implementation-map > m9_artifacts/heterogeneous_implementation_map.json
+          python frp_prototype_v1_1_0.py --export-compute-fabric-mapping > m9_artifacts/compute_fabric_mapping.json
+          python frp_prototype_v1_1_0.py --export-memory-register-interface-map > m9_artifacts/memory_register_interface_map.json
+          python frp_prototype_v1_1_0.py --export-clock-reset-domain-map > m9_artifacts/clock_reset_domain_map.json
+          python frp_prototype_v1_1_0.py --export-signal-pipeline-architecture > m9_artifacts/signal_pipeline_architecture.json
+          python frp_prototype_v1_1_0.py --export-accelerator-integration-profile > m9_artifacts/accelerator_integration_profile.json
+          python frp_prototype_v1_1_0.py --export-fpga-to-silicon-migration-path > m9_artifacts/fpga_to_silicon_migration_path.json
+
+      - name: Validate M9 schemas, architecture artifacts, and invariants
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("m9_artifacts")
+
+          structured = json.loads((root / "structured_output.json").read_text())
+          self_test = json.loads((root / "self_test.json").read_text())
+          benchmark = json.loads((root / "benchmark_matrix.json").read_text())
+          exported_benchmark = json.loads((root / "export_benchmark_matrix.json").read_text())
+
+          silicon = json.loads((root / "silicon_interface_model.json").read_text())
+          heterogeneous = json.loads((root / "heterogeneous_implementation_map.json").read_text())
+          compute = json.loads((root / "compute_fabric_mapping.json").read_text())
+          memory = json.loads((root / "memory_register_interface_map.json").read_text())
+          clock = json.loads((root / "clock_reset_domain_map.json").read_text())
+          pipeline = json.loads((root / "signal_pipeline_architecture.json").read_text())
+          accelerator = json.loads((root / "accelerator_integration_profile.json").read_text())
+          migration = json.loads((root / "fpga_to_silicon_migration_path.json").read_text())
+
+          assert structured["schema"] == "frp.structured_output.v1.1.0"
+          assert self_test["schema"] == "frp.structured_output.v1.1.0"
+          assert self_test["status"] == "PASS"
+
+          summary = self_test["summary"]
+
+          assert summary["version"] == "1.1.0"
+          assert summary["actual_direct_events"] == 0
+          assert summary["match"] == 1.0
+          assert summary["C_minus_P_min"] > 0
+          assert summary["switch_load_peak"] <= summary["transition_fraction"]
+          assert summary["ticks_recorded"] == summary["steps"]
+          assert sum(summary["scheduler_counts"].values()) == summary["steps"]
+
+          assert benchmark["schema"] == "frp.m3.benchmark_matrix.v1.1.0"
+          assert exported_benchmark["schema"] == "frp.m3.benchmark_matrix.v1.1.0"
+
+          assert silicon["schema"] == "frp.m9.silicon_interface_model.v1.1.0"
+          assert heterogeneous["schema"] == "frp.m9.heterogeneous_implementation_map.v1.1.0"
+          assert compute["schema"] == "frp.m9.compute_fabric_mapping.v1.1.0"
+          assert memory["schema"] == "frp.m9.memory_register_interface_map.v1.1.0"
+          assert clock["schema"] == "frp.m9.clock_reset_domain_map.v1.1.0"
+          assert pipeline["schema"] == "frp.m9.signal_pipeline_architecture.v1.1.0"
+          assert accelerator["schema"] == "frp.m9.accelerator_integration_profile.v1.1.0"
+          assert migration["schema"] == "frp.m9.fpga_to_silicon_migration_path.v1.1.0"
+
+          assert silicon["version"] == "1.1.0"
+          assert heterogeneous["version"] == "1.1.0"
+          assert compute["version"] == "1.1.0"
+          assert memory["version"] == "1.1.0"
+          assert clock["version"] == "1.1.0"
+          assert pipeline["version"] == "1.1.0"
+          assert accelerator["version"] == "1.1.0"
+          assert migration["version"] == "1.1.0"
+
+          inherited = silicon["inherited_boundary"]
+          assert inherited["release"] == "FRP v1.0.0"
+          assert inherited["validation_index"] == "FRP_VALIDATION_INDEX_v1_0_0.md"
+          assert inherited["production_release_manifest"] == "FRP_PRODUCTION_RELEASE_MANIFEST_v1_0_0.md"
+
+          required_interface_groups = {
+              "clock_and_reset_interface",
+              "scheduler_control_interface",
+              "ternary_cell_state_interface",
+              "neutral_transition_routing_interface",
+              "phase_telemetry_interface",
+              "stability_telemetry_interface",
+              "invariant_marker_interface",
+              "structured_export_interface",
+              "validation_status_interface",
+          }
+          assert required_interface_groups.issubset({item["name"] for item in silicon["interface_groups"]})
+
+          required_compute_fabrics = {
+              "CPU_control_layer",
+              "GPU_batch_evaluation_layer",
+              "FPGA_signal_pipeline_layer",
+              "ASIC_oriented_silicon_interface_layer",
+              "DSP_signal_processing_layer",
+              "NPU_style_accelerator_integration_layer",
+              "embedded_controller_coordination_layer",
+          }
+          assert required_compute_fabrics.issubset({item["fabric"] for item in heterogeneous["compute_fabrics"]})
+
+          required_function_assignments = {
+              "scheduler_logic",
+              "ternary_state_update_logic",
+              "neutral_transition_routing_logic",
+              "phase_coupling_evaluation",
+              "stability_metric_evaluation",
+              "telemetry_packing",
+              "invariant_marker_evaluation",
+              "artifact_export_coordination",
+          }
+          assert required_function_assignments.issubset({item["function"] for item in compute["function_assignments"]})
+
+          required_register_groups = {
+              "control_registers",
+              "scheduler_registers",
+              "ternary_state_registers",
+              "phase_telemetry_registers",
+              "transition_routing_counter_registers",
+              "stability_telemetry_registers",
+              "invariant_marker_registers",
+              "export_status_registers",
+              "validation_status_registers",
+          }
+          assert required_register_groups.issubset({item["group"] for item in memory["register_groups"]})
+
+          required_clock_domains = {
+              "global_control_clock",
+              "scheduler_clock",
+              "ternary_cell_update_clock",
+              "phase_telemetry_clock",
+              "stability_telemetry_clock",
+              "export_interface_clock",
+              "validation_monitor_clock",
+              "synchronous_reset_path",
+              "staged_initialization_path",
+          }
+          assert required_clock_domains.issubset({item["domain"] for item in clock["clock_reset_domains"]})
+
+          required_pipeline_stages = {
+              "configuration_load",
+              "scheduler_state_selection",
+              "phase_update",
+              "ternary_state_target_evaluation",
+              "neutral_transition_routing",
+              "distributed_commit",
+              "stability_metric_update",
+              "invariant_marker_evaluation",
+              "telemetry_packing",
+              "structured_export",
+          }
+          assert required_pipeline_stages.issubset({item["name"] for item in pipeline["pipeline_stages"]})
+
+          required_accelerator_roles = {
+              "phase_coupling_acceleration",
+              "telemetry_aggregation_acceleration",
+              "stability_metric_acceleration",
+              "benchmark_matrix_generation",
+              "trace_export_generation",
+              "formal_property_export_coordination",
+              "implementation_handoff_export_coordination",
+          }
+          assert required_accelerator_roles.issubset({item["role"] for item in accelerator["accelerator_roles"]})
+
+          required_migration_steps = {
+              "FPGA synthesis manifest",
+              "timing constraint profile",
+              "resource estimate map",
+              "implementation handoff scaffold",
+              "stable interface freeze",
+              "silicon interface model",
+              "heterogeneous implementation map",
+              "compute fabric mapping",
+              "memory/register interface map",
+              "clock/reset domain map",
+              "signal pipeline architecture",
+              "accelerator integration profile",
+              "FPGA-to-silicon migration path",
+          }
+          assert required_migration_steps.issubset(set(migration["migration_sequence"]))
+
+          required_candidate_markers = {
+              "match",
+              "actual_direct_events",
+              "C_minus_P_min",
+              "switch_load_peak",
+              "transition_fraction",
+              "ticks_recorded",
+              "steps",
+              "scheduler_counts",
+              "neutralized_conflicts",
+          }
+
+          for artifact in [
+              silicon,
+              heterogeneous,
+              compute,
+              memory,
+              clock,
+              pipeline,
+              accelerator,
+              migration,
+          ]:
+              markers = artifact["candidate_invariant_markers"]
+              assert required_candidate_markers.issubset(set(markers))
+              assert markers["match"] == 1.0
+              assert markers["actual_direct_events"] == 0
+              assert markers["C_minus_P_min"] > 0
+              assert markers["switch_load_peak"] <= markers["transition_fraction"]
+              assert markers["ticks_recorded"] == markers["steps"]
+              assert sum(markers["scheduler_counts"].values()) == markers["steps"]
+              assert markers["neutralized_conflicts"] >= 0
+
+          assert migration["source_release"]["release"] == "FRP v1.0.0"
+          assert migration["target_architecture_layer"] == "FRP v1.1.0 — M9 Silicon and Heterogeneous Implementation Architecture"
+          assert migration["next_architecture_layer"] == "M10 — Silicon Production and Tapeout Readiness Package"
+
+          print("FRP v1.1.0 M9 silicon and heterogeneous architecture validation PASS")
+          PY
+
+      - name: Validate M9 documentation markers
+        run: |
+          test -f docs/m9_silicon_heterogeneous_architecture.md
+
+          grep -q "FRP v1.1.0" docs/m9_silicon_heterogeneous_architecture.md
+          grep -q "M9 Silicon and Heterogeneous Implementation Architecture" docs/m9_silicon_heterogeneous_architecture.md
+
+          grep -q "frp.m9.silicon_interface_model.v1.1.0" docs/m9_silicon_heterogeneous_architecture.md
+          grep -q "frp.m9.heterogeneous_implementation_map.v1.1.0" docs/m9_silicon_heterogeneous_architecture.md
+          grep -q "frp.m9.compute_fabric_mapping.v1.1.0" docs/m9_silicon_heterogeneous_architecture.md
+          grep -q "frp.m9.memory_register_interface_map.v1.1.0" docs/m9_silicon_heterogeneous_architecture.md
+          grep -q "frp.m9.clock_reset_domain_map.v1.1.0" docs/m9_silicon_heterogeneous_architecture.md
+          grep -q "frp.m9.signal_pipeline_architecture.v1.1.0" docs/m9_silicon_heterogeneous_architecture.md
+          grep -q "frp.m9.accelerator_integration_profile.v1.1.0" docs/m9_silicon_heterogeneous_architecture.md
+          grep -q "frp.m9.fpga_to_silicon_migration_path.v1.1.0" docs/m9_silicon_heterogeneous_architecture.md
