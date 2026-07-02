@@ -1,0 +1,179 @@
+name: FRP M3 Benchmark and Signal Map
+
+on:
+  push:
+    paths:
+      - "frp_prototype_v0_9_5.py"
+      - "docs/benchmark_matrix.md"
+      - "docs/hardware_signal_mapping.md"
+      - "docs/fpga_register_map_draft.md"
+      - "docs/testbench_comparison_plan.md"
+      - "docs/m3_validation_targets.md"
+      - ".github/workflows/frp-m3-benchmark-signal-map.yml"
+  pull_request:
+    paths:
+      - "frp_prototype_v0_9_5.py"
+      - "docs/benchmark_matrix.md"
+      - "docs/hardware_signal_mapping.md"
+      - "docs/fpga_register_map_draft.md"
+      - "docs/testbench_comparison_plan.md"
+      - "docs/m3_validation_targets.md"
+      - ".github/workflows/frp-m3-benchmark-signal-map.yml"
+  workflow_dispatch:
+
+jobs:
+  validate-m3:
+    name: Validate FRP M3 exports
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile FRP v0.9.5 prototype
+        run: |
+          python -m py_compile frp_prototype_v0_9_5.py
+
+      - name: Run FRP v0.9.5 text self-test
+        run: |
+          python frp_prototype_v0_9_5.py --mode self-test --output text
+
+      - name: Generate structured JSON outputs
+        run: |
+          mkdir -p m3_outputs
+
+          python frp_prototype_v0_9_5.py --mode demo --output json --include-telemetry > m3_outputs/demo.json
+          python frp_prototype_v0_9_5.py --mode self-test --output json > m3_outputs/self_test.json
+          python frp_prototype_v0_9_5.py --mode benchmark --output json > m3_outputs/benchmark.json
+
+          python frp_prototype_v0_9_5.py --export-benchmark-matrix > m3_outputs/benchmark_matrix.json
+          python frp_prototype_v0_9_5.py --export-signal-map > m3_outputs/hardware_signal_map.json
+          python frp_prototype_v0_9_5.py --export-register-map > m3_outputs/fpga_register_map_draft.json
+          python frp_prototype_v0_9_5.py --export-testbench-vector > m3_outputs/testbench_vector.json
+
+      - name: Validate structured output schemas and invariants
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("m3_outputs")
+
+          def load(name):
+              path = root / name
+              with path.open("r", encoding="utf-8") as handle:
+                  return json.load(handle)
+
+          demo = load("demo.json")
+          self_test = load("self_test.json")
+          benchmark = load("benchmark.json")
+          benchmark_matrix = load("benchmark_matrix.json")
+          signal_map = load("hardware_signal_map.json")
+          register_map = load("fpga_register_map_draft.json")
+          testbench_vector = load("testbench_vector.json")
+
+          structured_schema = "frp.structured_output.v0.9.5"
+
+          assert demo["schema"] == structured_schema
+          assert demo["kind"] == "demo"
+          assert demo["summary"]["ticks_recorded"] == demo["config"]["steps"]
+
+          assert self_test["schema"] == structured_schema
+          assert self_test["kind"] == "self_test"
+          assert self_test["status"] == "PASS"
+          assert all(item["pass"] for item in self_test["checks"])
+
+          assert benchmark["schema"] == structured_schema
+          assert benchmark["kind"] == "benchmark"
+          assert len(benchmark["rows"]) == 4
+
+          frp_rows = [
+              row for row in benchmark["rows"]
+              if row["architecture"] == "frp_distributed_resonant"
+          ]
+          assert len(frp_rows) == 1
+
+          frp_row = frp_rows[0]
+          assert frp_row["match"] == 1.0
+          assert frp_row["actual_direct_events"] == 0
+          assert frp_row["C_minus_P_min"] > 0
+          assert frp_row["switch_load_peak"] <= frp_row["transition_fraction"]
+          assert frp_row["validation_status"] == "PASS"
+
+          assert benchmark_matrix["schema"] == "frp.m3.benchmark_matrix.v0.9.5"
+          assert benchmark_matrix["kind"] == "benchmark_matrix"
+          assert "rows" in benchmark_matrix
+          assert len(benchmark_matrix["rows"]) == 4
+          assert "candidate_invariants" in benchmark_matrix
+
+          assert signal_map["schema"] == "frp.m3.hardware_signal_map.v0.9.5"
+          assert signal_map["kind"] == "hardware_signal_map"
+          assert "signals" in signal_map
+          signal_names = {item["signal"] for item in signal_map["signals"]}
+          required_signals = {
+              "cell_state[i]",
+              "phase[i]",
+              "scheduler_mode",
+              "transition_fraction",
+              "gamma",
+              "actual_direct_events",
+              "prevented_direct_events",
+              "switch_load",
+              "heat",
+              "C_minus_P",
+              "phase_order_R",
+          }
+          assert required_signals.issubset(signal_names)
+
+          assert register_map["schema"] == "frp.m3.fpga_register_map_draft.v0.9.5"
+          assert register_map["kind"] == "fpga_register_map_draft"
+          assert register_map["data_width"] == 32
+          register_names = {item["name"] for item in register_map["registers"]}
+          required_registers = {
+              "FRP_VERSION",
+              "CONTROL",
+              "SCHEDULER_MODE",
+              "TRANSITION_FRACTION_Q16",
+              "GAMMA_Q16",
+              "CELL_COUNT",
+              "STEP_COUNT",
+              "STATUS",
+              "ACTUAL_DIRECT_EVENTS",
+              "PREVENTED_DIRECT_EVENTS",
+              "NEUTRALIZED_CONFLICTS",
+              "SWITCH_LOAD_PEAK_Q16",
+              "HEAT_PEAK_Q16",
+              "C_MINUS_P_MIN_Q16",
+              "PHASE_ORDER_R_Q16",
+              "TELEMETRY_READ_INDEX",
+          }
+          assert required_registers.issubset(register_names)
+
+          assert testbench_vector["schema"] == "frp.m3.testbench_vector.v0.9.5"
+          assert testbench_vector["kind"] == "testbench_vector"
+          assert testbench_vector["summary"]["actual_direct_events"] == 0
+          assert testbench_vector["summary"]["C_minus_P_min"] > 0
+          assert testbench_vector["summary"]["switch_load_peak"] <= testbench_vector["summary"]["transition_fraction"]
+          assert len(testbench_vector["sample_ticks"]) > 0
+
+          print("FRP M3 structured outputs validated successfully.")
+          PY
+
+      - name: Validate M3 documentation files
+        run: |
+          test -f docs/benchmark_matrix.md
+          test -f docs/hardware_signal_mapping.md
+          test -f docs/fpga_register_map_draft.md
+          test -f docs/testbench_comparison_plan.md
+          test -f docs/m3_validation_targets.md
+
+          grep -q "frp.m3.benchmark_matrix.v0.9.5" docs/benchmark_matrix.md
+          grep -q "frp.m3.hardware_signal_map.v0.9.5" docs/hardware_signal_mapping.md
+          grep -q "frp.m3.fpga_register_map_draft.v0.9.5" docs/fpga_register_map_draft.md
+          grep -q "frp.m3.testbench_vector.v0.9.5" docs/testbench_comparison_plan.md
+          grep -q "frp.structured_output.v0.9.5" docs/m3_validation_targets.md
