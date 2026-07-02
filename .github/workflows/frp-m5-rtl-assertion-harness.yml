@@ -1,0 +1,180 @@
+name: FRP M5 RTL Interface and Assertion Harness
+
+on:
+  push:
+    paths:
+      - "frp_prototype_v0_9_7.py"
+      - "docs/m5_rtl_interface_assertion_harness.md"
+      - ".github/workflows/frp-m5-rtl-assertion-harness.yml"
+  pull_request:
+    paths:
+      - "frp_prototype_v0_9_7.py"
+      - "docs/m5_rtl_interface_assertion_harness.md"
+      - ".github/workflows/frp-m5-rtl-assertion-harness.yml"
+  workflow_dispatch:
+
+jobs:
+  m5-rtl-assertion-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Compile FRP v0.9.7 executable reference file
+        run: |
+          python -m py_compile frp_prototype_v0_9_7.py
+
+      - name: Generate M5 JSON artifacts
+        run: |
+          mkdir -p m5_artifacts
+
+          python frp_prototype_v0_9_7.py --mode demo --output json > m5_artifacts/demo.json
+          python frp_prototype_v0_9_7.py --mode self-test --output json > m5_artifacts/self_test.json
+          python frp_prototype_v0_9_7.py --mode benchmark > m5_artifacts/benchmark_matrix.json
+
+          python frp_prototype_v0_9_7.py --export-benchmark-matrix > m5_artifacts/export_benchmark_matrix.json
+          python frp_prototype_v0_9_7.py --export-rtl-interface-contract > m5_artifacts/rtl_interface_contract.json
+          python frp_prototype_v0_9_7.py --export-assertion-manifest > m5_artifacts/assertion_manifest.json
+          python frp_prototype_v0_9_7.py --export-rtl-signal-binding > m5_artifacts/rtl_signal_binding.json
+          python frp_prototype_v0_9_7.py --export-assertion-harness > m5_artifacts/assertion_harness.json
+
+      - name: Validate M5 schemas and invariants
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("m5_artifacts")
+
+          def load(name):
+              with open(root / name, "r", encoding="utf-8") as f:
+                  return json.load(f)
+
+          demo = load("demo.json")
+          self_test = load("self_test.json")
+          benchmark = load("benchmark_matrix.json")
+          export_benchmark = load("export_benchmark_matrix.json")
+          contract = load("rtl_interface_contract.json")
+          manifest = load("assertion_manifest.json")
+          binding = load("rtl_signal_binding.json")
+          harness = load("assertion_harness.json")
+
+          assert demo["schema"] == "frp.structured_output.v0.9.7"
+          assert demo["version"] == "0.9.7"
+
+          assert self_test["schema"] == "frp.structured_output.v0.9.7"
+          assert self_test["status"] == "PASS"
+          assert self_test["checks"]["actual_direct_events_zero"] is True
+          assert self_test["checks"]["match_equals_one"] is True
+          assert self_test["checks"]["C_minus_P_positive"] is True
+          assert self_test["checks"]["switch_load_within_transition_fraction"] is True
+          assert self_test["checks"]["ticks_recorded_equals_steps"] is True
+          assert self_test["checks"]["scheduler_counts_sum_equals_steps"] is True
+
+          assert benchmark["schema"] == "frp.m3.benchmark_matrix.v0.9.7"
+          assert len(benchmark["rows"]) == 4
+
+          assert export_benchmark["schema"] == "frp.m3.benchmark_matrix.v0.9.7"
+          frp_row = [row for row in export_benchmark["rows"] if row["architecture"] == "frp_distributed_resonant"][0]
+          assert frp_row["actual_direct_events"] == 0
+          assert frp_row["match"] == 1.0
+          assert frp_row["C_minus_P_min"] > 0
+          assert frp_row["switch_load_peak"] <= export_benchmark["configuration"]["transition_fraction"]
+
+          assert contract["schema"] == "frp.m5.rtl_interface_contract.v0.9.7"
+          assert contract["kind"] == "rtl_interface_contract"
+          assert contract["summary"]["actual_direct_events"] == 0
+          assert contract["summary"]["match"] == 1.0
+          assert contract["summary"]["C_minus_P_min"] > 0
+
+          required_groups = {
+              "clock_reset",
+              "scheduler_control",
+              "ternary_cell_state",
+              "phase_telemetry_q16",
+              "transition_routing_counters",
+              "stability_telemetry_q16",
+              "phase_order_telemetry_q16",
+              "benchmark_invariant_outputs",
+          }
+          assert required_groups.issubset(set(contract["interface_groups"]))
+
+          signal_names = {signal["name"] for signal in contract["signals"]}
+          required_signals = {
+              "clk",
+              "rst",
+              "scheduler_mode",
+              "transition_fraction_q16",
+              "gamma_q16",
+              "cell_state",
+              "phase_q16",
+              "switch_load_q16",
+              "heat_q16",
+              "C_minus_P_q16",
+              "phase_order_R_q16",
+              "actual_direct_events",
+              "prevented_direct_events",
+              "neutralized_conflicts",
+              "match_q16",
+              "ticks_recorded",
+          }
+          assert required_signals.issubset(signal_names)
+
+          assert manifest["schema"] == "frp.m5.assertion_manifest.v0.9.7"
+          assert manifest["kind"] == "assertion_manifest"
+
+          assertion_ids = {item["id"] for item in manifest["assertions"]}
+          required_assertions = {
+              "A_DIRECT_EVENTS_ZERO",
+              "A_MATCH_EQUALS_ONE",
+              "A_C_MINUS_P_POSITIVE",
+              "A_SWITCH_LOAD_WITHIN_TRANSITION_FRACTION",
+              "A_TICKS_RECORDED_EQUALS_STEPS",
+              "A_SCHEDULER_COUNTS_SUM_EQUALS_STEPS",
+          }
+          assert required_assertions.issubset(assertion_ids)
+          assert all(item["status"] == "PASS" for item in manifest["assertions"])
+
+          assert binding["schema"] == "frp.m5.rtl_signal_binding.v0.9.7"
+          assert binding["kind"] == "rtl_signal_binding"
+          assert binding["binding_count"] == len(binding["bindings"])
+          bound_names = {item["frp_signal"] for item in binding["bindings"]}
+          assert required_signals.issubset(bound_names)
+
+          assert harness["schema"] == "frp.m5.assertion_harness_scaffold.v0.9.7"
+          assert harness["kind"] == "assertion_harness_scaffold"
+          assert harness["interface_contract_schema"] == "frp.m5.rtl_interface_contract.v0.9.7"
+          assert harness["assertion_manifest_schema"] == "frp.m5.assertion_manifest.v0.9.7"
+          assert harness["rtl_signal_binding_schema"] == "frp.m5.rtl_signal_binding.v0.9.7"
+
+          scaffold = harness["scaffold_text"]
+          assert "module tb_frp_v0_9_7_assertion_harness;" in scaffold
+          assert "localparam integer CELLS" in scaffold
+          assert "localparam integer STEPS" in scaffold
+          assert "reg clk;" in scaffold
+          assert "reg rst;" in scaffold
+          assert "task frp_assert_equal_32;" in scaffold
+          assert "task frp_assert_positive_32;" in scaffold
+          assert "A_DIRECT_EVENTS_ZERO" in scaffold
+          assert "A_MATCH_EQUALS_ONE" in scaffold
+          assert "A_C_MINUS_P_POSITIVE" in scaffold
+          assert "A_TICKS_RECORDED_EQUALS_STEPS" in scaffold
+
+          print("FRP v0.9.7 M5 validation PASS")
+          PY
+
+      - name: Validate M5 documentation markers
+        run: |
+          test -f docs/m5_rtl_interface_assertion_harness.md
+          grep -q "FRP v0.9.7" docs/m5_rtl_interface_assertion_harness.md
+          grep -q "M5 RTL Interface Contract and Assertion Harness" docs/m5_rtl_interface_assertion_harness.md
+          grep -q "frp.m5.rtl_interface_contract.v0.9.7" docs/m5_rtl_interface_assertion_harness.md
+          grep -q "frp.m5.assertion_manifest.v0.9.7" docs/m5_rtl_interface_assertion_harness.md
+          grep -q "frp.m5.rtl_signal_binding.v0.9.7" docs/m5_rtl_interface_assertion_harness.md
+          grep -q "frp.m5.assertion_harness_scaffold.v0.9.7" docs/m5_rtl_interface_assertion_harness.md
