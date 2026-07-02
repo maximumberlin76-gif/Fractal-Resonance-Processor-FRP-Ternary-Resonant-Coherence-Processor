@@ -604,7 +604,7 @@ def artifact_package_index(args: argparse.Namespace) -> Dict[str, Any]:
                 "TEST_REPORT_v0_9_9.md",
                 "TEST_REPORT_v1_0_0.md",
             ],
-            "validation_index": "FRP_VALIDATION_INDEX_v0_9_9.md",
+            "validation_index": "FRP_VALIDATION_INDEX_v1_0_0.md",
             "workflow_files": workflow_files(),
             "readme": "README.md",
             "changelog": "CHANGELOG.md",
@@ -633,7 +633,7 @@ def release_freeze_checklist(args: argparse.Namespace) -> Dict[str, Any]:
         {"id": "F_TEST_REPORT_PRESENT", "target": "TEST_REPORT_v1_0_0.md", "status": "PASS"},
         {"id": "F_README_UPDATED", "target": "README.md", "status": "PASS"},
         {"id": "F_CHANGELOG_UPDATED", "target": "CHANGELOG.md", "status": "PASS"},
-        {"id": "F_VALIDATION_INDEX_UPDATED", "target": "FRP_VALIDATION_INDEX_v0_9_9.md", "status": "PASS"},
+        {"id": "F_VALIDATION_INDEX_UPDATED", "target": "FRP_VALIDATION_INDEX_v1_0_0.md", "status": "PASS"},
         {"id": "F_CANDIDATE_INVARIANTS_PRESERVED", "target": "candidate_invariant_markers", "status": "PASS"},
     ]
 
