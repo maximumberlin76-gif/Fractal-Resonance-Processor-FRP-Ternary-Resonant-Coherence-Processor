@@ -1,0 +1,302 @@
+name: FRP M10 Silicon Production and Tapeout Readiness
+
+on:
+  push:
+    paths:
+      - "frp_prototype_v1_2_0.py"
+      - "docs/m10_silicon_production_tapeout_readiness.md"
+      - ".github/workflows/frp-m10-silicon-production-tapeout.yml"
+  pull_request:
+    paths:
+      - "frp_prototype_v1_2_0.py"
+      - "docs/m10_silicon_production_tapeout_readiness.md"
+      - ".github/workflows/frp-m10-silicon-production-tapeout.yml"
+  workflow_dispatch:
+
+jobs:
+  m10-silicon-production-tapeout-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Compile FRP v1.2.0 readiness reference file
+        run: |
+          python -m py_compile frp_prototype_v1_2_0.py
+
+      - name: Generate M10 JSON artifacts
+        run: |
+          mkdir -p m10_artifacts
+
+          python frp_prototype_v1_2_0.py --mode demo --output json > m10_artifacts/structured_output.json
+          python frp_prototype_v1_2_0.py --mode self-test --output json > m10_artifacts/self_test.json
+          python frp_prototype_v1_2_0.py --mode benchmark > m10_artifacts/benchmark_matrix.json
+
+          python frp_prototype_v1_2_0.py --export-benchmark-matrix > m10_artifacts/export_benchmark_matrix.json
+          python frp_prototype_v1_2_0.py --export-silicon-production-readiness-manifest > m10_artifacts/silicon_production_readiness_manifest.json
+          python frp_prototype_v1_2_0.py --export-tapeout-readiness-checklist > m10_artifacts/tapeout_readiness_checklist.json
+          python frp_prototype_v1_2_0.py --export-rtl-freeze-map > m10_artifacts/rtl_freeze_map.json
+          python frp_prototype_v1_2_0.py --export-verification-closure-matrix > m10_artifacts/verification_closure_matrix.json
+          python frp_prototype_v1_2_0.py --export-timing-constraint-readiness-map > m10_artifacts/timing_constraint_readiness_map.json
+          python frp_prototype_v1_2_0.py --export-memory-register-production-map > m10_artifacts/memory_register_production_map.json
+          python frp_prototype_v1_2_0.py --export-test-observability-readiness-plan > m10_artifacts/test_observability_readiness_plan.json
+          python frp_prototype_v1_2_0.py --export-implementation-signoff-package-index > m10_artifacts/implementation_signoff_package_index.json
+          python frp_prototype_v1_2_0.py --export-production-handoff-manifest > m10_artifacts/production_handoff_manifest.json
+
+      - name: Validate M10 schemas, readiness artifacts, and invariants
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("m10_artifacts")
+
+          structured = json.loads((root / "structured_output.json").read_text())
+          self_test = json.loads((root / "self_test.json").read_text())
+          benchmark = json.loads((root / "benchmark_matrix.json").read_text())
+          exported_benchmark = json.loads((root / "export_benchmark_matrix.json").read_text())
+
+          production = json.loads((root / "silicon_production_readiness_manifest.json").read_text())
+          tapeout = json.loads((root / "tapeout_readiness_checklist.json").read_text())
+          rtl = json.loads((root / "rtl_freeze_map.json").read_text())
+          verification = json.loads((root / "verification_closure_matrix.json").read_text())
+          timing = json.loads((root / "timing_constraint_readiness_map.json").read_text())
+          memory = json.loads((root / "memory_register_production_map.json").read_text())
+          observability = json.loads((root / "test_observability_readiness_plan.json").read_text())
+          signoff = json.loads((root / "implementation_signoff_package_index.json").read_text())
+          handoff = json.loads((root / "production_handoff_manifest.json").read_text())
+
+          assert structured["schema"] == "frp.structured_output.v1.2.0"
+          assert self_test["schema"] == "frp.structured_output.v1.2.0"
+          assert self_test["status"] == "PASS"
+
+          summary = self_test["summary"]
+
+          assert summary["version"] == "1.2.0"
+          assert summary["actual_direct_events"] == 0
+          assert summary["match"] == 1.0
+          assert summary["C_minus_P_min"] > 0
+          assert summary["switch_load_peak"] <= summary["transition_fraction"]
+          assert summary["ticks_recorded"] == summary["steps"]
+          assert sum(summary["scheduler_counts"].values()) == summary["steps"]
+
+          assert benchmark["schema"] == "frp.m3.benchmark_matrix.v1.2.0"
+          assert exported_benchmark["schema"] == "frp.m3.benchmark_matrix.v1.2.0"
+
+          assert production["schema"] == "frp.m10.silicon_production_readiness_manifest.v1.2.0"
+          assert tapeout["schema"] == "frp.m10.tapeout_readiness_checklist.v1.2.0"
+          assert rtl["schema"] == "frp.m10.rtl_freeze_map.v1.2.0"
+          assert verification["schema"] == "frp.m10.verification_closure_matrix.v1.2.0"
+          assert timing["schema"] == "frp.m10.timing_constraint_readiness_map.v1.2.0"
+          assert memory["schema"] == "frp.m10.memory_register_production_map.v1.2.0"
+          assert observability["schema"] == "frp.m10.test_observability_readiness_plan.v1.2.0"
+          assert signoff["schema"] == "frp.m10.implementation_signoff_package_index.v1.2.0"
+          assert handoff["schema"] == "frp.m10.production_handoff_manifest.v1.2.0"
+
+          for artifact in [
+              production,
+              tapeout,
+              rtl,
+              verification,
+              timing,
+              memory,
+              observability,
+              signoff,
+              handoff,
+          ]:
+              assert artifact["version"] == "1.2.0"
+
+          inherited = production["inherited_boundary"]
+          assert inherited["release"] == "FRP v1.1.0"
+          assert inherited["validation_index"] == "FRP_VALIDATION_INDEX_v1_1_0.md"
+          assert inherited["release_notes"] == "RELEASE_NOTES_v1_1_0.md"
+          assert inherited["test_report"] == "TEST_REPORT_v1_1_0.md"
+
+          required_readiness_groups = {
+              "inherited_architecture_boundary",
+              "silicon_interface_boundary",
+              "register_interface_boundary",
+              "clock_reset_boundary",
+              "signal_pipeline_boundary",
+              "verification_closure_boundary",
+              "timing_readiness_boundary",
+              "test_readiness_boundary",
+              "production_handoff_boundary",
+          }
+          assert required_readiness_groups.issubset(set(production["readiness_groups"]))
+
+          required_checklist_items = {
+              "architecture_freeze_status",
+              "interface_freeze_status",
+              "schema_freeze_status",
+              "register_map_readiness",
+              "clock_reset_readiness",
+              "timing_constraint_readiness",
+              "verification_closure_readiness",
+              "test_observability_readiness",
+              "implementation_signoff_readiness",
+              "production_handoff_readiness",
+          }
+          assert required_checklist_items.issubset({item["item"] for item in tapeout["checklist"]})
+          assert all(item["status"] == "PASS" for item in tapeout["checklist"])
+
+          required_rtl_groups = {
+              "scheduler_control_logic",
+              "ternary_cell_state_logic",
+              "neutral_transition_routing_logic",
+              "phase_telemetry_logic",
+              "stability_telemetry_logic",
+              "invariant_marker_logic",
+              "register_interface_logic",
+              "structured_export_interface_logic",
+              "validation_status_logic",
+          }
+          assert required_rtl_groups.issubset(set(rtl["rtl_freeze_groups"]))
+
+          required_verification_groups = {
+              "structured_output_validation",
+              "benchmark_matrix_validation",
+              "silicon_production_readiness_manifest_validation",
+              "tapeout_readiness_checklist_validation",
+              "rtl_freeze_map_validation",
+              "verification_closure_matrix_validation",
+              "timing_constraint_readiness_map_validation",
+              "memory_register_production_map_validation",
+              "test_observability_readiness_plan_validation",
+              "implementation_signoff_package_index_validation",
+              "production_handoff_manifest_validation",
+          }
+          assert required_verification_groups.issubset(set(verification["verification_closure_groups"]))
+
+          required_timing_groups = {
+              "global_control_clock_constraints",
+              "scheduler_clock_constraints",
+              "ternary_cell_update_clock_constraints",
+              "phase_telemetry_clock_constraints",
+              "stability_telemetry_clock_constraints",
+              "export_interface_clock_constraints",
+              "validation_monitor_clock_constraints",
+              "reset_sequencing_constraints",
+              "staged_initialization_constraints",
+          }
+          assert required_timing_groups.issubset(set(timing["timing_groups"]))
+
+          required_register_groups = {
+              "control_registers",
+              "scheduler_registers",
+              "ternary_state_registers",
+              "phase_telemetry_registers",
+              "transition_routing_counter_registers",
+              "stability_telemetry_registers",
+              "invariant_marker_registers",
+              "export_status_registers",
+              "validation_status_registers",
+              "production_handoff_registers",
+          }
+          assert required_register_groups.issubset({item["group"] for item in memory["register_groups"]})
+
+          required_observability_groups = {
+              "scheduler_observability",
+              "ternary_state_observability",
+              "neutral_transition_routing_observability",
+              "phase_telemetry_observability",
+              "stability_telemetry_observability",
+              "invariant_marker_observability",
+              "register_interface_observability",
+              "validation_status_observability",
+              "production_handoff_observability",
+          }
+          assert required_observability_groups.issubset(set(observability["observability_groups"]))
+
+          required_signoff_groups = {
+              "executable_reference_file",
+              "M10_milestone_documentation",
+              "M10_validation_workflow",
+              "M10_test_report",
+              "M10_release_notes",
+              "M10_validation_index",
+              "silicon_production_readiness_manifest",
+              "tapeout_readiness_checklist",
+              "RTL_freeze_map",
+              "verification_closure_matrix",
+              "timing_constraint_readiness_map",
+              "memory_register_production_map",
+              "test_observability_readiness_plan",
+              "production_handoff_manifest",
+          }
+          assert required_signoff_groups.issubset(set(signoff["signoff_package_groups"]))
+
+          required_handoff_groups = {
+              "inherited_v1_1_0_architecture_boundary",
+              "M10_readiness_artifact_set",
+              "stable_candidate_invariants",
+              "validation_workflow_stack",
+              "schema_package",
+              "documentation_package",
+              "release_facing_package",
+              "production_readiness_package",
+              "next_stage_handoff_package",
+          }
+          assert required_handoff_groups.issubset(set(handoff["handoff_groups"]))
+
+          assert handoff["inherited_boundary"]["release"] == "FRP v1.1.0"
+          assert handoff["next_architecture_layer"] == "M11 — Production Integration and External Implementation Handoff"
+
+          required_candidate_markers = {
+              "match",
+              "actual_direct_events",
+              "C_minus_P_min",
+              "switch_load_peak",
+              "transition_fraction",
+              "ticks_recorded",
+              "steps",
+              "scheduler_counts",
+              "neutralized_conflicts",
+          }
+
+          for artifact in [
+              production,
+              tapeout,
+              rtl,
+              verification,
+              timing,
+              memory,
+              observability,
+              signoff,
+              handoff,
+          ]:
+              markers = artifact["candidate_invariant_markers"]
+              assert required_candidate_markers.issubset(set(markers))
+              assert markers["match"] == 1.0
+              assert markers["actual_direct_events"] == 0
+              assert markers["C_minus_P_min"] > 0
+              assert markers["switch_load_peak"] <= markers["transition_fraction"]
+              assert markers["ticks_recorded"] == markers["steps"]
+              assert sum(markers["scheduler_counts"].values()) == markers["steps"]
+              assert markers["neutralized_conflicts"] >= 0
+
+          print("FRP v1.2.0 M10 silicon production and tapeout readiness validation PASS")
+          PY
+
+      - name: Validate M10 documentation markers
+        run: |
+          test -f docs/m10_silicon_production_tapeout_readiness.md
+
+          grep -q "FRP v1.2.0" docs/m10_silicon_production_tapeout_readiness.md
+          grep -q "M10 Silicon Production and Tapeout Readiness Package" docs/m10_silicon_production_tapeout_readiness.md
+
+          grep -q "frp.m10.silicon_production_readiness_manifest.v1.2.0" docs/m10_silicon_production_tapeout_readiness.md
+          grep -q "frp.m10.tapeout_readiness_checklist.v1.2.0" docs/m10_silicon_production_tapeout_readiness.md
+          grep -q "frp.m10.rtl_freeze_map.v1.2.0" docs/m10_silicon_production_tapeout_readiness.md
+          grep -q "frp.m10.verification_closure_matrix.v1.2.0" docs/m10_silicon_production_tapeout_readiness.md
+          grep -q "frp.m10.timing_constraint_readiness_map.v1.2.0" docs/m10_silicon_production_tapeout_readiness.md
+          grep -q "frp.m10.memory_register_production_map.v1.2.0" docs/m10_silicon_production_tapeout_readiness.md
+          grep -q "frp.m10.test_observability_readiness_plan.v1.2.0" docs/m10_silicon_production_tapeout_readiness.md
+          grep -q "frp.m10.implementation_signoff_package_index.v1.2.0" docs/m10_silicon_production_tapeout_readiness.md
+          grep -q "frp.m10.production_handoff_manifest.v1.2.0" docs/m10_silicon_production_tapeout_readiness.md
