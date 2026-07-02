@@ -208,7 +208,7 @@ Release-facing files:
 
 - `FRP_PRODUCTION_RELEASE_MANIFEST_v1_0_0.md`;
 
-- `FRP_VALIDATION_INDEX_v0_9_9.md`;
+  - `FRP_VALIDATION_INDEX_v1_0_0.md`;
 
 - `CHANGELOG.md`.
 
