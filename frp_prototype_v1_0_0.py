@@ -322,7 +322,7 @@ def release_facing_files() -> List[str]:
     return [
         "README.md",
         "CHANGELOG.md",
-        "FRP_VALIDATION_INDEX_v0_9_9.md",
+        "FRP_VALIDATION_INDEX_v1_0_0.md",
         "RELEASE_NOTES_v0_9_5.md",
         "RELEASE_NOTES_v0_9_6.md",
         "RELEASE_NOTES_v0_9_7.md",
