@@ -1,5 +1,7 @@
 # Fractal Resonance Processor (FRP)
 
+[![FRP M7 FPGA Synthesis and Timing Scaffold](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m7-fpga-synthesis.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m7-fpga-synthesis.yml)
+
 [![FRP M6 Formal Verification and Equivalence Scaffold](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m6-formal-verification.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m6-formal-verification.yml)
 
 [![FRP M5 RTL Interface and Assertion Harness](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m5-rtl-assertion-harness.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m5-rtl-assertion-harness.yml)
@@ -17,6 +19,188 @@
 **Ternary Resonant Coherence Processor — Structured Output Prototype**
 
 ## Current Release Layer
+
+**Current version:** `FRP v0.9.9`
+
+**Current milestone:** `M7 — FPGA Synthesis Package and Timing Constraint Scaffold`
+
+**Main executable reference file:** `frp_prototype_v0_9_9.py`
+
+FRP v0.9.9 establishes the M7 FPGA Synthesis Package and Timing Constraint Scaffold layer.
+
+This release extends the M6 formal verification hooks and equivalence scaffold layer into FPGA-oriented synthesis metadata, timing constraint preparation, resource estimate mapping, and implementation handoff scaffold generation.
+
+## M7 Export Layers
+
+FRP v0.9.9 defines four M7 export layers:
+
+- `fpga_synthesis_manifest`;
+
+- `timing_constraint_profile`;
+
+- `resource_estimate_map`;
+
+- `implementation_handoff_scaffold`.
+
+## M7 Export Commands
+
+FPGA synthesis manifest export:
+
+`python frp_prototype_v0_9_9.py --export-fpga-synthesis-manifest`
+
+Timing constraint profile export:
+
+`python frp_prototype_v0_9_9.py --export-timing-constraint-profile`
+
+Resource estimate map export:
+
+`python frp_prototype_v0_9_9.py --export-resource-estimate-map`
+
+Implementation handoff scaffold export:
+
+`python frp_prototype_v0_9_9.py --export-implementation-handoff`
+
+Benchmark matrix export:
+
+`python frp_prototype_v0_9_9.py --export-benchmark-matrix`
+
+## M7 Schemas
+
+Structured output schema:
+
+`frp.structured_output.v0.9.9`
+
+FPGA synthesis manifest schema:
+
+`frp.m7.fpga_synthesis_manifest.v0.9.9`
+
+Timing constraint profile schema:
+
+`frp.m7.timing_constraint_profile.v0.9.9`
+
+Resource estimate map schema:
+
+`frp.m7.resource_estimate_map.v0.9.9`
+
+Implementation handoff scaffold schema:
+
+`frp.m7.implementation_handoff_scaffold.v0.9.9`
+
+## M7 Validation Status
+
+Observed status:
+
+`PASS`
+
+Validation environment:
+
+`GitHub Actions hardware-backed CI execution`
+
+Validated workflows:
+
+- FRP Self Test;
+
+- FRP Benchmark Smoke Test;
+
+- FRP Structured Output;
+
+- FRP M7 FPGA Synthesis and Timing Scaffold.
+
+Validated M7 workflow stages:
+
+- compile FRP v0.9.9 executable reference file;
+
+- generate M7 JSON artifacts;
+
+- validate M7 schemas and invariants;
+
+- validate M7 documentation markers.
+
+## M7 FPGA Synthesis Manifest
+
+Validated FPGA synthesis manifest targets:
+
+- top module name;
+
+- clock domain definition;
+
+- reset domain definition;
+
+- RTL signal groups;
+
+- assertion groups;
+
+- formal property groups;
+
+- equivalence trace groups;
+
+- synthesis source groups;
+
+- generated artifact references.
+
+Validated top module:
+
+`frp_top_v0_9_9`
+
+## M7 Timing Constraint Profile
+
+Validated timing constraint targets:
+
+- `T_PRIMARY_CLOCK_PERIOD`;
+
+- `T_RESET_RELEASE_WINDOW`;
+
+- `T_BOUNDED_STEP_COUNTER`;
+
+- `T_SCHEDULER_STATE`;
+
+- `T_PHASE_TELEMETRY_Q16`;
+
+- `T_STABILITY_TELEMETRY_Q16`;
+
+- `T_TRANSITION_COUNTERS`;
+
+- `T_EQUIVALENCE_TRACE_SAMPLING`.
+
+## M7 Resource Estimate Map
+
+Validated resource estimate categories:
+
+- `R_TERNARY_CELL_STATE_REGISTERS`;
+
+- `R_PHASE_Q16_REGISTERS`;
+
+- `R_SCHEDULER_REGISTERS`;
+
+- `R_TRANSITION_COUNTER_REGISTERS`;
+
+- `R_STABILITY_TELEMETRY_REGISTERS`;
+
+- `R_PHASE_ORDER_TELEMETRY_REGISTERS`;
+
+- `R_ASSERTION_COMPARISON_LOGIC`;
+
+- `R_EQUIVALENCE_TRACE_COMPARISON_LOGIC`;
+
+- `R_BOUNDED_STEP_COUNTER_LOGIC`;
+
+- `R_FORMAL_HARNESS_SUPPORT_LOGIC`.
+
+## M7 Documentation
+
+M7 documentation file:
+
+- `docs/m7_fpga_synthesis_timing.md`.
+
+Release-facing files:
+
+- `RELEASE_NOTES_v0_9_9.md`;
+
+- `TEST_REPORT_v0_9_9.md`;
+
+- `CHANGELOG.md`.
+
+## Previous Release Layer — FRP v0.9.8 / M6
 
 **Current version:** `FRP v0.9.8`
 
