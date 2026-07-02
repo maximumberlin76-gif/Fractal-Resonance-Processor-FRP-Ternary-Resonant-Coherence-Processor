@@ -1,0 +1,160 @@
+name: FRP M6 Formal Verification and Equivalence Scaffold
+
+on:
+  push:
+    paths:
+      - "frp_prototype_v0_9_8.py"
+      - "docs/m6_formal_verification_equivalence.md"
+      - ".github/workflows/frp-m6-formal-verification.yml"
+  pull_request:
+    paths:
+      - "frp_prototype_v0_9_8.py"
+      - "docs/m6_formal_verification_equivalence.md"
+      - ".github/workflows/frp-m6-formal-verification.yml"
+  workflow_dispatch:
+
+jobs:
+  m6-formal-verification-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Compile FRP v0.9.8 executable reference file
+        run: |
+          python -m py_compile frp_prototype_v0_9_8.py
+
+      - name: Generate M6 JSON artifacts
+        run: |
+          mkdir -p m6_artifacts
+
+          python frp_prototype_v0_9_8.py --mode demo --output json > m6_artifacts/structured_output.json
+          python frp_prototype_v0_9_8.py --mode self-test --output json > m6_artifacts/self_test.json
+          python frp_prototype_v0_9_8.py --mode benchmark > m6_artifacts/benchmark_matrix.json
+
+          python frp_prototype_v0_9_8.py --export-benchmark-matrix > m6_artifacts/export_benchmark_matrix.json
+          python frp_prototype_v0_9_8.py --export-formal-property-set > m6_artifacts/formal_property_set.json
+          python frp_prototype_v0_9_8.py --export-equivalence-trace-map > m6_artifacts/equivalence_trace_map.json
+          python frp_prototype_v0_9_8.py --export-bounded-verification-config > m6_artifacts/bounded_verification_config.json
+          python frp_prototype_v0_9_8.py --export-formal-harness > m6_artifacts/formal_harness_scaffold.json
+
+      - name: Validate M6 schemas and invariants
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("m6_artifacts")
+
+          structured = json.loads((root / "structured_output.json").read_text())
+          self_test = json.loads((root / "self_test.json").read_text())
+          benchmark = json.loads((root / "benchmark_matrix.json").read_text())
+          exported_benchmark = json.loads((root / "export_benchmark_matrix.json").read_text())
+          properties = json.loads((root / "formal_property_set.json").read_text())
+          equivalence = json.loads((root / "equivalence_trace_map.json").read_text())
+          config = json.loads((root / "bounded_verification_config.json").read_text())
+          harness = json.loads((root / "formal_harness_scaffold.json").read_text())
+
+          assert structured["schema"] == "frp.structured_output.v0.9.8"
+          assert self_test["schema"] == "frp.structured_output.v0.9.8"
+          assert self_test["status"] == "PASS"
+
+          summary = self_test["summary"]
+
+          assert summary["actual_direct_events"] == 0
+          assert summary["match"] == 1.0
+          assert summary["C_minus_P_min"] > 0
+          assert summary["switch_load_peak"] <= summary["transition_fraction"]
+          assert summary["ticks_recorded"] == summary["steps"]
+          assert sum(summary["scheduler_counts"].values()) == summary["steps"]
+
+          assert benchmark["schema"] == "frp.m3.benchmark_matrix.v0.9.8"
+          assert exported_benchmark["schema"] == "frp.m3.benchmark_matrix.v0.9.8"
+
+          assert properties["schema"] == "frp.m6.formal_property_set.v0.9.8"
+          assert equivalence["schema"] == "frp.m6.equivalence_trace_map.v0.9.8"
+          assert config["schema"] == "frp.m6.bounded_verification_config.v0.9.8"
+          assert harness["schema"] == "frp.m6.formal_harness_scaffold.v0.9.8"
+
+          property_ids = {item["id"] for item in properties["properties"]}
+          required_property_ids = {
+              "P_DIRECT_EVENTS_ZERO",
+              "P_MATCH_EQUALS_ONE",
+              "P_C_MINUS_P_POSITIVE",
+              "P_SWITCH_LOAD_WITHIN_TRANSITION_FRACTION",
+              "P_TICKS_RECORDED_EQUALS_STEPS",
+              "P_SCHEDULER_COUNTS_SUM_EQUALS_STEPS",
+              "P_NEUTRAL_ROUTED_TRANSITION_PATH",
+          }
+          assert required_property_ids.issubset(property_ids)
+
+          assert all(item["status"] == "PASS" for item in properties["properties"])
+
+          mapping_fields = {item["reference_trace_field"] for item in equivalence["mappings"]}
+          required_mapping_fields = {
+              "cell_state",
+              "phase_q16",
+              "scheduler_state",
+              "switch_load_q16",
+              "heat_q16",
+              "C_minus_P_q16",
+              "phase_order_R_q16",
+              "actual_direct_events",
+              "prevented_direct_events",
+              "neutralized_conflicts",
+          }
+          assert required_mapping_fields.issubset(mapping_fields)
+
+          rtl_signals = {item["rtl_signal"] for item in equivalence["mappings"]}
+          required_rtl_signals = {
+              "frp_cell_state",
+              "frp_phase_q16",
+              "frp_scheduler_state",
+              "frp_switch_load_q16",
+              "frp_heat_q16",
+              "frp_C_minus_P_q16",
+              "frp_phase_order_R_q16",
+              "frp_actual_direct_events",
+              "frp_prevented_direct_events",
+              "frp_neutralized_conflicts",
+          }
+          assert required_rtl_signals.issubset(rtl_signals)
+
+          bounds = config["bounds"]
+          assert bounds["cells"] == summary["cells"]
+          assert bounds["steps"] == summary["steps"]
+          assert bounds["trace_comparison_depth"] == summary["steps"]
+
+          scaffold = harness["scaffold_text"]
+
+          assert "module tb_frp_v0_9_8_formal_harness;" in scaffold
+          assert "bounded_step_counter" in scaffold
+          assert "Formal property placeholders" in scaffold
+          assert "Assumption placeholders" in scaffold
+          assert "Cover placeholders" in scaffold
+          assert "Equivalence mapping placeholders" in scaffold
+          assert "P_DIRECT_EVENTS_ZERO" in scaffold
+          assert "P_NEUTRAL_ROUTED_TRANSITION_PATH" in scaffold
+          assert "cell_state -> frp_cell_state" in scaffold
+          assert "C_minus_P_q16 -> frp_C_minus_P_q16" in scaffold
+
+          print("FRP v0.9.8 M6 schema and invariant validation PASS")
+          PY
+
+      - name: Validate M6 documentation markers
+        run: |
+          test -f docs/m6_formal_verification_equivalence.md
+
+          grep -q "FRP v0.9.8" docs/m6_formal_verification_equivalence.md
+          grep -q "M6 Formal Verification Hooks and Equivalence Scaffold" docs/m6_formal_verification_equivalence.md
+
+          grep -q "frp.m6.formal_property_set.v0.9.8" docs/m6_formal_verification_equivalence.md
+          grep -q "frp.m6.equivalence_trace_map.v0.9.8" docs/m6_formal_verification_equivalence.md
+          grep -q "frp.m6.bounded_verification_config.v0.9.8" docs/m6_formal_verification_equivalence.md
+          grep -q "frp.m6.formal_harness_scaffold.v0.9.8" docs/m6_formal_verification_equivalence.md
