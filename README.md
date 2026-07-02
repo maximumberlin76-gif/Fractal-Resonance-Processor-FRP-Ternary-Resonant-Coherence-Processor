@@ -1,5 +1,7 @@
 # Fractal Resonance Processor (FRP)
 
+[![FRP M9 Silicon and Heterogeneous Architecture](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m9-silicon-architecture.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m9-silicon-architecture.yml)
+
 [![FRP M8 Production Release Package](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m8-production-release.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m8-production-release.yml)
 
 [![FRP M7 FPGA Synthesis and Timing Scaffold](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m7-fpga-synthesis.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m7-fpga-synthesis.yml)
@@ -20,7 +22,245 @@
 
 **Ternary Resonant Coherence Processor — Structured Output Prototype**
 
-## Current Release Layer
+## Current Architecture Layer
+
+**Current version:** `FRP v1.1.0`
+
+**Current milestone:** `M9 — Silicon and Heterogeneous Implementation Architecture`
+
+**Main executable reference file:** `frp_prototype_v1_1_0.py`
+
+FRP v1.1.0 establishes the M9 Silicon and Heterogeneous Implementation Architecture layer of the Fractal Resonance Processor reference architecture.
+
+This release extends the stable FRP v1.0.0 production reference prototype into a silicon-facing and heterogeneous implementation architecture layer.
+
+The M9 layer defines the architecture bridge from stable production release package to silicon interface modeling, heterogeneous compute mapping, signal pipeline organization, memory/register interface mapping, clock/reset domain mapping, accelerator integration, and FPGA-to-silicon migration planning.
+
+## Inherited Production Boundary
+
+FRP v1.1.0 inherits the stable v1.0.0 production release boundary:
+
+`FRP v1.0.0 — M8 Production Release Package and Stable Interface Freeze`
+
+Inherited executable reference file:
+
+`frp_prototype_v1_0_0.py`
+
+Inherited validation index:
+
+`FRP_VALIDATION_INDEX_v1_0_0.md`
+
+Inherited production release manifest:
+
+`FRP_PRODUCTION_RELEASE_MANIFEST_v1_0_0.md`
+
+## M9 Export Layers
+
+FRP v1.1.0 defines eight M9 export layers:
+
+- `silicon_interface_model`;
+
+- `heterogeneous_implementation_map`;
+
+- `compute_fabric_mapping`;
+
+- `memory_register_interface_map`;
+
+- `clock_reset_domain_map`;
+
+- `signal_pipeline_architecture`;
+
+- `accelerator_integration_profile`;
+
+- `fpga_to_silicon_migration_path`.
+
+## M9 Export Commands
+
+Silicon interface model export:
+
+`python frp_prototype_v1_1_0.py --export-silicon-interface-model`
+
+Heterogeneous implementation map export:
+
+`python frp_prototype_v1_1_0.py --export-heterogeneous-implementation-map`
+
+Compute fabric mapping export:
+
+`python frp_prototype_v1_1_0.py --export-compute-fabric-mapping`
+
+Memory/register interface map export:
+
+`python frp_prototype_v1_1_0.py --export-memory-register-interface-map`
+
+Clock/reset domain map export:
+
+`python frp_prototype_v1_1_0.py --export-clock-reset-domain-map`
+
+Signal pipeline architecture export:
+
+`python frp_prototype_v1_1_0.py --export-signal-pipeline-architecture`
+
+Accelerator integration profile export:
+
+`python frp_prototype_v1_1_0.py --export-accelerator-integration-profile`
+
+FPGA-to-silicon migration path export:
+
+`python frp_prototype_v1_1_0.py --export-fpga-to-silicon-migration-path`
+
+Benchmark matrix export:
+
+`python frp_prototype_v1_1_0.py --export-benchmark-matrix`
+
+## Stable v1.1.0 Schemas
+
+Structured output schema:
+
+`frp.structured_output.v1.1.0`
+
+Benchmark matrix schema:
+
+`frp.m3.benchmark_matrix.v1.1.0`
+
+M9 export schemas:
+
+`frp.m9.silicon_interface_model.v1.1.0`
+
+`frp.m9.heterogeneous_implementation_map.v1.1.0`
+
+`frp.m9.compute_fabric_mapping.v1.1.0`
+
+`frp.m9.memory_register_interface_map.v1.1.0`
+
+`frp.m9.clock_reset_domain_map.v1.1.0`
+
+`frp.m9.signal_pipeline_architecture.v1.1.0`
+
+`frp.m9.accelerator_integration_profile.v1.1.0`
+
+`frp.m9.fpga_to_silicon_migration_path.v1.1.0`
+
+## M9 Validation Status
+
+Validation status:
+
+`PASS`
+
+Validation environment:
+
+`GitHub Actions hardware-backed CI execution`
+
+Validated commit:
+
+`4050e8c`
+
+Validated workflows:
+
+- FRP Self Test;
+
+- FRP Benchmark Smoke Test;
+
+- FRP Structured Output;
+
+- FRP M9 Silicon and Heterogeneous Architecture.
+
+## M9 Architecture Domains
+
+FRP v1.1.0 validates the following architecture domains:
+
+- silicon interface model;
+
+- heterogeneous implementation map;
+
+- compute fabric mapping;
+
+- memory/register interface map;
+
+- clock/reset domain map;
+
+- signal pipeline architecture;
+
+- accelerator integration profile;
+
+- FPGA-to-silicon migration path.
+
+## M9 Production Architecture Files
+
+M9 documentation file:
+
+- `docs/m9_silicon_heterogeneous_architecture.md`.
+
+M9 executable reference file:
+
+- `frp_prototype_v1_1_0.py`.
+
+M9 workflow file:
+
+- `.github/workflows/frp-m9-silicon-architecture.yml`.
+
+M9 release-facing files:
+
+- `RELEASE_NOTES_v1_1_0.md`;
+
+- `TEST_REPORT_v1_1_0.md`;
+
+- `FRP_VALIDATION_INDEX_v1_1_0.md`;
+
+- `CHANGELOG.md`.
+
+## Architecture Progression
+
+FRP v1.1.0 preserves the validated architecture progression:
+
+`production reference prototype`
+
+↓  
+
+`stable production release package`
+
+↓  
+
+`stable interface freeze`
+
+↓  
+
+`silicon interface model`
+
+↓  
+
+`heterogeneous implementation map`
+
+↓  
+
+`compute fabric mapping`
+
+↓  
+
+`memory/register interface map`
+
+↓  
+
+`clock/reset domain map`
+
+↓  
+
+`signal pipeline architecture`
+
+↓  
+
+`accelerator integration profile`
+
+↓  
+
+`FPGA-to-silicon migration path`
+
+## Next Architecture Layer
+
+Next planned architecture layer:
+
+`FRP v1.2.0 — M10 Silicon Production and Tapeout Readiness Package`
+
+## Previous Production Release Layer — FRP v1.0.0 / M8
 
 **Current version:** `FRP v1.0.0`
 
