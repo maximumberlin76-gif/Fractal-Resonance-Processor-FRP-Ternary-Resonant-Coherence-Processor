@@ -1,0 +1,217 @@
+name: FRP M8 Production Release Package
+
+on:
+  push:
+    paths:
+      - "frp_prototype_v1_0_0.py"
+      - "docs/m8_production_release_package.md"
+      - ".github/workflows/frp-m8-production-release.yml"
+  pull_request:
+    paths:
+      - "frp_prototype_v1_0_0.py"
+      - "docs/m8_production_release_package.md"
+      - ".github/workflows/frp-m8-production-release.yml"
+  workflow_dispatch:
+
+jobs:
+  m8-production-release-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Compile FRP v1.0.0 executable reference file
+        run: |
+          python -m py_compile frp_prototype_v1_0_0.py
+
+      - name: Generate M8 JSON artifacts
+        run: |
+          mkdir -p m8_artifacts
+
+          python frp_prototype_v1_0_0.py --mode demo --output json > m8_artifacts/structured_output.json
+          python frp_prototype_v1_0_0.py --mode self-test --output json > m8_artifacts/self_test.json
+          python frp_prototype_v1_0_0.py --mode benchmark > m8_artifacts/benchmark_matrix.json
+
+          python frp_prototype_v1_0_0.py --export-benchmark-matrix > m8_artifacts/export_benchmark_matrix.json
+          python frp_prototype_v1_0_0.py --export-production-release-manifest > m8_artifacts/production_release_manifest.json
+          python frp_prototype_v1_0_0.py --export-stable-interface-contract > m8_artifacts/stable_interface_contract.json
+          python frp_prototype_v1_0_0.py --export-artifact-package-index > m8_artifacts/artifact_package_index.json
+          python frp_prototype_v1_0_0.py --export-release-freeze-checklist > m8_artifacts/release_freeze_checklist.json
+
+      - name: Validate M8 schemas and invariants
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("m8_artifacts")
+
+          structured = json.loads((root / "structured_output.json").read_text())
+          self_test = json.loads((root / "self_test.json").read_text())
+          benchmark = json.loads((root / "benchmark_matrix.json").read_text())
+          exported_benchmark = json.loads((root / "export_benchmark_matrix.json").read_text())
+          manifest = json.loads((root / "production_release_manifest.json").read_text())
+          contract = json.loads((root / "stable_interface_contract.json").read_text())
+          package = json.loads((root / "artifact_package_index.json").read_text())
+          checklist = json.loads((root / "release_freeze_checklist.json").read_text())
+
+          assert structured["schema"] == "frp.structured_output.v1.0.0"
+          assert self_test["schema"] == "frp.structured_output.v1.0.0"
+          assert self_test["status"] == "PASS"
+
+          summary = self_test["summary"]
+
+          assert summary["version"] == "1.0.0"
+          assert summary["actual_direct_events"] == 0
+          assert summary["match"] == 1.0
+          assert summary["C_minus_P_min"] > 0
+          assert summary["switch_load_peak"] <= summary["transition_fraction"]
+          assert summary["ticks_recorded"] == summary["steps"]
+          assert sum(summary["scheduler_counts"].values()) == summary["steps"]
+
+          assert benchmark["schema"] == "frp.m3.benchmark_matrix.v1.0.0"
+          assert exported_benchmark["schema"] == "frp.m3.benchmark_matrix.v1.0.0"
+
+          assert manifest["schema"] == "frp.m8.production_release_manifest.v1.0.0"
+          assert contract["schema"] == "frp.m8.stable_interface_contract.v1.0.0"
+          assert package["schema"] == "frp.m8.artifact_package_index.v1.0.0"
+          assert checklist["schema"] == "frp.m8.release_freeze_checklist.v1.0.0"
+          assert checklist["status"] == "PASS"
+
+          release = manifest["release"]
+          assert release["version"] == "v1.0.0"
+          assert release["milestone"] == "M8"
+          assert release["main_executable_reference_file"] == "frp_prototype_v1_0_0.py"
+
+          required_commands = {
+              "--mode demo --output json",
+              "--mode self-test --output json",
+              "--mode benchmark",
+              "--export-benchmark-matrix",
+              "--export-production-release-manifest",
+              "--export-stable-interface-contract",
+              "--export-artifact-package-index",
+              "--export-release-freeze-checklist",
+          }
+          assert required_commands.issubset(set(manifest["stable_cli_commands"]))
+
+          required_schemas = {
+              "frp.structured_output.v1.0.0",
+              "frp.m3.benchmark_matrix.v1.0.0",
+              "frp.m8.production_release_manifest.v1.0.0",
+              "frp.m8.stable_interface_contract.v1.0.0",
+              "frp.m8.artifact_package_index.v1.0.0",
+              "frp.m8.release_freeze_checklist.v1.0.0",
+              "frp.m7.fpga_synthesis_manifest.v0.9.9",
+              "frp.m7.timing_constraint_profile.v0.9.9",
+              "frp.m7.resource_estimate_map.v0.9.9",
+              "frp.m7.implementation_handoff_scaffold.v0.9.9",
+          }
+          assert required_schemas.issubset(set(manifest["stable_schema_set"]))
+
+          required_workflows = {
+              "FRP Self Test",
+              "FRP Benchmark Smoke Test",
+              "FRP Structured Output",
+              "FRP M3 Benchmark and Signal Map",
+              "FRP M4 HDL Trace and Testbench",
+              "FRP M5 RTL Interface and Assertion Harness",
+              "FRP M6 Formal Verification and Equivalence Scaffold",
+              "FRP M7 FPGA Synthesis and Timing Scaffold",
+              "FRP M8 Production Release Package",
+          }
+          assert required_workflows.issubset(set(manifest["validation_workflow_stack"]))
+
+          required_layers = {
+              "benchmark_matrix",
+              "hardware_signal_mapping",
+              "hdl_trace",
+              "vcd_trace",
+              "signal_fixture",
+              "verilog_testbench_scaffold",
+              "rtl_interface_contract",
+              "assertion_manifest",
+              "rtl_signal_binding",
+              "assertion_harness_scaffold",
+              "formal_property_set",
+              "equivalence_trace_map",
+              "bounded_verification_config",
+              "formal_harness_scaffold",
+              "fpga_synthesis_manifest",
+              "timing_constraint_profile",
+              "resource_estimate_map",
+              "implementation_handoff_scaffold",
+              "production_release_manifest",
+              "stable_interface_contract",
+              "artifact_package_index",
+              "release_freeze_checklist",
+          }
+          assert required_layers.issubset(set(manifest["artifact_export_layers"]))
+          assert required_layers.issubset(set(contract["export_artifact_names"]))
+          assert required_layers.issubset(set(package["artifact_export_layers"]))
+
+          markers = manifest["candidate_invariant_markers"]
+          assert markers["match"] == 1.0
+          assert markers["actual_direct_events"] == 0
+          assert markers["C_minus_P_min"] > 0
+          assert markers["switch_load_peak"] <= markers["transition_fraction"]
+          assert markers["ticks_recorded"] == markers["steps"]
+          assert sum(markers["scheduler_counts"].values()) == markers["steps"]
+          assert markers["neutralized_conflicts"] >= 0
+
+          assert contract["interface_freeze"]["release_line"] == "v1.0.0"
+          assert contract["interface_freeze"]["main_executable_reference_file"] == "frp_prototype_v1_0_0.py"
+          assert "clock_and_reset" in contract["signal_group_names"]
+          assert "scheduler_control" in contract["signal_group_names"]
+          assert "match" in contract["invariant_marker_names"]
+          assert "actual_direct_events" in contract["invariant_marker_names"]
+          assert "C_minus_P_min" in contract["invariant_marker_names"]
+
+          package_index = package["package_index"]
+          assert "frp_prototype_v1_0_0.py" in package_index["executable_reference_files"]
+          assert "docs/m8_production_release_package.md" in package_index["milestone_documentation_files"]
+          assert "RELEASE_NOTES_v1_0_0.md" in package_index["release_notes"]
+          assert "TEST_REPORT_v1_0_0.md" in package_index["test_reports"]
+          assert "README.md" == package_index["readme"]
+          assert "CHANGELOG.md" == package_index["changelog"]
+          assert package_index["production_release_manifest"] == "FRP_PRODUCTION_RELEASE_MANIFEST_v1_0_0.md"
+
+          checklist_ids = {item["id"] for item in checklist["checklist"]}
+          required_checklist_ids = {
+              "F_EXECUTABLE_REFERENCE_FILE_PRESENT",
+              "F_PRODUCTION_RELEASE_MANIFEST_GENERATED",
+              "F_STABLE_INTERFACE_CONTRACT_GENERATED",
+              "F_ARTIFACT_PACKAGE_INDEX_GENERATED",
+              "F_RELEASE_FREEZE_CHECKLIST_GENERATED",
+              "F_WORKFLOW_STACK_VALIDATED",
+              "F_RELEASE_NOTES_PRESENT",
+              "F_TEST_REPORT_PRESENT",
+              "F_README_UPDATED",
+              "F_CHANGELOG_UPDATED",
+              "F_VALIDATION_INDEX_UPDATED",
+              "F_CANDIDATE_INVARIANTS_PRESERVED",
+          }
+          assert required_checklist_ids.issubset(checklist_ids)
+          assert all(item["status"] == "PASS" for item in checklist["checklist"])
+          assert all(value == "PASS" for value in checklist["candidate_invariant_status"].values())
+
+          print("FRP v1.0.0 M8 production release schema and invariant validation PASS")
+          PY
+
+      - name: Validate M8 documentation markers
+        run: |
+          test -f docs/m8_production_release_package.md
+
+          grep -q "FRP v1.0.0" docs/m8_production_release_package.md
+          grep -q "M8 Production Release Package and Stable Interface Freeze" docs/m8_production_release_package.md
+
+          grep -q "frp.m8.production_release_manifest.v1.0.0" docs/m8_production_release_package.md
+          grep -q "frp.m8.stable_interface_contract.v1.0.0" docs/m8_production_release_package.md
+          grep -q "frp.m8.artifact_package_index.v1.0.0" docs/m8_production_release_package.md
+          grep -q "frp.m8.release_freeze_checklist.v1.0.0" docs/m8_production_release_package.md
