@@ -1,5 +1,7 @@
 # Fractal Resonance Processor (FRP)
 
+[![FRP M4 HDL Trace and Testbench](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m4-hdl-trace.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m4-hdl-trace.yml)
+
 [![FRP M3 Benchmark and Signal Map](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m3-benchmark-signal-map.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m3-benchmark-signal-map.yml)
 
 [![FRP Self Test](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml)
@@ -9,6 +11,118 @@
 [![FRP Structured Output](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-structured-output.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-structured-output.yml)
 
 **Ternary Resonant Coherence Processor — Structured Output Prototype**
+
+## Current Release Layer
+
+**Current version:** `FRP v0.9.6`
+
+**Current milestone:** `M4 — HDL Trace Export and Testbench Scaffold`
+
+**Main prototype:** `frp_prototype_v0_9_6.py`
+
+FRP v0.9.6 establishes the M4 HDL Trace Export and Testbench Scaffold layer.
+
+This release extends the M3 benchmark and hardware-facing signal mapping layer into HDL-oriented trace export, VCD-style waveform preparation, signal fixture generation, and Verilog testbench scaffold generation.
+
+## M4 Export Layers
+
+FRP v0.9.6 defines four M4 export layers:
+
+- `hdl_trace`;
+
+- `vcd_trace`;
+
+- `signal_fixture`;
+
+- `verilog_testbench_scaffold`.
+
+## M4 Export Commands
+
+HDL trace export:
+
+`python frp_prototype_v0_9_6.py --export-hdl-trace`
+
+VCD-style trace export:
+
+`python frp_prototype_v0_9_6.py --export-vcd-trace`
+
+Signal fixture export:
+
+`python frp_prototype_v0_9_6.py --export-signal-fixture`
+
+Verilog testbench scaffold export:
+
+`python frp_prototype_v0_9_6.py --export-verilog-testbench`
+
+Benchmark matrix export:
+
+`python frp_prototype_v0_9_6.py --export-benchmark-matrix`
+
+## M4 Schemas
+
+Structured output schema:
+
+`frp.structured_output.v0.9.6`
+
+HDL trace schema:
+
+`frp.m4.hdl_trace.v0.9.6`
+
+VCD-style trace schema:
+
+`frp.m4.vcd_trace.v0.9.6`
+
+Signal fixture schema:
+
+`frp.m4.signal_fixture.v0.9.6`
+
+Verilog testbench scaffold schema:
+
+`frp.m4.verilog_testbench_scaffold.v0.9.6`
+
+## M4 Validation Status
+
+Observed status:
+
+`PASS`
+
+Validation environment:
+
+`GitHub Actions hardware-backed CI execution`
+
+Validated workflows:
+
+- FRP Self Test;
+
+- FRP Benchmark Smoke Test;
+
+- FRP Structured Output;
+
+- FRP M4 HDL Trace and Testbench.
+
+Validated M4 workflow stages:
+
+- compile FRP v0.9.6 prototype;
+
+- generate M4 JSON artifacts;
+
+- validate M4 schemas and invariants;
+
+- validate M4 documentation markers.
+
+## M4 Documentation
+
+M4 documentation file:
+
+- `docs/m4_hdl_trace_testbench.md`.
+
+Release-facing files:
+
+- `RELEASE_NOTES_v0_9_6.md`;
+
+- `TEST_REPORT_v0_9_6.md`;
+
+- `CHANGELOG.md`.
 
 ## Current Release Layer
 
