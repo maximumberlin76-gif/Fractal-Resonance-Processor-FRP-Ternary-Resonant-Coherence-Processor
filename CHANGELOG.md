@@ -2,6 +2,292 @@
 
 All notable changes to the Fractal Resonance Processor (FRP) project are documented in this file.
 
+## [v1.4.0] — M12 External Implementation Feedback and Production Iteration Loop
+
+### Added
+
+- FRP v1.4.0 M12 External Implementation Feedback and Production Iteration Loop layer;
+
+- main executable reference file `frp_prototype_v1_4_0.py`;
+
+- M12 architecture document `docs/m12_external_implementation_feedback_iteration.md`;
+
+- M12 GitHub Actions workflow `.github/workflows/frp-m12-feedback-iteration.yml`;
+
+- external feedback intake manifest;
+
+- aggressive feedback stress harness;
+
+- implementation feedback matrix;
+
+- production iteration plan;
+
+- issue resolution map;
+
+- partner validation feedback map;
+
+- readiness delta tracker;
+
+- iteration release control map;
+
+- production feedback index;
+
+- next cycle handoff manifest;
+
+- requested direct transition tracking;
+
+- prevented direct transition tracking;
+
+- neutral-routed transition tracking;
+
+- tick-separated neutral transition queue;
+
+- hostile polarity-switching request injection;
+
+- bounded switch-load telemetry;
+
+- structured stress-harness validation output;
+
+- M12 benchmark matrix extension;
+
+- M12 validation index;
+
+- M12 test report;
+
+- M12 release notes.
+
+### M12 Export Layers
+
+FRP v1.4.0 defines ten M12 export layers:
+
+- `external_feedback_intake_manifest`;
+
+- `aggressive_feedback_stress_harness`;
+
+- `implementation_feedback_matrix`;
+
+- `production_iteration_plan`;
+
+- `issue_resolution_map`;
+
+- `partner_validation_feedback_map`;
+
+- `readiness_delta_tracker`;
+
+- `iteration_release_control_map`;
+
+- `production_feedback_index`;
+
+- `next_cycle_handoff_manifest`.
+
+### M12 Export Commands
+
+- `python frp_prototype_v1_4_0.py --export-external-feedback-intake-manifest`;
+
+- `python frp_prototype_v1_4_0.py --export-aggressive-feedback-stress-harness`;
+
+- `python frp_prototype_v1_4_0.py --export-implementation-feedback-matrix`;
+
+- `python frp_prototype_v1_4_0.py --export-production-iteration-plan`;
+
+- `python frp_prototype_v1_4_0.py --export-issue-resolution-map`;
+
+- `python frp_prototype_v1_4_0.py --export-partner-validation-feedback-map`;
+
+- `python frp_prototype_v1_4_0.py --export-readiness-delta-tracker`;
+
+- `python frp_prototype_v1_4_0.py --export-iteration-release-control-map`;
+
+- `python frp_prototype_v1_4_0.py --export-production-feedback-index`;
+
+- `python frp_prototype_v1_4_0.py --export-next-cycle-handoff-manifest`;
+
+- `python frp_prototype_v1_4_0.py --export-benchmark-matrix`.
+
+### Stable v1.4.0 Schemas
+
+- `frp.structured_output.v1.4.0`;
+
+- `frp.m3.benchmark_matrix.v1.4.0`;
+
+- `frp.m12.external_feedback_intake_manifest.v1.4.0`;
+
+- `frp.m12.aggressive_feedback_stress_harness.v1.4.0`;
+
+- `frp.m12.implementation_feedback_matrix.v1.4.0`;
+
+- `frp.m12.production_iteration_plan.v1.4.0`;
+
+- `frp.m12.issue_resolution_map.v1.4.0`;
+
+- `frp.m12.partner_validation_feedback_map.v1.4.0`;
+
+- `frp.m12.readiness_delta_tracker.v1.4.0`;
+
+- `frp.m12.iteration_release_control_map.v1.4.0`;
+
+- `frp.m12.production_feedback_index.v1.4.0`;
+
+- `frp.m12.next_cycle_handoff_manifest.v1.4.0`.
+
+### Aggressive Feedback Stress Harness
+
+The M12 aggressive feedback stress harness validates FRP transition control under hostile polarity-switching pressure.
+
+Validated transition path:
+
+`hostile polarity inversion request`
+
+↓
+
+`requested direct transition recorded`
+
+↓
+
+`direct polarity transition prevented`
+
+↓
+
+`prevented direct transition recorded`
+
+↓
+
+`transition routed through active neutral state 0`
+
+↓
+
+`neutral-routed transition recorded`
+
+↓
+
+`target polarity retained in the pending neutral transition queue`
+
+↓
+
+`target polarity applied on a subsequent processor tick`
+
+Validated neutral routes:
+
+`-1 → 0 → 1`
+
+`1 → 0 → -1`
+
+### Validated Stress-Harness Markers
+
+- `requested_direct_events >= 1`;
+
+- `prevented_direct_events >= requested_direct_events`;
+
+- `actual_direct_events = 0`;
+
+- `neutral_routed_events >= prevented_direct_events`;
+
+- `C_minus_P_min > 0`;
+
+- `switch_load_peak <= transition_fraction`;
+
+- `ticks_recorded = steps`;
+
+- `scheduler counts match selected cycle mode`;
+
+- `stress_harness_pass = True`.
+
+### Preserved Candidate Invariants
+
+- `match = 1.000`;
+
+- `actual_direct_events = 0`;
+
+- `C_minus_P_min > 0`;
+
+- `switch_load_peak <= transition_fraction`;
+
+- `ticks_recorded = steps`;
+
+- `scheduler counts match selected cycle mode`;
+
+- `neutral-routed transition path is preserved`;
+
+- `neutralized_conflicts tracked`.
+
+### Benchmark Matrix Extension
+
+FRP v1.4.0 validates four architecture rows:
+
+1. binary-style forced switch;
+
+2. direct ternary commit;
+
+3. FRP distributed resonant;
+
+4. FRP aggressive feedback stress harness.
+
+### Validation
+
+Validation status:
+
+`PASS`
+
+Validation environment:
+
+`GitHub Actions hardware-backed CI execution`
+
+Validated commit:
+
+`64b55b6`
+
+Validated workflows:
+
+- FRP Self Test;
+
+- FRP Benchmark Smoke Test;
+
+- FRP Structured Output;
+
+- FRP M12 External Implementation Feedback and Production Iteration.
+
+Validated M12 workflow run:
+
+`FRP M12 External Implementation Feedback and Production Iteration #1`
+
+### Inherited Boundary
+
+FRP v1.4.0 inherits the validated boundary:
+
+`FRP v1.3.0 — M11 Production Integration and External Implementation Handoff`
+
+Inherited reference files:
+
+- `frp_prototype_v1_3_0.py`;
+
+- `FRP_VALIDATION_INDEX_v1_3_0.md`;
+
+- `RELEASE_NOTES_v1_3_0.md`;
+
+- `TEST_REPORT_v1_3_0.md`.
+
+### Release Files
+
+- `frp_prototype_v1_4_0.py`;
+
+- `docs/m12_external_implementation_feedback_iteration.md`;
+
+- `.github/workflows/frp-m12-feedback-iteration.yml`;
+
+- `FRP_VALIDATION_INDEX_v1_4_0.md`;
+
+- `RELEASE_NOTES_v1_4_0.md`;
+
+- `TEST_REPORT_v1_4_0.md`;
+
+- `CHANGELOG.md`;
+
+- `README.md`.
+
+### Next Architecture Layer
+
+`M13 — Production Scaling and Implementation Stabilization Package`
+
 ## v1.3.0 — M11 Production Integration and External Implementation Handoff
 
 FRP v1.3.0 establishes the M11 Production Integration and External Implementation Handoff layer.
