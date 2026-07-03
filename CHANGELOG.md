@@ -2,6 +2,756 @@
 
 All notable changes to the Fractal Resonance Processor (FRP) project are documented in this file.
 
+## [v1.5.0] — M13 Production Scaling and Implementation Stabilization Package
+
+### Added
+
+- FRP v1.5.0 M13 Production Scaling and Implementation Stabilization Package layer;
+
+- main executable reference file `frp_prototype_v1_5_0.py`;
+
+- M13 architecture document `docs/m13_production_scaling_implementation_stabilization.md`;
+
+- M13 GitHub Actions workflow `.github/workflows/frp-m13-production-scaling-stabilization.yml`;
+
+- thermal saturation model;
+
+- delay dynamics model;
+
+- nonlinear coherence compression model;
+
+- thermal gamma drift model;
+
+- coupled thermal-delay stress harness;
+
+- bounded thermal survival validation;
+
+- thermal stability boundary sweep;
+
+- deterministic first C(t) - P(t) crossing detection;
+
+- recovery dynamics map;
+
+- production scaling stability envelope;
+
+- state-dependent frequency target displacement;
+
+- lagged internal frequency response;
+
+- frequency lag telemetry;
+
+- dynamic power generation;
+
+- thermal accumulation and dissipation;
+
+- thermal overload tracking;
+
+- thermally dependent effective coupling degradation;
+
+- correlated Sakaguchi gamma drift;
+
+- nonlinear coherence compression;
+
+- deterministic seeded execution;
+
+- production scaling classification domains;
+
+- M13 benchmark matrix extension;
+
+- M13 test report;
+
+- M13 release notes;
+
+- M13 validation index.
+
+### Inherited Validation Boundary
+
+FRP v1.5.0 inherits the validated boundary:
+
+`FRP v1.4.0 — M12 External Implementation Feedback and Production Iteration Loop`
+
+Inherited reference files:
+
+- `frp_prototype_v1_4_0.py`;
+
+- `FRP_VALIDATION_INDEX_v1_4_0.md`;
+
+- `RELEASE_NOTES_v1_4_0.md`;
+
+- `TEST_REPORT_v1_4_0.md`.
+
+Inherited M12 transition-pressure markers:
+
+- `requested_direct_events`;
+
+- `prevented_direct_events`;
+
+- `actual_direct_events`;
+
+- `neutral_routed_events`;
+
+- `neutralized_conflicts`;
+
+- `stress_harness_pass`.
+
+### M13 Artifact Layers
+
+FRP v1.5.0 defines eight M13 artifact layers:
+
+- `thermal_saturation_model`;
+
+- `delay_dynamics_model`;
+
+- `nonlinear_coherence_compression_model`;
+
+- `thermal_gamma_drift_model`;
+
+- `coupled_thermal_delay_stress_harness`;
+
+- `thermal_stability_boundary_sweep`;
+
+- `recovery_dynamics_map`;
+
+- `production_scaling_stability_envelope`.
+
+### M13 Export Commands
+
+- `python frp_prototype_v1_5_0.py --export-thermal-saturation-model`;
+
+- `python frp_prototype_v1_5_0.py --export-delay-dynamics-model`;
+
+- `python frp_prototype_v1_5_0.py --export-nonlinear-coherence-compression-model`;
+
+- `python frp_prototype_v1_5_0.py --export-thermal-gamma-drift-model`;
+
+- `python frp_prototype_v1_5_0.py --export-coupled-thermal-delay-stress-harness`;
+
+- `python frp_prototype_v1_5_0.py --export-thermal-stability-boundary-sweep`;
+
+- `python frp_prototype_v1_5_0.py --export-recovery-dynamics-map`;
+
+- `python frp_prototype_v1_5_0.py --export-production-scaling-stability-envelope`;
+
+- `python frp_prototype_v1_5_0.py --export-benchmark-matrix`.
+
+### Stable v1.5.0 Schemas
+
+- `frp.structured_output.v1.5.0`;
+
+- `frp.m3.benchmark_matrix.v1.5.0`;
+
+- `frp.m13.thermal_saturation_model.v1.5.0`;
+
+- `frp.m13.delay_dynamics_model.v1.5.0`;
+
+- `frp.m13.nonlinear_coherence_compression_model.v1.5.0`;
+
+- `frp.m13.thermal_gamma_drift_model.v1.5.0`;
+
+- `frp.m13.coupled_thermal_delay_stress_harness.v1.5.0`;
+
+- `frp.m13.thermal_stability_boundary_sweep.v1.5.0`;
+
+- `frp.m13.recovery_dynamics_map.v1.5.0`;
+
+- `frp.m13.production_scaling_stability_envelope.v1.5.0`.
+
+### Deterministic Seeded Execution
+
+FRP v1.5.0 validates reproducible seeded execution.
+
+Validated seed:
+
+`76`
+
+The M13 workflow executes the reference configuration twice and compares the generated structured outputs directly.
+
+Validated deterministic execution domains:
+
+- initial cell states;
+
+- initial phase states;
+
+- correlated gamma drift;
+
+- structured output;
+
+- candidate invariant telemetry.
+
+Validation result:
+
+`PASS`
+
+### Thermal Saturation Model
+
+The M13 thermal saturation model introduces dynamic heat accumulation and dissipation under switching activity and frequency lag.
+
+Validated thermal variables:
+
+- `ambient_heat`;
+
+- `heat`;
+
+- `generated_power`;
+
+- `thermal_dissipation`;
+
+- `thermal_time_constant`;
+
+- `thermal_soft_limit`;
+
+- `thermal_hard_limit`;
+
+- `thermal_overload`;
+
+- `heat_peak`.
+
+Validated thermal relations:
+
+`generated_power = base_power + switch_power_gain * switch_load + lag_power_gain * mean_frequency_lag`
+
+`thermal_dissipation = (heat - ambient_heat) / thermal_time_constant`
+
+`thermal_overload = max(0, heat - thermal_soft_limit)`
+
+Validated thermal path:
+
+`switching activity`
+
+↓
+
+`dynamic switching load`
+
+↓
+
+`frequency lag`
+
+↓
+
+`dynamic power generation`
+
+↓
+
+`thermal accumulation`
+
+↓
+
+`thermal dissipation`
+
+↓
+
+`thermal overload`
+
+↓
+
+`effective coupling degradation`
+
+### Delay Dynamics Model
+
+The M13 delay dynamics model introduces state-dependent frequency targets and lagged internal frequency response.
+
+Validated relations:
+
+`frequency_target = base_frequency + state_frequency_gain * abs(cell_state) + switching_frequency_gain * cell_switch_activity`
+
+`frequency_next = frequency_current + delay_alpha * (frequency_target - frequency_current)`
+
+`frequency_lag = abs(frequency_target - frequency_current)`
+
+Validated delay path:
+
+`state transition`
+
+↓
+
+`frequency target displacement`
+
+↓
+
+`partial internal frequency response`
+
+↓
+
+`residual frequency lag`
+
+↓
+
+`subsequent tick inheritance`
+
+↓
+
+`progressive frequency convergence`
+
+### Nonlinear Coherence Compression Model
+
+The M13 nonlinear coherence compression model couples thermal overload and reduced stability margin to exponential coherence compression.
+
+Validated relation:
+
+`margin_pressure = max(0, stability_soft_margin - previous_C_minus_P)`
+
+Validated compression relation:
+
+`coherence_compression = exp(-(thermal_compression_gain * thermal_overload^2 + margin_compression_gain * margin_pressure^2))`
+
+Validated effective coherence relation:
+
+`effective_coherence = raw_phase_coherence * coherence_compression`
+
+Validated compression path:
+
+`thermal overload`
+
+↓
+
+`reduced stability margin`
+
+↓
+
+`nonlinear compression pressure`
+
+↓
+
+`exponential coherence compression`
+
+↓
+
+`effective coherence reduction`
+
+↓
+
+`C(t) response`
+
+↓
+
+`C(t) - P(t) stability-margin response`
+
+### Thermal Gamma Drift Model
+
+The M13 thermal gamma drift model introduces correlated thermal drift of the Sakaguchi phase shift.
+
+Nominal Sakaguchi phase shift:
+
+`gamma = 0.30 pi`
+
+Validated correlated drift relation:
+
+`gamma_noise_next = gamma_noise_state + gamma_correlation_alpha * (gamma_noise_target - gamma_noise_state)`
+
+Validated effective gamma relation:
+
+`gamma_effective = gamma_nominal + gamma_thermal_gain * thermal_overload * gamma_noise_state`
+
+Validated gamma drift relation:
+
+`gamma_drift = gamma_effective - gamma_nominal`
+
+Validated gamma path:
+
+`thermal accumulation`
+
+↓
+
+`correlated noise-state evolution`
+
+↓
+
+`slow gamma drift`
+
+↓
+
+`effective Sakaguchi phase-shift displacement`
+
+↓
+
+`phase-field deformation`
+
+↓
+
+`coherence response`
+
+### Effective Coupling Degradation
+
+Validated relation:
+
+`effective_coupling = coupling_nominal * exp(-thermal_coupling_gain * thermal_overload)`
+
+Validated coupling path:
+
+`thermal overload`
+
+↓
+
+`effective coupling degradation`
+
+↓
+
+`weaker phase correction`
+
+↓
+
+`greater phase dispersion`
+
+↓
+
+`raw phase-coherence response`
+
+### Coupled Thermal-Delay Stress Harness
+
+The M13 coupled thermal-delay stress harness validates:
+
+- hostile transition request injection;
+
+- tick-separated neutral routing;
+
+- switching-load accumulation;
+
+- state-dependent frequency target displacement;
+
+- lagged internal frequency response;
+
+- dynamic power generation;
+
+- thermal accumulation;
+
+- thermal dissipation;
+
+- effective coupling degradation;
+
+- correlated gamma drift;
+
+- nonlinear coherence compression;
+
+- C(t) - P(t) stability tracking;
+
+- recovery tracking.
+
+Validated complete chain:
+
+`hostile transition pressure`
+
+↓
+
+`tick-separated neutral routing`
+
+↓
+
+`switching activity`
+
+↓
+
+`frequency target displacement`
+
+↓
+
+`frequency lag`
+
+↓
+
+`dynamic power generation`
+
+↓
+
+`thermal accumulation`
+
+↓
+
+`effective coupling degradation`
+
+↓
+
+`correlated gamma drift`
+
+↓
+
+`phase-field deformation`
+
+↓
+
+`nonlinear coherence compression`
+
+↓
+
+`C(t) - P(t) response`
+
+↓
+
+`recovery dynamics`
+
+Validation result:
+
+`PASS`
+
+### Bounded Thermal Survival Validation
+
+Validated markers:
+
+`actual_direct_events = 0`
+
+`requested_direct_events >= 1`
+
+`prevented_direct_events >= requested_direct_events`
+
+`neutral_routed_events >= prevented_direct_events`
+
+`C_minus_P_min > 0`
+
+`heat_peak <= thermal_hard_limit`
+
+`frequency_lag_peak <= 0.20`
+
+`gamma_drift_peak <= 0.08`
+
+`switch_load_peak <= transition_fraction`
+
+`ticks_recorded = steps`
+
+`scheduler counts match selected cycle mode`
+
+`recovery_completed = True`
+
+Validation result:
+
+`PASS`
+
+### Thermal Stability Boundary Sweep
+
+Validated ordered pressure levels:
+
+1. `0.10`;
+
+2. `0.25`;
+
+3. `0.50`;
+
+4. `0.75`;
+
+5. `1.00`.
+
+Validated processor ticks per pressure level:
+
+`16`
+
+Validated boundary markers:
+
+`boundary_detected = True`
+
+`first_C_minus_P_crossing recorded`
+
+`boundary_tick >= 0`
+
+`boundary_pressure_level recorded`
+
+`C_minus_P_at_boundary <= 0`
+
+The boundary sweep preserves:
+
+`actual_direct_events = 0`
+
+Validation result:
+
+`PASS`
+
+### First C(t) - P(t) Crossing Detection
+
+The first stability-boundary crossing is detected when:
+
+`previous_C_minus_P > 0`
+
+and:
+
+`current_C_minus_P <= 0`
+
+The first detected crossing retains:
+
+- `boundary_tick`;
+
+- `boundary_pressure_level`;
+
+- `heat_at_boundary`;
+
+- `gamma_drift_at_boundary`;
+
+- `frequency_lag_at_boundary`;
+
+- `raw_phase_coherence_at_boundary`;
+
+- `effective_coherence_at_boundary`;
+
+- `coherence_compression_at_boundary`;
+
+- `C_minus_P_at_boundary`.
+
+Validation result:
+
+`PASS`
+
+### Recovery Dynamics Validation
+
+Validated recovery start tick:
+
+`48`
+
+Validated recovery conditions:
+
+`heat <= recovery_heat_limit`
+
+`mean_frequency_lag <= recovery_frequency_lag_limit`
+
+`abs(gamma_drift) <= recovery_gamma_drift_limit`
+
+`C_minus_P >= recovery_margin`
+
+Validated recovery markers:
+
+`recovery_completion_tick recorded`
+
+`recovery_duration recorded`
+
+`recovery_completed = True`
+
+Validation result:
+
+`PASS`
+
+### Production Scaling Stability Envelope
+
+Validated scaling dimensions:
+
+- cell count;
+
+- transition fraction;
+
+- scheduler mode;
+
+- switching pressure level;
+
+- thermal time constant;
+
+- delay response coefficient;
+
+- coupling strength;
+
+- thermal coupling gain;
+
+- coherence compression gain.
+
+Validated configuration count:
+
+`4`
+
+Validated classification domains:
+
+- stable operational domain;
+
+- bounded survival domain;
+
+- near-boundary domain;
+
+- boundary-detected domain;
+
+- recovered domain.
+
+Validation result:
+
+`PASS`
+
+### Preserved Candidate Invariants
+
+FRP v1.5.0 preserves:
+
+`match = 1.000`
+
+`actual_direct_events = 0`
+
+`C_minus_P_min > 0`
+
+`switch_load_peak <= transition_fraction`
+
+`ticks_recorded = steps`
+
+`scheduler counts match selected cycle mode`
+
+`neutral-routed transition path is preserved`
+
+`neutralized_conflicts tracked`
+
+M13 additionally tracks:
+
+`heat_peak`
+
+`frequency_lag_peak`
+
+`gamma_drift_peak`
+
+`coherence_compression_min`
+
+`boundary_detected`
+
+`recovery_completed`
+
+### Benchmark Matrix Extension
+
+Validated benchmark schema:
+
+`frp.m3.benchmark_matrix.v1.5.0`
+
+Validated architecture rows:
+
+1. `binary_style_forced_switch`;
+
+2. `frp_v1_4_0_transition_pressure_layer`;
+
+3. `frp_v1_5_0_bounded_thermal_survival`;
+
+4. `frp_v1_5_0_thermal_stability_boundary_sweep`.
+
+### Validation
+
+Validation status:
+
+`PASS`
+
+Validation environment:
+
+`GitHub Actions hardware-backed CI execution`
+
+Validated commit:
+
+`43912e4`
+
+Validated workflow stack:
+
+- `FRP Structured Output #96`;
+
+- `FRP M13 Production Scaling and Implementation Stabilization #1`;
+
+- `FRP Benchmark Smoke Test #135`;
+
+- `FRP Self Test #137`.
+
+### Release Files
+
+- `frp_prototype_v1_5_0.py`;
+
+- `docs/m13_production_scaling_implementation_stabilization.md`;
+
+- `.github/workflows/frp-m13-production-scaling-stabilization.yml`;
+
+- `FRP_VALIDATION_INDEX_v1_5_0.md`;
+
+- `RELEASE_NOTES_v1_5_0.md`;
+
+- `TEST_REPORT_v1_5_0.md`;
+
+- `CHANGELOG.md`;
+
+- `README.md`.
+
+### Next Architecture Layer
+
+`M14 — Physical Implementation Correlation and Production Qualification Package`
+
 ## [v1.4.0] — M12 External Implementation Feedback and Production Iteration Loop
 
 ### Added
