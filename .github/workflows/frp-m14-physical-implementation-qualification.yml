@@ -1,0 +1,954 @@
+name: FRP M14 Physical Implementation Correlation and Production Qualification
+
+on:
+  push:
+    paths:
+      - "frp_prototype_v1_6_0.py"
+      - "docs/m14_physical_implementation_correlation_production_qualification.md"
+      - ".github/workflows/frp-m14-physical-implementation-qualification.yml"
+  pull_request:
+    paths:
+      - "frp_prototype_v1_6_0.py"
+      - "docs/m14_physical_implementation_correlation_production_qualification.md"
+      - ".github/workflows/frp-m14-physical-implementation-qualification.yml"
+  workflow_dispatch:
+
+jobs:
+  m14-physical-implementation-qualification:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Compile FRP v1.6.0 M14 reference file
+        run: |
+          python -m py_compile frp_prototype_v1_6_0.py
+
+      - name: Generate M14 validation artifacts
+        run: |
+          mkdir -p m14_artifacts
+
+          python frp_prototype_v1_6_0.py \
+            --mode demo \
+            --output json \
+            > m14_artifacts/structured_output.json
+
+          python frp_prototype_v1_6_0.py \
+            --mode self-test \
+            --output json \
+            > m14_artifacts/self_test.json
+
+          python frp_prototype_v1_6_0.py \
+            --mode benchmark \
+            > m14_artifacts/benchmark_matrix.json
+
+          python frp_prototype_v1_6_0.py \
+            --export-benchmark-matrix \
+            > m14_artifacts/export_benchmark_matrix.json
+
+          python frp_prototype_v1_6_0.py \
+            --export-hierarchical-ultrametric-topology-model \
+            > m14_artifacts/hierarchical_ultrametric_topology_model.json
+
+          python frp_prototype_v1_6_0.py \
+            --export-fractal-coupling-weight-map \
+            > m14_artifacts/fractal_coupling_weight_map.json
+
+          python frp_prototype_v1_6_0.py \
+            --export-multiscale-phase-coherence-map \
+            > m14_artifacts/multiscale_phase_coherence_map.json
+
+          python frp_prototype_v1_6_0.py \
+            --export-cluster-local-thermal-field \
+            > m14_artifacts/cluster_local_thermal_field.json
+
+          python frp_prototype_v1_6_0.py \
+            --export-cross-cluster-propagation-map \
+            > m14_artifacts/cross_cluster_propagation_map.json
+
+          python frp_prototype_v1_6_0.py \
+            --export-localized-hotspot-containment-harness \
+            > m14_artifacts/localized_hotspot_containment_harness.json
+
+          python frp_prototype_v1_6_0.py \
+            --export-dense-hierarchical-equivalence-map \
+            > m14_artifacts/dense_hierarchical_equivalence_map.json
+
+          python frp_prototype_v1_6_0.py \
+            --export-physical-domain-correlation-package \
+            > m14_artifacts/physical_domain_correlation_package.json
+
+      - name: Validate deterministic seeded execution
+        run: |
+          python frp_prototype_v1_6_0.py \
+            --mode demo \
+            --output json \
+            > m14_artifacts/deterministic_run_a.json
+
+          python frp_prototype_v1_6_0.py \
+            --mode demo \
+            --output json \
+            > m14_artifacts/deterministic_run_b.json
+
+          cmp \
+            m14_artifacts/deterministic_run_a.json \
+            m14_artifacts/deterministic_run_b.json
+
+      - name: Generate 8 16 and 32 cell topology qualification artifacts
+        run: |
+          python frp_prototype_v1_6_0.py \
+            --cells 8 \
+            --export-hierarchical-ultrametric-topology-model \
+            > m14_artifacts/topology_8_cells.json
+
+          python frp_prototype_v1_6_0.py \
+            --cells 16 \
+            --export-hierarchical-ultrametric-topology-model \
+            > m14_artifacts/topology_16_cells.json
+
+          python frp_prototype_v1_6_0.py \
+            --cells 32 \
+            --export-hierarchical-ultrametric-topology-model \
+            > m14_artifacts/topology_32_cells.json
+
+          python frp_prototype_v1_6_0.py \
+            --cells 8 \
+            --export-dense-hierarchical-equivalence-map \
+            > m14_artifacts/equivalence_8_cells.json
+
+          python frp_prototype_v1_6_0.py \
+            --cells 16 \
+            --export-dense-hierarchical-equivalence-map \
+            > m14_artifacts/equivalence_16_cells.json
+
+          python frp_prototype_v1_6_0.py \
+            --cells 32 \
+            --export-dense-hierarchical-equivalence-map \
+            > m14_artifacts/equivalence_32_cells.json
+
+      - name: Validate M14 kernel topology thermal fields coherence equivalence and qualification
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("m14_artifacts")
+
+          def load(name):
+              return json.loads(
+                  (root / name).read_text()
+              )
+
+          structured = load(
+              "structured_output.json"
+          )
+
+          self_test = load(
+              "self_test.json"
+          )
+
+          benchmark = load(
+              "benchmark_matrix.json"
+          )
+
+          exported_benchmark = load(
+              "export_benchmark_matrix.json"
+          )
+
+          topology = load(
+              "hierarchical_ultrametric_topology_model.json"
+          )
+
+          coupling = load(
+              "fractal_coupling_weight_map.json"
+          )
+
+          multiscale = load(
+              "multiscale_phase_coherence_map.json"
+          )
+
+          thermal = load(
+              "cluster_local_thermal_field.json"
+          )
+
+          propagation = load(
+              "cross_cluster_propagation_map.json"
+          )
+
+          hotspot = load(
+              "localized_hotspot_containment_harness.json"
+          )
+
+          equivalence = load(
+              "dense_hierarchical_equivalence_map.json"
+          )
+
+          physical = load(
+              "physical_domain_correlation_package.json"
+          )
+
+          expected_schemas = {
+              "structured":
+                  "frp.structured_output.v1.6.0",
+
+              "benchmark":
+                  "frp.m3.benchmark_matrix.v1.6.0",
+
+              "topology":
+                  "frp.m14.hierarchical_ultrametric_topology_model.v1.6.0",
+
+              "coupling":
+                  "frp.m14.fractal_coupling_weight_map.v1.6.0",
+
+              "multiscale":
+                  "frp.m14.multiscale_phase_coherence_map.v1.6.0",
+
+              "thermal":
+                  "frp.m14.cluster_local_thermal_field.v1.6.0",
+
+              "propagation":
+                  "frp.m14.cross_cluster_propagation_map.v1.6.0",
+
+              "hotspot":
+                  "frp.m14.localized_hotspot_containment_harness.v1.6.0",
+
+              "equivalence":
+                  "frp.m14.dense_hierarchical_equivalence_map.v1.6.0",
+
+              "physical":
+                  "frp.m14.physical_domain_correlation_package.v1.6.0",
+          }
+
+          assert structured["schema"] == expected_schemas["structured"]
+          assert self_test["schema"] == expected_schemas["structured"]
+
+          assert benchmark["schema"] == expected_schemas["benchmark"]
+          assert exported_benchmark["schema"] == expected_schemas["benchmark"]
+
+          assert topology["schema"] == expected_schemas["topology"]
+          assert coupling["schema"] == expected_schemas["coupling"]
+          assert multiscale["schema"] == expected_schemas["multiscale"]
+          assert thermal["schema"] == expected_schemas["thermal"]
+          assert propagation["schema"] == expected_schemas["propagation"]
+          assert hotspot["schema"] == expected_schemas["hotspot"]
+          assert equivalence["schema"] == expected_schemas["equivalence"]
+          assert physical["schema"] == expected_schemas["physical"]
+
+          all_artifacts = [
+              structured,
+              self_test,
+              benchmark,
+              exported_benchmark,
+              topology,
+              coupling,
+              multiscale,
+              thermal,
+              propagation,
+              hotspot,
+              equivalence,
+              physical,
+          ]
+
+          for artifact in all_artifacts:
+              assert artifact["version"] == "1.6.0"
+
+          assert self_test["status"] == "PASS"
+
+          assert len(self_test["checks"]) == 33
+
+          for check_name, check_value in self_test["checks"].items():
+              assert check_value is True, (
+                  f"M14 self-test failed: {check_name}"
+              )
+
+          reference = self_test["reference_summary"]
+
+          assert reference["cells"] == 16
+          assert reference["hierarchy_depth"] == 4
+
+          assert reference["balanced_ternary_state_domain"] is True
+
+          assert reference["actual_direct_events"] == 0
+          assert reference["match"] == 1.0
+
+          assert reference["C_minus_P_min"] > 0
+
+          assert (
+              reference["switch_load_peak"]
+              <= reference["transition_fraction"]
+          )
+
+          assert reference["ticks_recorded"] == reference["steps"]
+
+          assert reference["scheduler"] == "7/1"
+
+          assert reference["scheduler_counts"] == {
+              "balance": 56,
+              "commit": 8,
+          }
+
+          assert reference["scheduler_counts_valid"] is True
+
+          assert reference["fractal_alpha"] == 0.7
+          assert reference["thermal_beta"] == 1.2
+
+          assert reference["heat_peak"] >= 0
+          assert reference["local_heat_peak"] >= reference["heat_peak"]
+
+          assert reference["frequency_lag_peak"] >= 0
+          assert reference["gamma_drift_peak"] >= 0
+
+          assert (
+              0
+              < reference["coherence_compression_min"]
+              <= 1.0
+          )
+
+          assert structured["kernel"]["balanced_ternary_states"] == [
+              -1,
+              0,
+              1,
+          ]
+
+          assert structured["kernel"]["active_neutral_state"] == 0
+
+          assert structured["kernel"]["neutral_routes"] == [
+              "-1 -> 0 -> 1",
+              "1 -> 0 -> -1",
+          ]
+
+          assert structured["kernel"]["scheduler_modes"] == [
+              "free",
+              "7/1",
+              "1/7",
+          ]
+
+          scheduler_validation = self_test["scheduler_validation"]
+
+          assert scheduler_validation["free"]["status"] == "PASS"
+          assert scheduler_validation["7/1"]["status"] == "PASS"
+          assert scheduler_validation["1/7"]["status"] == "PASS"
+
+          assert (
+              scheduler_validation["free"]["summary"]["scheduler_counts"]
+              == {"free": 16}
+          )
+
+          assert (
+              scheduler_validation["7/1"]["summary"]["scheduler_counts"]
+              == {
+                  "balance": 14,
+                  "commit": 2,
+              }
+          )
+
+          assert (
+              scheduler_validation["1/7"]["summary"]["scheduler_counts"]
+              == {
+                  "excite": 2,
+                  "neutralize": 14,
+              }
+          )
+
+          for mode in [
+              "free",
+              "7/1",
+              "1/7",
+          ]:
+              summary = scheduler_validation[mode]["summary"]
+
+              assert summary["balanced_ternary_state_domain"] is True
+              assert summary["actual_direct_events"] == 0
+              assert summary["scheduler_counts_valid"] is True
+
+              assert (
+                  summary["switch_load_peak"]
+                  <= summary["transition_fraction"]
+              )
+
+              assert summary["ticks_recorded"] == summary["steps"]
+
+          neutral_route = self_test["neutral_route_validation"]
+
+          assert neutral_route["status"] == "PASS"
+
+          for check_name, check_value in neutral_route["checks"].items():
+              assert check_value is True, (
+                  f"Neutral-route check failed: {check_name}"
+              )
+
+          assert neutral_route["state_after_tick_0"] == 0
+          assert neutral_route["state_after_tick_1"] == 1
+
+          neutral_summary = neutral_route["summary"]
+
+          assert neutral_summary["actual_direct_events"] == 0
+          assert neutral_summary["requested_direct_events"] == 1
+          assert neutral_summary["prevented_direct_events"] == 1
+          assert neutral_summary["neutral_routed_events"] == 1
+
+          inherited = topology["inherited_boundary"]
+
+          assert inherited["release"] == "FRP v1.5.0"
+
+          assert (
+              inherited["main_executable_reference_file"]
+              == "frp_prototype_v1_5_0.py"
+          )
+
+          assert (
+              inherited["validation_index"]
+              == "FRP_VALIDATION_INDEX_v1_5_0.md"
+          )
+
+          assert (
+              inherited["release_notes"]
+              == "RELEASE_NOTES_v1_5_0.md"
+          )
+
+          assert (
+              inherited["test_report"]
+              == "TEST_REPORT_v1_5_0.md"
+          )
+
+          inherited_kernel = inherited["preserved_kernel"]
+
+          assert inherited_kernel["balanced_ternary_states"] == [
+              -1,
+              0,
+              1,
+          ]
+
+          assert inherited_kernel["active_neutral_state"] == 0
+
+          assert (
+              inherited_kernel["tick_separated_neutral_routing"]
+              is True
+          )
+
+          assert inherited_kernel["scheduler_modes"] == [
+              "free",
+              "7/1",
+              "1/7",
+          ]
+
+          assert inherited_kernel["gamma_nominal_relation"] == "0.30 pi"
+          assert inherited_kernel["stability_relation"] == "C(t) > P(t)"
+
+          assert (
+              inherited_kernel["pressure_relation"]
+              == "P(t) = heat + switch_load"
+          )
+
+          assert topology["cells"] == 16
+          assert topology["hierarchy_depth"] == 4
+          assert topology["exact_dyadic_topology"] is True
+
+          assert topology["distance_relation"] == "bit_length(i XOR j)"
+          assert topology["shell_population_relation"] == "2^(d - 1)"
+
+          topology_metrics = topology["topology_metrics"]
+
+          assert topology_metrics["row_sum_match"] is True
+          assert topology_metrics["symmetry_match"] is True
+          assert topology_metrics["diagonal_zero"] is True
+          assert topology_metrics["shell_influence_monotonic"] is True
+
+          assert topology_metrics["row_sum_error_max"] <= 1e-12
+          assert topology_metrics["symmetry_error_max"] <= 1e-12
+          assert topology_metrics["diagonal_error_max"] <= 1e-15
+
+          shell_profile = topology_metrics["shell_influence_profile"]
+
+          assert [row["distance"] for row in shell_profile] == [
+              1,
+              2,
+              3,
+              4,
+          ]
+
+          assert [row["shell_population"] for row in shell_profile] == [
+              1,
+              2,
+              4,
+              8,
+          ]
+
+          shell_influences = [
+              row["aggregate_shell_influence"]
+              for row in shell_profile
+          ]
+
+          assert all(
+              shell_influences[index]
+              > shell_influences[index + 1]
+
+              for index in range(
+                  len(shell_influences) - 1
+              )
+          )
+
+          assert coupling["fractal_alpha"] == 0.7
+
+          assert (
+              coupling["relation"]
+              == "W_raw(i,j) = 1 / (2^(d - 1) * d^alpha)"
+          )
+
+          assert len(coupling["rows"]) == 16 * 16
+
+          coupling_metrics = coupling["topology_metrics"]
+
+          assert coupling_metrics["row_sum_match"] is True
+          assert coupling_metrics["symmetry_match"] is True
+          assert coupling_metrics["diagonal_zero"] is True
+          assert coupling_metrics["shell_influence_monotonic"] is True
+
+          diagonal_rows = [
+              row
+              for row in coupling["rows"]
+              if row["i"] == row["j"]
+          ]
+
+          assert len(diagonal_rows) == 16
+
+          for row in diagonal_rows:
+              assert row["hierarchical_distance"] == 0
+              assert row["shell_population"] == 0
+              assert row["raw_pair_weight"] == 0.0
+              assert row["normalized_pair_weight"] == 0.0
+
+          assert len(multiscale["levels"]) == 4
+
+          assert [
+              level["group_size"]
+              for level in multiscale["levels"]
+          ] == [
+              2,
+              4,
+              8,
+              16,
+          ]
+
+          assert [
+              level["group_count"]
+              for level in multiscale["levels"]
+          ] == [
+              8,
+              4,
+              2,
+              1,
+          ]
+
+          for level in multiscale["levels"]:
+              assert (
+                  len(level["group_phase_coherence"])
+                  == level["group_count"]
+              )
+
+              assert 0 <= level["level_min_phase_coherence"] <= 1
+              assert 0 <= level["level_mean_phase_coherence"] <= 1
+              assert 0 <= level["level_max_phase_coherence"] <= 1
+
+          assert thermal["thermal_beta"] == 1.2
+
+          assert len(thermal["final_heat_cells"]) == 16
+          assert len(thermal["local_heat_peaks"]) == 16
+          assert len(thermal["final_cluster_metrics"]) == 4
+
+          thermal_metrics = thermal["thermal_topology_metrics"]
+
+          assert thermal_metrics["row_sum_match"] is True
+          assert thermal_metrics["symmetry_match"] is True
+          assert thermal_metrics["diagonal_zero"] is True
+          assert thermal_metrics["shell_influence_monotonic"] is True
+
+          assert hotspot["status"] == "PASS"
+
+          for check_name, check_value in hotspot["checks"].items():
+              assert check_value is True, (
+                  f"Hotspot check failed: {check_name}"
+              )
+
+          hotspot_summary = hotspot["summary"]
+
+          assert hotspot_summary["balanced_ternary_state_domain"] is True
+          assert hotspot_summary["actual_direct_events"] == 0
+
+          assert hotspot_summary["requested_direct_events"] >= 1
+
+          assert (
+              hotspot_summary["prevented_direct_events"]
+              >= hotspot_summary["requested_direct_events"]
+          )
+
+          assert (
+              hotspot_summary["neutral_routed_events"]
+              >= hotspot_summary["prevented_direct_events"]
+          )
+
+          assert hotspot_summary["C_minus_P_min"] > 0
+
+          assert (
+              hotspot_summary["switch_load_peak"]
+              <= hotspot_summary["transition_fraction"]
+          )
+
+          containment = hotspot["containment_markers"]
+
+          assert (
+              containment["active_cluster_heat_peak"]
+              > containment["inactive_cluster_heat_mean_peak"]
+          )
+
+          assert (
+              containment["remote_cluster_heat_peak"]
+              < containment["active_cluster_heat_peak"]
+          )
+
+          assert (
+              containment["cross_cluster_thermal_propagation_bounded"]
+              is True
+          )
+
+          assert (
+              containment["cross_cluster_thermal_propagation_ratio"]
+              < 0.75
+          )
+
+          assert (
+              containment["remote_thermal_propagation_ratio"]
+              < 0.70
+          )
+
+          assert containment["localized_hotspot_containment_pass"] is True
+
+          assert hotspot["recovery_markers"]["recovery_completed"] is True
+
+          assert (
+              hotspot["recovery_markers"]["recovery_completion_tick"]
+              is not None
+          )
+
+          assert propagation["status"] == "PASS"
+
+          assert (
+              propagation["thermal_propagation_markers"]
+              == hotspot["containment_markers"]
+          )
+
+          assert equivalence["status"] == "PASS"
+
+          for check_name, check_value in equivalence["checks"].items():
+              assert check_value is True, (
+                  f"Equivalence check failed: {check_name}"
+              )
+
+          equivalence_markers = equivalence["equivalence_markers"]
+
+          assert equivalence_markers["topology_match"] == 1.0
+
+          tolerance = equivalence_markers["equivalence_tolerance"]
+
+          assert (
+              equivalence_markers["max_coupling_error"]
+              <= tolerance
+          )
+
+          assert (
+              equivalence_markers["max_phase_velocity_error"]
+              <= tolerance
+          )
+
+          assert (
+              equivalence_markers["max_phase_error"]
+              <= tolerance
+          )
+
+          assert (
+              len(equivalence["dense_coupling_field"])
+              == 16
+          )
+
+          assert (
+              len(equivalence["hierarchical_coupling_field"])
+              == 16
+          )
+
+          assert (
+              len(equivalence["dense_phase_velocity"])
+              == 16
+          )
+
+          assert (
+              len(equivalence["hierarchical_phase_velocity"])
+              == 16
+          )
+
+          for mode in [
+              "default",
+              "7/1",
+              "1/7",
+          ]:
+              markers = self_test[
+                  "dense_hierarchical_equivalence"
+              ][mode]
+
+              assert markers["topology_match"] == 1.0
+
+              assert (
+                  markers["max_coupling_error"]
+                  <= markers["equivalence_tolerance"]
+              )
+
+              assert (
+                  markers["max_phase_velocity_error"]
+                  <= markers["equivalence_tolerance"]
+              )
+
+              assert (
+                  markers["max_phase_error"]
+                  <= markers["equivalence_tolerance"]
+              )
+
+          assert physical["status"] == "PASS"
+
+          assert (
+              physical["dense_hierarchical_equivalence_status"]
+              == "PASS"
+          )
+
+          assert (
+              physical["localized_hotspot_containment_status"]
+              == "PASS"
+          )
+
+          assert len(physical["rows"]) == 6
+
+          for row in physical["rows"]:
+              assert (
+                  row["production_qualification_status"]
+                  == "PASS"
+              )
+
+          assert len(physical["qualification_domains"]) == 19
+
+          assert len(benchmark["rows"]) == 5
+          assert len(exported_benchmark["rows"]) == 5
+
+          architecture_names = {
+              row["architecture"]
+              for row in benchmark["rows"]
+          }
+
+          assert architecture_names == {
+              "all_to_all_uniform_reference",
+              "frp_v1_5_0_thermal_delay_stabilization",
+              "frp_v1_6_0_dense_hierarchical_reference",
+              "frp_v1_6_0_hierarchical_accelerated_path",
+              "frp_v1_6_0_localized_hotspot_containment",
+          }
+
+          print(
+              "FRP v1.6.0 M14 kernel, topology, thermal field, "
+              "multiscale coherence, hotspot containment, "
+              "dense-hierarchical equivalence, and physical-domain "
+              "qualification validation PASS"
+          )
+          PY
+
+      - name: Validate 8 16 and 32 cell dyadic scaling
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("m14_artifacts")
+
+          expected_depths = {
+              8: 3,
+              16: 4,
+              32: 5,
+          }
+
+          for cells, depth in expected_depths.items():
+              topology = json.loads(
+                  (
+                      root
+                      / f"topology_{cells}_cells.json"
+                  ).read_text()
+              )
+
+              equivalence = json.loads(
+                  (
+                      root
+                      / f"equivalence_{cells}_cells.json"
+                  ).read_text()
+              )
+
+              assert topology["cells"] == cells
+              assert topology["hierarchy_depth"] == depth
+              assert topology["exact_dyadic_topology"] is True
+
+              metrics = topology["topology_metrics"]
+
+              assert metrics["row_sum_match"] is True
+              assert metrics["symmetry_match"] is True
+              assert metrics["diagonal_zero"] is True
+              assert metrics["shell_influence_monotonic"] is True
+
+              assert [
+                  row["shell_population"]
+                  for row in metrics["shell_influence_profile"]
+              ] == [
+                  2 ** (distance - 1)
+                  for distance in range(
+                      1,
+                      depth + 1,
+                  )
+              ]
+
+              assert equivalence["status"] == "PASS"
+
+              markers = equivalence["equivalence_markers"]
+
+              assert markers["topology_match"] == 1.0
+
+              assert (
+                  markers["max_coupling_error"]
+                  <= markers["equivalence_tolerance"]
+              )
+
+              assert (
+                  markers["max_phase_velocity_error"]
+                  <= markers["equivalence_tolerance"]
+              )
+
+              assert (
+                  markers["max_phase_error"]
+                  <= markers["equivalence_tolerance"]
+              )
+
+              assert (
+                  equivalence["summary"]["actual_direct_events"]
+                  == 0
+              )
+
+              assert (
+                  equivalence["summary"]["balanced_ternary_state_domain"]
+                  is True
+              )
+
+          print(
+              "FRP v1.6.0 M14 8-cell, 16-cell, and 32-cell "
+              "dyadic scaling qualification PASS"
+          )
+          PY
+
+      - name: Validate M14 architecture document markers
+        run: |
+          test -f docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "FRP v1.6.0" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "M14 Physical Implementation Correlation and Production Qualification Package" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "frp_prototype_v1_6_0.py" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "Balanced ternary states remain:" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "\`-1 → 0 → 1\`" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "\`1 → 0 → -1\`" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "\`free\`" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "\`7/1\`" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "\`1/7\`" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "W_raw(i,j) = 1 / (2^(d - 1) × d^alpha)" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "\`W_ij\`" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "\`T_ij\`" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "\`O(N^2)\`" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "\`O(N log N)\`" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "frp.m14.hierarchical_ultrametric_topology_model.v1.6.0" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "frp.m14.fractal_coupling_weight_map.v1.6.0" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "frp.m14.multiscale_phase_coherence_map.v1.6.0" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "frp.m14.cluster_local_thermal_field.v1.6.0" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "frp.m14.cross_cluster_propagation_map.v1.6.0" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "frp.m14.localized_hotspot_containment_harness.v1.6.0" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "frp.m14.dense_hierarchical_equivalence_map.v1.6.0" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "frp.m14.physical_domain_correlation_package.v1.6.0" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+          grep -Fq \
+            "M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package" \
+            docs/m14_physical_implementation_correlation_production_qualification.md
+
+      - name: Upload M14 validation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-v1.6.0-m14-validation-artifacts
+          path: m14_artifacts/
