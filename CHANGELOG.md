@@ -2,6 +2,1326 @@
 
 All notable changes to the Fractal Resonance Processor (FRP) project are documented in this file.
 
+## [v1.6.0] — M14 Physical Implementation Correlation and Production Qualification Package
+
+### Added
+
+- FRP v1.6.0 M14 Physical Implementation Correlation and Production Qualification Package layer;
+
+- main executable reference file `frp_prototype_v1_6_0.py`;
+
+- M14 architecture document `docs/m14_physical_implementation_correlation_production_qualification.md`;
+
+- M14 GitHub Actions workflow `.github/workflows/frp-m14-physical-implementation-qualification.yml`;
+
+- dyadic hierarchical ultrametric topology;
+
+- Cantor-space-inspired hierarchical coupling topology;
+
+- XOR bit-length hierarchical distance;
+
+- shell population model;
+
+- shell-normalized fractal coupling;
+
+- explicit local phase-coherence domains;
+
+- multiscale phase-coherence telemetry;
+
+- cluster-local thermal fields;
+
+- per-cell heat states;
+
+- local dynamic power generation;
+
+- hierarchical thermal diffusion;
+
+- independent phase-coupling and thermal-diffusion topologies;
+
+- local thermal overload tracking;
+
+- local correlated Sakaguchi gamma drift;
+
+- factorized thermal coupling degradation;
+
+- cross-cluster propagation map;
+
+- localized hotspot-containment harness;
+
+- distributed recovery validation;
+
+- dense `O(N^2)` reference interaction path;
+
+- hierarchical `O(N log N)` accelerated interaction path;
+
+- dense-to-hierarchical equivalence validation;
+
+- 8-cell dyadic scaling qualification;
+
+- 16-cell dyadic scaling qualification;
+
+- 32-cell dyadic scaling qualification;
+
+- physical-domain correlation package;
+
+- production qualification domains;
+
+- deterministic seeded execution;
+
+- M14 benchmark matrix extension;
+
+- M14 test report;
+
+- M14 release notes;
+
+- M14 validation index.
+
+### Preserved FRP Kernel
+
+FRP v1.6.0 preserves the validated balanced ternary computational kernel.
+
+Balanced ternary states:
+
+`-1`
+
+`0`
+
+`1`
+
+The neutral state remains:
+
+`0`
+
+The neutral state remains an active balancing, damping, transition, and stabilization state.
+
+Validated polarity-transition routes:
+
+`-1 → 0 → 1`
+
+`1 → 0 → -1`
+
+Direct opposite-polarity requests remain intercepted.
+
+Target polarity remains retained through the pending neutral transition queue.
+
+Target polarity remains applied on a subsequent processor tick.
+
+Validated kernel invariant:
+
+`actual_direct_events = 0`
+
+Validation result:
+
+`PASS`
+
+### Preserved Scheduler Layer
+
+FRP v1.6.0 preserves:
+
+`free`
+
+`7/1`
+
+`1/7`
+
+The hierarchical topology changes interaction structure while preserving the inherited scheduler layer.
+
+Validated default scheduler:
+
+`7/1`
+
+Validated default 64-tick scheduler count:
+
+`balance = 56`
+
+`commit = 8`
+
+Validated 16-tick free scheduler count:
+
+`free = 16`
+
+Validated 16-tick 7/1 scheduler count:
+
+`balance = 14`
+
+`commit = 2`
+
+Validated 16-tick 1/7 scheduler count:
+
+`excite = 2`
+
+`neutralize = 14`
+
+Validated scheduler relation:
+
+`sum(scheduler_counts) = ticks_recorded`
+
+Validation result:
+
+`PASS`
+
+### Inherited Validation Boundary
+
+FRP v1.6.0 inherits the validated boundary:
+
+`FRP v1.5.0 — M13 Production Scaling and Implementation Stabilization Package`
+
+Inherited reference files:
+
+- `frp_prototype_v1_5_0.py`;
+
+- `FRP_VALIDATION_INDEX_v1_5_0.md`;
+
+- `RELEASE_NOTES_v1_5_0.md`;
+
+- `TEST_REPORT_v1_5_0.md`.
+
+Inherited M13 artifact layers:
+
+- `thermal_saturation_model`;
+
+- `delay_dynamics_model`;
+
+- `nonlinear_coherence_compression_model`;
+
+- `thermal_gamma_drift_model`;
+
+- `coupled_thermal_delay_stress_harness`;
+
+- `thermal_stability_boundary_sweep`;
+
+- `recovery_dynamics_map`;
+
+- `production_scaling_stability_envelope`.
+
+Inherited M13 stabilization markers:
+
+`heat_peak`
+
+`frequency_lag_peak`
+
+`gamma_drift_peak`
+
+`coherence_compression_min`
+
+`boundary_detected`
+
+`recovery_completed`
+
+### M14 Artifact Layers
+
+FRP v1.6.0 defines eight M14 artifact layers:
+
+- `hierarchical_ultrametric_topology_model`;
+
+- `fractal_coupling_weight_map`;
+
+- `multiscale_phase_coherence_map`;
+
+- `cluster_local_thermal_field`;
+
+- `cross_cluster_propagation_map`;
+
+- `localized_hotspot_containment_harness`;
+
+- `dense_hierarchical_equivalence_map`;
+
+- `physical_domain_correlation_package`.
+
+### M14 Export Commands
+
+- `python frp_prototype_v1_6_0.py --export-hierarchical-ultrametric-topology-model`;
+
+- `python frp_prototype_v1_6_0.py --export-fractal-coupling-weight-map`;
+
+- `python frp_prototype_v1_6_0.py --export-multiscale-phase-coherence-map`;
+
+- `python frp_prototype_v1_6_0.py --export-cluster-local-thermal-field`;
+
+- `python frp_prototype_v1_6_0.py --export-cross-cluster-propagation-map`;
+
+- `python frp_prototype_v1_6_0.py --export-localized-hotspot-containment-harness`;
+
+- `python frp_prototype_v1_6_0.py --export-dense-hierarchical-equivalence-map`;
+
+- `python frp_prototype_v1_6_0.py --export-physical-domain-correlation-package`;
+
+- `python frp_prototype_v1_6_0.py --export-benchmark-matrix`.
+
+### Stable v1.6.0 Schemas
+
+- `frp.structured_output.v1.6.0`;
+
+- `frp.m3.benchmark_matrix.v1.6.0`;
+
+- `frp.m14.hierarchical_ultrametric_topology_model.v1.6.0`;
+
+- `frp.m14.fractal_coupling_weight_map.v1.6.0`;
+
+- `frp.m14.multiscale_phase_coherence_map.v1.6.0`;
+
+- `frp.m14.cluster_local_thermal_field.v1.6.0`;
+
+- `frp.m14.cross_cluster_propagation_map.v1.6.0`;
+
+- `frp.m14.localized_hotspot_containment_harness.v1.6.0`;
+
+- `frp.m14.dense_hierarchical_equivalence_map.v1.6.0`;
+
+- `frp.m14.physical_domain_correlation_package.v1.6.0`.
+
+### Deterministic Seeded Execution
+
+FRP v1.6.0 validates deterministic seeded execution.
+
+Validated seed:
+
+`76`
+
+The M14 workflow executes the reference configuration twice and compares the generated structured outputs directly.
+
+Validated deterministic execution domains:
+
+- balanced ternary initial states;
+
+- initial phase states;
+
+- local correlated gamma drift;
+
+- hierarchical topology;
+
+- structured output;
+
+- candidate invariant telemetry.
+
+Validation result:
+
+`PASS`
+
+### Exact Dyadic Topology
+
+M14 requires:
+
+`num_cells = 2^L`
+
+where:
+
+`L = hierarchy depth`
+
+Validated scaling configurations:
+
+`8 cells → hierarchy depth 3`
+
+`16 cells → hierarchy depth 4`
+
+`32 cells → hierarchy depth 5`
+
+Validation result:
+
+`PASS`
+
+### Hierarchical Ultrametric Distance
+
+For distinct cells i and j:
+
+`hierarchical_distance(i,j) = bit_length(i XOR j)`
+
+For the same cell:
+
+`hierarchical_distance(i,i) = 0`
+
+For the sixteen-cell reference domain:
+
+`distance(0,1) = 1`
+
+`distance(0,2) = 2`
+
+`distance(0,3) = 2`
+
+`distance(0,4) = 3`
+
+`distance(0,7) = 3`
+
+`distance(0,8) = 4`
+
+`distance(0,15) = 4`
+
+Validation result:
+
+`PASS`
+
+### Shell Population
+
+For hierarchy distance d:
+
+`shell_population(d) = 2^(d - 1)`
+
+Validated eight-cell shell population set:
+
+`1`
+
+`2`
+
+`4`
+
+Validated sixteen-cell shell population set:
+
+`1`
+
+`2`
+
+`4`
+
+`8`
+
+Validated thirty-two-cell shell population set:
+
+`1`
+
+`2`
+
+`4`
+
+`8`
+
+`16`
+
+Validation result:
+
+`PASS`
+
+### Shell-Normalized Fractal Coupling
+
+Validated raw pair-weight relation:
+
+`W_raw(i,j) = 1 / (2^(d - 1) × d^alpha)`
+
+where:
+
+`d = hierarchical_distance(i,j)`
+
+and:
+
+`i != j`
+
+Validated diagonal relation:
+
+`W_raw(i,i) = 0`
+
+Validated row normalization:
+
+`W_ij = W_raw(i,j) / sum_j(W_raw(i,j))`
+
+Validated coupling-topology relations:
+
+`sum_j(W_ij) = 1`
+
+`W_ij = W_ji`
+
+`W_ii = 0`
+
+Validated hierarchical scaling exponent:
+
+`fractal_alpha = 0.70`
+
+Validation result:
+
+`PASS`
+
+### Aggregate Shell Influence
+
+Each hierarchical shell contains:
+
+`2^(d - 1)`
+
+cells.
+
+Shell normalization produces aggregate shell influence proportional to:
+
+`1 / d^alpha`
+
+Validated aggregate influence order:
+
+`nearest shell`
+
+↓
+
+`second shell`
+
+↓
+
+`third shell`
+
+↓
+
+`highest shell`
+
+Validated marker:
+
+`shell_influence_monotonic = True`
+
+Validation result:
+
+`PASS`
+
+### Phase-Coupling and Thermal-Diffusion Topology Separation
+
+FRP v1.6.0 separates phase coupling from thermal diffusion.
+
+Phase-coupling topology:
+
+`W_ij`
+
+Thermal-diffusion topology:
+
+`T_ij`
+
+The phase-coupling topology controls:
+
+- phase interaction;
+
+- hierarchical phase-coherence propagation;
+
+- local coupling dominance;
+
+- cross-cluster phase influence.
+
+The thermal-diffusion topology controls:
+
+- local heat propagation;
+
+- inter-cell thermal diffusion;
+
+- cross-cluster thermal leakage;
+
+- hotspot containment.
+
+The architecture does not require:
+
+`W_ij = T_ij`
+
+Validation result:
+
+`PASS`
+
+### Thermal-Diffusion Topology
+
+Validated thermal hierarchical scaling exponent:
+
+`thermal_beta = 1.20`
+
+Validated raw thermal pair relation:
+
+`T_raw(i,j) = 1 / (2^(d - 1) × d^beta)`
+
+Validated thermal row normalization:
+
+`T_ij = T_raw(i,j) / sum_j(T_raw(i,j))`
+
+Validated thermal-topology markers:
+
+`row_sum_match = True`
+
+`symmetry_match = True`
+
+`diagonal_zero = True`
+
+`shell_influence_monotonic = True`
+
+Validation result:
+
+`PASS`
+
+### Cluster-Local Thermal Field
+
+FRP v1.6.0 extends the inherited M13 thermal layer into distributed per-cell thermal states.
+
+Each cell maintains:
+
+`heat_i`
+
+`generated_power_i`
+
+`thermal_dissipation_i`
+
+`thermal_diffusion_i`
+
+`thermal_overload_i`
+
+`heat_peak_i`
+
+The inherited global heat telemetry remains:
+
+`heat = mean_i(heat_i)`
+
+The global heat peak remains:
+
+`heat_peak = max_t(heat)`
+
+The local heat peak is:
+
+`local_heat_peak = max_i,t(heat_i)`
+
+Validation result:
+
+`PASS`
+
+### Local Dynamic Power Generation
+
+For each cell i:
+
+`generated_power_i = base_power_cell + switch_power_gain × switch_activity_i + lag_power_gain × frequency_lag_i`
+
+Validated local path:
+
+`local state transition`
+
+↓
+
+`local switching activity`
+
+↓
+
+`local frequency target displacement`
+
+↓
+
+`local frequency lag`
+
+↓
+
+`local dynamic power generation`
+
+Validation result:
+
+`PASS`
+
+### Hierarchical Thermal Diffusion
+
+For each cell i:
+
+`thermal_diffusion_i = thermal_diffusion_gain × sum_j(T_ij × (heat_j - heat_i))`
+
+Validated local heat update:
+
+`heat_i_next = max(ambient_heat, heat_i + generated_power_i - thermal_dissipation_i + thermal_diffusion_i)`
+
+Validated thermal path:
+
+`local generated power`
+
+↓
+
+`local heat accumulation`
+
+↓
+
+`local thermal dissipation`
+
+↓
+
+`hierarchical thermal diffusion`
+
+↓
+
+`neighbor-domain heating`
+
+↓
+
+`cross-cluster thermal propagation`
+
+↓
+
+`global thermal aggregate`
+
+Validation result:
+
+`PASS`
+
+### Local Thermal Overload
+
+For each cell i:
+
+`thermal_overload_i = max(0, heat_i - thermal_soft_limit)`
+
+Validated local thermal telemetry includes:
+
+- per-cell heat;
+
+- per-cell thermal overload;
+
+- per-cluster mean heat;
+
+- per-cluster peak heat;
+
+- active-cluster heat peak;
+
+- inactive-cluster heat mean;
+
+- remote-cluster heat peak;
+
+- cross-cluster thermal propagation ratio.
+
+Validation result:
+
+`PASS`
+
+### Factorized Thermal Coupling Degradation
+
+For each cell i:
+
+`thermal_node_factor_i = exp(-0.5 × thermal_coupling_gain × thermal_overload_i)`
+
+For cells i and j:
+
+`thermal_pair_factor(i,j) = thermal_node_factor_i × thermal_node_factor_j`
+
+Validated effective pair coupling:
+
+`K_eff(i,j) = coupling_nominal × W_ij × thermal_pair_factor(i,j)`
+
+Equivalent relation:
+
+`K_eff(i,j) = coupling_nominal × W_ij × exp(-thermal_coupling_gain × (thermal_overload_i + thermal_overload_j) / 2)`
+
+Validation result:
+
+`PASS`
+
+### Local Correlated Gamma Drift
+
+Each cell maintains:
+
+`gamma_noise_state_i`
+
+`gamma_noise_target_i`
+
+`gamma_effective_i`
+
+`gamma_drift_i`
+
+Validated correlated drift relation:
+
+`gamma_noise_next_i = gamma_noise_state_i + gamma_correlation_alpha × (gamma_noise_target_i - gamma_noise_state_i)`
+
+Validated effective phase-shift relation:
+
+`gamma_effective_i = gamma_nominal + gamma_thermal_gain × thermal_overload_i × gamma_noise_state_i`
+
+Validated local drift:
+
+`gamma_drift_i = gamma_effective_i - gamma_nominal`
+
+Nominal Sakaguchi phase shift remains:
+
+`gamma = 0.30 pi`
+
+Validation result:
+
+`PASS`
+
+### Dense Reference Interaction Path
+
+The dense reference path evaluates every pair of distinct cells.
+
+For each cell i:
+
+`coupling_dense_i = sum_j(K_eff(i,j) × sin(phase_j - phase_i - gamma_effective_i))`
+
+where:
+
+`j != i`
+
+Validated computational scaling:
+
+`O(N^2)`
+
+Validated path marker:
+
+`dense_path_present = True`
+
+Validation result:
+
+`PASS`
+
+### Hierarchical Accelerated Interaction Path
+
+The hierarchical accelerated path uses exact dyadic shell aggregation.
+
+Validated interaction chain:
+
+`leaf phase states`
+
+↓
+
+`pair-domain reduction`
+
+↓
+
+`cluster reduction`
+
+↓
+
+`supercluster reduction`
+
+↓
+
+`global-domain reduction`
+
+↓
+
+`per-cell shell lookup`
+
+↓
+
+`hierarchical coupling accumulation`
+
+Validated computational scaling target:
+
+`O(N log N)`
+
+Validated path marker:
+
+`hierarchical_path_present = True`
+
+Validation result:
+
+`PASS`
+
+### Dense-Hierarchical Equivalence
+
+FRP v1.6.0 validates the dense reference interaction path against the hierarchical accelerated interaction path.
+
+Validated target:
+
+`topology_match = 1.000`
+
+Validated conditions:
+
+`max_coupling_error <= equivalence_tolerance`
+
+`max_phase_velocity_error <= equivalence_tolerance`
+
+`max_phase_error <= equivalence_tolerance`
+
+Validated scheduler configurations:
+
+`default configuration`
+
+`7/1`
+
+`1/7`
+
+Validation result:
+
+`PASS`
+
+### Multiscale Phase-Coherence Map
+
+For a dyadic group G:
+
+`R_G = magnitude(mean_i(exp(i × phase_i)))`
+
+For the sixteen-cell reference configuration:
+
+`group size 2 → group count 8`
+
+`group size 4 → group count 4`
+
+`group size 8 → group count 2`
+
+`group size 16 → group count 1`
+
+Validated telemetry:
+
+`pair_domain_coherence_mean`
+
+`pair_domain_coherence_min`
+
+`cluster_coherence_mean`
+
+`cluster_coherence_min`
+
+`supercluster_coherence_mean`
+
+`supercluster_coherence_min`
+
+`global_phase_coherence`
+
+`coherence_dispersion_across_clusters`
+
+Validation result:
+
+`PASS`
+
+### Local Phase-Coherence Domains
+
+Validated topology:
+
+`locally coherent`
+
+↓
+
+`hierarchically coupled`
+
+↓
+
+`globally adaptive`
+
+Validated domain chain:
+
+`cell`
+
+↓
+
+`pair-domain phase coherence`
+
+↓
+
+`cluster phase coherence`
+
+↓
+
+`supercluster phase coherence`
+
+↓
+
+`global phase coherence`
+
+Validation result:
+
+`PASS`
+
+### C(t) and P(t) Preservation
+
+FRP v1.6.0 preserves:
+
+`C(t) > P(t)`
+
+The inherited pressure relation remains:
+
+`P(t) = heat + switch_load`
+
+The inherited stability margin remains:
+
+`C_minus_P = C(t) - P(t)`
+
+The hierarchical topology does not replace the inherited global candidate stability relation.
+
+Validation result:
+
+`PASS`
+
+### Tick-Separated Neutral Routing Validation
+
+Validated explicit opposite-polarity request:
+
+`-1 → 1`
+
+Tick 0 result:
+
+`-1 → 0`
+
+Pending neutral route count:
+
+`1`
+
+Tick 1 result:
+
+`0 → 1`
+
+Validated counters:
+
+`requested_direct_events = 1`
+
+`prevented_direct_events = 1`
+
+`neutral_routed_events = 1`
+
+`actual_direct_events = 0`
+
+Validation result:
+
+`PASS`
+
+### Localized Hotspot-Containment Harness
+
+Reference active-cluster size:
+
+`4 cells`
+
+Reference active cluster:
+
+`cells 0 to 3`
+
+Validated stress chain:
+
+`localized hostile transition pressure`
+
+↓
+
+`tick-separated neutral routing`
+
+↓
+
+`active-cluster switching activity`
+
+↓
+
+`active-cluster frequency lag`
+
+↓
+
+`active-cluster dynamic power generation`
+
+↓
+
+`active-cluster heat accumulation`
+
+↓
+
+`hierarchical thermal diffusion`
+
+↓
+
+`cross-cluster thermal propagation`
+
+↓
+
+`local phase-coherence response`
+
+↓
+
+`multiscale phase-coherence response`
+
+↓
+
+`global C(t) - P(t) response`
+
+↓
+
+`load release`
+
+↓
+
+`distributed recovery`
+
+Validation result:
+
+`PASS`
+
+### Hotspot-Containment Markers
+
+Validated:
+
+`actual_direct_events = 0`
+
+`requested_direct_events >= 1`
+
+`prevented_direct_events >= requested_direct_events`
+
+`neutral_routed_events >= prevented_direct_events`
+
+`active_cluster_heat_peak > inactive_cluster_heat_mean_peak`
+
+`remote_cluster_heat_peak < active_cluster_heat_peak`
+
+`cross_cluster_thermal_propagation_bounded = True`
+
+`global_C_minus_P_min > 0`
+
+`switch_load_peak <= transition_fraction`
+
+`ticks_recorded = steps`
+
+`scheduler counts match selected cycle mode`
+
+`localized_hotspot_containment_pass = True`
+
+Validated limits:
+
+`cross_cluster_thermal_propagation_ratio < 0.75`
+
+`remote_thermal_propagation_ratio < 0.70`
+
+Validation result:
+
+`PASS`
+
+### Distributed Recovery
+
+Validated recovery markers:
+
+`recovery_start_tick`
+
+`recovery_completion_tick`
+
+`recovery_duration`
+
+`recovery_completed`
+
+Validated recovery result:
+
+`recovery_completed = True`
+
+Validation result:
+
+`PASS`
+
+### Physical-Domain Correlation Package
+
+Validated source domains:
+
+- `cell_state`;
+
+- `W_ij`;
+
+- `T_ij`;
+
+- `heat_i`;
+
+- `R_G`;
+
+- `C_minus_P`.
+
+Validated physical-domain correlation row count:
+
+`6`
+
+Every production qualification row completed with:
+
+`PASS`
+
+Physical-domain correlation package status:
+
+`PASS`
+
+### Production Qualification Domains
+
+FRP v1.6.0 validates:
+
+1. topology generation qualification;
+
+2. topology normalization qualification;
+
+3. topology symmetry qualification;
+
+4. dyadic shell-population qualification;
+
+5. shell-influence monotonicity qualification;
+
+6. balanced ternary state qualification;
+
+7. neutral-routing qualification;
+
+8. 7/1 scheduler qualification;
+
+9. 1/7 scheduler qualification;
+
+10. dense reference coupling qualification;
+
+11. hierarchical coupling qualification;
+
+12. dense-hierarchical equivalence qualification;
+
+13. local thermal-field qualification;
+
+14. thermal-diffusion qualification;
+
+15. multiscale phase-coherence qualification;
+
+16. hotspot-containment qualification;
+
+17. cross-cluster propagation qualification;
+
+18. deterministic seeded execution qualification;
+
+19. structured artifact qualification.
+
+Validated qualification domain count:
+
+`19`
+
+Validation result:
+
+`PASS`
+
+### M14 Self-Test Validation
+
+Validated self-test status:
+
+`PASS`
+
+Validated internal M14 self-test check count:
+
+`33`
+
+All internal self-test checks completed with:
+
+`True`
+
+Validation result:
+
+`PASS`
+
+### Preserved Candidate Invariants
+
+FRP v1.6.0 preserves:
+
+`match = 1.000`
+
+`actual_direct_events = 0`
+
+`C_minus_P_min > 0`
+
+`switch_load_peak <= transition_fraction`
+
+`ticks_recorded = steps`
+
+`scheduler counts match selected cycle mode`
+
+`neutral-routed transition path is preserved`
+
+`neutralized_conflicts tracked`
+
+M14 additionally validates:
+
+`balanced_ternary_state_domain`
+
+`local_heat_peak`
+
+`topology_row_sum_match`
+
+`topology_symmetry_match`
+
+`topology_diagonal_zero`
+
+`shell_influence_monotonic`
+
+`topology_match`
+
+`max_coupling_error`
+
+`max_phase_velocity_error`
+
+`localized_hotspot_containment_pass`
+
+### Benchmark Matrix Extension
+
+Validated benchmark schema:
+
+`frp.m3.benchmark_matrix.v1.6.0`
+
+Validated architecture rows:
+
+1. `all_to_all_uniform_reference`;
+
+2. `frp_v1_5_0_thermal_delay_stabilization`;
+
+3. `frp_v1_6_0_dense_hierarchical_reference`;
+
+4. `frp_v1_6_0_hierarchical_accelerated_path`;
+
+5. `frp_v1_6_0_localized_hotspot_containment`.
+
+Validated architecture row count:
+
+`5`
+
+Validation result:
+
+`PASS`
+
+### Validation
+
+Validation status:
+
+`PASS`
+
+Validation environment:
+
+`GitHub Actions hardware-backed CI execution`
+
+Validated commit:
+
+`09141fc`
+
+Validated workflow stack:
+
+- `FRP Structured Output #104`;
+
+- `FRP M14 Physical Implementation Correlation and Production Qualification #1`;
+
+- `FRP Benchmark Smoke Test #143`;
+
+- `FRP Self Test #145`.
+
+### Release Files
+
+- `frp_prototype_v1_6_0.py`;
+
+- `docs/m14_physical_implementation_correlation_production_qualification.md`;
+
+- `.github/workflows/frp-m14-physical-implementation-qualification.yml`;
+
+- `FRP_VALIDATION_INDEX_v1_6_0.md`;
+
+- `RELEASE_NOTES_v1_6_0.md`;
+
+- `TEST_REPORT_v1_6_0.md`;
+
+- `CHANGELOG.md`;
+
+- `README.md`.
+
+### M14 Technical Chain
+
+`M13 thermal-delay stabilization`
+
+↓
+
+`dyadic hierarchical topology`
+
+↓
+
+`shell-normalized fractal coupling`
+
+↓
+
+`local phase-coherence domains`
+
+↓
+
+`cluster-local thermal fields`
+
+↓
+
+`cross-cluster propagation`
+
+↓
+
+`localized hotspot containment`
+
+↓
+
+`multiscale stability response`
+
+↓
+
+`dense-to-hierarchical equivalence`
+
+↓
+
+`physical implementation correlation`
+
+↓
+
+`production qualification`
+
+### Next Architecture Layer
+
+`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+
 ## [v1.5.0] — M13 Production Scaling and Implementation Stabilization Package
 
 ### Added
