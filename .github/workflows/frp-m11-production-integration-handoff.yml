@@ -1,0 +1,296 @@
+name: FRP M11 Production Integration and External Handoff
+
+on:
+  push:
+    paths:
+      - "frp_prototype_v1_3_0.py"
+      - "docs/m11_production_integration_external_handoff.md"
+      - ".github/workflows/frp-m11-production-integration-handoff.yml"
+  pull_request:
+    paths:
+      - "frp_prototype_v1_3_0.py"
+      - "docs/m11_production_integration_external_handoff.md"
+      - ".github/workflows/frp-m11-production-integration-handoff.yml"
+  workflow_dispatch:
+
+jobs:
+  m11-production-integration-handoff-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Compile FRP v1.3.0 handoff reference file
+        run: |
+          python -m py_compile frp_prototype_v1_3_0.py
+
+      - name: Generate M11 JSON artifacts
+        run: |
+          mkdir -p m11_artifacts
+
+          python frp_prototype_v1_3_0.py --mode demo --output json > m11_artifacts/structured_output.json
+          python frp_prototype_v1_3_0.py --mode self-test --output json > m11_artifacts/self_test.json
+          python frp_prototype_v1_3_0.py --mode benchmark > m11_artifacts/benchmark_matrix.json
+
+          python frp_prototype_v1_3_0.py --export-benchmark-matrix > m11_artifacts/export_benchmark_matrix.json
+          python frp_prototype_v1_3_0.py --export-production-integration-manifest > m11_artifacts/production_integration_manifest.json
+          python frp_prototype_v1_3_0.py --export-external-implementation-handoff-package > m11_artifacts/external_implementation_handoff_package.json
+          python frp_prototype_v1_3_0.py --export-partner-interface-control-map > m11_artifacts/partner_interface_control_map.json
+          python frp_prototype_v1_3_0.py --export-implementation-responsibility-matrix > m11_artifacts/implementation_responsibility_matrix.json
+          python frp_prototype_v1_3_0.py --export-validation-continuity-plan > m11_artifacts/validation_continuity_plan.json
+          python frp_prototype_v1_3_0.py --export-production-documentation-alignment-map > m11_artifacts/production_documentation_alignment_map.json
+          python frp_prototype_v1_3_0.py --export-integration-milestone-checklist > m11_artifacts/integration_milestone_checklist.json
+          python frp_prototype_v1_3_0.py --export-external-package-index > m11_artifacts/external_package_index.json
+          python frp_prototype_v1_3_0.py --export-execution-handoff-manifest > m11_artifacts/execution_handoff_manifest.json
+
+      - name: Validate M11 schemas, handoff artifacts, and invariants
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("m11_artifacts")
+
+          structured = json.loads((root / "structured_output.json").read_text())
+          self_test = json.loads((root / "self_test.json").read_text())
+          benchmark = json.loads((root / "benchmark_matrix.json").read_text())
+          exported_benchmark = json.loads((root / "export_benchmark_matrix.json").read_text())
+
+          integration = json.loads((root / "production_integration_manifest.json").read_text())
+          external_handoff = json.loads((root / "external_implementation_handoff_package.json").read_text())
+          partner = json.loads((root / "partner_interface_control_map.json").read_text())
+          responsibility = json.loads((root / "implementation_responsibility_matrix.json").read_text())
+          continuity = json.loads((root / "validation_continuity_plan.json").read_text())
+          documentation = json.loads((root / "production_documentation_alignment_map.json").read_text())
+          checklist = json.loads((root / "integration_milestone_checklist.json").read_text())
+          external_index = json.loads((root / "external_package_index.json").read_text())
+          execution = json.loads((root / "execution_handoff_manifest.json").read_text())
+
+          assert structured["schema"] == "frp.structured_output.v1.3.0"
+          assert self_test["schema"] == "frp.structured_output.v1.3.0"
+          assert self_test["status"] == "PASS"
+
+          summary = self_test["summary"]
+
+          assert summary["version"] == "1.3.0"
+          assert summary["actual_direct_events"] == 0
+          assert summary["match"] == 1.0
+          assert summary["C_minus_P_min"] > 0
+          assert summary["switch_load_peak"] <= summary["transition_fraction"]
+          assert summary["ticks_recorded"] == summary["steps"]
+          assert sum(summary["scheduler_counts"].values()) == summary["steps"]
+
+          assert benchmark["schema"] == "frp.m3.benchmark_matrix.v1.3.0"
+          assert exported_benchmark["schema"] == "frp.m3.benchmark_matrix.v1.3.0"
+
+          assert integration["schema"] == "frp.m11.production_integration_manifest.v1.3.0"
+          assert external_handoff["schema"] == "frp.m11.external_implementation_handoff_package.v1.3.0"
+          assert partner["schema"] == "frp.m11.partner_interface_control_map.v1.3.0"
+          assert responsibility["schema"] == "frp.m11.implementation_responsibility_matrix.v1.3.0"
+          assert continuity["schema"] == "frp.m11.validation_continuity_plan.v1.3.0"
+          assert documentation["schema"] == "frp.m11.production_documentation_alignment_map.v1.3.0"
+          assert checklist["schema"] == "frp.m11.integration_milestone_checklist.v1.3.0"
+          assert external_index["schema"] == "frp.m11.external_package_index.v1.3.0"
+          assert execution["schema"] == "frp.m11.execution_handoff_manifest.v1.3.0"
+
+          for artifact in [
+              integration,
+              external_handoff,
+              partner,
+              responsibility,
+              continuity,
+              documentation,
+              checklist,
+              external_index,
+              execution,
+          ]:
+              assert artifact["version"] == "1.3.0"
+
+          inherited = integration["inherited_boundary"]
+          assert inherited["release"] == "FRP v1.2.0"
+          assert inherited["validation_index"] == "FRP_VALIDATION_INDEX_v1_2_0.md"
+          assert inherited["release_notes"] == "RELEASE_NOTES_v1_2_0.md"
+          assert inherited["test_report"] == "TEST_REPORT_v1_2_0.md"
+
+          required_integration_groups = {
+              "inherited_readiness_boundary",
+              "production_integration_boundary",
+              "external_interface_boundary",
+              "implementation_package_boundary",
+              "validation_continuity_boundary",
+              "documentation_alignment_boundary",
+              "partner_coordination_boundary",
+              "execution_handoff_boundary",
+              "next_stage_production_boundary",
+          }
+          assert required_integration_groups.issubset(set(integration["integration_groups"]))
+
+          required_handoff_package_groups = {
+              "executable_reference_file",
+              "architecture_documentation_set",
+              "validation_index_chain",
+              "release_notes_chain",
+              "test_report_chain",
+              "schema_package",
+              "export_command_package",
+              "artifact_layer_package",
+              "implementation_readiness_package",
+              "production_handoff_package",
+          }
+          assert required_handoff_package_groups.issubset(set(external_handoff["handoff_package_groups"]))
+
+          required_interface_control_groups = {
+              "CLI_interface_control",
+              "schema_interface_control",
+              "register_interface_control",
+              "clock_reset_interface_control",
+              "signal_pipeline_interface_control",
+              "validation_status_interface_control",
+              "artifact_export_interface_control",
+              "production_handoff_interface_control",
+              "external_reporting_interface_control",
+          }
+          assert required_interface_control_groups.issubset(set(partner["interface_control_groups"]))
+
+          required_responsibility_groups = {
+              "FRP_reference_architecture_ownership",
+              "executable_reference_file_ownership",
+              "schema_package_ownership",
+              "validation_workflow_ownership",
+              "register_interface_implementation",
+              "timing_and_constraint_implementation",
+              "test_and_observability_implementation",
+              "production_integration_coordination",
+              "external_implementation_execution",
+              "production_handoff_coordination",
+          }
+          assert required_responsibility_groups.issubset(set(responsibility["responsibility_groups"]))
+
+          required_validation_continuity_groups = {
+              "GitHub_Actions_validation_continuity",
+              "structured_output_validation_continuity",
+              "benchmark_matrix_validation_continuity",
+              "schema_validation_continuity",
+              "candidate_invariant_continuity",
+              "documentation_marker_continuity",
+              "production_readiness_continuity",
+              "external_implementation_validation_continuity",
+              "execution_handoff_validation_continuity",
+          }
+          assert required_validation_continuity_groups.issubset(set(continuity["validation_continuity_groups"]))
+
+          required_documentation_groups = {
+              "README_alignment",
+              "CHANGELOG_alignment",
+              "release_notes_alignment",
+              "test_report_alignment",
+              "validation_index_alignment",
+              "milestone_documentation_alignment",
+              "workflow_documentation_alignment",
+              "implementation_handoff_documentation_alignment",
+              "production_integration_documentation_alignment",
+          }
+          assert required_documentation_groups.issubset(set(documentation["documentation_groups"]))
+
+          required_checklist_items = {
+              "release_boundary_confirmed",
+              "executable_reference_file_confirmed",
+              "schema_package_confirmed",
+              "export_command_package_confirmed",
+              "validation_workflow_stack_confirmed",
+              "candidate_invariants_confirmed",
+              "documentation_chain_confirmed",
+              "external_package_index_confirmed",
+              "execution_handoff_manifest_confirmed",
+          }
+          assert required_checklist_items.issubset({item["item"] for item in checklist["checklist"]})
+          assert all(item["status"] == "PASS" for item in checklist["checklist"])
+
+          required_package_groups = {
+              "executable_reference_package",
+              "documentation_package",
+              "validation_package",
+              "release_package",
+              "workflow_package",
+              "schema_package",
+              "command_package",
+              "artifact_package",
+              "production_handoff_package",
+          }
+          assert required_package_groups.issubset(set(external_index["package_groups"]))
+
+          required_execution_handoff_groups = {
+              "inherited_v1_2_0_readiness_boundary",
+              "M11_production_integration_artifact_set",
+              "external_implementation_handoff_package",
+              "partner_interface_control_map",
+              "implementation_responsibility_matrix",
+              "validation_continuity_plan",
+              "production_documentation_alignment_map",
+              "integration_milestone_checklist",
+              "external_package_index",
+              "next_stage_execution_package",
+          }
+          assert required_execution_handoff_groups.issubset(set(execution["execution_handoff_groups"]))
+
+          assert execution["inherited_boundary"]["release"] == "FRP v1.2.0"
+          assert execution["next_architecture_layer"] == "M12 — External Implementation Feedback and Production Iteration Loop"
+
+          required_candidate_markers = {
+              "match",
+              "actual_direct_events",
+              "C_minus_P_min",
+              "switch_load_peak",
+              "transition_fraction",
+              "ticks_recorded",
+              "steps",
+              "scheduler_counts",
+              "neutralized_conflicts",
+          }
+
+          for artifact in [
+              integration,
+              external_handoff,
+              partner,
+              responsibility,
+              continuity,
+              documentation,
+              checklist,
+              external_index,
+              execution,
+          ]:
+              markers = artifact["candidate_invariant_markers"]
+              assert required_candidate_markers.issubset(set(markers))
+              assert markers["match"] == 1.0
+              assert markers["actual_direct_events"] == 0
+              assert markers["C_minus_P_min"] > 0
+              assert markers["switch_load_peak"] <= markers["transition_fraction"]
+              assert markers["ticks_recorded"] == markers["steps"]
+              assert sum(markers["scheduler_counts"].values()) == markers["steps"]
+              assert markers["neutralized_conflicts"] >= 0
+
+          print("FRP v1.3.0 M11 production integration and external implementation handoff validation PASS")
+          PY
+
+      - name: Validate M11 documentation markers
+        run: |
+          test -f docs/m11_production_integration_external_handoff.md
+
+          grep -q "FRP v1.3.0" docs/m11_production_integration_external_handoff.md
+          grep -q "M11 Production Integration and External Implementation Handoff" docs/m11_production_integration_external_handoff.md
+
+          grep -q "frp.m11.production_integration_manifest.v1.3.0" docs/m11_production_integration_external_handoff.md
+          grep -q "frp.m11.external_implementation_handoff_package.v1.3.0" docs/m11_production_integration_external_handoff.md
+          grep -q "frp.m11.partner_interface_control_map.v1.3.0" docs/m11_production_integration_external_handoff.md
+          grep -q "frp.m11.implementation_responsibility_matrix.v1.3.0" docs/m11_production_integration_external_handoff.md
+          grep -q "frp.m11.validation_continuity_plan.v1.3.0" docs/m11_production_integration_external_handoff.md
+          grep -q "frp.m11.production_documentation_alignment_map.v1.3.0" docs/m11_production_integration_external_handoff.md
+          grep -q "frp.m11.integration_milestone_checklist.v1.3.0" docs/m11_production_integration_external_handoff.md
+          grep -q "frp.m11.external_package_index.v1.3.0" docs/m11_production_integration_external_handoff.md
+          grep -q "frp.m11.execution_handoff_manifest.v1.3.0" docs/m11_production_integration_external_handoff.md
