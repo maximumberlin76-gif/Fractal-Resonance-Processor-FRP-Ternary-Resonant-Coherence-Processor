@@ -2,6 +2,224 @@
 
 All notable changes to the Fractal Resonance Processor (FRP) project are documented in this file.
 
+## v1.2.0 — M10 Silicon Production and Tapeout Readiness Package
+
+FRP v1.2.0 establishes the M10 Silicon Production and Tapeout Readiness Package layer.
+
+This release extends the validated FRP v1.1.0 Silicon and Heterogeneous Implementation Architecture layer into a production-readiness and tapeout-readiness architecture package.
+
+The M10 layer defines the structured readiness bridge from silicon-facing architecture mapping toward production planning, tapeout package organization, implementation freeze control, verification closure mapping, constraint readiness, timing readiness, register interface readiness, test readiness, and release handoff structure.
+
+### Added
+
+- Added `frp_prototype_v1_2_0.py`.
+
+- Added M10 milestone documentation:
+
+  `docs/m10_silicon_production_tapeout_readiness.md`
+
+- Added M10 GitHub Actions workflow:
+
+  `.github/workflows/frp-m10-silicon-production-tapeout.yml`
+
+- Added M10 test report:
+
+  `TEST_REPORT_v1_2_0.md`
+
+- Added M10 release notes:
+
+  `RELEASE_NOTES_v1_2_0.md`
+
+- Added M10 validation index:
+
+  `FRP_VALIDATION_INDEX_v1_2_0.md`
+
+### Inherited Architecture Boundary
+
+FRP v1.2.0 inherits the validated v1.1.0 architecture boundary:
+
+`FRP v1.1.0 — M9 Silicon and Heterogeneous Implementation Architecture`
+
+Inherited executable reference file:
+
+`frp_prototype_v1_1_0.py`
+
+Inherited validation index:
+
+`FRP_VALIDATION_INDEX_v1_1_0.md`
+
+Inherited release notes:
+
+`RELEASE_NOTES_v1_1_0.md`
+
+Inherited test report:
+
+`TEST_REPORT_v1_1_0.md`
+
+### M10 Export Layers
+
+FRP v1.2.0 defines the following M10 export layers:
+
+- `silicon_production_readiness_manifest`;
+
+- `tapeout_readiness_checklist`;
+
+- `rtl_freeze_map`;
+
+- `verification_closure_matrix`;
+
+- `timing_constraint_readiness_map`;
+
+- `memory_register_production_map`;
+
+- `test_observability_readiness_plan`;
+
+- `implementation_signoff_package_index`;
+
+- `production_handoff_manifest`.
+
+### M10 Export Commands
+
+Silicon production readiness manifest export:
+
+`python frp_prototype_v1_2_0.py --export-silicon-production-readiness-manifest`
+
+Tapeout readiness checklist export:
+
+`python frp_prototype_v1_2_0.py --export-tapeout-readiness-checklist`
+
+RTL freeze map export:
+
+`python frp_prototype_v1_2_0.py --export-rtl-freeze-map`
+
+Verification closure matrix export:
+
+`python frp_prototype_v1_2_0.py --export-verification-closure-matrix`
+
+Timing and constraint readiness map export:
+
+`python frp_prototype_v1_2_0.py --export-timing-constraint-readiness-map`
+
+Memory/register production map export:
+
+`python frp_prototype_v1_2_0.py --export-memory-register-production-map`
+
+Test and observability readiness plan export:
+
+`python frp_prototype_v1_2_0.py --export-test-observability-readiness-plan`
+
+Implementation signoff package index export:
+
+`python frp_prototype_v1_2_0.py --export-implementation-signoff-package-index`
+
+Production handoff manifest export:
+
+`python frp_prototype_v1_2_0.py --export-production-handoff-manifest`
+
+Benchmark matrix export:
+
+`python frp_prototype_v1_2_0.py --export-benchmark-matrix`
+
+### Stable v1.2.0 Schemas
+
+`frp.structured_output.v1.2.0`
+
+`frp.m3.benchmark_matrix.v1.2.0`
+
+`frp.m10.silicon_production_readiness_manifest.v1.2.0`
+
+`frp.m10.tapeout_readiness_checklist.v1.2.0`
+
+`frp.m10.rtl_freeze_map.v1.2.0`
+
+`frp.m10.verification_closure_matrix.v1.2.0`
+
+`frp.m10.timing_constraint_readiness_map.v1.2.0`
+
+`frp.m10.memory_register_production_map.v1.2.0`
+
+`frp.m10.test_observability_readiness_plan.v1.2.0`
+
+`frp.m10.implementation_signoff_package_index.v1.2.0`
+
+`frp.m10.production_handoff_manifest.v1.2.0`
+
+### GitHub Actions Validation
+
+Validation status:
+
+`PASS`
+
+Validation environment:
+
+`GitHub Actions hardware-backed CI execution`
+
+Validated commit:
+
+`ae161cc`
+
+Validated workflows:
+
+- FRP Self Test;
+
+- FRP Benchmark Smoke Test;
+
+- FRP Structured Output;
+
+- FRP M10 Silicon Production and Tapeout Readiness.
+
+### M10 Readiness Domains
+
+Validated readiness domains:
+
+- silicon production readiness manifest;
+
+- tapeout readiness checklist;
+
+- RTL freeze map;
+
+- verification closure matrix;
+
+- timing and constraint readiness map;
+
+- memory/register production map;
+
+- test and observability readiness plan;
+
+- implementation signoff package index;
+
+- production handoff manifest.
+
+### Preserved Candidate Invariants
+
+FRP v1.2.0 preserves the validated candidate invariant markers:
+
+`match = 1.000`
+
+`actual_direct_events = 0`
+
+`C_minus_P_min > 0`
+
+`switch_load_peak <= transition_fraction`
+
+`ticks_recorded = steps`
+
+`scheduler counts match selected cycle mode`
+
+`neutral-routed transition path is preserved`
+
+`neutralized_conflicts tracked`
+
+### Technical Position
+
+FRP v1.2.0 completes the M10 Silicon Production and Tapeout Readiness Package layer of the Fractal Resonance Processor reference architecture.
+
+The release establishes the structured readiness package for silicon production planning, tapeout preparation, implementation freeze control, verification closure mapping, timing readiness, register production mapping, test observability, signoff packaging, and production handoff.
+
+### Next Architecture Layer
+
+`FRP v1.3.0 — M11 Production Integration and External Implementation Handoff`
+
 ## v1.1.0 — M9 Silicon and Heterogeneous Implementation Architecture
 
 FRP v1.1.0 establishes the M9 Silicon and Heterogeneous Implementation Architecture layer.
