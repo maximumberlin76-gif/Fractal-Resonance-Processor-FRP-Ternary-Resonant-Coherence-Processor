@@ -1,0 +1,431 @@
+name: FRP M13 Production Scaling and Implementation Stabilization
+
+on:
+  push:
+    paths:
+      - "frp_prototype_v1_5_0.py"
+      - "docs/m13_production_scaling_implementation_stabilization.md"
+      - ".github/workflows/frp-m13-production-scaling-stabilization.yml"
+  pull_request:
+    paths:
+      - "frp_prototype_v1_5_0.py"
+      - "docs/m13_production_scaling_implementation_stabilization.md"
+      - ".github/workflows/frp-m13-production-scaling-stabilization.yml"
+  workflow_dispatch:
+
+jobs:
+  m13-production-scaling-stabilization-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Compile FRP v1.5.0 stabilization reference file
+        run: |
+          python -m py_compile frp_prototype_v1_5_0.py
+
+      - name: Generate M13 JSON artifacts
+        run: |
+          mkdir -p m13_artifacts
+
+          python frp_prototype_v1_5_0.py --mode demo --output json > m13_artifacts/structured_output.json
+          python frp_prototype_v1_5_0.py --mode self-test --output json > m13_artifacts/self_test.json
+          python frp_prototype_v1_5_0.py --mode benchmark > m13_artifacts/benchmark_matrix.json
+
+          python frp_prototype_v1_5_0.py --export-benchmark-matrix > m13_artifacts/export_benchmark_matrix.json
+          python frp_prototype_v1_5_0.py --export-thermal-saturation-model > m13_artifacts/thermal_saturation_model.json
+          python frp_prototype_v1_5_0.py --export-delay-dynamics-model > m13_artifacts/delay_dynamics_model.json
+          python frp_prototype_v1_5_0.py --export-nonlinear-coherence-compression-model > m13_artifacts/nonlinear_coherence_compression_model.json
+          python frp_prototype_v1_5_0.py --export-thermal-gamma-drift-model > m13_artifacts/thermal_gamma_drift_model.json
+          python frp_prototype_v1_5_0.py --export-coupled-thermal-delay-stress-harness > m13_artifacts/coupled_thermal_delay_stress_harness.json
+          python frp_prototype_v1_5_0.py --export-thermal-stability-boundary-sweep > m13_artifacts/thermal_stability_boundary_sweep.json
+          python frp_prototype_v1_5_0.py --export-recovery-dynamics-map > m13_artifacts/recovery_dynamics_map.json
+          python frp_prototype_v1_5_0.py --export-production-scaling-stability-envelope > m13_artifacts/production_scaling_stability_envelope.json
+
+      - name: Validate deterministic seeded execution
+        run: |
+          python frp_prototype_v1_5_0.py --mode demo --output json > m13_artifacts/deterministic_run_a.json
+          python frp_prototype_v1_5_0.py --mode demo --output json > m13_artifacts/deterministic_run_b.json
+
+          cmp m13_artifacts/deterministic_run_a.json m13_artifacts/deterministic_run_b.json
+
+      - name: Validate M13 schemas, coupled dynamics, boundary detection, recovery, and invariants
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("m13_artifacts")
+
+          structured = json.loads(
+              (root / "structured_output.json").read_text()
+          )
+
+          self_test = json.loads(
+              (root / "self_test.json").read_text()
+          )
+
+          benchmark = json.loads(
+              (root / "benchmark_matrix.json").read_text()
+          )
+
+          exported_benchmark = json.loads(
+              (root / "export_benchmark_matrix.json").read_text()
+          )
+
+          thermal = json.loads(
+              (root / "thermal_saturation_model.json").read_text()
+          )
+
+          delay = json.loads(
+              (root / "delay_dynamics_model.json").read_text()
+          )
+
+          compression = json.loads(
+              (root / "nonlinear_coherence_compression_model.json").read_text()
+          )
+
+          gamma = json.loads(
+              (root / "thermal_gamma_drift_model.json").read_text()
+          )
+
+          coupled = json.loads(
+              (root / "coupled_thermal_delay_stress_harness.json").read_text()
+          )
+
+          boundary = json.loads(
+              (root / "thermal_stability_boundary_sweep.json").read_text()
+          )
+
+          recovery = json.loads(
+              (root / "recovery_dynamics_map.json").read_text()
+          )
+
+          envelope = json.loads(
+              (root / "production_scaling_stability_envelope.json").read_text()
+          )
+
+          assert structured["schema"] == "frp.structured_output.v1.5.0"
+          assert self_test["schema"] == "frp.structured_output.v1.5.0"
+
+          assert benchmark["schema"] == "frp.m3.benchmark_matrix.v1.5.0"
+          assert exported_benchmark["schema"] == "frp.m3.benchmark_matrix.v1.5.0"
+
+          assert thermal["schema"] == "frp.m13.thermal_saturation_model.v1.5.0"
+          assert delay["schema"] == "frp.m13.delay_dynamics_model.v1.5.0"
+          assert compression["schema"] == "frp.m13.nonlinear_coherence_compression_model.v1.5.0"
+          assert gamma["schema"] == "frp.m13.thermal_gamma_drift_model.v1.5.0"
+          assert coupled["schema"] == "frp.m13.coupled_thermal_delay_stress_harness.v1.5.0"
+          assert boundary["schema"] == "frp.m13.thermal_stability_boundary_sweep.v1.5.0"
+          assert recovery["schema"] == "frp.m13.recovery_dynamics_map.v1.5.0"
+          assert envelope["schema"] == "frp.m13.production_scaling_stability_envelope.v1.5.0"
+
+          for artifact in [
+              structured,
+              self_test,
+              benchmark,
+              exported_benchmark,
+              thermal,
+              delay,
+              compression,
+              gamma,
+              coupled,
+              boundary,
+              recovery,
+              envelope,
+          ]:
+              assert artifact["version"] == "1.5.0"
+
+          assert self_test["status"] == "PASS"
+
+          for check_name, check_value in self_test["checks"].items():
+              assert check_value is True, (
+                  f"Self-test check failed: {check_name}"
+              )
+
+          reference = self_test["summary"]
+
+          assert reference["actual_direct_events"] == 0
+          assert reference["match"] == 1.0
+          assert reference["C_minus_P_min"] > 0
+          assert reference["switch_load_peak"] <= reference["transition_fraction"]
+          assert reference["ticks_recorded"] == reference["steps"]
+          assert sum(reference["scheduler_counts"].values()) == reference["steps"]
+
+          assert reference["heat_peak"] >= 0
+          assert reference["frequency_lag_peak"] >= 0
+          assert reference["gamma_drift_peak"] >= 0
+          assert 0 < reference["coherence_compression_min"] <= 1.0
+
+          assert self_test["checks"]["stable_cli_commands_present"] is True
+          assert self_test["checks"]["stable_schema_set_present"] is True
+          assert self_test["checks"]["m13_artifact_layers_present"] is True
+          assert self_test["checks"]["candidate_invariant_names_present"] is True
+
+          inherited = thermal["inherited_boundary"]
+
+          assert inherited["release"] == "FRP v1.4.0"
+          assert inherited["main_executable_reference_file"] == "frp_prototype_v1_4_0.py"
+          assert inherited["validation_index"] == "FRP_VALIDATION_INDEX_v1_4_0.md"
+          assert inherited["release_notes"] == "RELEASE_NOTES_v1_4_0.md"
+          assert inherited["test_report"] == "TEST_REPORT_v1_4_0.md"
+
+          required_transition_pressure_markers = {
+              "requested_direct_events",
+              "prevented_direct_events",
+              "actual_direct_events",
+              "neutral_routed_events",
+              "neutralized_conflicts",
+              "stress_harness_pass",
+          }
+
+          assert required_transition_pressure_markers.issubset(
+              set(inherited["transition_pressure_markers"])
+          )
+
+          required_thermal_variables = {
+              "ambient_heat",
+              "heat",
+              "generated_power",
+              "thermal_dissipation",
+              "thermal_time_constant",
+              "thermal_soft_limit",
+              "thermal_hard_limit",
+              "thermal_overload",
+              "heat_peak",
+          }
+
+          assert required_thermal_variables.issubset(
+              set(thermal["thermal_variables"])
+          )
+
+          required_delay_variables = {
+              "base_frequency",
+              "frequency_target",
+              "frequency_current",
+              "frequency_lag",
+              "frequency_lag_peak",
+              "delay_alpha",
+          }
+
+          assert required_delay_variables.issubset(
+              set(delay["delay_variables"])
+          )
+
+          required_compression_variables = {
+              "raw_phase_coherence",
+              "thermal_overload",
+              "previous_C_minus_P",
+              "stability_soft_margin",
+              "margin_pressure",
+              "thermal_compression_gain",
+              "margin_compression_gain",
+              "coherence_compression",
+              "effective_coherence",
+          }
+
+          assert required_compression_variables.issubset(
+              set(compression["compression_variables"])
+          )
+
+          required_gamma_variables = {
+              "gamma_nominal",
+              "gamma_noise_state",
+              "gamma_noise_target",
+              "gamma_correlation_alpha",
+              "gamma_thermal_gain",
+              "gamma_effective",
+              "gamma_drift",
+              "gamma_drift_peak",
+          }
+
+          assert required_gamma_variables.issubset(
+              set(gamma["gamma_variables"])
+          )
+
+          assert gamma["deterministic_seed"] == 76
+
+          for artifact in [
+              thermal,
+              delay,
+              compression,
+              gamma,
+          ]:
+              markers = artifact["candidate_invariant_markers"]
+
+              assert markers["match"] == 1.0
+              assert markers["actual_direct_events"] == 0
+              assert markers["C_minus_P_min"] > 0
+              assert markers["switch_load_peak"] <= markers["transition_fraction"]
+              assert markers["ticks_recorded"] == markers["steps"]
+              assert sum(markers["scheduler_counts"].values()) == markers["steps"]
+
+              assert markers["heat_peak"] >= 0
+              assert markers["frequency_lag_peak"] >= 0
+              assert markers["gamma_drift_peak"] >= 0
+              assert 0 < markers["coherence_compression_min"] <= 1.0
+
+          assert coupled["status"] == "PASS"
+
+          for check_name, check_value in coupled["checks"].items():
+              assert check_value is True, (
+                  f"Coupled stress check failed: {check_name}"
+              )
+
+          coupled_summary = coupled["summary"]
+
+          assert coupled_summary["requested_direct_events"] >= 1
+          assert coupled_summary["prevented_direct_events"] >= coupled_summary["requested_direct_events"]
+          assert coupled_summary["actual_direct_events"] == 0
+          assert coupled_summary["neutral_routed_events"] >= coupled_summary["prevented_direct_events"]
+
+          assert coupled_summary["C_minus_P_min"] > 0
+          assert coupled_summary["switch_load_peak"] <= coupled_summary["transition_fraction"]
+          assert coupled_summary["heat_peak"] <= 0.85
+          assert coupled_summary["frequency_lag_peak"] <= 0.20
+          assert coupled_summary["gamma_drift_peak"] <= 0.08
+
+          assert coupled_summary["ticks_recorded"] == coupled_summary["steps"]
+          assert sum(coupled_summary["scheduler_counts"].values()) == coupled_summary["steps"]
+
+          assert coupled["recovery"]["recovery_completed"] is True
+          assert coupled["recovery"]["recovery_completion_tick"] is not None
+          assert coupled["recovery"]["recovery_duration"] is not None
+          assert coupled["recovery"]["recovery_duration"] >= 0
+
+          assert boundary["status"] == "PASS"
+
+          for check_name, check_value in boundary["checks"].items():
+              assert check_value is True, (
+                  f"Boundary sweep check failed: {check_name}"
+              )
+
+          assert boundary["pressure_levels"] == [
+              0.10,
+              0.25,
+              0.50,
+              0.75,
+              1.00,
+          ]
+
+          assert len(boundary["stage_summaries"]) == 5
+
+          boundary_summary = boundary["summary"]
+
+          assert boundary_summary["actual_direct_events"] == 0
+          assert boundary_summary["boundary_detected"] is True
+          assert boundary_summary["first_C_minus_P_crossing"] is not None
+
+          crossing = boundary_summary["first_C_minus_P_crossing"]
+
+          assert crossing["boundary_tick"] >= 0
+          assert crossing["boundary_pressure_level"] in boundary["pressure_levels"]
+          assert crossing["C_minus_P_at_boundary"] <= 0
+
+          assert boundary["boundary_markers"]["boundary_detected"] is True
+          assert boundary["boundary_markers"]["first_C_minus_P_crossing"] is not None
+
+          assert recovery["status"] == "PASS"
+
+          for check_name, check_value in recovery["checks"].items():
+              assert check_value is True, (
+                  f"Recovery check failed: {check_name}"
+              )
+
+          assert recovery["recovery_markers"]["recovery_start_tick"] == 48
+          assert recovery["recovery_markers"]["recovery_completion_tick"] is not None
+          assert recovery["recovery_markers"]["recovery_duration"] is not None
+          assert recovery["recovery_markers"]["recovery_duration"] >= 0
+          assert recovery["recovery_markers"]["recovery_completed"] is True
+
+          required_scaling_dimensions = {
+              "cell_count",
+              "transition_fraction",
+              "scheduler_mode",
+              "switching_pressure_level",
+              "thermal_time_constant",
+              "delay_response_coefficient",
+              "coupling_strength",
+              "thermal_coupling_gain",
+              "coherence_compression_gain",
+          }
+
+          assert required_scaling_dimensions.issubset(
+              set(envelope["scaling_dimensions"])
+          )
+
+          assert len(envelope["rows"]) == 4
+
+          allowed_classifications = {
+              "stable operational domain",
+              "bounded survival domain",
+              "near-boundary domain",
+              "boundary-detected domain",
+              "recovered domain",
+          }
+
+          for row in envelope["rows"]:
+              assert row["classification"] in allowed_classifications
+              assert row["cells"] in {8, 16, 32}
+              assert row["scheduler"] in {"free", "7/1", "1/7"}
+              assert row["transition_fraction"] in {0.125, 0.25, 0.50, 0.75}
+              assert row["heat_peak"] >= 0
+              assert row["frequency_lag_peak"] >= 0
+              assert row["gamma_drift_peak"] >= 0
+              assert 0 < row["coherence_compression_min"] <= 1.0
+
+          assert len(benchmark["rows"]) == 4
+          assert len(exported_benchmark["rows"]) == 4
+
+          architecture_names = {
+              row["architecture"]
+              for row in benchmark["rows"]
+          }
+
+          assert {
+              "binary_style_forced_switch",
+              "frp_v1_4_0_transition_pressure_layer",
+              "frp_v1_5_0_bounded_thermal_survival",
+              "frp_v1_5_0_thermal_stability_boundary_sweep",
+          }.issubset(architecture_names)
+
+          print(
+              "FRP v1.5.0 M13 production scaling and implementation stabilization validation PASS"
+          )
+          PY
+
+      - name: Validate M13 documentation markers
+        run: |
+          test -f docs/m13_production_scaling_implementation_stabilization.md
+
+          grep -q "FRP v1.5.0" docs/m13_production_scaling_implementation_stabilization.md
+          grep -q "M13 Production Scaling and Implementation Stabilization Package" docs/m13_production_scaling_implementation_stabilization.md
+
+          grep -q "frp.m13.thermal_saturation_model.v1.5.0" docs/m13_production_scaling_implementation_stabilization.md
+          grep -q "frp.m13.delay_dynamics_model.v1.5.0" docs/m13_production_scaling_implementation_stabilization.md
+          grep -q "frp.m13.nonlinear_coherence_compression_model.v1.5.0" docs/m13_production_scaling_implementation_stabilization.md
+          grep -q "frp.m13.thermal_gamma_drift_model.v1.5.0" docs/m13_production_scaling_implementation_stabilization.md
+          grep -q "frp.m13.coupled_thermal_delay_stress_harness.v1.5.0" docs/m13_production_scaling_implementation_stabilization.md
+          grep -q "frp.m13.thermal_stability_boundary_sweep.v1.5.0" docs/m13_production_scaling_implementation_stabilization.md
+          grep -q "frp.m13.recovery_dynamics_map.v1.5.0" docs/m13_production_scaling_implementation_stabilization.md
+          grep -q "frp.m13.production_scaling_stability_envelope.v1.5.0" docs/m13_production_scaling_implementation_stabilization.md
+
+          grep -q "thermal saturation model" docs/m13_production_scaling_implementation_stabilization.md
+          grep -q "delay dynamics model" docs/m13_production_scaling_implementation_stabilization.md
+          grep -q "nonlinear coherence compression model" docs/m13_production_scaling_implementation_stabilization.md
+          grep -q "thermal gamma drift model" docs/m13_production_scaling_implementation_stabilization.md
+          grep -q "thermal stability boundary sweep" docs/m13_production_scaling_implementation_stabilization.md
+          grep -q "recovery dynamics map" docs/m13_production_scaling_implementation_stabilization.md
+          grep -q "production scaling stability envelope" docs/m13_production_scaling_implementation_stabilization.md
+
+      - name: Upload M13 validation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-v1.5.0-m13-validation-artifacts
+          path: m13_artifacts/
