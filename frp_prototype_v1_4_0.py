@@ -3,7 +3,7 @@ import argparse
 import json
 import math
 import random
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 VERSION = "1.4.0"
 MILESTONE = "M12 — External Implementation Feedback and Production Iteration Loop"
@@ -101,6 +101,7 @@ class FractalResonanceProcessor:
 
         for i, p in enumerate(self.phases):
             coupling = 0.0
+
             for j, q in enumerate(self.phases):
                 if i != j:
                     coupling += math.sin(q - p - self.gamma)
@@ -135,22 +136,23 @@ class FractalResonanceProcessor:
 
     def process_transition_requests(self, max_changes: int) -> int:
         changes = 0
+        still_pending: List[Tuple[int, int]] = []
 
-        remaining_pending: List[Tuple[int, int]] = []
         for cell_idx, target in self.pending_neutral_routes:
             if changes >= max_changes:
-                remaining_pending.append((cell_idx, target))
+                still_pending.append((cell_idx, target))
                 continue
 
             if self.states[cell_idx] == 0:
                 if self._apply_state(cell_idx, target):
                     changes += 1
             else:
-                remaining_pending.append((cell_idx, target))
+                still_pending.append((cell_idx, target))
 
-        self.pending_neutral_routes = remaining_pending
+        self.pending_neutral_routes = still_pending
 
         remaining_requests: List[Tuple[int, int]] = []
+
         for cell_idx, target in self.transition_requests:
             if changes >= max_changes:
                 remaining_requests.append((cell_idx, target))
@@ -170,6 +172,7 @@ class FractalResonanceProcessor:
                     changes += 1
                     self.neutral_routed_events += 1
                     self.pending_neutral_routes.append((cell_idx, target))
+
                 continue
 
             if self._apply_state(cell_idx, target):
@@ -200,6 +203,7 @@ class FractalResonanceProcessor:
                     changes += 1
                     self.neutral_routed_events += 1
                     self.pending_neutral_routes.append((i, desired))
+
                 continue
 
             if self._apply_state(i, desired):
@@ -210,7 +214,6 @@ class FractalResonanceProcessor:
     def tick(self, tick_index: int, auto_targets: bool = True) -> None:
         sched = scheduler_state(self.scheduler, tick_index)
         self.scheduler_counts[sched] = self.scheduler_counts.get(sched, 0) + 1
-
         self.current_switch_changes = 0
 
         self.update_phases(sched)
@@ -256,15 +259,46 @@ class FractalResonanceProcessor:
             "pending_neutral_routes": len(self.pending_neutral_routes),
         })
 
-    def run(self, steps: int, auto_targets: bool = True) -> Dict[str, Any]:
-        for tick_index in range(steps):
-            self.tick(tick_index, auto_targets=auto_targets)
+    def summarize(self, steps: int) -> Dict[str, Any]:
+        if not self.telemetry:
+            match = 1.0 if self.actual_direct_events == 0 else 0.0
+
+            return {
+                "version": VERSION,
+                "milestone": MILESTONE,
+                "cells": self.cells,
+                "steps": steps,
+                "scheduler": self.scheduler,
+                "transition_fraction": self.transition_fraction,
+                "gamma": self.gamma,
+                "transition_fraction_q16": q16(self.transition_fraction),
+                "gamma_q16": q16(self.gamma),
+                "actual_direct_events": self.actual_direct_events,
+                "requested_direct_events": self.requested_direct_events,
+                "prevented_direct_events": self.prevented_direct_events,
+                "neutral_routed_events": self.neutral_routed_events,
+                "neutralized_conflicts": self.neutralized_conflicts,
+                "ticks_recorded": 0,
+                "scheduler_counts": dict(self.scheduler_counts),
+                "C_minus_P_min": 0.0,
+                "C_minus_P_min_q16": q16(0.0),
+                "C_minus_P_final": 0.0,
+                "switch_load_peak": 0.0,
+                "switch_load_peak_q16": q16(0.0),
+                "phase_order_R_final": 0.0,
+                "phase_order_R_final_q16": q16(0.0),
+                "match": match,
+                "match_q16": q16(match),
+                "pending_neutral_routes_final": len(self.pending_neutral_routes),
+            }
 
         c_minus_p_values = [x["C_minus_P"] for x in self.telemetry]
         switch_values = [x["switch_load"] for x in self.telemetry]
         r_values = [x["phase_order_R"] for x in self.telemetry]
 
-        summary = {
+        match = 1.0 if self.actual_direct_events == 0 else 0.0
+
+        return {
             "version": VERSION,
             "milestone": MILESTONE,
             "cells": self.cells,
@@ -288,42 +322,43 @@ class FractalResonanceProcessor:
             "switch_load_peak_q16": q16(max(switch_values)),
             "phase_order_R_final": round(r_values[-1], 6),
             "phase_order_R_final_q16": q16(r_values[-1]),
-            "match": 1.0 if self.actual_direct_events == 0 else 0.0,
-            "match_q16": q16(1.0 if self.actual_direct_events == 0 else 0.0),
+            "match": match,
+            "match_q16": q16(match),
             "pending_neutral_routes_final": len(self.pending_neutral_routes),
         }
 
+    def run(self, steps: int, auto_targets: bool = True) -> Dict[str, Any]:
+        for tick_index in range(steps):
+            self.tick(tick_index, auto_targets=auto_targets)
+
         return {
-            "summary": summary,
+            "summary": self.summarize(steps),
             "telemetry": self.telemetry,
         }
 
 
-def run_reference(args: argparse.Namespace) -> Dict[str, Any]:
-    processor = FractalResonanceProcessor(
+def make_processor(args: argparse.Namespace) -> FractalResonanceProcessor:
+    return FractalResonanceProcessor(
         cells=args.cells,
         transition_fraction=args.transition_fraction,
         gamma=args.gamma,
         scheduler=args.scheduler,
         seed=args.seed,
     )
-    return processor.run(args.steps, auto_targets=True)
+
+
+def run_reference(args: argparse.Namespace) -> Dict[str, Any]:
+    return make_processor(args).run(args.steps, auto_targets=True)
 
 
 def run_aggressive_feedback_stress(args: argparse.Namespace) -> Dict[str, Any]:
-    processor = FractalResonanceProcessor(
-        cells=args.cells,
-        transition_fraction=args.transition_fraction,
-        gamma=args.gamma,
-        scheduler=args.scheduler,
-        seed=args.seed,
-    )
-
+    processor = make_processor(args)
     processor.states = [(-1 if i % 2 == 0 else 1) for i in range(processor.cells)]
 
     for tick_index in range(args.steps):
         if not processor.pending_neutral_routes:
             nonzero_cells = [i for i, state in enumerate(processor.states) if state != 0]
+
             if nonzero_cells:
                 cell_idx = nonzero_cells[tick_index % len(nonzero_cells)]
                 hostile_target = 1 if processor.states[cell_idx] == -1 else -1
@@ -331,8 +366,7 @@ def run_aggressive_feedback_stress(args: argparse.Namespace) -> Dict[str, Any]:
 
         processor.tick(tick_index, auto_targets=False)
 
-    result = processor.run(0, auto_targets=False)
-    summary = result["summary"]
+    summary = processor.summarize(args.steps)
 
     checks = {
         "requested_direct_events_present": summary["requested_direct_events"] >= 1,
@@ -359,7 +393,7 @@ def run_aggressive_feedback_stress(args: argparse.Namespace) -> Dict[str, Any]:
             "tick_separated_neutral_transition_queue": True,
         },
         "summary": summary,
-        "telemetry": result["telemetry"],
+        "telemetry": processor.telemetry,
     }
 
 
@@ -485,6 +519,17 @@ def candidate_invariant_markers(summary: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def stress_harness_markers(stress_summary: Dict[str, Any]) -> Dict[str, Any]:
+    stress_harness_pass = (
+        stress_summary["requested_direct_events"] >= 1
+        and stress_summary["prevented_direct_events"] >= stress_summary["requested_direct_events"]
+        and stress_summary["actual_direct_events"] == 0
+        and stress_summary["neutral_routed_events"] >= stress_summary["prevented_direct_events"]
+        and stress_summary["C_minus_P_min"] > 0
+        and stress_summary["switch_load_peak"] <= stress_summary["transition_fraction"]
+        and stress_summary["ticks_recorded"] == stress_summary["steps"]
+        and sum(stress_summary["scheduler_counts"].values()) == stress_summary["steps"]
+    )
+
     return {
         "requested_direct_events": stress_summary["requested_direct_events"],
         "prevented_direct_events": stress_summary["prevented_direct_events"],
@@ -496,14 +541,7 @@ def stress_harness_markers(stress_summary: Dict[str, Any]) -> Dict[str, Any]:
         "ticks_recorded": stress_summary["ticks_recorded"],
         "steps": stress_summary["steps"],
         "scheduler_counts": stress_summary["scheduler_counts"],
-        "stress_harness_pass": (
-            stress_summary["requested_direct_events"] >= 1
-            and stress_summary["prevented_direct_events"] >= stress_summary["requested_direct_events"]
-            and stress_summary["actual_direct_events"] == 0
-            and stress_summary["neutral_routed_events"] >= stress_summary["prevented_direct_events"]
-            and stress_summary["C_minus_P_min"] > 0
-            and stress_summary["switch_load_peak"] <= stress_summary["transition_fraction"]
-        ),
+        "stress_harness_pass": stress_harness_pass,
     }
 
 
@@ -556,6 +594,8 @@ def self_test(args: argparse.Namespace) -> Dict[str, Any]:
         "stress_neutral_routed_events_cover_prevention": stress_summary["neutral_routed_events"] >= stress_summary["prevented_direct_events"],
         "stress_C_minus_P_positive": stress_summary["C_minus_P_min"] > 0,
         "stress_switch_load_within_transition_fraction": stress_summary["switch_load_peak"] <= stress_summary["transition_fraction"] + 1e-9,
+        "stress_ticks_recorded_equals_steps": stress_summary["ticks_recorded"] == stress_summary["steps"],
+        "stress_scheduler_counts_sum_equals_steps": sum(stress_summary["scheduler_counts"].values()) == stress_summary["steps"],
     }
 
     return {
@@ -615,6 +655,7 @@ def benchmark_matrix(args: argparse.Namespace) -> Dict[str, Any]:
             "actual_direct_events": frp["actual_direct_events"],
             "requested_direct_events": frp["requested_direct_events"],
             "prevented_direct_events": frp["prevented_direct_events"],
+            "neutral_routed_events": frp["neutral_routed_events"],
             "match": frp["match"],
             "C_minus_P_min": frp["C_minus_P_min"],
             "switch_load_peak": frp["switch_load_peak"],
@@ -659,7 +700,7 @@ def build_m12_artifact(
     group_key: str,
     groups: List[str],
     args: argparse.Namespace,
-    extra: Dict[str, Any] | None = None,
+    extra: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     result = run_reference(args)
     summary = result["summary"]
@@ -896,6 +937,7 @@ def text_report(payload: Dict[str, Any]) -> str:
         lines.append(f"status: {payload.get('status')}")
 
     summary = payload.get("summary")
+
     if summary:
         lines.append(f"actual_direct_events: {summary.get('actual_direct_events')}")
         lines.append(f"requested_direct_events: {summary.get('requested_direct_events')}")
