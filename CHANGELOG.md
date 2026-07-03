@@ -2,6 +2,224 @@
 
 All notable changes to the Fractal Resonance Processor (FRP) project are documented in this file.
 
+## v1.3.0 — M11 Production Integration and External Implementation Handoff
+
+FRP v1.3.0 establishes the M11 Production Integration and External Implementation Handoff layer.
+
+This release extends the validated FRP v1.2.0 Silicon Production and Tapeout Readiness Package into a structured production-integration and external implementation handoff layer.
+
+The M11 layer defines the bridge from internal readiness packaging toward external implementation coordination, production integration planning, partner-facing handoff structure, implementation package transfer, interface accountability, validation continuity, production documentation alignment, and next-stage execution coordination.
+
+### Added
+
+- Added `frp_prototype_v1_3_0.py`.
+
+- Added M11 milestone documentation:
+
+  `docs/m11_production_integration_external_handoff.md`
+
+- Added M11 GitHub Actions workflow:
+
+  `.github/workflows/frp-m11-production-integration-handoff.yml`
+
+- Added M11 test report:
+
+  `TEST_REPORT_v1_3_0.md`
+
+- Added M11 release notes:
+
+  `RELEASE_NOTES_v1_3_0.md`
+
+- Added M11 validation index:
+
+  `FRP_VALIDATION_INDEX_v1_3_0.md`
+
+### Inherited Readiness Boundary
+
+FRP v1.3.0 inherits the validated v1.2.0 readiness boundary:
+
+`FRP v1.2.0 — M10 Silicon Production and Tapeout Readiness Package`
+
+Inherited executable reference file:
+
+`frp_prototype_v1_2_0.py`
+
+Inherited validation index:
+
+`FRP_VALIDATION_INDEX_v1_2_0.md`
+
+Inherited release notes:
+
+`RELEASE_NOTES_v1_2_0.md`
+
+Inherited test report:
+
+`TEST_REPORT_v1_2_0.md`
+
+### M11 Export Layers
+
+FRP v1.3.0 defines the following M11 export layers:
+
+- `production_integration_manifest`;
+
+- `external_implementation_handoff_package`;
+
+- `partner_interface_control_map`;
+
+- `implementation_responsibility_matrix`;
+
+- `validation_continuity_plan`;
+
+- `production_documentation_alignment_map`;
+
+- `integration_milestone_checklist`;
+
+- `external_package_index`;
+
+- `execution_handoff_manifest`.
+
+### M11 Export Commands
+
+Production integration manifest export:
+
+`python frp_prototype_v1_3_0.py --export-production-integration-manifest`
+
+External implementation handoff package export:
+
+`python frp_prototype_v1_3_0.py --export-external-implementation-handoff-package`
+
+Partner interface control map export:
+
+`python frp_prototype_v1_3_0.py --export-partner-interface-control-map`
+
+Implementation responsibility matrix export:
+
+`python frp_prototype_v1_3_0.py --export-implementation-responsibility-matrix`
+
+Validation continuity plan export:
+
+`python frp_prototype_v1_3_0.py --export-validation-continuity-plan`
+
+Production documentation alignment map export:
+
+`python frp_prototype_v1_3_0.py --export-production-documentation-alignment-map`
+
+Integration milestone checklist export:
+
+`python frp_prototype_v1_3_0.py --export-integration-milestone-checklist`
+
+External package index export:
+
+`python frp_prototype_v1_3_0.py --export-external-package-index`
+
+Execution handoff manifest export:
+
+`python frp_prototype_v1_3_0.py --export-execution-handoff-manifest`
+
+Benchmark matrix export:
+
+`python frp_prototype_v1_3_0.py --export-benchmark-matrix`
+
+### Stable v1.3.0 Schemas
+
+`frp.structured_output.v1.3.0`
+
+`frp.m3.benchmark_matrix.v1.3.0`
+
+`frp.m11.production_integration_manifest.v1.3.0`
+
+`frp.m11.external_implementation_handoff_package.v1.3.0`
+
+`frp.m11.partner_interface_control_map.v1.3.0`
+
+`frp.m11.implementation_responsibility_matrix.v1.3.0`
+
+`frp.m11.validation_continuity_plan.v1.3.0`
+
+`frp.m11.production_documentation_alignment_map.v1.3.0`
+
+`frp.m11.integration_milestone_checklist.v1.3.0`
+
+`frp.m11.external_package_index.v1.3.0`
+
+`frp.m11.execution_handoff_manifest.v1.3.0`
+
+### GitHub Actions Validation
+
+Validation status:
+
+`PASS`
+
+Validation environment:
+
+`GitHub Actions hardware-backed CI execution`
+
+Validated commit:
+
+`5a1fe25`
+
+Validated workflows:
+
+- FRP Self Test;
+
+- FRP Benchmark Smoke Test;
+
+- FRP Structured Output;
+
+- FRP M11 Production Integration and External Handoff.
+
+### M11 Handoff Domains
+
+Validated handoff domains:
+
+- production integration manifest;
+
+- external implementation handoff package;
+
+- partner interface control map;
+
+- implementation responsibility matrix;
+
+- validation continuity plan;
+
+- production documentation alignment map;
+
+- integration milestone checklist;
+
+- external package index;
+
+- execution handoff manifest.
+
+### Preserved Candidate Invariants
+
+FRP v1.3.0 preserves the validated candidate invariant markers:
+
+`match = 1.000`
+
+`actual_direct_events = 0`
+
+`C_minus_P_min > 0`
+
+`switch_load_peak <= transition_fraction`
+
+`ticks_recorded = steps`
+
+`scheduler counts match selected cycle mode`
+
+`neutral-routed transition path is preserved`
+
+`neutralized_conflicts tracked`
+
+### Technical Position
+
+FRP v1.3.0 completes the M11 Production Integration and External Implementation Handoff layer of the Fractal Resonance Processor reference architecture.
+
+The release establishes the structured package for production integration coordination, external implementation handoff, partner interface control, responsibility allocation, validation continuity, documentation alignment, integration checkpointing, external package indexing, and execution handoff.
+
+### Next Architecture Layer
+
+`FRP v1.4.0 — M12 External Implementation Feedback and Production Iteration Loop`
+
 ## v1.2.0 — M10 Silicon Production and Tapeout Readiness Package
 
 FRP v1.2.0 establishes the M10 Silicon Production and Tapeout Readiness Package layer.
