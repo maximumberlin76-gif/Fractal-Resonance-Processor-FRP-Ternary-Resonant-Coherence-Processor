@@ -1,0 +1,351 @@
+name: FRP M12 External Implementation Feedback and Production Iteration
+
+on:
+  push:
+    paths:
+      - "frp_prototype_v1_4_0.py"
+      - "docs/m12_external_implementation_feedback_iteration.md"
+      - ".github/workflows/frp-m12-feedback-iteration.yml"
+  pull_request:
+    paths:
+      - "frp_prototype_v1_4_0.py"
+      - "docs/m12_external_implementation_feedback_iteration.md"
+      - ".github/workflows/frp-m12-feedback-iteration.yml"
+  workflow_dispatch:
+
+jobs:
+  m12-feedback-iteration-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Compile FRP v1.4.0 feedback iteration reference file
+        run: |
+          python -m py_compile frp_prototype_v1_4_0.py
+
+      - name: Generate M12 JSON artifacts
+        run: |
+          mkdir -p m12_artifacts
+
+          python frp_prototype_v1_4_0.py --mode demo --output json > m12_artifacts/structured_output.json
+          python frp_prototype_v1_4_0.py --mode self-test --output json > m12_artifacts/self_test.json
+          python frp_prototype_v1_4_0.py --mode benchmark > m12_artifacts/benchmark_matrix.json
+
+          python frp_prototype_v1_4_0.py --export-benchmark-matrix > m12_artifacts/export_benchmark_matrix.json
+          python frp_prototype_v1_4_0.py --export-external-feedback-intake-manifest > m12_artifacts/external_feedback_intake_manifest.json
+          python frp_prototype_v1_4_0.py --export-aggressive-feedback-stress-harness > m12_artifacts/aggressive_feedback_stress_harness.json
+          python frp_prototype_v1_4_0.py --export-implementation-feedback-matrix > m12_artifacts/implementation_feedback_matrix.json
+          python frp_prototype_v1_4_0.py --export-production-iteration-plan > m12_artifacts/production_iteration_plan.json
+          python frp_prototype_v1_4_0.py --export-issue-resolution-map > m12_artifacts/issue_resolution_map.json
+          python frp_prototype_v1_4_0.py --export-partner-validation-feedback-map > m12_artifacts/partner_validation_feedback_map.json
+          python frp_prototype_v1_4_0.py --export-readiness-delta-tracker > m12_artifacts/readiness_delta_tracker.json
+          python frp_prototype_v1_4_0.py --export-iteration-release-control-map > m12_artifacts/iteration_release_control_map.json
+          python frp_prototype_v1_4_0.py --export-production-feedback-index > m12_artifacts/production_feedback_index.json
+          python frp_prototype_v1_4_0.py --export-next-cycle-handoff-manifest > m12_artifacts/next_cycle_handoff_manifest.json
+
+      - name: Validate M12 schemas, feedback artifacts, stress harness, and invariants
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("m12_artifacts")
+
+          structured = json.loads((root / "structured_output.json").read_text())
+          self_test = json.loads((root / "self_test.json").read_text())
+          benchmark = json.loads((root / "benchmark_matrix.json").read_text())
+          exported_benchmark = json.loads((root / "export_benchmark_matrix.json").read_text())
+
+          intake = json.loads((root / "external_feedback_intake_manifest.json").read_text())
+          stress = json.loads((root / "aggressive_feedback_stress_harness.json").read_text())
+          feedback = json.loads((root / "implementation_feedback_matrix.json").read_text())
+          iteration = json.loads((root / "production_iteration_plan.json").read_text())
+          resolution = json.loads((root / "issue_resolution_map.json").read_text())
+          partner = json.loads((root / "partner_validation_feedback_map.json").read_text())
+          delta = json.loads((root / "readiness_delta_tracker.json").read_text())
+          release_control = json.loads((root / "iteration_release_control_map.json").read_text())
+          feedback_index = json.loads((root / "production_feedback_index.json").read_text())
+          handoff = json.loads((root / "next_cycle_handoff_manifest.json").read_text())
+
+          assert structured["schema"] == "frp.structured_output.v1.4.0"
+          assert self_test["schema"] == "frp.structured_output.v1.4.0"
+          assert self_test["status"] == "PASS"
+
+          summary = self_test["summary"]
+          stress_summary = self_test["stress_harness_summary"]
+
+          assert summary["version"] == "1.4.0"
+          assert summary["actual_direct_events"] == 0
+          assert summary["match"] == 1.0
+          assert summary["C_minus_P_min"] > 0
+          assert summary["switch_load_peak"] <= summary["transition_fraction"]
+          assert summary["ticks_recorded"] == summary["steps"]
+          assert sum(summary["scheduler_counts"].values()) == summary["steps"]
+
+          assert stress_summary["requested_direct_events"] >= 1
+          assert stress_summary["prevented_direct_events"] >= stress_summary["requested_direct_events"]
+          assert stress_summary["actual_direct_events"] == 0
+          assert stress_summary["neutral_routed_events"] >= stress_summary["prevented_direct_events"]
+          assert stress_summary["C_minus_P_min"] > 0
+          assert stress_summary["switch_load_peak"] <= stress_summary["transition_fraction"]
+          assert stress_summary["ticks_recorded"] == stress_summary["steps"]
+          assert sum(stress_summary["scheduler_counts"].values()) == stress_summary["steps"]
+
+          assert benchmark["schema"] == "frp.m3.benchmark_matrix.v1.4.0"
+          assert exported_benchmark["schema"] == "frp.m3.benchmark_matrix.v1.4.0"
+
+          assert intake["schema"] == "frp.m12.external_feedback_intake_manifest.v1.4.0"
+          assert stress["schema"] == "frp.m12.aggressive_feedback_stress_harness.v1.4.0"
+          assert feedback["schema"] == "frp.m12.implementation_feedback_matrix.v1.4.0"
+          assert iteration["schema"] == "frp.m12.production_iteration_plan.v1.4.0"
+          assert resolution["schema"] == "frp.m12.issue_resolution_map.v1.4.0"
+          assert partner["schema"] == "frp.m12.partner_validation_feedback_map.v1.4.0"
+          assert delta["schema"] == "frp.m12.readiness_delta_tracker.v1.4.0"
+          assert release_control["schema"] == "frp.m12.iteration_release_control_map.v1.4.0"
+          assert feedback_index["schema"] == "frp.m12.production_feedback_index.v1.4.0"
+          assert handoff["schema"] == "frp.m12.next_cycle_handoff_manifest.v1.4.0"
+
+          for artifact in [
+              intake,
+              stress,
+              feedback,
+              iteration,
+              resolution,
+              partner,
+              delta,
+              release_control,
+              feedback_index,
+              handoff,
+          ]:
+              assert artifact["version"] == "1.4.0"
+
+          assert stress["status"] == "PASS"
+          assert stress["checks"]["requested_direct_events_present"] is True
+          assert stress["checks"]["prevented_direct_events_cover_requests"] is True
+          assert stress["checks"]["actual_direct_events_zero"] is True
+          assert stress["checks"]["neutral_routed_events_cover_prevention"] is True
+          assert stress["checks"]["C_minus_P_positive"] is True
+          assert stress["checks"]["switch_load_within_transition_fraction"] is True
+          assert stress["checks"]["ticks_recorded_equals_steps"] is True
+          assert stress["checks"]["scheduler_counts_sum_equals_steps"] is True
+
+          inherited = intake["inherited_boundary"]
+          assert inherited["release"] == "FRP v1.3.0"
+          assert inherited["validation_index"] == "FRP_VALIDATION_INDEX_v1_3_0.md"
+          assert inherited["release_notes"] == "RELEASE_NOTES_v1_3_0.md"
+          assert inherited["test_report"] == "TEST_REPORT_v1_3_0.md"
+
+          required_intake_groups = {
+              "inherited_handoff_boundary",
+              "external_feedback_source_boundary",
+              "partner_implementation_feedback_boundary",
+              "validation_feedback_boundary",
+              "documentation_feedback_boundary",
+              "integration_feedback_boundary",
+              "production_readiness_feedback_boundary",
+              "iteration_planning_boundary",
+              "next_cycle_handoff_boundary",
+          }
+          assert required_intake_groups.issubset(set(intake["intake_groups"]))
+
+          required_feedback_matrix_groups = {
+              "executable_reference_feedback",
+              "CLI_command_feedback",
+              "schema_package_feedback",
+              "artifact_export_feedback",
+              "register_interface_feedback",
+              "clock_reset_interface_feedback",
+              "signal_pipeline_feedback",
+              "validation_workflow_feedback",
+              "production_handoff_feedback",
+              "external_execution_feedback",
+          }
+          assert required_feedback_matrix_groups.issubset(set(feedback["feedback_matrix_groups"]))
+
+          required_iteration_groups = {
+              "feedback_intake_review",
+              "stress_harness_result_review",
+              "implementation_delta_classification",
+              "validation_delta_classification",
+              "documentation_delta_classification",
+              "interface_delta_classification",
+              "readiness_delta_classification",
+              "release_loop_planning",
+              "iteration_checkpointing",
+              "next_cycle_handoff_preparation",
+          }
+          assert required_iteration_groups.issubset(set(iteration["production_iteration_groups"]))
+
+          required_resolution_groups = {
+              "feedback_item_classification",
+              "stress_harness_finding_classification",
+              "affected_artifact_identification",
+              "affected_schema_identification",
+              "affected_command_identification",
+              "affected_documentation_identification",
+              "affected_workflow_identification",
+              "resolution_owner_assignment",
+              "resolution_validation_checkpoint",
+              "release_loop_closure_marker",
+          }
+          assert required_resolution_groups.issubset(set(resolution["issue_resolution_groups"]))
+
+          required_partner_groups = {
+              "partner_validation_intake",
+              "partner_artifact_review",
+              "partner_interface_review",
+              "partner_schema_review",
+              "partner_register_interface_review",
+              "partner_timing_and_constraint_review",
+              "partner_observability_review",
+              "partner_production_handoff_review",
+              "partner_stress_harness_feedback_review",
+              "partner_execution_feedback_review",
+          }
+          assert required_partner_groups.issubset(set(partner["partner_validation_groups"]))
+
+          required_delta_groups = {
+              "inherited_readiness_baseline",
+              "external_feedback_delta",
+              "aggressive_stress_harness_delta",
+              "implementation_delta",
+              "validation_delta",
+              "documentation_delta",
+              "interface_delta",
+              "production_readiness_delta",
+              "iteration_status_delta",
+              "next_cycle_readiness_delta",
+          }
+          assert required_delta_groups.issubset(set(delta["readiness_delta_groups"]))
+
+          required_release_control_groups = {
+              "current_release_boundary",
+              "inherited_validation_boundary",
+              "feedback_intake_boundary",
+              "stress_harness_boundary",
+              "iteration_control_boundary",
+              "issue_resolution_boundary",
+              "documentation_update_boundary",
+              "validation_rerun_boundary",
+              "release_candidate_boundary",
+              "next_release_boundary",
+          }
+          assert required_release_control_groups.issubset(set(release_control["release_control_groups"]))
+
+          required_feedback_index_groups = {
+              "feedback_intake_package",
+              "aggressive_stress_harness_package",
+              "implementation_feedback_package",
+              "partner_validation_feedback_package",
+              "readiness_delta_package",
+              "issue_resolution_package",
+              "iteration_plan_package",
+              "release_control_package",
+              "validation_continuity_package",
+              "next_cycle_handoff_package",
+          }
+          assert required_feedback_index_groups.issubset(set(feedback_index["feedback_index_groups"]))
+
+          required_handoff_groups = {
+              "inherited_v1_3_0_handoff_boundary",
+              "M12_feedback_artifact_set",
+              "external_feedback_intake_manifest",
+              "aggressive_feedback_stress_harness",
+              "implementation_feedback_matrix",
+              "production_iteration_plan",
+              "issue_resolution_map",
+              "partner_validation_feedback_map",
+              "readiness_delta_tracker",
+              "iteration_release_control_map",
+              "production_feedback_index",
+              "next_stage_scaling_package",
+          }
+          assert required_handoff_groups.issubset(set(handoff["next_cycle_handoff_groups"]))
+          assert handoff["next_architecture_layer"] == "M13 — Production Scaling and Implementation Stabilization Package"
+
+          required_candidate_markers = {
+              "match",
+              "actual_direct_events",
+              "C_minus_P_min",
+              "switch_load_peak",
+              "transition_fraction",
+              "ticks_recorded",
+              "steps",
+              "scheduler_counts",
+              "neutralized_conflicts",
+          }
+
+          required_stress_markers = {
+              "requested_direct_events",
+              "prevented_direct_events",
+              "actual_direct_events",
+              "neutral_routed_events",
+              "C_minus_P_min",
+              "switch_load_peak",
+              "transition_fraction",
+              "ticks_recorded",
+              "steps",
+              "scheduler_counts",
+              "stress_harness_pass",
+          }
+
+          for artifact in [
+              intake,
+              feedback,
+              iteration,
+              resolution,
+              partner,
+              delta,
+              release_control,
+              feedback_index,
+              handoff,
+          ]:
+              markers = artifact["candidate_invariant_markers"]
+              assert required_candidate_markers.issubset(set(markers))
+              assert markers["match"] == 1.0
+              assert markers["actual_direct_events"] == 0
+              assert markers["C_minus_P_min"] > 0
+              assert markers["switch_load_peak"] <= markers["transition_fraction"]
+              assert markers["ticks_recorded"] == markers["steps"]
+              assert sum(markers["scheduler_counts"].values()) == markers["steps"]
+              assert markers["neutralized_conflicts"] >= 0
+
+              stress_markers = artifact["stress_harness_markers"]
+              assert required_stress_markers.issubset(set(stress_markers))
+              assert stress_markers["requested_direct_events"] >= 1
+              assert stress_markers["prevented_direct_events"] >= stress_markers["requested_direct_events"]
+              assert stress_markers["actual_direct_events"] == 0
+              assert stress_markers["neutral_routed_events"] >= stress_markers["prevented_direct_events"]
+              assert stress_markers["C_minus_P_min"] > 0
+              assert stress_markers["switch_load_peak"] <= stress_markers["transition_fraction"]
+              assert stress_markers["ticks_recorded"] == stress_markers["steps"]
+              assert sum(stress_markers["scheduler_counts"].values()) == stress_markers["steps"]
+              assert stress_markers["stress_harness_pass"] is True
+
+          print("FRP v1.4.0 M12 external implementation feedback and production iteration validation PASS")
+          PY
+
+      - name: Validate M12 documentation markers
+        run: |
+          test -f docs/m12_external_implementation_feedback_iteration.md
+
+          grep -q "FRP v1.4.0" docs/m12_external_implementation_feedback_iteration.md
+          grep -q "M12 External Implementation Feedback and Production Iteration Loop" docs/m12_external_implementation_feedback_iteration.md
+
+          grep -q "frp.m12.external_feedback_intake_manifest.v1.4.0" docs/m12_external_implementation_feedback_iteration.md
+          grep -q "frp.m12.aggressive_feedback_stress_harness.v1.4.0" docs/m12_external_implementation_feedback_iteration.md
+          grep -q "frp.m12.implementation_feedback_matrix.v1.4.0" docs/m12_external_implementation_feedback_iteration.md
+          grep -q "frp.m12.production_iteration_plan.v1.4.0" docs/m12_external_implementation_feedback_iteration.md
+          grep -q "frp.m12.issue_resolution_map.v1.4.0" docs/m12_external_implementation_feedback_iteration.md
+          grep -q "frp.m12.partner_validation_feedback_map.v1.4.0" docs/m12_external_implementation_feedback_iteration.md
+          grep -q "frp.m12.readiness_delta_tracker.v1.4.0" docs/m12_external_implementation_feedback_iteration.md
+          grep -q "frp.m12.iteration_release_control_map.v1.4.0" docs/m12_external_implementation_feedback_iteration.md
+          grep -q "frp.m12.production_feedback_index.v1.4.0" docs/m12_external_implementation_feedback_iteration.md
+          grep -q "frp.m12.next_cycle_handoff_manifest.v1.4.0" docs/m12_external_implementation_feedback_iteration.md
