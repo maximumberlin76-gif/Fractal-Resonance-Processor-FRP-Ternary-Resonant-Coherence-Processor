@@ -1,0 +1,285 @@
+name: FRP Hardware Sensitivity Profile Qualification
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "benchmarks/architecture_comparison/calibration/hardware_cost_calibration_v1.md"
+      - "benchmarks/architecture_comparison/calibration/coefficient_provenance_map_v1.md"
+      - "benchmarks/architecture_comparison/profiles/hardware_sensitivity_cost_profile_v1.json"
+      - "benchmarks/architecture_comparison/validate_hardware_sensitivity_profile.py"
+      - "benchmarks/architecture_comparison/results/reference_comparison_seed_76.json"
+      - ".github/workflows/frp-hardware-sensitivity-profile.yml"
+
+  pull_request:
+    paths:
+      - "benchmarks/architecture_comparison/calibration/hardware_cost_calibration_v1.md"
+      - "benchmarks/architecture_comparison/calibration/coefficient_provenance_map_v1.md"
+      - "benchmarks/architecture_comparison/profiles/hardware_sensitivity_cost_profile_v1.json"
+      - "benchmarks/architecture_comparison/validate_hardware_sensitivity_profile.py"
+      - "benchmarks/architecture_comparison/results/reference_comparison_seed_76.json"
+      - ".github/workflows/frp-hardware-sensitivity-profile.yml"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-hardware-sensitivity-profile-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  hardware-sensitivity-profile:
+    name: Hardware Sensitivity Profile Qualification
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 15
+
+    env:
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      LC_ALL: C.UTF-8
+      TZ: UTC
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: benchmarks/architecture_comparison
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Show qualification environment
+        run: |
+          python --version
+          pwd
+
+          test -f calibration/hardware_cost_calibration_v1.md
+          test -f calibration/coefficient_provenance_map_v1.md
+          test -f profiles/hardware_sensitivity_cost_profile_v1.json
+          test -f validate_hardware_sensitivity_profile.py
+          test -f results/reference_comparison_seed_76.json
+
+      - name: Compile hardware sensitivity profile validator
+        run: |
+          python -m py_compile \
+            validate_hardware_sensitivity_profile.py
+
+      - name: Create qualification directory
+        run: |
+          mkdir -p .qualification
+
+      - name: Validate canonical hardware sensitivity profile
+        run: |
+          python validate_hardware_sensitivity_profile.py \
+            --profile profiles/hardware_sensitivity_cost_profile_v1.json \
+            --output text
+
+      - name: Record canonical validation result
+        run: |
+          python validate_hardware_sensitivity_profile.py \
+            --profile profiles/hardware_sensitivity_cost_profile_v1.json \
+            --output json \
+            > .qualification/hardware_sensitivity_profile_validation.json
+
+          cat .qualification/hardware_sensitivity_profile_validation.json
+
+      - name: Run validator self-test
+        run: |
+          python validate_hardware_sensitivity_profile.py \
+            --profile profiles/hardware_sensitivity_cost_profile_v1.json \
+            --self-test \
+            --output text
+
+      - name: Record validator self-test result
+        run: |
+          python validate_hardware_sensitivity_profile.py \
+            --profile profiles/hardware_sensitivity_cost_profile_v1.json \
+            --self-test \
+            --output json \
+            > .qualification/hardware_sensitivity_profile_self_test.json
+
+          cat .qualification/hardware_sensitivity_profile_self_test.json
+
+      - name: Regenerate validation result independently
+        run: |
+          python validate_hardware_sensitivity_profile.py \
+            --profile profiles/hardware_sensitivity_cost_profile_v1.json \
+            --output json \
+            > .qualification/hardware_sensitivity_profile_validation_repeat.json
+
+      - name: Verify byte-identical deterministic validation
+        run: |
+          cmp \
+            .qualification/hardware_sensitivity_profile_validation.json \
+            .qualification/hardware_sensitivity_profile_validation_repeat.json
+
+      - name: Verify qualification result contract
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          result_path = Path(
+              ".qualification/"
+              "hardware_sensitivity_profile_validation.json"
+          )
+
+          self_test_path = Path(
+              ".qualification/"
+              "hardware_sensitivity_profile_self_test.json"
+          )
+
+          profile_path = Path(
+              "profiles/"
+              "hardware_sensitivity_cost_profile_v1.json"
+          )
+
+          result = json.loads(
+              result_path.read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          self_test = json.loads(
+              self_test_path.read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          profile = json.loads(
+              profile_path.read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          assert result["status"] == "PASS"
+
+          assert (
+              result["schema"]
+              ==
+              "frp.benchmark."
+              "hardware_sensitivity_cost_profile.v1"
+          )
+
+          assert (
+              result["profile_name"]
+              ==
+              "literature_anchored_cmos45_sensitivity_v1"
+          )
+
+          assert (
+              result["coefficient_count"]
+              == 12
+          )
+
+          assert (
+              result["scenario_order"]
+              == [
+                  "lower_bound",
+                  "nominal",
+                  "upper_bound",
+              ]
+          )
+
+          assert (
+              result["reference_count"]
+              == 4
+          )
+
+          assert (
+              result["cost_profile_sha256"]
+              ==
+              profile["cost_profile_sha256"]
+          )
+
+          assert (
+              len(result["cost_profile_sha256"])
+              == 64
+          )
+
+          assert (
+              self_test["status"]
+              == "PASS"
+          )
+
+          assert (
+              self_test["self_test_count"]
+              == 6
+          )
+
+          expected_self_tests = [
+              "reject_invalid_bounds",
+              "reject_unresolved_reference",
+              "reject_scenario_vector_mismatch",
+              "reject_winner_assertion",
+              "reject_coefficient_order_change",
+              "reject_digest_mismatch",
+          ]
+
+          assert (
+              self_test["self_tests"]
+              == expected_self_tests
+          )
+
+          assert (
+              profile["evaluation_contract"][
+                  "winner_assertions"
+              ]
+              == []
+          )
+
+          assert (
+              profile["validation_contract"][
+                  "winner_assertions"
+              ]
+              == []
+          )
+
+          print(
+              "hardware sensitivity profile "
+              "qualification contract: PASS"
+          )
+
+          print(
+              "cost_profile_sha256="
+              f"{result['cost_profile_sha256']}"
+          )
+          PY
+
+      - name: Build SHA-256 qualification manifest
+        run: |
+          sha256sum \
+            calibration/hardware_cost_calibration_v1.md \
+            calibration/coefficient_provenance_map_v1.md \
+            profiles/hardware_sensitivity_cost_profile_v1.json \
+            validate_hardware_sensitivity_profile.py \
+            results/reference_comparison_seed_76.json \
+            .qualification/hardware_sensitivity_profile_validation.json \
+            .qualification/hardware_sensitivity_profile_validation_repeat.json \
+            .qualification/hardware_sensitivity_profile_self_test.json \
+            > .qualification/hardware_sensitivity_profile_sha256_manifest.txt
+
+          cat .qualification/hardware_sensitivity_profile_sha256_manifest.txt
+
+      - name: Upload hardware sensitivity profile qualification artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-hardware-sensitivity-profile-qualification
+          path: |
+            benchmarks/architecture_comparison/.qualification/hardware_sensitivity_profile_validation.json
+            benchmarks/architecture_comparison/.qualification/hardware_sensitivity_profile_validation_repeat.json
+            benchmarks/architecture_comparison/.qualification/hardware_sensitivity_profile_self_test.json
+            benchmarks/architecture_comparison/.qualification/hardware_sensitivity_profile_sha256_manifest.txt
+          if-no-files-found: error
+          retention-days: 90
