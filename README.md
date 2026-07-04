@@ -1,5 +1,7 @@
 # Fractal Resonance Processor (FRP)
 
+[FRP M15 Implementation Mapping and Qualification Closure](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m15-implementation-mapping-qualification.yml)
+
 [![FRP M14 Physical Implementation Correlation and Production Qualification](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m14-physical-implementation-qualification.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m14-physical-implementation-qualification.yml)
 
 [![FRP M13 Production Scaling and Implementation Stabilization](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m13-production-scaling-stabilization.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m13-production-scaling-stabilization.yml)
@@ -33,6 +35,880 @@
 **Ternary Resonant Coherence Processor — Structured Output Prototype**
 
 ## Current Architecture Layer
+
+**Current version:** `FRP v1.7.0`
+
+**Current milestone:** `M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+
+**Main executable reference file:** `frp_prototype_v1_7_0.py`
+
+FRP v1.7.0 establishes the M15 Implementation Mapping, Domain Interface, and Qualification Closure Package layer of the Fractal Resonance Processor reference architecture.
+
+This release extends the published FRP v1.6.0 Physical Implementation Correlation and Production Qualification Package layer into a deterministic fixed-point hardware-interface, stateful quantized hardware shadow, cycle-exact reference-trace, RTL comparison-vector, SystemVerilog interface-mapping, RTL assertion-correlation, and qualification-closure layer.
+
+The M15 architecture defines the bridge:
+
+`M14 floating semantic reference`
+
+↓
+
+`M15 quantized hardware shadow model`
+
+↓
+
+`cycle-exact integer golden trace`
+
+↓
+
+`deterministic RTL comparison vectors`
+
+↓
+
+`SystemVerilog interface mapping`
+
+↓
+
+`RTL assertion correlation mapping`
+
+↓
+
+`qualification closure`
+
+## Inherited Validation Boundary
+
+FRP v1.7.0 inherits the published FRP v1.6.0 validation boundary:
+
+`FRP v1.6.0 — M14 Physical Implementation Correlation and Production Qualification Package`
+
+Inherited executable reference file:
+
+`frp_prototype_v1_6_0.py`
+
+Inherited validation index:
+
+`FRP_VALIDATION_INDEX_v1_6_0.md`
+
+Inherited release notes:
+
+`RELEASE_NOTES_v1_6_0.md`
+
+Inherited test report:
+
+`TEST_REPORT_v1_6_0.md`
+
+Inherited validated commit:
+
+`09141fc`
+
+Inherited release status:
+
+`PUBLISHED`
+
+## Preserved Balanced Ternary Kernel
+
+FRP v1.7.0 preserves the validated balanced ternary computational kernel.
+
+Balanced ternary state domain:
+
+`{-1, 0, 1}`
+
+Validated states:
+
+`-1`
+
+`0`
+
+`1`
+
+The neutral state remains:
+
+`0`
+
+The neutral state remains an active balancing, damping, transition, and stabilization state.
+
+Validated opposite-polarity routes:
+
+`-1 → 0 → 1`
+
+`1 → 0 → -1`
+
+Validated execution relation:
+
+`tick N: active polarity → 0`
+
+↓
+
+`pending neutral route retained`
+
+↓
+
+`tick N+1 or later: 0 → target polarity`
+
+Validated invariant:
+
+`actual_direct_events = 0`
+
+Validation result:
+
+`PASS`
+
+## Balanced Ternary Hardware Encoding
+
+FRP v1.7.0 defines the canonical two-bit balanced ternary encoding:
+
+`-1 → 2'b11`
+
+`0 → 2'b00`
+
+`+1 → 2'b01`
+
+Reserved encoding:
+
+`2'b10`
+
+Validated invariant:
+
+`reserved_state_events = 0`
+
+Validation result:
+
+`PASS`
+
+## Preserved Scheduler Layer
+
+FRP v1.7.0 preserves:
+
+`free`
+
+`7/1`
+
+`1/7`
+
+Validated free scheduler profile:
+
+`16 ticks → free = 16`
+
+Validated 7/1 scheduler profile:
+
+`16 ticks → balance = 14, commit = 2`
+
+Validated default 7/1 scheduler profile:
+
+`64 ticks → balance = 56, commit = 8`
+
+Validated 1/7 scheduler profile:
+
+`16 ticks → excite = 2, neutralize = 14`
+
+Validated relation:
+
+`sum(scheduler_counts) = ticks_recorded`
+
+Validation result:
+
+`PASS`
+
+## Transition-Fraction and Request-Lane Interface
+
+Validated default transition fraction:
+
+`transition_fraction = 0.25`
+
+Validated hardware-facing relation:
+
+`REQUEST_LANES = max_changes`
+
+Validated scaling profiles:
+
+`8 cells → 2 request lanes`
+
+`16 cells → 4 request lanes`
+
+`32 cells → 8 request lanes`
+
+Request lanes are processed in ascending lane order.
+
+Validated relation:
+
+`switch_load_peak <= transition_fraction`
+
+Default validated value:
+
+`switch_load_peak = 0.25`
+
+Validation result:
+
+`PASS`
+
+## M15 Artifact Layers
+
+FRP v1.7.0 defines ten M15 artifact layers:
+
+- `fixed_point_interface_profile`;
+
+- `balanced_ternary_hardware_encoding_map`;
+
+- `quantized_reference_shadow_model`;
+
+- `cycle_exact_reference_trace`;
+
+- `rtl_comparison_vector_package`;
+
+- `systemverilog_testbench_interface_map`;
+
+- `synthesizable_rtl_reference_core`;
+
+- `rtl_assertion_correlation_harness`;
+
+- `reference_rtl_equivalence_report`;
+
+- `qualification_closure_manifest`.
+
+## M15 Export Commands
+
+Fixed-point interface profile export:
+
+`python frp_prototype_v1_7_0.py --export-fixed-point-interface-profile`
+
+Balanced ternary hardware encoding map export:
+
+`python frp_prototype_v1_7_0.py --export-balanced-ternary-hardware-encoding-map`
+
+Quantized reference shadow model export:
+
+`python frp_prototype_v1_7_0.py --export-quantized-reference-shadow-model`
+
+Cycle-exact reference trace export:
+
+`python frp_prototype_v1_7_0.py --export-cycle-exact-reference-trace`
+
+RTL comparison vector package export:
+
+`python frp_prototype_v1_7_0.py --export-rtl-comparison-vector-package`
+
+SystemVerilog testbench interface map export:
+
+`python frp_prototype_v1_7_0.py --export-systemverilog-testbench-interface-map`
+
+Synthesizable RTL reference-core map export:
+
+`python frp_prototype_v1_7_0.py --export-synthesizable-rtl-reference-core`
+
+RTL assertion correlation harness export:
+
+`python frp_prototype_v1_7_0.py --export-rtl-assertion-correlation-harness`
+
+Reference RTL equivalence report export:
+
+`python frp_prototype_v1_7_0.py --export-reference-rtl-equivalence-report`
+
+Qualification closure manifest export:
+
+`python frp_prototype_v1_7_0.py --export-qualification-closure-manifest`
+
+Benchmark matrix export:
+
+`python frp_prototype_v1_7_0.py --export-benchmark-matrix`
+
+## Stable v1.7.0 Schemas
+
+Structured output schema:
+
+`frp.structured_output.v1.7.0`
+
+Benchmark matrix schema:
+
+`frp.m3.benchmark_matrix.v1.7.0`
+
+M15 export schemas:
+
+`frp.m15.fixed_point_interface_profile.v1.7.0`
+
+`frp.m15.balanced_ternary_hardware_encoding_map.v1.7.0`
+
+`frp.m15.quantized_reference_shadow_model.v1.7.0`
+
+`frp.m15.cycle_exact_reference_trace.v1.7.0`
+
+`frp.m15.rtl_comparison_vector_package.v1.7.0`
+
+`frp.m15.systemverilog_testbench_interface_map.v1.7.0`
+
+`frp.m15.synthesizable_rtl_reference_core.v1.7.0`
+
+`frp.m15.rtl_assertion_correlation_harness.v1.7.0`
+
+`frp.m15.reference_rtl_equivalence_report.v1.7.0`
+
+`frp.m15.qualification_closure_manifest.v1.7.0`
+
+## M15 Validation Status
+
+Validation status:
+
+`PASS`
+
+Validation environment:
+
+`GitHub Actions hardware-backed CI execution`
+
+Validated commit:
+
+`5fd9a4f`
+
+Validated workflow stack:
+
+- `FRP Structured Output #113`;
+
+- `FRP M15 Implementation Mapping and Qualification Closure #1`;
+
+- `FRP Self Test #154`;
+
+- `FRP Benchmark Smoke Test #152`.
+
+Validated M15 self-test check count:
+
+`41`
+
+All internal M15 self-test checks completed with:
+
+`True`
+
+Validation result:
+
+`PASS`
+
+## Hardware-Facing Numeric Profile
+
+FRP v1.7.0 defines four primary hardware-facing numeric representations:
+
+`S32Q16`
+
+`S32Q30`
+
+`PHASE_U32`
+
+`GAMMA_S32`
+
+General dynamic scalar type:
+
+`S32Q16`
+
+Normalized coefficient type:
+
+`S32Q30`
+
+Binary phase type:
+
+`PHASE_U32`
+
+Sakaguchi gamma phase-offset type:
+
+`GAMMA_S32`
+
+Validation result:
+
+`PASS`
+
+## Deterministic Quantization
+
+Validated rounding rule:
+
+`round-to-nearest with half cases away from zero`
+
+For nonnegative scaled value x:
+
+`quantized = floor(x + 0.5)`
+
+For negative scaled value x:
+
+`quantized = ceil(x - 0.5)`
+
+Validated domains include:
+
+- positive half-case rounding;
+
+- negative half-case rounding;
+
+- signed saturation;
+
+- fixed-point multiplication;
+
+- phase wrapping.
+
+Validation result:
+
+`PASS`
+
+## Exact Q30 Hierarchical Closure
+
+Validated phase-topology aggregate relation:
+
+`sum_d(shell_population(d) × W_level_q[d]) = 2^30`
+
+Validated thermal-topology aggregate relation:
+
+`sum_d(shell_population(d) × T_level_q[d]) = 2^30`
+
+Validated invariants:
+
+`fixed_point_topology_sum_exact = True`
+
+`fixed_point_thermal_sum_exact = True`
+
+Validation result:
+
+`PASS`
+
+## Deterministic Trigonometric Profile
+
+Validated trigonometric profile:
+
+`4096-entry full-cycle lookup table`
+
+Validated lookup address width:
+
+`12 bits`
+
+Validated phase-index relation:
+
+`lut_index = phase_word >> 20`
+
+Validated sine relation:
+
+`sin_lut[k] = quantize_q30(sin(2 pi k / 4096))`
+
+Validated cosine relation:
+
+`cos_lut[k] = sin_lut[(k + 1024) mod 4096]`
+
+Validation result:
+
+`PASS`
+
+## Stateful Quantized Hardware Shadow Model
+
+The M15 quantized hardware shadow model is a stateful finite-word execution path.
+
+Validated relation:
+
+`quantized state at tick N`
+
+↓
+
+`input state for quantized tick N+1`
+
+Cycle-exact hardware-facing vectors are generated from:
+
+`quantized_reference_shadow_model`
+
+Validation result:
+
+`PASS`
+
+## Deterministic Gamma-Noise Stimulus
+
+The deterministic gamma-noise target sequence is externalized into the hardware-facing verification stimulus stream.
+
+Validated cycle input fields:
+
+`gamma_noise_update_valid`
+
+`gamma_noise_target_q[cell]`
+
+Validated primary vector-row fields:
+
+`GAMMA_UPDATE_VALID`
+
+`GAMMA_NOISE_TARGETS_Q`
+
+Validated ordering:
+
+`GAMMA_UPDATE_VALID`
+
+↓
+
+`GAMMA_NOISE_TARGETS_Q`
+
+↓
+
+`STATES_PACKED`
+
+Validation result:
+
+`PASS`
+
+## Cycle-Exact Reference Trace
+
+Validated relation:
+
+`inputs presented for tick t`
+
+↓
+
+`processor executes tick t`
+
+↓
+
+`post-tick state captured`
+
+↓
+
+`comparison outputs recorded`
+
+Validated default trace length:
+
+`64 ticks`
+
+The primary trace records deterministic integer and hexadecimal hardware-facing fields.
+
+Validation result:
+
+`PASS`
+
+## Deterministic RTL Comparison Vector Package
+
+Validated package file count:
+
+`10`
+
+Validated package files:
+
+`frp_m15_kernel_vectors.vec`
+
+`frp_m15_pending_routes.trace`
+
+`frp_m15_scheduler_free_vectors.vec`
+
+`frp_m15_scheduler_7_1_vectors.vec`
+
+`frp_m15_scheduler_1_7_vectors.vec`
+
+`frp_m15_full_correlation_vectors.vec`
+
+`frp_m15_cell_trace.vec`
+
+`frp_m15_reference_preload.json`
+
+`frp_m15_trig_lut_q30.vec`
+
+`frp_m15_sha256_manifest.json`
+
+Validation result:
+
+`PASS`
+
+## Deterministic Vector Regeneration
+
+The complete M15 vector package is generated twice.
+
+Validated relation:
+
+`vectors_a == vectors_b`
+
+Validated result:
+
+`10 / 10 files byte-identical`
+
+Validated complete deterministic package digest:
+
+`703dd4b56f4b34289a2c5bc5521ad4ddc3113bdec8c38238c3244c69cb4d58df`
+
+Validation result:
+
+`PASS`
+
+## SystemVerilog Interface Mapping
+
+Validated default parameters:
+
+`NUM_CELLS = 16`
+
+`HIERARCHY_DEPTH = 4`
+
+`REQUEST_LANES = 4`
+
+`CELL_ID_WIDTH = 4`
+
+`STATE_VECTOR_WIDTH = 32`
+
+`SCALAR_WIDTH = 32`
+
+`PHASE_WIDTH = 32`
+
+Validated verification stimulus inputs:
+
+`preload_valid`
+
+`gamma_noise_update_valid`
+
+`gamma_noise_target_q`
+
+Validation result:
+
+`PASS`
+
+## RTL Assertion Correlation Mapping
+
+Validated assertion-domain count:
+
+`13`
+
+Validated domains include:
+
+- valid balanced ternary encoding;
+
+- reserved-state exclusion;
+
+- direct opposite-polarity transition exclusion;
+
+- active neutral-route insertion;
+
+- target application after ready tick;
+
+- `actual_direct_events = 0`;
+
+- transition-limit enforcement;
+
+- scheduler sequence;
+
+- scheduler count consistency;
+
+- phase-topology fixed-point normalization;
+
+- thermal-topology fixed-point normalization;
+
+- deterministic trace tick count;
+
+- exact cycle-output comparison contract.
+
+Validated integer comparison rule:
+
+`actual integer field == expected integer field`
+
+Validation result:
+
+`PASS`
+
+## Floating Semantic Reference to Quantized Shadow Correlation
+
+Validated categorical markers:
+
+`state_sequence_match = 1.000`
+
+`scheduler_sequence_match = 1.000`
+
+`neutral_route_sequence_match = 1.000`
+
+`C_minus_P_sign_match = 1.000`
+
+`boundary_order_match = 1.000`
+
+Validation result:
+
+`PASS`
+
+## Exact Quantized Shadow Deterministic Replay
+
+Validated markers:
+
+`shadow_replay_state_match = 1.000`
+
+`shadow_replay_scheduler_match = 1.000`
+
+`shadow_replay_pending_route_match = 1.000`
+
+`shadow_replay_counter_match = 1.000`
+
+`shadow_replay_trace_match = 1.000`
+
+`shadow_replay_cell_trace_match = 1.000`
+
+Validation result:
+
+`PASS`
+
+## Scaling Qualification
+
+Validated profiles:
+
+`8 cells`
+
+`16 cells`
+
+`32 cells`
+
+Validated 8-cell profile:
+
+`hierarchy_depth = 3`
+
+`request_lanes = 2`
+
+`packed state width = 16 bits`
+
+Validated 16-cell profile:
+
+`hierarchy_depth = 4`
+
+`request_lanes = 4`
+
+`packed state width = 32 bits`
+
+Validated 32-cell profile:
+
+`hierarchy_depth = 5`
+
+`request_lanes = 8`
+
+`packed state width = 64 bits`
+
+Every validated profile preserves:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+`balanced_ternary_state_domain = True`
+
+`fixed_point_topology_sum_exact = True`
+
+`fixed_point_thermal_sum_exact = True`
+
+Validation result:
+
+`PASS`
+
+## M15 Release Files
+
+M15 architecture document:
+
+- `docs/m15_implementation_mapping_domain_interface_qualification_closure.md`.
+
+M15 executable reference file:
+
+- `frp_prototype_v1_7_0.py`.
+
+M15 workflow file:
+
+- `.github/workflows/frp-m15-implementation-mapping-qualification.yml`.
+
+M15 release-facing files:
+
+- `RELEASE_NOTES_v1_7_0.md`;
+
+- `TEST_REPORT_v1_7_0.md`;
+
+- `FRP_VALIDATION_INDEX_v1_7_0.md`;
+
+- `CHANGELOG.md`.
+
+## M15 Technical Chain
+
+`published M14 semantic reference`
+
+↓
+
+`hardware-facing numeric types`
+
+↓
+
+`balanced ternary binary encoding`
+
+↓
+
+`deterministic fixed-point arithmetic`
+
+↓
+
+`quantized hardware shadow execution`
+
+↓
+
+`cycle-exact golden trace`
+
+↓
+
+`RTL comparison vectors`
+
+↓
+
+`verification preload and deterministic stimulus`
+
+↓
+
+`SystemVerilog interface mapping`
+
+↓
+
+`RTL assertion correlation mapping`
+
+↓
+
+`floating semantic correlation`
+
+↓
+
+`exact quantized shadow deterministic replay`
+
+↓
+
+`qualification closure`
+
+## Architecture Progression
+
+FRP v1.7.0 extends the validated architecture progression:
+
+`physical-domain correlation package`
+
+↓
+
+`fixed-point interface profile`
+
+↓
+
+`balanced ternary hardware encoding map`
+
+↓
+
+`quantized reference shadow model`
+
+↓
+
+`cycle-exact reference trace`
+
+↓
+
+`RTL comparison vector package`
+
+↓
+
+`SystemVerilog testbench interface map`
+
+↓
+
+`synthesizable RTL reference-core map`
+
+↓
+
+`RTL assertion correlation harness`
+
+↓
+
+`reference RTL equivalence report`
+
+↓
+
+`qualification closure manifest`
+
+## Next Architecture Layer
+
+Next planned architecture layer:
+
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
+
+## Previous Architecture Layer — FRP v1.6.0 / M14
 
 **Current version:** `FRP v1.6.0`
 
