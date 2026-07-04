@@ -982,6 +982,318 @@ The workflow does not validate:
 
 Those values remain measured comparison results.
 
+## Hardware-Informed Sensitivity Layer
+
+The hardware-informed sensitivity layer is an additive comparison branch.
+
+It does not replace:
+
+`unit_event_cost_v1`
+
+It does not replace the canonical unit-event result:
+
+`benchmarks/architecture_comparison/results/reference_comparison_seed_76.json`
+
+The canonical unit-event baseline remains bound to:
+
+`comparison_package_sha256 = 5a4be61ce7fd6bc680bbd8bc28bfe7cc9d2ad35adddf642cecff111fbd503d6a`
+
+The hardware-informed sensitivity layer applies one literature-anchored cost profile to the same raw architecture execution results.
+
+Profile identifier:
+
+`literature_anchored_cmos45_sensitivity_v1`
+
+Profile role:
+
+`hardware_informed_sensitivity`
+
+Normalization reference:
+
+`32-bit integer addition = 1.0`
+
+Reference energy value:
+
+`0.1 pJ`
+
+Reference technology context:
+
+`45 nm CMOS`
+
+Primary literature anchor:
+
+`Mark Horowitz, 1.1 Computing's Energy Problem (and What We Can Do About It), ISSCC 2014, DOI: 10.1109/ISSCC.2014.6757323`
+
+The literature values are treated as rough technology-context anchors for sensitivity analysis.
+
+They are not treated as universal physical constants.
+
+### Calibration and Provenance Chain
+
+The sensitivity layer is defined by:
+
+`hardware cost calibration contract`
+
+↓
+
+`coefficient provenance map`
+
+↓
+
+`literature-anchored hardware sensitivity profile`
+
+↓
+
+`strict machine validator`
+
+↓
+
+`GitHub Actions profile qualification`
+
+↓
+
+`hardware sensitivity runner`
+
+↓
+
+`GitHub Actions comparison qualification`
+
+↓
+
+`canonical sensitivity result`
+
+Calibration contract:
+
+`benchmarks/architecture_comparison/calibration/hardware_cost_calibration_v1.md`
+
+Coefficient provenance map:
+
+`benchmarks/architecture_comparison/calibration/coefficient_provenance_map_v1.md`
+
+Sensitivity profile:
+
+`benchmarks/architecture_comparison/profiles/hardware_sensitivity_cost_profile_v1.json`
+
+Profile validator:
+
+`benchmarks/architecture_comparison/validate_hardware_sensitivity_profile.py`
+
+Sensitivity runner:
+
+`benchmarks/architecture_comparison/run_hardware_sensitivity_comparison.py`
+
+Canonical sensitivity result:
+
+`benchmarks/architecture_comparison/results/reference_comparison_seed_76_hardware_sensitivity_v1.json`
+
+### Global Scenario Contract
+
+The scenario order is fixed:
+
+1. `lower_bound`;
+2. `nominal`;
+3. `upper_bound`.
+
+The same global scenario vector is applied to every architecture.
+
+No architecture-specific coefficient vectors are permitted.
+
+The same raw architecture results are used for all three scenarios.
+
+The same raw event traces are used for all three scenarios.
+
+The sensitivity layer therefore measures ranking response to declared coefficient uncertainty without changing architecture execution.
+
+### Canonical Sensitivity Results
+
+The ranking basis is:
+
+`ascending_total_normalized_energy`
+
+| Scenario | Binary Synchronous Reference | Binary Clock-Gated Reference | Direct Ternary Reference | FRP v1.7.0 Quantized Shadow |
+|---|---:|---:|---:|---:|
+| `lower_bound` | 181.078125 | 111.109375 | 118.078125 | 14457825.125 |
+| `nominal` | 724.3125 | 444.4375 | 472.3125 | 25157118.0 |
+| `upper_bound` | 4049.25 | 2929.75 | 3041.25 | 39955490.0 |
+
+The ranking is identical in all three scenarios:
+
+`binary_clock_gated_reference`
+
+↓
+
+`direct_ternary_reference`
+
+↓
+
+`binary_synchronous_reference`
+
+↓
+
+`frp_v1_7_0_quantized_shadow`
+
+The canonical result records:
+
+`ranking_stable = true`
+
+`ranking_sensitive = false`
+
+### Pairwise Stability Classification
+
+The canonical result contains six pairwise stability relations.
+
+| Left Architecture | Right Architecture | Classification |
+|---|---|---|
+| `binary_synchronous_reference` | `binary_clock_gated_reference` | `stable_higher_cost` |
+| `binary_synchronous_reference` | `direct_ternary_reference` | `stable_higher_cost` |
+| `binary_synchronous_reference` | `frp_v1_7_0_quantized_shadow` | `stable_lower_cost` |
+| `binary_clock_gated_reference` | `direct_ternary_reference` | `stable_lower_cost` |
+| `binary_clock_gated_reference` | `frp_v1_7_0_quantized_shadow` | `stable_lower_cost` |
+| `direct_ternary_reference` | `frp_v1_7_0_quantized_shadow` | `stable_lower_cost` |
+
+Every pairwise relation remains unchanged across:
+
+`lower_bound`
+
+`nominal`
+
+`upper_bound`
+
+### FRP Cost Concentration in the Current Sensitivity Model
+
+The current M15 quantized shadow records the following raw event totals:
+
+`fixed_point_multiplies_32x32 = 518728`
+
+`lut_reads_32 = 172221`
+
+`fixed_point_accumulates_64 = 296534`
+
+`fixed_point_adds_32 = 339899`
+
+`fixed_point_compares_32 = 45430`
+
+The sensitivity result therefore identifies the current dominant declared cost concentration as:
+
+`fixed-point arithmetic volume`
+
+plus:
+
+`trigonometric lookup volume`
+
+This is a direct result of the current M15 quantized hardware shadow execution path under the declared event taxonomy and the declared global coefficient vectors.
+
+The result is not a physical silicon energy measurement.
+
+The result does not establish universal energy ordering between binary, ternary, and FRP hardware.
+
+The result does establish that the current M15 quantized shadow produces the highest declared normalized activity cost in all three hardware-informed sensitivity scenarios.
+
+This result is retained without coefficient adjustment and without winner assertions.
+
+### Separation from the Original v0.9.3 Thermal Benchmark
+
+The M15 Comparative Architecture Benchmark Suite and the original v0.9.3 benchmark are separate measurement contours.
+
+The M15 suite compares:
+
+`binary_synchronous_reference`
+
+`binary_clock_gated_reference`
+
+`direct_ternary_reference`
+
+`frp_v1_7_0_quantized_shadow`
+
+The original v0.9.3 benchmark separately compared:
+
+`binary_style_forced_switch`
+
+`direct_ternary_commit`
+
+`distributed_neutral_ternary`
+
+and the FRP model of that release.
+
+In the canonical v0.9.3 benchmark table:
+
+| Architecture | Match | C-P_min | Heat Peak | Switch Peak | Actual Direct | Prevented Direct | Neutralized |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `binary_style_forced_switch` | 1.000 | -0.551000 | 0.051000 | 1.000000 | 2052 | 0 | 0 |
+| `direct_ternary_commit` | 1.000 | -0.551000 | 0.051000 | 1.000000 | 2052 | 0 | 0 |
+| `distributed_neutral_ternary` | 1.000 | 0.174750 | 0.003250 | 0.250000 | 0 | 0 | 2052 |
+| `frp_distributed_resonant` | 1.000 | 0.144750 | 0.107000 | 0.250000 | 0 | 3820 | 2392 |
+
+The lowest heat peak in that benchmark was produced by:
+
+`distributed_neutral_ternary`
+
+with:
+
+`heat_peak = 0.003250`
+
+and:
+
+`switch_load_peak = 0.25`
+
+The direct ternary commit path did not produce that advantage.
+
+It matched the binary-style forced-switch result in the recorded benchmark table.
+
+The measured distinction therefore belongs to the distributed neutral-transition architecture:
+
+`active neutral state 0`
+
+plus:
+
+`prohibited direct polarity reversal`
+
+plus:
+
+`tick-separated neutral routing`
+
+plus:
+
+`distributed transition load`
+
+The original benchmark result is preserved as a thermal-proxy result.
+
+It is not replaced or invalidated by the M15 hardware-informed sensitivity result.
+
+The M15 sensitivity result measures the declared event cost of the much larger quantized FRP execution stack, including phase, hierarchy, fixed-point arithmetic, lookup-table activity, queue activity, thermal-field computation, and coherence computation.
+
+The two benchmark contours answer different questions and must not be merged into one ranking claim.
+
+### Canonical Sensitivity Package Integrity
+
+The canonical hardware sensitivity package records:
+
+`hardware_sensitivity_package_sha256 = a44cf392d946e3b5c21dffbaa1d726d31da326a007e2908914f6477215261ea0`
+
+The result preserves:
+
+`same architecture results for all scenarios`
+
+`same raw traces for all scenarios`
+
+`global exact scenario vectors`
+
+`semantic completion ratio = 1.000 for all architectures`
+
+`semantic output match = 1.000 for all architectures`
+
+`FRP actual_direct_events = 0`
+
+`FRP reserved_state_events = 0`
+
+`FRP queue_overflow_events = 0`
+
+`winner_assertions = []`
+
+The qualification role remains:
+
+`integrity_only_no_winner_assertions`
+
 ## Planned File Set
 
 Suite documentation:
