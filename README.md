@@ -2,6 +2,10 @@
 
 [![FRP M15 Implementation Mapping and Qualification Closure](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m15-implementation-mapping-qualification.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m15-implementation-mapping-qualification.yml)
 
+[![FRP Hardware Sensitivity Profile Qualification](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-hardware-sensitivity-profile.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-hardware-sensitivity-profile.yml)
+
+[![FRP Hardware Sensitivity Comparison](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-hardware-sensitivity-comparison.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-hardware-sensitivity-comparison.yml)
+
 [![FRP M14 Physical Implementation Correlation and Production Qualification](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m14-physical-implementation-qualification.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m14-physical-implementation-qualification.yml)
 
 [![FRP M13 Production Scaling and Implementation Stabilization](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m13-production-scaling-stabilization.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m13-production-scaling-stabilization.yml)
@@ -377,6 +381,166 @@ All internal M15 self-test checks completed with:
 Validation result:
 
 `PASS`
+
+## Comparative Architecture Benchmark Suite
+
+The repository includes a separate Comparative Architecture Benchmark Suite for deterministic architecture-level comparison.
+
+Detailed benchmark documentation:
+
+`benchmarks/architecture_comparison/README.md`
+
+Canonical unit-event baseline:
+
+`benchmarks/architecture_comparison/results/reference_comparison_seed_76.json`
+
+Canonical hardware-informed sensitivity result:
+
+`benchmarks/architecture_comparison/results/reference_comparison_seed_76_hardware_sensitivity_v1.json`
+
+### Canonical Unit-Event Baseline
+
+The canonical baseline profile remains:
+
+`unit_event_cost_v1`
+
+Canonical package digest:
+
+`5a4be61ce7fd6bc680bbd8bc28bfe7cc9d2ad35adddf642cecff111fbd503d6a`
+
+The unit-event baseline measures declared architecture event volume under a common unit-cost model.
+
+It is not a physical silicon energy measurement.
+
+The canonical baseline is preserved unchanged.
+
+### Hardware-Informed Sensitivity Qualification
+
+Profile qualification status:
+
+`PASS`
+
+Validated workflow:
+
+`FRP Hardware Sensitivity Profile Qualification #1`
+
+Validated commit:
+
+`cf23ca7`
+
+Comparison qualification status:
+
+`PASS`
+
+Validated workflow:
+
+`FRP Hardware Sensitivity Comparison #1`
+
+Validated commit:
+
+`d90cce4`
+
+Canonical result recording commit:
+
+`aaecf23`
+
+The hardware-informed sensitivity layer applies the same global coefficient scenarios to all architectures:
+
+1. `lower_bound`;
+2. `nominal`;
+3. `upper_bound`.
+
+No architecture-specific coefficient vectors are used.
+
+The canonical result records:
+
+`ranking_stable = true`
+
+`ranking_sensitive = false`
+
+The ranking remains identical across all three scenarios:
+
+`binary_clock_gated_reference`
+
+↓
+
+`direct_ternary_reference`
+
+↓
+
+`binary_synchronous_reference`
+
+↓
+
+`frp_v1_7_0_quantized_shadow`
+
+The current M15 quantized shadow produces the highest declared normalized activity cost in all three hardware-informed sensitivity scenarios.
+
+The dominant declared cost concentration is associated with:
+
+`fixed-point arithmetic volume`
+
+and:
+
+`trigonometric lookup volume`
+
+This result is retained without coefficient adjustment and without winner assertions.
+
+Canonical hardware sensitivity package digest:
+
+`a44cf392d946e3b5c21dffbaa1d726d31da326a007e2908914f6477215261ea0`
+
+### Separation from the Original Thermal Benchmark
+
+The current Comparative Architecture Benchmark Suite and the original v0.9.3 thermal benchmark are separate measurement contours.
+
+The original benchmark is documented in:
+
+`TEST_REPORT_v0_9_3.md`
+
+In the original benchmark, the lowest recorded heat peak was produced by:
+
+`distributed_neutral_ternary`
+
+with:
+
+`heat_peak = 0.003250`
+
+`switch_load_peak = 0.25`
+
+`actual_direct_events = 0`
+
+The direct ternary commit path recorded:
+
+`heat_peak = 0.051000`
+
+The binary-style forced-switch path recorded:
+
+`heat_peak = 0.051000`
+
+The measured thermal-proxy distinction therefore belongs to the distributed neutral-transition architecture rather than to ternary encoding alone.
+
+The relevant architecture combines:
+
+`active neutral state 0`
+
+↓
+
+`prohibited direct polarity reversal`
+
+↓
+
+`tick-separated neutral routing`
+
+↓
+
+`distributed transition load`
+
+The original thermal result is preserved.
+
+It is not replaced or invalidated by the M15 hardware-informed sensitivity result.
+
+The two benchmark contours answer different technical questions and must not be merged into one ranking claim.
 
 ## Hardware-Facing Numeric Profile
 
