@@ -1,0 +1,513 @@
+name: FRP M15 Implementation Mapping and Qualification Closure
+
+on:
+  push:
+    paths:
+      - "frp_prototype_v1_7_0.py"
+      - "docs/m15_implementation_mapping_domain_interface_qualification_closure.md"
+      - "rtl/m15/**"
+      - ".github/workflows/frp-m15-implementation-mapping-qualification.yml"
+  pull_request:
+    paths:
+      - "frp_prototype_v1_7_0.py"
+      - "docs/m15_implementation_mapping_domain_interface_qualification_closure.md"
+      - "rtl/m15/**"
+      - ".github/workflows/frp-m15-implementation-mapping-qualification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  m15-implementation-mapping-qualification:
+    name: M15 implementation mapping qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compile FRP v1.7.0 reference file
+        run: |
+          set -euo pipefail
+          python -m py_compile frp_prototype_v1_7_0.py
+
+      - name: Generate M15 qualification outputs
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/m15/vectors_a artifacts/m15/vectors_b
+
+          python frp_prototype_v1_7_0.py --mode demo --output json \
+            > artifacts/m15/structured-output.json
+
+          python frp_prototype_v1_7_0.py --mode self-test --output json \
+            > artifacts/m15/self-test.json
+
+          python frp_prototype_v1_7_0.py --mode self-test --scheduler free --output json \
+            > artifacts/m15/self-test-free.json
+
+          python frp_prototype_v1_7_0.py --mode self-test --scheduler 7/1 --output json \
+            > artifacts/m15/self-test-7-1.json
+
+          python frp_prototype_v1_7_0.py --mode self-test --scheduler 1/7 --output json \
+            > artifacts/m15/self-test-1-7.json
+
+          python frp_prototype_v1_7_0.py --export-fixed-point-interface-profile \
+            > artifacts/m15/fixed-point-interface-profile.json
+
+          python frp_prototype_v1_7_0.py --export-balanced-ternary-hardware-encoding-map \
+            > artifacts/m15/balanced-ternary-hardware-encoding-map.json
+
+          python frp_prototype_v1_7_0.py --export-quantized-reference-shadow-model \
+            > artifacts/m15/quantized-reference-shadow-model.json
+
+          python frp_prototype_v1_7_0.py --export-cycle-exact-reference-trace \
+            > artifacts/m15/cycle-exact-reference-trace.json
+
+          python frp_prototype_v1_7_0.py --export-rtl-comparison-vector-package \
+            > artifacts/m15/rtl-comparison-vector-package.json
+
+          python frp_prototype_v1_7_0.py --export-systemverilog-testbench-interface-map \
+            > artifacts/m15/systemverilog-testbench-interface-map.json
+
+          python frp_prototype_v1_7_0.py --export-synthesizable-rtl-reference-core \
+            > artifacts/m15/synthesizable-rtl-reference-core.json
+
+          python frp_prototype_v1_7_0.py --export-rtl-assertion-correlation-harness \
+            > artifacts/m15/rtl-assertion-correlation-harness.json
+
+          python frp_prototype_v1_7_0.py --export-reference-rtl-equivalence-report \
+            > artifacts/m15/reference-rtl-equivalence-report.json
+
+          python frp_prototype_v1_7_0.py --export-qualification-closure-manifest \
+            > artifacts/m15/qualification-closure-manifest.json
+
+          python frp_prototype_v1_7_0.py --export-benchmark-matrix \
+            > artifacts/m15/benchmark-matrix.json
+
+          python frp_prototype_v1_7_0.py --cells 8 --steps 16 --mode demo --output json \
+            > artifacts/m15/scaling-8.json
+
+          python frp_prototype_v1_7_0.py --cells 16 --steps 16 --mode demo --output json \
+            > artifacts/m15/scaling-16.json
+
+          python frp_prototype_v1_7_0.py --cells 32 --steps 16 --mode demo --output json \
+            > artifacts/m15/scaling-32.json
+
+          python frp_prototype_v1_7_0.py \
+            --export-rtl-comparison-vector-package \
+            --vector-output-dir artifacts/m15/vectors_a \
+            > artifacts/m15/vector-package-a.json
+
+          python frp_prototype_v1_7_0.py \
+            --export-rtl-comparison-vector-package \
+            --vector-output-dir artifacts/m15/vectors_b \
+            > artifacts/m15/vector-package-b.json
+
+      - name: Compare deterministic vector packages
+        run: |
+          set -euo pipefail
+          diff -qr artifacts/m15/vectors_a artifacts/m15/vectors_b
+
+      - name: Validate M15 schemas, kernel invariants, fixed-point contract, and equivalence
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("artifacts/m15")
+
+          def load(name):
+              with (root / name).open("r", encoding="utf-8") as handle:
+                  return json.load(handle)
+
+          milestone = "M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package"
+
+          structured = load("structured-output.json")
+          assert structured["schema"] == "frp.structured_output.v1.7.0"
+          assert structured["version"] == "1.7.0"
+          assert structured["milestone"] == milestone
+          summary = structured["summary"]
+          assert summary["cells"] == 16
+          assert summary["hierarchy_depth"] == 4
+          assert summary["request_lanes"] == 4
+          assert summary["ticks_recorded"] == 64
+          assert summary["scheduler"] == "7/1"
+          assert summary["scheduler_counts"] == {"balance": 56, "commit": 8}
+          assert summary["scheduler_counts_valid"] is True
+          assert summary["balanced_ternary_state_domain"] is True
+          assert summary["reserved_state_events"] == 0
+          assert summary["actual_direct_events"] == 0
+          assert summary["queue_overflow_events"] == 0
+          assert summary["switch_load_peak"] <= 0.25
+          assert summary["C_minus_P_min"] > 0.0
+          assert summary["fixed_point_topology_sum_exact"] is True
+          assert summary["fixed_point_thermal_sum_exact"] is True
+
+          for name in (
+              "self-test.json",
+              "self-test-free.json",
+              "self-test-7-1.json",
+              "self-test-1-7.json",
+          ):
+              payload = load(name)
+              assert payload["schema"] == "frp.structured_output.v1.7.0"
+              assert payload["version"] == "1.7.0"
+              assert payload["status"] == "PASS"
+              assert payload["check_count"] == 41
+              assert len(payload["checks"]) == 41
+              assert all(payload["checks"].values())
+
+          expected_schemas = {
+              "fixed-point-interface-profile.json": "frp.m15.fixed_point_interface_profile.v1.7.0",
+              "balanced-ternary-hardware-encoding-map.json": "frp.m15.balanced_ternary_hardware_encoding_map.v1.7.0",
+              "quantized-reference-shadow-model.json": "frp.m15.quantized_reference_shadow_model.v1.7.0",
+              "cycle-exact-reference-trace.json": "frp.m15.cycle_exact_reference_trace.v1.7.0",
+              "rtl-comparison-vector-package.json": "frp.m15.rtl_comparison_vector_package.v1.7.0",
+              "systemverilog-testbench-interface-map.json": "frp.m15.systemverilog_testbench_interface_map.v1.7.0",
+              "synthesizable-rtl-reference-core.json": "frp.m15.synthesizable_rtl_reference_core.v1.7.0",
+              "rtl-assertion-correlation-harness.json": "frp.m15.rtl_assertion_correlation_harness.v1.7.0",
+              "reference-rtl-equivalence-report.json": "frp.m15.reference_rtl_equivalence_report.v1.7.0",
+              "qualification-closure-manifest.json": "frp.m15.qualification_closure_manifest.v1.7.0",
+          }
+
+          for name, schema in expected_schemas.items():
+              payload = load(name)
+              assert payload["schema"] == schema, (name, payload.get("schema"))
+              assert payload["version"] == "1.7.0"
+              assert payload["milestone"] == milestone
+
+          fixed = load("fixed-point-interface-profile.json")
+          assert fixed["profile"]["general_scalar"]["name"] == "S32Q16"
+          assert fixed["profile"]["normalized_coefficient"]["name"] == "S32Q30"
+          assert fixed["profile"]["phase"]["name"] == "PHASE_U32"
+          assert fixed["profile"]["gamma"]["name"] == "GAMMA_S32"
+          assert fixed["profile"]["trigonometric_profile"]["table_entries"] == 4096
+          assert fixed["fixed_point_topology_sum_exact"] is True
+          assert fixed["fixed_point_thermal_sum_exact"] is True
+
+          encoding = load("balanced-ternary-hardware-encoding-map.json")
+          mapping = {
+              row["state"]: row["integer_code"]
+              for row in encoding["state_encoding"]
+          }
+          assert mapping == {-1: 3, 0: 0, 1: 1}
+          assert encoding["reserved_state_code"]["integer_code"] == 2
+          assert encoding["request_interface"]["request_lanes"] == 4
+          assert encoding["request_interface"]["cell_id_width"] == 4
+
+          shadow = load("quantized-reference-shadow-model.json")
+          shadow_summary = shadow["summary"]
+          assert shadow_summary["actual_direct_events"] == 0
+          assert shadow_summary["reserved_state_events"] == 0
+          assert shadow_summary["queue_overflow_events"] == 0
+          assert shadow_summary["balanced_ternary_state_domain"] is True
+          assert shadow_summary["scheduler_counts_valid"] is True
+          assert shadow_summary["ticks_recorded"] == 64
+          assert shadow_summary["switch_load_peak"] <= 0.25
+          assert shadow_summary["C_minus_P_min"] > 0.0
+          assert shadow_summary["fixed_point_topology_sum_exact"] is True
+          assert shadow_summary["fixed_point_thermal_sum_exact"] is True
+
+          trace = load("cycle-exact-reference-trace.json")
+          assert len(trace["trace"]) == 64
+          assert trace["summary"]["actual_direct_events"] == 0
+          assert all(
+              len(row["gamma_noise_target_q16"]) == 16
+              for row in trace["trace"]
+          )
+          assert all(
+              row["reserved_state_events"] == 0
+              for row in trace["trace"]
+          )
+          assert all(
+              row["actual_direct_events"] == 0
+              for row in trace["trace"]
+          )
+
+          vectors = load("rtl-comparison-vector-package.json")
+          assert vectors["manifest"]["file_count"] == 10
+          assert len(vectors["deterministic_package_digest"]) == 64
+
+          expected_vector_files = {
+              "frp_m15_kernel_vectors.vec",
+              "frp_m15_pending_routes.trace",
+              "frp_m15_scheduler_free_vectors.vec",
+              "frp_m15_scheduler_7_1_vectors.vec",
+              "frp_m15_scheduler_1_7_vectors.vec",
+              "frp_m15_full_correlation_vectors.vec",
+              "frp_m15_cell_trace.vec",
+              "frp_m15_reference_preload.json",
+              "frp_m15_trig_lut_q30.vec",
+              "frp_m15_sha256_manifest.json",
+          }
+          assert {
+              row["name"]
+              for row in vectors["manifest"]["files"]
+          } == expected_vector_files
+
+          sv_map = load("systemverilog-testbench-interface-map.json")
+          assert sv_map["parameters"] == {
+              "NUM_CELLS": 16,
+              "HIERARCHY_DEPTH": 4,
+              "REQUEST_LANES": 4,
+              "CELL_ID_WIDTH": 4,
+              "STATE_VECTOR_WIDTH": 32,
+              "SCALAR_WIDTH": 32,
+              "PHASE_WIDTH": 32,
+          }
+          assert "gamma_noise_target_q" in sv_map["verification_stimulus_inputs"]
+
+          rtl_core = load("synthesizable-rtl-reference-core.json")
+          assert len(rtl_core["exact_tick_execution_order"]) == 26
+          assert rtl_core["kernel_requirements"]["actual_direct_events"] == 0
+          assert rtl_core["kernel_requirements"]["tick_separated_neutral_routing"] is True
+          assert rtl_core["kernel_requirements"]["scheduler_modes"] == [
+              "free",
+              "7/1",
+              "1/7",
+          ]
+
+          assertions = load("rtl-assertion-correlation-harness.json")
+          assert assertions["assertion_count"] == 13
+          assert assertions["exact_comparison_rule"] == (
+              "actual integer field == expected integer field"
+          )
+
+          equivalence = load("reference-rtl-equivalence-report.json")
+          semantic = equivalence["floating_reference_to_quantized_shadow"]
+
+          assert semantic["state_sequence_match"] == 1.0
+          assert semantic["scheduler_sequence_match"] == 1.0
+          assert semantic["neutral_route_sequence_match"] == 1.0
+          assert semantic["C_minus_P_sign_match"] == 1.0
+          assert semantic["boundary_order_match"] == 1.0
+
+          assert semantic["max_phase_error"] <= 0.02
+          assert semantic["max_frequency_error"] <= 0.0001
+          assert semantic["max_heat_error"] <= 0.001
+          assert semantic["max_gamma_error"] <= 0.000001
+          assert semantic["max_coherence_error"] <= 0.01
+          assert semantic["max_C_error"] <= 0.01
+          assert semantic["max_P_error"] <= 0.001
+          assert semantic["max_C_minus_P_error"] <= 0.01
+
+          exact = equivalence["quantized_shadow_deterministic_replay"]
+
+          for field in (
+              "shadow_replay_state_match",
+              "shadow_replay_scheduler_match",
+              "shadow_replay_pending_route_match",
+              "shadow_replay_counter_match",
+              "shadow_replay_trace_match",
+              "shadow_replay_cell_trace_match",
+          ):
+              assert exact[field] == 1.0, field
+
+          closure = load("qualification-closure-manifest.json")
+          assert closure["status"] == "PASS"
+          assert all(closure["checks"].values())
+          assert len(closure["artifact_layers"]) == 10
+
+          benchmark = load("benchmark-matrix.json")
+          assert benchmark["schema"] == "frp.m3.benchmark_matrix.v1.7.0"
+          assert len(benchmark["rows"]) == 5
+          assert [
+              row["architecture"]
+              for row in benchmark["rows"]
+          ] == [
+              "frp_v1_6_0_m14_floating_semantic_reference",
+              "frp_v1_7_0_quantized_hardware_shadow",
+              "frp_v1_7_0_cycle_exact_vector_package",
+              "frp_v1_7_0_systemverilog_correlation_contract",
+              "frp_v1_7_0_qualification_closure",
+          ]
+
+          expected_scaling = {
+              8: (3, 2, 16),
+              16: (4, 4, 32),
+              32: (5, 8, 64),
+          }
+
+          for cells, (depth, lanes, state_width) in expected_scaling.items():
+              payload = load(f"scaling-{cells}.json")
+              item = payload["summary"]
+
+              assert item["cells"] == cells
+              assert item["hierarchy_depth"] == depth
+              assert item["request_lanes"] == lanes
+              assert 2 * cells == state_width
+              assert item["actual_direct_events"] == 0
+              assert item["reserved_state_events"] == 0
+              assert item["queue_overflow_events"] == 0
+              assert item["balanced_ternary_state_domain"] is True
+              assert item["scheduler_counts_valid"] is True
+              assert item["fixed_point_topology_sum_exact"] is True
+              assert item["fixed_point_thermal_sum_exact"] is True
+
+          print("M15 JSON qualification assertions: PASS")
+          PY
+
+      - name: Validate deterministic vector package integrity
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          for directory_name in ("vectors_a", "vectors_b"):
+              directory = Path("artifacts/m15") / directory_name
+
+              files = sorted(
+                  path.name
+                  for path in directory.iterdir()
+                  if path.is_file()
+              )
+
+              assert len(files) == 10
+              assert "frp_m15_sha256_manifest.json" in files
+
+              with (
+                  directory / "frp_m15_sha256_manifest.json"
+              ).open("r", encoding="utf-8") as handle:
+                  manifest = json.load(handle)
+
+              assert len(manifest) == 9
+
+              for name, expected_digest in manifest.items():
+                  path = directory / name
+                  assert path.is_file(), name
+
+                  actual_digest = hashlib.sha256(
+                      path.read_bytes()
+                  ).hexdigest()
+
+                  assert actual_digest == expected_digest, name
+
+              full_vectors = (
+                  directory / "frp_m15_full_correlation_vectors.vec"
+              ).read_text(encoding="utf-8")
+
+              assert "GAMMA_NOISE_TARGETS_Q" in full_vectors
+              assert '# format_version="frp.m15.vector.v1"' in full_vectors
+              assert '# frp_version="1.7.0"' in full_vectors
+              assert "# cells=16" in full_vectors
+              assert "# request_lanes=4" in full_vectors
+
+              kernel_vectors = (
+                  directory / "frp_m15_kernel_vectors.vec"
+              ).read_text(encoding="utf-8")
+
+              assert "ACTUAL_DIRECT_EVENTS" in kernel_vectors
+              assert "PENDING_ROUTE_COUNT" in kernel_vectors
+
+              route_trace = (
+                  directory / "frp_m15_pending_routes.trace"
+              ).read_text(encoding="utf-8")
+
+              assert "ROUTE_STATUS" in route_trace
+              assert "pending" in route_trace
+              assert "applied" in route_trace
+
+          directory_a = Path("artifacts/m15/vectors_a")
+          directory_b = Path("artifacts/m15/vectors_b")
+
+          for path_a in sorted(directory_a.iterdir()):
+              if not path_a.is_file():
+                  continue
+
+              path_b = directory_b / path_a.name
+
+              assert path_b.is_file()
+              assert path_a.read_bytes() == path_b.read_bytes(), path_a.name
+
+          print(
+              "M15 vector package integrity and deterministic repeat: PASS"
+          )
+          PY
+
+      - name: Validate M15 architecture document contract
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path(
+              "docs/m15_implementation_mapping_domain_interface_qualification_closure.md"
+          )
+
+          text = path.read_text(encoding="utf-8")
+
+          required_markers = [
+              "# FRP v1.7.0 — M15 Implementation Mapping, Domain Interface, and Qualification Closure Package",
+              "`M14 floating semantic reference`",
+              "`M15 quantized hardware shadow model`",
+              "`cycle-exact integer golden trace`",
+              "`synthesizable RTL reference core`",
+              "`exact quantized shadow ↔ RTL equivalence`",
+              "`actual_direct_events = 0`",
+              "`-1 → 0 → 1`",
+              "`1 → 0 → -1`",
+              "`free`",
+              "`7/1`",
+              "`1/7`",
+              "`S32Q16`",
+              "`S32Q30`",
+              "`PHASE_U32`",
+              "`GAMMA_S32`",
+              "`GAMMA_NOISE_TARGETS_Q`",
+              "`quantized_reference_shadow_model`",
+              "`rtl_comparison_vector_package`",
+              "`reference_rtl_equivalence_report`",
+              "`qualification_closure_manifest`",
+              "`M16 — RTL Core Realization and Execution Semantics Package`",
+          ]
+
+          for marker in required_markers:
+              assert marker in text, marker
+
+          section_start = text.index("## Primary Vector Row Format")
+          section_end = text.index(
+              "## Vector Cell Ordering",
+              section_start,
+          )
+
+          section = text[section_start:section_end]
+
+          gamma_valid = section.index("`GAMMA_UPDATE_VALID`")
+          gamma_targets = section.index("`GAMMA_NOISE_TARGETS_Q`")
+          states_packed = section.index("`STATES_PACKED`")
+
+          assert gamma_valid < gamma_targets < states_packed
+
+          for schema in (
+              "frp.m15.fixed_point_interface_profile.v1.7.0",
+              "frp.m15.balanced_ternary_hardware_encoding_map.v1.7.0",
+              "frp.m15.quantized_reference_shadow_model.v1.7.0",
+              "frp.m15.cycle_exact_reference_trace.v1.7.0",
+              "frp.m15.rtl_comparison_vector_package.v1.7.0",
+              "frp.m15.systemverilog_testbench_interface_map.v1.7.0",
+              "frp.m15.synthesizable_rtl_reference_core.v1.7.0",
+              "frp.m15.rtl_assertion_correlation_harness.v1.7.0",
+              "frp.m15.reference_rtl_equivalence_report.v1.7.0",
+              "frp.m15.qualification_closure_manifest.v1.7.0",
+          ):
+              assert f"`{schema}`" in text, schema
+
+          print("M15 architecture document contract: PASS")
+          PY
+
+      - name: Upload M15 qualification artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-v1.7.0-m15-qualification-artifacts
+          path: artifacts/m15
+          if-no-files-found: error
