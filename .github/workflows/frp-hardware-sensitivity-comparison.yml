@@ -1,0 +1,942 @@
+name: FRP Hardware Sensitivity Comparison
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frp_prototype_v1_7_0.py"
+      - "benchmarks/architecture_comparison/common_workload.py"
+      - "benchmarks/architecture_comparison/common_cost_model.py"
+      - "benchmarks/architecture_comparison/common_thermal_model.py"
+      - "benchmarks/architecture_comparison/binary_synchronous_reference.py"
+      - "benchmarks/architecture_comparison/binary_clock_gated_reference.py"
+      - "benchmarks/architecture_comparison/direct_ternary_reference.py"
+      - "benchmarks/architecture_comparison/frp_v1_7_0_adapter.py"
+      - "benchmarks/architecture_comparison/run_architecture_comparison.py"
+      - "benchmarks/architecture_comparison/run_hardware_sensitivity_comparison.py"
+      - "benchmarks/architecture_comparison/validate_hardware_sensitivity_profile.py"
+      - "benchmarks/architecture_comparison/calibration/hardware_cost_calibration_v1.md"
+      - "benchmarks/architecture_comparison/calibration/coefficient_provenance_map_v1.md"
+      - "benchmarks/architecture_comparison/profiles/workload_profile_v1.json"
+      - "benchmarks/architecture_comparison/profiles/normalized_cost_profile_v1.json"
+      - "benchmarks/architecture_comparison/profiles/thermal_proxy_profile_v1.json"
+      - "benchmarks/architecture_comparison/profiles/hardware_sensitivity_cost_profile_v1.json"
+      - "benchmarks/architecture_comparison/results/reference_comparison_seed_76.json"
+      - "benchmarks/architecture_comparison/results/reference_comparison_seed_76_hardware_sensitivity_v1.json"
+      - ".github/workflows/frp-hardware-sensitivity-comparison.yml"
+
+  pull_request:
+    paths:
+      - "frp_prototype_v1_7_0.py"
+      - "benchmarks/architecture_comparison/common_workload.py"
+      - "benchmarks/architecture_comparison/common_cost_model.py"
+      - "benchmarks/architecture_comparison/common_thermal_model.py"
+      - "benchmarks/architecture_comparison/binary_synchronous_reference.py"
+      - "benchmarks/architecture_comparison/binary_clock_gated_reference.py"
+      - "benchmarks/architecture_comparison/direct_ternary_reference.py"
+      - "benchmarks/architecture_comparison/frp_v1_7_0_adapter.py"
+      - "benchmarks/architecture_comparison/run_architecture_comparison.py"
+      - "benchmarks/architecture_comparison/run_hardware_sensitivity_comparison.py"
+      - "benchmarks/architecture_comparison/validate_hardware_sensitivity_profile.py"
+      - "benchmarks/architecture_comparison/calibration/hardware_cost_calibration_v1.md"
+      - "benchmarks/architecture_comparison/calibration/coefficient_provenance_map_v1.md"
+      - "benchmarks/architecture_comparison/profiles/workload_profile_v1.json"
+      - "benchmarks/architecture_comparison/profiles/normalized_cost_profile_v1.json"
+      - "benchmarks/architecture_comparison/profiles/thermal_proxy_profile_v1.json"
+      - "benchmarks/architecture_comparison/profiles/hardware_sensitivity_cost_profile_v1.json"
+      - "benchmarks/architecture_comparison/results/reference_comparison_seed_76.json"
+      - "benchmarks/architecture_comparison/results/reference_comparison_seed_76_hardware_sensitivity_v1.json"
+      - ".github/workflows/frp-hardware-sensitivity-comparison.yml"
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: frp-hardware-sensitivity-comparison-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  hardware-sensitivity-comparison:
+    name: Hardware Sensitivity Comparison Qualification
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 30
+
+    env:
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      LC_ALL: C.UTF-8
+      TZ: UTC
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: benchmarks/architecture_comparison
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Show qualification environment
+        run: |
+          python --version
+          pwd
+
+          test -f ../../frp_prototype_v1_7_0.py
+
+          test -f common_workload.py
+          test -f common_cost_model.py
+          test -f common_thermal_model.py
+
+          test -f binary_synchronous_reference.py
+          test -f binary_clock_gated_reference.py
+          test -f direct_ternary_reference.py
+          test -f frp_v1_7_0_adapter.py
+
+          test -f run_architecture_comparison.py
+          test -f run_hardware_sensitivity_comparison.py
+          test -f validate_hardware_sensitivity_profile.py
+
+          test -f calibration/hardware_cost_calibration_v1.md
+          test -f calibration/coefficient_provenance_map_v1.md
+
+          test -f profiles/workload_profile_v1.json
+          test -f profiles/normalized_cost_profile_v1.json
+          test -f profiles/thermal_proxy_profile_v1.json
+          test -f profiles/hardware_sensitivity_cost_profile_v1.json
+
+          test -f results/reference_comparison_seed_76.json
+
+      - name: Compile sensitivity execution chain
+        run: |
+          python -m py_compile \
+            common_workload.py \
+            common_cost_model.py \
+            common_thermal_model.py \
+            binary_synchronous_reference.py \
+            binary_clock_gated_reference.py \
+            direct_ternary_reference.py \
+            frp_v1_7_0_adapter.py \
+            run_architecture_comparison.py \
+            validate_hardware_sensitivity_profile.py \
+            run_hardware_sensitivity_comparison.py \
+            ../../frp_prototype_v1_7_0.py
+
+      - name: Create qualification directories
+        run: |
+          mkdir -p results
+          mkdir -p .qualification
+
+      - name: Record canonical unit-event baseline checksum
+        run: |
+          sha256sum \
+            results/reference_comparison_seed_76.json \
+            > .qualification/baseline_before.sha256
+
+          cat .qualification/baseline_before.sha256
+
+      - name: Validate hardware sensitivity profile
+        run: |
+          python validate_hardware_sensitivity_profile.py \
+            --profile profiles/hardware_sensitivity_cost_profile_v1.json \
+            --output text
+
+      - name: Record hardware sensitivity profile validation
+        run: |
+          python validate_hardware_sensitivity_profile.py \
+            --profile profiles/hardware_sensitivity_cost_profile_v1.json \
+            --output json \
+            > .qualification/hardware_sensitivity_profile_validation.json
+
+          cat .qualification/hardware_sensitivity_profile_validation.json
+
+      - name: Run hardware sensitivity profile validator self-test
+        run: |
+          python validate_hardware_sensitivity_profile.py \
+            --profile profiles/hardware_sensitivity_cost_profile_v1.json \
+            --self-test \
+            --output text
+
+      - name: Run hardware sensitivity comparison self-test
+        run: |
+          python run_hardware_sensitivity_comparison.py \
+            --hardware-sensitivity-profile profiles/hardware_sensitivity_cost_profile_v1.json \
+            --self-test \
+            --output json \
+            > .qualification/hardware_sensitivity_runner_self_test.json
+
+          cat .qualification/hardware_sensitivity_runner_self_test.json
+
+      - name: Verify sensitivity runner self-test
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path(
+              ".qualification/"
+              "hardware_sensitivity_runner_self_test.json"
+          )
+
+          result = json.loads(
+              path.read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          assert (
+              result["schema"]
+              ==
+              "frp.benchmark."
+              "hardware_sensitivity_comparison."
+              "self_test.v1"
+          )
+
+          assert result["status"] == "PASS"
+
+          assert result["check_count"] > 0
+
+          assert all(
+              result["checks"].values()
+          )
+
+          assert (
+              result["qualification_status"]
+              == "PASS"
+          )
+
+          assert (
+              len(
+                  result[
+                      "hardware_sensitivity_package_sha256"
+                  ]
+              )
+              == 64
+          )
+
+          assert (
+              len(
+                  result[
+                      "hardware_sensitivity_profile_sha256"
+                  ]
+              )
+              == 64
+          )
+
+          assert (
+              len(
+                  result[
+                      "raw_trace_set_sha256"
+                  ]
+              )
+              == 64
+          )
+
+          print(
+              "hardware sensitivity runner "
+              "self-test qualification: PASS"
+          )
+          PY
+
+      - name: Generate canonical hardware sensitivity result
+        run: |
+          python run_hardware_sensitivity_comparison.py \
+            --workload-profile profiles/workload_profile_v1.json \
+            --hardware-sensitivity-profile profiles/hardware_sensitivity_cost_profile_v1.json \
+            --thermal-profile profiles/thermal_proxy_profile_v1.json \
+            --frp-scheduler "7/1" \
+            --write results/reference_comparison_seed_76_hardware_sensitivity_v1.json \
+            --output text
+
+      - name: Regenerate hardware sensitivity result independently
+        run: |
+          python run_hardware_sensitivity_comparison.py \
+            --workload-profile profiles/workload_profile_v1.json \
+            --hardware-sensitivity-profile profiles/hardware_sensitivity_cost_profile_v1.json \
+            --thermal-profile profiles/thermal_proxy_profile_v1.json \
+            --frp-scheduler "7/1" \
+            --write .qualification/reference_comparison_seed_76_hardware_sensitivity_v1_repeat.json \
+            --output text
+
+      - name: Verify byte-identical deterministic regeneration
+        run: |
+          cmp \
+            results/reference_comparison_seed_76_hardware_sensitivity_v1.json \
+            .qualification/reference_comparison_seed_76_hardware_sensitivity_v1_repeat.json
+
+      - name: Verify canonical unit-event baseline remained unchanged
+        run: |
+          sha256sum \
+            -c .qualification/baseline_before.sha256
+
+      - name: Verify hardware sensitivity package contract
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import math
+          from pathlib import Path
+
+          result_path = Path(
+              "results/"
+              "reference_comparison_seed_76_"
+              "hardware_sensitivity_v1.json"
+          )
+
+          repeat_path = Path(
+              ".qualification/"
+              "reference_comparison_seed_76_"
+              "hardware_sensitivity_v1_repeat.json"
+          )
+
+          profile_path = Path(
+              "profiles/"
+              "hardware_sensitivity_cost_profile_v1.json"
+          )
+
+          baseline_path = Path(
+              "results/"
+              "reference_comparison_seed_76.json"
+          )
+
+          result = json.loads(
+              result_path.read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          repeat = json.loads(
+              repeat_path.read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          profile = json.loads(
+              profile_path.read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          baseline = json.loads(
+              baseline_path.read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          expected_architecture_order = [
+              "binary_synchronous_reference",
+              "binary_clock_gated_reference",
+              "direct_ternary_reference",
+              "frp_v1_7_0_quantized_shadow",
+          ]
+
+          expected_scenario_order = [
+              "lower_bound",
+              "nominal",
+              "upper_bound",
+          ]
+
+          allowed_pairwise_classifications = {
+              "stable_lower_cost",
+              "stable_higher_cost",
+              "crosses_within_sensitivity_range",
+          }
+
+          allowed_pairwise_relations = {
+              "lower_cost",
+              "higher_cost",
+              "equal_cost",
+          }
+
+          assert result == repeat
+
+          assert (
+              result["schema"]
+              ==
+              "frp.benchmark."
+              "hardware_sensitivity_comparison.v1"
+          )
+
+          assert (
+              result["suite_name"]
+              ==
+              "FRP Comparative Architecture Benchmark Suite"
+          )
+
+          assert (
+              result["benchmark_kind"]
+              ==
+              "hardware_informed_sensitivity_matrix"
+          )
+
+          assert (
+              result["frp_reference_version"]
+              == "1.7.0"
+          )
+
+          assert (
+              result["frp_scheduler"]
+              == "7/1"
+          )
+
+          assert (
+              result["architecture_order"]
+              == expected_architecture_order
+          )
+
+          assert (
+              result["workload_sha256"]
+              == baseline["workload_sha256"]
+          )
+
+          assert (
+              result[
+                  "hardware_sensitivity_profile_sha256"
+              ]
+              ==
+              profile["cost_profile_sha256"]
+          )
+
+          assert (
+              result[
+                  "hardware_sensitivity_profile"
+              ][
+                  "cost_profile_sha256"
+              ]
+              ==
+              profile["cost_profile_sha256"]
+          )
+
+          assert (
+              result[
+                  "hardware_sensitivity_profile"
+              ][
+                  "scenario_order"
+              ]
+              == expected_scenario_order
+          )
+
+          assert (
+              result[
+                  "hardware_sensitivity_profile"
+              ][
+                  "coefficient_order"
+              ]
+              == profile["coefficient_order"]
+          )
+
+          assert (
+              result["profile_validation"]["status"]
+              == "PASS"
+          )
+
+          assert (
+              result["baseline_binding"]["status"]
+              == "PASS"
+          )
+
+          assert all(
+              result[
+                  "baseline_binding"
+              ][
+                  "checks"
+              ].values()
+          )
+
+          assert (
+              result[
+                  "baseline_binding"
+              ][
+                  "current_execution"
+              ][
+                  "status"
+              ]
+              == "PASS"
+          )
+
+          assert all(
+              result[
+                  "baseline_binding"
+              ][
+                  "current_execution"
+              ][
+                  "checks"
+              ].values()
+          )
+
+          assert (
+              result["integrity"]["status"]
+              == "PASS"
+          )
+
+          assert all(
+              result["integrity"]["checks"].values()
+          )
+
+          assert (
+              result["qualification"]["policy"]
+              ==
+              "integrity_only_no_winner_assertions"
+          )
+
+          assert (
+              result["qualification"]["status"]
+              == "PASS"
+          )
+
+          assert all(
+              result[
+                  "qualification"
+              ][
+                  "checks"
+              ].values()
+          )
+
+          assert (
+              result[
+                  "qualification"
+              ][
+                  "winner_assertions"
+              ]
+              == []
+          )
+
+          ledger = result["raw_trace_ledger"]
+
+          assert len(ledger) == 4
+
+          assert (
+              [
+                  row["architecture_id"]
+                  for row in ledger
+              ]
+              == expected_architecture_order
+          )
+
+          assert all(
+              row["workload_sha256"]
+              == result["workload_sha256"]
+              for row in ledger
+          )
+
+          baseline_by_id = {
+              row["architecture_id"]: row
+              for row in baseline["architectures"]
+          }
+
+          ledger_by_id = {
+              row["architecture_id"]: row
+              for row in ledger
+          }
+
+          assert all(
+              row["architecture_result_sha256"]
+              ==
+              baseline_by_id[
+                  row["architecture_id"]
+              ][
+                  "architecture_result_sha256"
+              ]
+              for row in ledger
+          )
+
+          assert all(
+              len(
+                  row["raw_event_trace_sha256"]
+              )
+              == 64
+              for row in ledger
+          )
+
+          assert all(
+              len(
+                  row["raw_event_totals_sha256"]
+              )
+              == 64
+              for row in ledger
+          )
+
+          scenarios = result["scenarios"]
+
+          assert len(scenarios) == 3
+
+          assert (
+              [
+                  scenario["scenario_id"]
+                  for scenario in scenarios
+              ]
+              == expected_scenario_order
+          )
+
+          trace_digest_map = {
+              row["architecture_id"]:
+              row["raw_event_trace_sha256"]
+              for row in ledger
+          }
+
+          architecture_digest_map = {
+              row["architecture_id"]:
+              row["architecture_result_sha256"]
+              for row in ledger
+          }
+
+          scenario_cost_digests = set()
+
+          for scenario in scenarios:
+              scenario_id = scenario[
+                  "scenario_id"
+              ]
+
+              assert (
+                  scenario["scenario_vector"]
+                  ==
+                  {
+                      key: float(value)
+                      for key, value
+                      in profile[
+                          "scenario_vectors"
+                      ][
+                          scenario_id
+                      ].items()
+                  }
+              )
+
+              assert (
+                  len(
+                      scenario[
+                          "scenario_vector_sha256"
+                      ]
+                  )
+                  == 64
+              )
+
+              assert (
+                  len(
+                      scenario[
+                          "scenario_cost_profile_sha256"
+                      ]
+                  )
+                  == 64
+              )
+
+              scenario_cost_digests.add(
+                  scenario[
+                      "scenario_cost_profile_sha256"
+                  ]
+              )
+
+              assert (
+                  scenario["integrity"]["status"]
+                  == "PASS"
+              )
+
+              assert all(
+                  scenario[
+                      "integrity"
+                  ][
+                      "checks"
+                  ].values()
+              )
+
+              assert (
+                  [
+                      row["architecture_id"]
+                      for row
+                      in scenario["architectures"]
+                  ]
+                  == expected_architecture_order
+              )
+
+              assert (
+                  [
+                      row["architecture_id"]
+                      for row
+                      in scenario["comparison_matrix"]
+                  ]
+                  == expected_architecture_order
+              )
+
+              assert {
+                  row["architecture_id"]:
+                  row["raw_event_trace_sha256"]
+                  for row
+                  in scenario["architectures"]
+              } == trace_digest_map
+
+              assert {
+                  row["architecture_id"]:
+                  row["architecture_result_sha256"]
+                  for row
+                  in scenario["architectures"]
+              } == architecture_digest_map
+
+              assert all(
+                  row["semantic_completion_ratio"]
+                  == 1.0
+                  for row
+                  in scenario["comparison_matrix"]
+              )
+
+              assert all(
+                  row["semantic_output_match"]
+                  == 1.0
+                  for row
+                  in scenario["comparison_matrix"]
+              )
+
+              assert (
+                  len(
+                      scenario[
+                          "ranking"
+                      ][
+                          "architecture_order"
+                      ]
+                  )
+                  == 4
+              )
+
+              assert (
+                  set(
+                      scenario[
+                          "ranking"
+                      ][
+                          "architecture_order"
+                      ]
+                  )
+                  == set(
+                      expected_architecture_order
+                  )
+              )
+
+              assert all(
+                  math.isfinite(
+                      float(
+                          row[
+                              "total_normalized_energy"
+                          ]
+                      )
+                  )
+                  for row
+                  in scenario["comparison_matrix"]
+              )
+
+          assert len(scenario_cost_digests) == 3
+
+          stability = result["ranking_stability"]
+
+          assert (
+              stability["ranking_basis"]
+              ==
+              "ascending_total_normalized_energy"
+          )
+
+          assert (
+              set(
+                  stability[
+                      "scenario_rankings"
+                  ].keys()
+              )
+              == set(
+                  expected_scenario_order
+              )
+          )
+
+          assert isinstance(
+              stability["ranking_stable"],
+              bool,
+          )
+
+          assert isinstance(
+              stability["ranking_sensitive"],
+              bool,
+          )
+
+          assert (
+              stability["ranking_sensitive"]
+              is not stability["ranking_stable"]
+          )
+
+          pairwise = stability[
+              "pairwise_stability"
+          ]
+
+          assert len(pairwise) == 6
+
+          for row in pairwise:
+              assert (
+                  row["classification"]
+                  in allowed_pairwise_classifications
+              )
+
+              assert (
+                  set(
+                      row[
+                          "scenario_relations"
+                      ].keys()
+                  )
+                  == set(
+                      expected_scenario_order
+                  )
+              )
+
+              assert all(
+                  relation
+                  in allowed_pairwise_relations
+                  for relation
+                  in row[
+                      "scenario_relations"
+                  ].values()
+              )
+
+          frp = ledger_by_id[
+              "frp_v1_7_0_quantized_shadow"
+          ][
+              "architecture_specific_metrics"
+          ]
+
+          assert (
+              frp["actual_direct_events"]
+              == 0
+          )
+
+          assert (
+              frp["reserved_state_events"]
+              == 0
+          )
+
+          assert (
+              frp["queue_overflow_events"]
+              == 0
+          )
+
+          assert (
+              frp["pending_route_count_final"]
+              == 0
+          )
+
+          assert (
+              frp["requested_direct_events"]
+              ==
+              frp["prevented_direct_events"]
+          )
+
+          assert (
+              frp["neutral_insertions"]
+              ==
+              frp["neutral_routed_events"]
+          )
+
+          recorded_digest = result[
+              "hardware_sensitivity_package_sha256"
+          ]
+
+          assert len(recorded_digest) == 64
+
+          payload = dict(result)
+
+          del payload[
+              "hardware_sensitivity_package_sha256"
+          ]
+
+          canonical = json.dumps(
+              payload,
+              ensure_ascii=False,
+              sort_keys=True,
+              separators=(",", ":"),
+              allow_nan=False,
+          ).encode("utf-8")
+
+          recomputed_digest = hashlib.sha256(
+              canonical
+          ).hexdigest()
+
+          assert (
+              recorded_digest
+              == recomputed_digest
+          )
+
+          print(
+              "hardware sensitivity comparison "
+              "package qualification: PASS"
+          )
+
+          print(
+              "hardware_sensitivity_package_sha256="
+              f"{recorded_digest}"
+          )
+
+          print(
+              "ranking_stable="
+              f"{stability['ranking_stable']}"
+          )
+
+          print(
+              "ranking_sensitive="
+              f"{stability['ranking_sensitive']}"
+          )
+          PY
+
+      - name: Build SHA-256 qualification manifest
+        run: |
+          sha256sum \
+            calibration/hardware_cost_calibration_v1.md \
+            calibration/coefficient_provenance_map_v1.md \
+            profiles/workload_profile_v1.json \
+            profiles/thermal_proxy_profile_v1.json \
+            profiles/hardware_sensitivity_cost_profile_v1.json \
+            validate_hardware_sensitivity_profile.py \
+            run_hardware_sensitivity_comparison.py \
+            results/reference_comparison_seed_76.json \
+            results/reference_comparison_seed_76_hardware_sensitivity_v1.json \
+            .qualification/reference_comparison_seed_76_hardware_sensitivity_v1_repeat.json \
+            .qualification/hardware_sensitivity_profile_validation.json \
+            .qualification/hardware_sensitivity_runner_self_test.json \
+            > .qualification/hardware_sensitivity_comparison_sha256_manifest.txt
+
+          cat .qualification/hardware_sensitivity_comparison_sha256_manifest.txt
+
+      - name: Upload hardware sensitivity comparison artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-hardware-sensitivity-comparison-seed-76
+          path: |
+            benchmarks/architecture_comparison/results/reference_comparison_seed_76_hardware_sensitivity_v1.json
+            benchmarks/architecture_comparison/.qualification/reference_comparison_seed_76_hardware_sensitivity_v1_repeat.json
+            benchmarks/architecture_comparison/.qualification/hardware_sensitivity_profile_validation.json
+            benchmarks/architecture_comparison/.qualification/hardware_sensitivity_runner_self_test.json
+            benchmarks/architecture_comparison/.qualification/hardware_sensitivity_comparison_sha256_manifest.txt
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Commit canonical hardware sensitivity result to main
+        if: >-
+          github.ref == 'refs/heads/main' &&
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add --force \
+            results/reference_comparison_seed_76_hardware_sensitivity_v1.json
+
+          if git diff --cached --quiet; then
+            echo "Canonical hardware sensitivity result is already current."
+            exit 0
+          fi
+
+          git commit \
+            -m "[skip actions] Record canonical hardware sensitivity comparison result"
+
+          git push origin HEAD:main
