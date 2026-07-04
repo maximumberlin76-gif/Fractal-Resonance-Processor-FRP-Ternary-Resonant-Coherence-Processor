@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: frp-architecture-comparison-${{ github.ref }}
@@ -47,6 +47,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -416,3 +418,23 @@ jobs:
             benchmarks/architecture_comparison/.qualification/reference_comparison_seed_76_repeat.json
           if-no-files-found: error
           retention-days: 90
+
+      - name: Commit canonical comparison result to main
+        if: >-
+          github.ref == 'refs/heads/main' &&
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add --force results/reference_comparison_seed_76.json
+
+          if git diff --cached --quiet; then
+            echo "Canonical comparison result is already current."
+            exit 0
+          fi
+
+          git commit \
+            -m "[skip actions] Record canonical architecture comparison result"
+
+          git push origin HEAD:main
