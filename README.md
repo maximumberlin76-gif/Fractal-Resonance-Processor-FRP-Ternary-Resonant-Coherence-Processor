@@ -1,6 +1,6 @@
 # Fractal Resonance Processor (FRP)
 
-[FRP M15 Implementation Mapping and Qualification Closure](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m15-implementation-mapping-qualification.yml)
+[![FRP M15 Implementation Mapping and Qualification Closure](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m15-implementation-mapping-qualification.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m15-implementation-mapping-qualification.yml)
 
 [![FRP M14 Physical Implementation Correlation and Production Qualification](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m14-physical-implementation-qualification.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m14-physical-implementation-qualification.yml)
 
