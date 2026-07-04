@@ -2088,6 +2088,508 @@ Validation result:
 
 `PASS`
 
+## Comparative Architecture Benchmark Qualification
+
+The M15 validation surface includes a separate post-release Comparative Architecture Benchmark Suite.
+
+Detailed benchmark documentation:
+
+`benchmarks/architecture_comparison/README.md`
+
+Canonical unit-event baseline:
+
+`benchmarks/architecture_comparison/results/reference_comparison_seed_76.json`
+
+Canonical hardware-informed sensitivity result:
+
+`benchmarks/architecture_comparison/results/reference_comparison_seed_76_hardware_sensitivity_v1.json`
+
+The comparative benchmark suite does not modify:
+
+- the validated M15 reference architecture;
+
+- the canonical M15 executable reference file;
+
+- the canonical unit-event baseline;
+
+- the original v0.9.3 thermal benchmark.
+
+Validation result:
+
+`PASS`
+
+## Canonical Unit-Event Baseline Qualification
+
+Validated profile:
+
+`unit_event_cost_v1`
+
+Validated architecture set:
+
+1. `binary_synchronous_reference`;
+
+2. `binary_clock_gated_reference`;
+
+3. `direct_ternary_reference`;
+
+4. `frp_v1_7_0_quantized_shadow`.
+
+Validated semantic workload relation:
+
+`one identical semantic workload`
+
+↓
+
+`architecture-specific execution`
+
+↓
+
+`raw architecture event counters`
+
+↓
+
+`one common normalized cost model`
+
+↓
+
+`one common thermal proxy model`
+
+↓
+
+`machine-readable comparison matrix`
+
+Validated canonical result:
+
+`benchmarks/architecture_comparison/results/reference_comparison_seed_76.json`
+
+Validated canonical package digest:
+
+`5a4be61ce7fd6bc680bbd8bc28bfe7cc9d2ad35adddf642cecff111fbd503d6a`
+
+Validated baseline role:
+
+`declared architecture event volume under one common unit-cost model`
+
+Validated interpretation boundary:
+
+`not a physical silicon energy measurement`
+
+Validation result:
+
+`PASS`
+
+## Hardware Sensitivity Profile Qualification
+
+Validated profile identifier:
+
+`literature_anchored_cmos45_sensitivity_v1`
+
+Validated profile role:
+
+`hardware_informed_sensitivity`
+
+Validated normalization reference:
+
+`32-bit integer addition = 1.0`
+
+Validated reference energy value:
+
+`0.1 pJ`
+
+Validated reference technology context:
+
+`45 nm CMOS`
+
+Validated primary literature anchor:
+
+`Mark Horowitz, 1.1 Computing's Energy Problem (and What We Can Do About It), ISSCC 2014, DOI: 10.1109/ISSCC.2014.6757323`
+
+Validated interpretation boundary:
+
+`rough technology-context anchors for sensitivity analysis`
+
+Validated exclusion:
+
+`not universal physical constants`
+
+Validated workflow:
+
+`FRP Hardware Sensitivity Profile Qualification #1`
+
+Validated commit:
+
+`cf23ca7`
+
+Validated workflow status:
+
+`PASS`
+
+Validation result:
+
+`PASS`
+
+## Hardware Sensitivity Comparison Qualification
+
+Validated workflow:
+
+`FRP Hardware Sensitivity Comparison #1`
+
+Validated commit:
+
+`d90cce4`
+
+Validated workflow status:
+
+`PASS`
+
+Validated canonical result recording commit:
+
+`aaecf23`
+
+Validated canonical result:
+
+`benchmarks/architecture_comparison/results/reference_comparison_seed_76_hardware_sensitivity_v1.json`
+
+Validated scenario order:
+
+1. `lower_bound`;
+
+2. `nominal`;
+
+3. `upper_bound`.
+
+Validated scenario relation:
+
+`same global scenario vector applied to every architecture`
+
+Validated exclusion:
+
+`no architecture-specific coefficient vectors`
+
+Validated raw-result relation:
+
+`same architecture results for all scenarios`
+
+Validated raw-trace relation:
+
+`same raw traces for all scenarios`
+
+Validation result:
+
+`PASS`
+
+## Canonical Hardware Sensitivity Scenario Results
+
+Validated ranking basis:
+
+`ascending_total_normalized_energy`
+
+Validated `lower_bound` results:
+
+`binary_clock_gated_reference = 111.109375`
+
+`direct_ternary_reference = 118.078125`
+
+`binary_synchronous_reference = 181.078125`
+
+`frp_v1_7_0_quantized_shadow = 14457825.125`
+
+Validated `nominal` results:
+
+`binary_clock_gated_reference = 444.4375`
+
+`direct_ternary_reference = 472.3125`
+
+`binary_synchronous_reference = 724.3125`
+
+`frp_v1_7_0_quantized_shadow = 25157118.0`
+
+Validated `upper_bound` results:
+
+`binary_clock_gated_reference = 2929.75`
+
+`direct_ternary_reference = 3041.25`
+
+`binary_synchronous_reference = 4049.25`
+
+`frp_v1_7_0_quantized_shadow = 39955490.0`
+
+Validated ranking in all three scenarios:
+
+`binary_clock_gated_reference`
+
+↓
+
+`direct_ternary_reference`
+
+↓
+
+`binary_synchronous_reference`
+
+↓
+
+`frp_v1_7_0_quantized_shadow`
+
+Validated ranking stability:
+
+`ranking_stable = true`
+
+Validated ranking sensitivity:
+
+`ranking_sensitive = false`
+
+Validation result:
+
+`PASS`
+
+## Pairwise Stability Qualification
+
+Validated pairwise relation:
+
+`binary_synchronous_reference`
+
+vs:
+
+`binary_clock_gated_reference`
+
+Classification:
+
+`stable_higher_cost`
+
+Validated pairwise relation:
+
+`binary_synchronous_reference`
+
+vs:
+
+`direct_ternary_reference`
+
+Classification:
+
+`stable_higher_cost`
+
+Validated pairwise relation:
+
+`binary_synchronous_reference`
+
+vs:
+
+`frp_v1_7_0_quantized_shadow`
+
+Classification:
+
+`stable_lower_cost`
+
+Validated pairwise relation:
+
+`binary_clock_gated_reference`
+
+vs:
+
+`direct_ternary_reference`
+
+Classification:
+
+`stable_lower_cost`
+
+Validated pairwise relation:
+
+`binary_clock_gated_reference`
+
+vs:
+
+`frp_v1_7_0_quantized_shadow`
+
+Classification:
+
+`stable_lower_cost`
+
+Validated pairwise relation:
+
+`direct_ternary_reference`
+
+vs:
+
+`frp_v1_7_0_quantized_shadow`
+
+Classification:
+
+`stable_lower_cost`
+
+Validated pairwise stability relation:
+
+`all six classifications remain unchanged across lower_bound, nominal, and upper_bound`
+
+Validation result:
+
+`PASS`
+
+## FRP Hardware Sensitivity Cost Concentration
+
+Validated raw event total:
+
+`fixed_point_multiplies_32x32 = 518728`
+
+Validated raw event total:
+
+`lut_reads_32 = 172221`
+
+Validated raw event total:
+
+`fixed_point_accumulates_64 = 296534`
+
+Validated raw event total:
+
+`fixed_point_adds_32 = 339899`
+
+Validated raw event total:
+
+`fixed_point_compares_32 = 45430`
+
+Validated dominant declared cost concentration:
+
+`fixed-point arithmetic volume`
+
+plus:
+
+`trigonometric lookup volume`
+
+Validated result:
+
+`the current M15 quantized shadow produces the highest declared normalized activity cost in all three hardware-informed sensitivity scenarios`
+
+Validated interpretation boundary:
+
+`not a physical silicon energy measurement`
+
+Validated exclusion:
+
+`does not establish universal energy ordering between binary, ternary, and FRP hardware`
+
+Validated policy:
+
+`result retained without coefficient adjustment`
+
+Validated policy:
+
+`winner_assertions = []`
+
+Validation result:
+
+`PASS`
+
+## Separation from the Original v0.9.3 Thermal Benchmark
+
+Validated benchmark separation:
+
+`M15 Comparative Architecture Benchmark Suite`
+
+is separate from:
+
+`original v0.9.3 thermal benchmark`
+
+Original benchmark document:
+
+`TEST_REPORT_v0_9_3.md`
+
+Validated lowest original benchmark heat peak:
+
+`distributed_neutral_ternary`
+
+Validated original result:
+
+`heat_peak = 0.003250`
+
+Validated original result:
+
+`switch_load_peak = 0.25`
+
+Validated original result:
+
+`actual_direct_events = 0`
+
+Validated direct ternary commit heat peak:
+
+`heat_peak = 0.051000`
+
+Validated binary-style forced-switch heat peak:
+
+`heat_peak = 0.051000`
+
+Validated architectural distinction:
+
+`active neutral state 0`
+
+↓
+
+`prohibited direct polarity reversal`
+
+↓
+
+`tick-separated neutral routing`
+
+↓
+
+`distributed transition load`
+
+Validated interpretation:
+
+`the recorded thermal-proxy distinction belongs to the distributed neutral-transition architecture rather than to ternary encoding alone`
+
+Validated preservation rule:
+
+`the original v0.9.3 thermal benchmark result remains preserved`
+
+Validated separation rule:
+
+`the original thermal benchmark result is not replaced or invalidated by the M15 hardware-informed sensitivity result`
+
+Validated comparison rule:
+
+`the two benchmark contours answer different technical questions and must not be merged into one ranking claim`
+
+Validation result:
+
+`PASS`
+
+## Hardware Sensitivity Package Integrity
+
+Validated canonical package digest:
+
+`a44cf392d946e3b5c21dffbaa1d726d31da326a007e2908914f6477215261ea0`
+
+Validated preserved relations:
+
+`same architecture results for all scenarios`
+
+`same raw traces for all scenarios`
+
+`global exact scenario vectors`
+
+`semantic completion ratio = 1.000 for all architectures`
+
+`semantic output match = 1.000 for all architectures`
+
+Validated FRP invariants:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+Validated winner-assertion policy:
+
+`winner_assertions = []`
+
+Validated qualification role:
+
+`integrity_only_no_winner_assertions`
+
+Validation result:
+
+`PASS`
+
 ## Architecture Document Contract
 
 Validated document:
