@@ -2,6 +2,2066 @@
 
 All notable changes to the Fractal Resonance Processor (FRP) project are documented in this file.
 
+## [v1.7.0] — M15 Implementation Mapping, Domain Interface, and Qualification Closure Package
+
+### Added
+
+- Added the FRP v1.7.0 M15 Implementation Mapping, Domain Interface, and Qualification Closure Package layer.
+
+- Added main executable reference file:
+
+  - `frp_prototype_v1_7_0.py`.
+
+- Added M15 architecture document:
+
+  - `docs/m15_implementation_mapping_domain_interface_qualification_closure.md`.
+
+- Added M15 GitHub Actions qualification workflow:
+
+  - `.github/workflows/frp-m15-implementation-mapping-qualification.yml`.
+
+- Added M15 release-facing validation files:
+
+  - `TEST_REPORT_v1_7_0.md`;
+
+  - `RELEASE_NOTES_v1_7_0.md`;
+
+  - `FRP_VALIDATION_INDEX_v1_7_0.md`.
+
+### Published Validation Boundary
+
+FRP v1.7.0 inherits the published FRP v1.6.0 validation boundary:
+
+`FRP v1.6.0 — M14 Physical Implementation Correlation and Production Qualification Package`
+
+Inherited executable reference file:
+
+`frp_prototype_v1_6_0.py`
+
+Inherited validation index:
+
+`FRP_VALIDATION_INDEX_v1_6_0.md`
+
+Inherited release notes:
+
+`RELEASE_NOTES_v1_6_0.md`
+
+Inherited test report:
+
+`TEST_REPORT_v1_6_0.md`
+
+Inherited validated commit:
+
+`09141fc`
+
+Inherited release status:
+
+`PUBLISHED`
+
+### Preserved FRP Kernel
+
+FRP v1.7.0 preserves the validated balanced ternary computational kernel.
+
+Balanced ternary state domain:
+
+`{-1, 0, 1}`
+
+Validated states:
+
+`-1`
+
+`0`
+
+`1`
+
+Active neutral state:
+
+`0`
+
+The neutral state remains an active balancing, damping, transition, and stabilization state.
+
+Validated opposite-polarity transition routes:
+
+`-1 → 0 → 1`
+
+`1 → 0 → -1`
+
+Validated execution relation:
+
+`tick N: active polarity → 0`
+
+↓
+
+`pending neutral route retained`
+
+↓
+
+`tick N+1 or later: 0 → target polarity`
+
+Validated invariant:
+
+`actual_direct_events = 0`
+
+Validation result:
+
+`PASS`
+
+### Tick-Separated Neutral Route Qualification
+
+Added explicit qualification for both opposite-polarity directions:
+
+`-1 → 0 → 1`
+
+and:
+
+`1 → 0 → -1`
+
+Validated properties:
+
+- opposite-polarity requests are intercepted;
+
+- the active polarity reaches neutral first;
+
+- the target polarity is retained through the pending neutral route;
+
+- the pending route retains the ready tick;
+
+- the target polarity is applied on a subsequent processor tick;
+
+- same-tick opposite-polarity application remains excluded;
+
+- route status remains traceable.
+
+Validation result:
+
+`PASS`
+
+### Preserved Transition Counters
+
+Preserved:
+
+`requested_direct_events`
+
+`prevented_direct_events`
+
+`actual_direct_events`
+
+`neutral_routed_events`
+
+`neutralized_conflicts`
+
+The counters remain represented through:
+
+- quantized hardware shadow execution;
+
+- cycle-exact traces;
+
+- RTL comparison vector packages;
+
+- deterministic replay;
+
+- qualification closure.
+
+Validated invariant:
+
+`actual_direct_events = 0`
+
+### Balanced Ternary Hardware Encoding
+
+Added canonical two-bit balanced ternary hardware encoding:
+
+`-1 → 2'b11`
+
+`0 → 2'b00`
+
+`+1 → 2'b01`
+
+Reserved encoding:
+
+`2'b10`
+
+Added reserved-state rejection.
+
+Validated invariant:
+
+`reserved_state_events = 0`
+
+Validation result:
+
+`PASS`
+
+### Packed State Vector
+
+Added deterministic packed-state representation.
+
+Validated cell ordering:
+
+`cell 0 occupies bits [1:0]`
+
+`cell 1 occupies bits [3:2]`
+
+`cell i occupies bits [2i+1:2i]`
+
+Validated relation:
+
+`packed state width = 2N bits`
+
+Normative machine-readable comparison field:
+
+`states_packed`
+
+Validation result:
+
+`PASS`
+
+### Preserved Scheduler Layer
+
+Preserved scheduler modes:
+
+`free`
+
+`7/1`
+
+`1/7`
+
+Validated free scheduler profile:
+
+`16 ticks → free = 16`
+
+Validated 7/1 scheduler profile:
+
+`16 ticks → balance = 14, commit = 2`
+
+Validated default 7/1 profile:
+
+`64 ticks → balance = 56, commit = 8`
+
+Validated 1/7 scheduler profile:
+
+`16 ticks → excite = 2, neutralize = 14`
+
+Validated relation:
+
+`sum(scheduler_counts) = ticks_recorded`
+
+Validation result:
+
+`PASS`
+
+### Scheduler Mode Encoding
+
+Added scheduler mode encoding:
+
+`free → 2'b00`
+
+`7/1 → 2'b01`
+
+`1/7 → 2'b10`
+
+Reserved:
+
+`2'b11`
+
+### Scheduler State Encoding
+
+Added scheduler-state encoding:
+
+`free → 3'b000`
+
+`balance → 3'b001`
+
+`commit → 3'b010`
+
+`excite → 3'b011`
+
+`neutralize → 3'b100`
+
+Reserved:
+
+`3'b101`
+
+`3'b110`
+
+`3'b111`
+
+The scheduler-state code is recorded in every cycle-exact primary vector row.
+
+### Preserved Transition-Fraction Control
+
+Preserved:
+
+`transition_fraction`
+
+Validated default:
+
+`transition_fraction = 0.25`
+
+Added explicit hardware-facing request-lane relation:
+
+`REQUEST_LANES = max_changes`
+
+Validated scaling profiles:
+
+`8 cells → 2 request lanes`
+
+`16 cells → 4 request lanes`
+
+`32 cells → 8 request lanes`
+
+Validated relation:
+
+`switch_load_peak <= transition_fraction`
+
+Default validated value:
+
+`switch_load_peak = 0.25`
+
+Validation result:
+
+`PASS`
+
+### Deterministic Request-Lane Ordering
+
+Added parameterized multi-lane request interface.
+
+Request lanes are processed in ascending order:
+
+`lane 0`
+
+↓
+
+`lane 1`
+
+↓
+
+`lane 2`
+
+↓
+
+`...`
+
+Added explicit same-cell multi-lane ordering qualification.
+
+Validated behavior:
+
+- lane zero is processed first;
+
+- a subsequent opposite-polarity request remains intercepted;
+
+- the same-tick result remains neutral;
+
+- the target remains retained through the pending route;
+
+- `actual_direct_events = 0`.
+
+Validation result:
+
+`PASS`
+
+### Bounded Pending Neutral Route Queue
+
+Added bounded neutral-route queue validation.
+
+Validated queue properties:
+
+- deterministic processing order;
+
+- cell identifier retention;
+
+- target-state retention;
+
+- ready-tick retention;
+
+- pending status tracing;
+
+- applied status tracing;
+
+- queue overflow detection;
+
+- bounded queue length.
+
+Default execution invariant:
+
+`queue_overflow_events = 0`
+
+Added explicit queue exhaustion qualification.
+
+Queue exhaustion validation result:
+
+`PASS`
+
+### Preserved M14 Dyadic Hierarchical Topology
+
+Preserved exact dyadic relation:
+
+`num_cells = 2^L`
+
+where:
+
+`L = hierarchy depth`
+
+Preserved hierarchical distance:
+
+`hierarchical_distance(i,j) = bit_length(i XOR j)`
+
+for:
+
+`i != j`
+
+Preserved diagonal relation:
+
+`hierarchical_distance(i,i) = 0`
+
+Validated scaling:
+
+`8 cells → hierarchy depth 3`
+
+`16 cells → hierarchy depth 4`
+
+`32 cells → hierarchy depth 5`
+
+Validation result:
+
+`PASS`
+
+### Preserved Shell Population
+
+Preserved relation:
+
+`shell_population(d) = 2^(d - 1)`
+
+Validated 8-cell shell population set:
+
+`1`
+
+`2`
+
+`4`
+
+Validated 16-cell shell population set:
+
+`1`
+
+`2`
+
+`4`
+
+`8`
+
+Validated 32-cell shell population set:
+
+`1`
+
+`2`
+
+`4`
+
+`8`
+
+`16`
+
+Validation result:
+
+`PASS`
+
+### Preserved Shell-Normalized Phase Coupling
+
+Preserved relation:
+
+`W_raw(i,j) = 1 / (2^(d - 1) × d^alpha)`
+
+Preserved default exponent:
+
+`fractal_alpha = 0.70`
+
+Added fixed-point phase-coupling representation:
+
+`W_level_q[d]`
+
+Added exact Q30 aggregate closure:
+
+`sum_d(shell_population(d) × W_level_q[d]) = 2^30`
+
+Validated integer target:
+
+`1073741824`
+
+Validated invariant:
+
+`fixed_point_topology_sum_exact = True`
+
+Validation result:
+
+`PASS`
+
+### Preserved Shell-Normalized Thermal Diffusion
+
+Preserved relation:
+
+`T_raw(i,j) = 1 / (2^(d - 1) × d^beta)`
+
+Preserved default exponent:
+
+`thermal_beta = 1.20`
+
+Added fixed-point thermal-diffusion representation:
+
+`T_level_q[d]`
+
+Added exact Q30 aggregate closure:
+
+`sum_d(shell_population(d) × T_level_q[d]) = 2^30`
+
+Validated integer target:
+
+`1073741824`
+
+Validated invariant:
+
+`fixed_point_thermal_sum_exact = True`
+
+Validation result:
+
+`PASS`
+
+### Fixed-Point Residual Closure
+
+Added deterministic phase-topology residual closure:
+
+`residual_W = 2^30 - sum_d(shell_population(d) × W_level_q[d])`
+
+Added deterministic thermal-topology residual closure:
+
+`residual_T = 2^30 - sum_d(shell_population(d) × T_level_q[d])`
+
+The residual is applied to:
+
+`distance 1 pair weight`
+
+Validated final relations:
+
+`fixed_point_topology_sum_exact = True`
+
+`fixed_point_thermal_sum_exact = True`
+
+Validation result:
+
+`PASS`
+
+### Hardware-Facing Numeric Profile
+
+Added primary hardware-facing numeric representations:
+
+`S32Q16`
+
+`S32Q30`
+
+`PHASE_U32`
+
+`GAMMA_S32`
+
+Validation result:
+
+`PASS`
+
+### S32Q16
+
+Added general dynamic scalar type:
+
+`S32Q16`
+
+Definition:
+
+`signed 32-bit integer`
+
+Fractional bits:
+
+`16`
+
+Scale:
+
+`65536`
+
+Mapped domains include:
+
+- frequency;
+
+- frequency target;
+
+- frequency lag;
+
+- generated power;
+
+- heat;
+
+- thermal dissipation;
+
+- thermal diffusion;
+
+- thermal overload;
+
+- coupling field;
+
+- `C(t)`;
+
+- `P(t)`;
+
+- `C_minus_P`.
+
+### S32Q30
+
+Added normalized coefficient type:
+
+`S32Q30`
+
+Definition:
+
+`signed 32-bit integer`
+
+Fractional bits:
+
+`30`
+
+Scale:
+
+`1073741824`
+
+Mapped domains include:
+
+- sine output;
+
+- cosine output;
+
+- normalized phase-coupling weights;
+
+- normalized thermal-diffusion weights;
+
+- thermal node factors;
+
+- phase-coherence values;
+
+- coherence compression factors.
+
+### PHASE_U32
+
+Added binary phase representation:
+
+`PHASE_U32`
+
+Definition:
+
+`unsigned 32-bit phase accumulator`
+
+Validated mapping:
+
+`0x00000000 → 0`
+
+`0x40000000 → pi / 2`
+
+`0x80000000 → pi`
+
+`0xC0000000 → 3 pi / 2`
+
+Validated relation:
+
+`2^32 phase units → 2 pi`
+
+Validated phase overflow behavior:
+
+`modulo 2^32 wrap`
+
+Validation result:
+
+`PASS`
+
+### GAMMA_S32
+
+Added Sakaguchi gamma hardware-facing phase-offset type:
+
+`GAMMA_S32`
+
+Definition:
+
+`signed 32-bit phase offset`
+
+The representation uses the same phase scale as:
+
+`PHASE_U32`
+
+Inherited nominal value:
+
+`gamma_nominal = 0.30 pi`
+
+Validation result:
+
+`PASS`
+
+### Deterministic Quantization Rule
+
+Added explicit rounding rule:
+
+`round-to-nearest with half cases away from zero`
+
+For nonnegative scaled value x:
+
+`quantized = floor(x + 0.5)`
+
+For negative scaled value x:
+
+`quantized = ceil(x - 0.5)`
+
+Validated:
+
+- positive half-case rounding;
+
+- negative half-case rounding;
+
+- positive half-LSB rounding;
+
+- negative half-LSB rounding.
+
+Validation result:
+
+`PASS`
+
+### Deterministic Saturation
+
+Added deterministic signed saturation.
+
+For signed width W:
+
+`minimum = -2^(W - 1)`
+
+`maximum = 2^(W - 1) - 1`
+
+Validated:
+
+- positive saturation;
+
+- negative saturation.
+
+Phase accumulation remains the explicit wrapping domain.
+
+Validation result:
+
+`PASS`
+
+### Fixed-Point Multiply Operators
+
+Added:
+
+`mul_q30(a,b) = round_shift(a × b, 30)`
+
+Added:
+
+`mul_q16(a,b) = round_shift(a × b, 16)`
+
+Added:
+
+`mul_q16_q30(a,b) = round_shift(a × b, 30)`
+
+The multiplication path uses widened intermediate values before rounding and destination saturation.
+
+Validation result:
+
+`PASS`
+
+### Deterministic Trigonometric Lookup Table
+
+Added deterministic trigonometric profile:
+
+`4096-entry full-cycle lookup table`
+
+Lookup address width:
+
+`12 bits`
+
+Phase-index relation:
+
+`lut_index = phase_word >> 20`
+
+Sine relation:
+
+`sin_lut[k] = quantize_q30(sin(2 pi k / 4096))`
+
+Cosine relation:
+
+`cos_lut[k] = sin_lut[(k + 1024) mod 4096]`
+
+Validated:
+
+- entry count;
+
+- deterministic rebuild;
+
+- sine zero;
+
+- quarter-cycle relation;
+
+- half-cycle relation;
+
+- cosine offset relation.
+
+Validated lookup-table SHA-256:
+
+`acb0dfe2c00998840f9ca00f9ef9e3b46011db6c745faa59a9db13c4121cc57b`
+
+Validation result:
+
+`PASS`
+
+### Verification Preload Mapping
+
+Added separation between:
+
+`reset state`
+
+and:
+
+`reference preload state`
+
+Added deterministic reference preload mapping for:
+
+- balanced ternary states;
+
+- phase words;
+
+- frequency targets;
+
+- frequency states;
+
+- heat states;
+
+- gamma-noise states;
+
+- gamma-noise targets.
+
+Validated reference preload SHA-256:
+
+`fbd4ce8153133a30bacb4004ef6b126858e64da1f464b763439d29fd8c98b5af`
+
+Validation result:
+
+`PASS`
+
+### Deterministic Gamma-Noise Stimulus
+
+Added external deterministic gamma-noise stimulus path:
+
+`gamma_noise_update_valid`
+
+and:
+
+`gamma_noise_target_q[cell]`
+
+Added primary vector fields:
+
+`GAMMA_UPDATE_VALID`
+
+`GAMMA_NOISE_TARGETS_Q`
+
+Validated ordering:
+
+`GAMMA_UPDATE_VALID`
+
+↓
+
+`GAMMA_NOISE_TARGETS_Q`
+
+↓
+
+`STATES_PACKED`
+
+Validation result:
+
+`PASS`
+
+### Stateful Quantized Hardware Shadow Model
+
+Added:
+
+`quantized_reference_shadow_model`
+
+The quantized hardware shadow executes as a stateful finite-word reference path.
+
+Validated relation:
+
+`quantized state at tick N`
+
+↓
+
+`input state for quantized tick N+1`
+
+Cycle-exact hardware-facing reference vectors are generated from the stateful quantized hardware shadow execution path.
+
+Validation result:
+
+`PASS`
+
+### Two-Level Correlation Model
+
+Added semantic correlation relation:
+
+`M14 floating semantic reference`
+
+↔
+
+`M15 quantized hardware shadow reference`
+
+Added exact integer comparison contract:
+
+`M15 quantized hardware shadow reference`
+
+↔
+
+`mapped RTL comparison domain`
+
+Validated exact comparison relation:
+
+`actual integer field == expected integer field`
+
+### Floating Semantic Reference to Quantized Shadow Correlation
+
+Validated:
+
+`state_sequence_match = 1.000`
+
+`scheduler_sequence_match = 1.000`
+
+`neutral_route_sequence_match = 1.000`
+
+`C_minus_P_sign_match = 1.000`
+
+`boundary_order_match = 1.000`
+
+Validated maximum phase difference:
+
+`0.010957534368146086 rad`
+
+Validated maximum frequency difference:
+
+`2.2803546471550362e-05`
+
+Validated maximum heat difference:
+
+`4.701887369061575e-05`
+
+Validated maximum gamma difference:
+
+`0.0`
+
+Validated maximum phase-coherence difference:
+
+`0.002228678310501553`
+
+Validated maximum C(t) difference:
+
+`0.0007545911459079235`
+
+Validated maximum P(t) difference:
+
+`1.4974864477032557e-05`
+
+Validated maximum C_minus_P difference:
+
+`0.0007535557740776522`
+
+Validation result:
+
+`PASS`
+
+### Exact Quantized Shadow Deterministic Replay
+
+Validated:
+
+`shadow_replay_state_match = 1.000`
+
+`shadow_replay_scheduler_match = 1.000`
+
+`shadow_replay_pending_route_match = 1.000`
+
+`shadow_replay_counter_match = 1.000`
+
+`shadow_replay_trace_match = 1.000`
+
+`shadow_replay_cell_trace_match = 1.000`
+
+Validated trace SHA-256:
+
+`06be197a6f7620796daad6420091e21392295cb0e182b394da2d9990324415be`
+
+Validated cell-trace SHA-256:
+
+`ba7d5f5a5f45d1c6808a0d4c7d7f612916bb2e2c4d33faf5e182810d704ad544`
+
+Validation result:
+
+`PASS`
+
+### Exact Tick Execution Order
+
+Added and validated a 26-stage ordered tick execution chain:
+
+1. resolve scheduler state;
+
+2. clear current-tick switch-change counters;
+
+3. clear current-tick per-cell switch activity;
+
+4. process ready pending neutral routes;
+
+5. process external request lanes in ascending lane order;
+
+6. process phase-derived reference targets when enabled;
+
+7. calculate switch load;
+
+8. update frequency targets;
+
+9. update lagged frequency states;
+
+10. calculate local generated power;
+
+11. calculate local thermal dissipation;
+
+12. calculate hierarchical thermal diffusion;
+
+13. update local heat states;
+
+14. calculate local thermal overload;
+
+15. update deterministic gamma-noise correlation states;
+
+16. update local gamma-effective values;
+
+17. update thermal node factors;
+
+18. calculate hierarchical phase-coupling field;
+
+19. update phase velocities;
+
+20. update wrapped phase words;
+
+21. calculate multiscale phase-coherence values;
+
+22. calculate global C(t);
+
+23. calculate global P(t);
+
+24. calculate C_minus_P;
+
+25. detect first stability crossing;
+
+26. capture post-tick outputs.
+
+Validation result:
+
+`PASS`
+
+### Cycle-Exact Reference Trace
+
+Added:
+
+`cycle_exact_reference_trace`
+
+Validated cycle relation:
+
+`inputs presented for tick t`
+
+↓
+
+`processor executes tick t`
+
+↓
+
+`post-tick state captured`
+
+↓
+
+`comparison outputs recorded`
+
+Default validated trace length:
+
+`64 ticks`
+
+Validation result:
+
+`PASS`
+
+### Primary Vector Row Contract
+
+Added primary hardware-facing row fields:
+
+`TICK`
+
+`RESET_N`
+
+`SCHED_MODE`
+
+`SCHED_STATE`
+
+`AUTO_TARGETS_ENABLE`
+
+`REQ_VALID_MASK`
+
+`REQ_CELL_IDS`
+
+`REQ_TARGET_STATES`
+
+`GAMMA_UPDATE_VALID`
+
+`GAMMA_NOISE_TARGETS_Q`
+
+`STATES_PACKED`
+
+`PENDING_ROUTE_COUNT`
+
+`SWITCH_LOAD_Q`
+
+`HEAT_GLOBAL_Q`
+
+`COHERENCE_GLOBAL_Q`
+
+`C_Q`
+
+`P_Q`
+
+`C_MINUS_P_Q`
+
+`REQUESTED_DIRECT_EVENTS`
+
+`PREVENTED_DIRECT_EVENTS`
+
+`NEUTRAL_ROUTED_EVENTS`
+
+`NEUTRALIZED_CONFLICTS`
+
+`ACTUAL_DIRECT_EVENTS`
+
+Validation result:
+
+`PASS`
+
+### Per-Cell Trace Contract
+
+Added per-cell trace fields:
+
+`TICK`
+
+`CELL_ID`
+
+`STATE_CODE`
+
+`PHASE_WORD`
+
+`FREQUENCY_TARGET_Q`
+
+`FREQUENCY_CURRENT_Q`
+
+`FREQUENCY_LAG_Q`
+
+`GENERATED_POWER_Q`
+
+`HEAT_Q`
+
+`THERMAL_OVERLOAD_Q`
+
+`GAMMA_NOISE_STATE_Q`
+
+`GAMMA_EFFECTIVE_WORD`
+
+`THERMAL_NODE_FACTOR_Q`
+
+`COUPLING_FIELD_Q`
+
+Validation result:
+
+`PASS`
+
+### Pending Neutral Route Trace Contract
+
+Added route trace fields:
+
+`TICK`
+
+`ROUTE_INDEX`
+
+`CELL_ID`
+
+`TARGET_STATE_CODE`
+
+`READY_TICK`
+
+`ROUTE_STATUS`
+
+Validated route states:
+
+`pending`
+
+`applied`
+
+Validation result:
+
+`PASS`
+
+### M15 Artifact Layers
+
+Added ten M15 artifact layers:
+
+1. `fixed_point_interface_profile`;
+
+2. `balanced_ternary_hardware_encoding_map`;
+
+3. `quantized_reference_shadow_model`;
+
+4. `cycle_exact_reference_trace`;
+
+5. `rtl_comparison_vector_package`;
+
+6. `systemverilog_testbench_interface_map`;
+
+7. `synthesizable_rtl_reference_core`;
+
+8. `rtl_assertion_correlation_harness`;
+
+9. `reference_rtl_equivalence_report`;
+
+10. `qualification_closure_manifest`.
+
+Validation result:
+
+`PASS`
+
+### M15 Export Commands
+
+Added:
+
+`--export-fixed-point-interface-profile`
+
+Added:
+
+`--export-balanced-ternary-hardware-encoding-map`
+
+Added:
+
+`--export-quantized-reference-shadow-model`
+
+Added:
+
+`--export-cycle-exact-reference-trace`
+
+Added:
+
+`--export-rtl-comparison-vector-package`
+
+Added:
+
+`--export-systemverilog-testbench-interface-map`
+
+Added:
+
+`--export-synthesizable-rtl-reference-core`
+
+Added:
+
+`--export-rtl-assertion-correlation-harness`
+
+Added:
+
+`--export-reference-rtl-equivalence-report`
+
+Added:
+
+`--export-qualification-closure-manifest`
+
+Preserved:
+
+`--export-benchmark-matrix`
+
+### Stable CLI Command Set
+
+Validated execution modes:
+
+`--mode demo`
+
+`--mode self-test`
+
+`--mode benchmark`
+
+Validated M15 export command forms:
+
+`10`
+
+Validated benchmark export:
+
+`1`
+
+Validated total command-form count:
+
+`14`
+
+Validation result:
+
+`PASS`
+
+### Stable M15 Schemas
+
+Added:
+
+`frp.m15.fixed_point_interface_profile.v1.7.0`
+
+Added:
+
+`frp.m15.balanced_ternary_hardware_encoding_map.v1.7.0`
+
+Added:
+
+`frp.m15.quantized_reference_shadow_model.v1.7.0`
+
+Added:
+
+`frp.m15.cycle_exact_reference_trace.v1.7.0`
+
+Added:
+
+`frp.m15.rtl_comparison_vector_package.v1.7.0`
+
+Added:
+
+`frp.m15.systemverilog_testbench_interface_map.v1.7.0`
+
+Added:
+
+`frp.m15.synthesizable_rtl_reference_core.v1.7.0`
+
+Added:
+
+`frp.m15.rtl_assertion_correlation_harness.v1.7.0`
+
+Added:
+
+`frp.m15.reference_rtl_equivalence_report.v1.7.0`
+
+Added:
+
+`frp.m15.qualification_closure_manifest.v1.7.0`
+
+Updated structured output schema:
+
+`frp.structured_output.v1.7.0`
+
+Updated benchmark matrix schema:
+
+`frp.m3.benchmark_matrix.v1.7.0`
+
+Validated release-facing schema count:
+
+`12`
+
+Validation result:
+
+`PASS`
+
+### M15 Self-Test Validation
+
+Validated self-test check count:
+
+`41`
+
+Validated true checks:
+
+`41`
+
+Validated false checks:
+
+`0`
+
+Validated execution profiles:
+
+`default`
+
+`free`
+
+`7/1`
+
+`1/7`
+
+Self-test status:
+
+`PASS`
+
+### RTL Comparison Vector Package
+
+Added deterministic ten-file package:
+
+`frp_m15_kernel_vectors.vec`
+
+`frp_m15_pending_routes.trace`
+
+`frp_m15_scheduler_free_vectors.vec`
+
+`frp_m15_scheduler_7_1_vectors.vec`
+
+`frp_m15_scheduler_1_7_vectors.vec`
+
+`frp_m15_full_correlation_vectors.vec`
+
+`frp_m15_cell_trace.vec`
+
+`frp_m15_reference_preload.json`
+
+`frp_m15_trig_lut_q30.vec`
+
+`frp_m15_sha256_manifest.json`
+
+Validated package file count:
+
+`10`
+
+Validation result:
+
+`PASS`
+
+### Kernel Vector Qualification
+
+Added kernel vector qualification for:
+
+- balanced ternary states;
+
+- isolated request execution;
+
+- multi-lane request execution;
+
+- opposite-polarity interception;
+
+- pending route creation;
+
+- delayed target application;
+
+- transition-fraction enforcement;
+
+- queue exhaustion detection.
+
+Validated invariant:
+
+`actual_direct_events = 0`
+
+Validation result:
+
+`PASS`
+
+### Scheduler Vector Qualification
+
+Added:
+
+`frp_m15_scheduler_free_vectors.vec`
+
+Added:
+
+`frp_m15_scheduler_7_1_vectors.vec`
+
+Added:
+
+`frp_m15_scheduler_1_7_vectors.vec`
+
+Validated:
+
+- scheduler sequences;
+
+- scheduler counts;
+
+- balanced ternary preservation;
+
+- tick-separated neutral routing;
+
+- deterministic request ordering;
+
+- deterministic quantized trace generation.
+
+Validation result:
+
+`PASS`
+
+### Full Correlation Vector Qualification
+
+Added:
+
+`frp_m15_full_correlation_vectors.vec`
+
+Validated domains:
+
+- hierarchical phase coupling;
+
+- distributed thermal fields;
+
+- hierarchical thermal diffusion;
+
+- local gamma drift;
+
+- multiscale phase coherence;
+
+- global stability telemetry;
+
+- stateful fixed-point feedback;
+
+- deterministic gamma-noise stimulus;
+
+- cycle-exact hardware-facing trace generation.
+
+Validation result:
+
+`PASS`
+
+### Deterministic Vector Regeneration
+
+The complete M15 vector package is generated twice.
+
+Validated relation:
+
+`vectors_a == vectors_b`
+
+Validated result:
+
+`10 / 10 files byte-identical`
+
+Validation result:
+
+`PASS`
+
+### Vector Package Integrity
+
+Added:
+
+`frp_m15_sha256_manifest.json`
+
+Validated manifest entry count:
+
+`9`
+
+The manifest records every generated vector-package file except the manifest itself.
+
+Every recorded SHA-256 value is recomputed during M15 qualification.
+
+Validated complete deterministic package digest:
+
+`703dd4b56f4b34289a2c5bc5521ad4ddc3113bdec8c38238c3244c69cb4d58df`
+
+Validation result:
+
+`PASS`
+
+### SystemVerilog Testbench Interface Map
+
+Added parameterized SystemVerilog interface mapping.
+
+Validated default parameters:
+
+`NUM_CELLS = 16`
+
+`HIERARCHY_DEPTH = 4`
+
+`REQUEST_LANES = 4`
+
+`CELL_ID_WIDTH = 4`
+
+`STATE_VECTOR_WIDTH = 32`
+
+`SCALAR_WIDTH = 32`
+
+`PHASE_WIDTH = 32`
+
+Validated execution inputs:
+
+`clk`
+
+`reset_n`
+
+`scheduler_mode`
+
+`auto_targets_enable`
+
+`request_valid`
+
+`request_cell_id`
+
+`request_target_state`
+
+Validated verification stimulus inputs:
+
+`preload_valid`
+
+`gamma_noise_update_valid`
+
+`gamma_noise_target_q`
+
+Validation result:
+
+`PASS`
+
+### Synthesizable RTL Reference-Core Mapping
+
+Added reference-core mapping for:
+
+`frp_m15_types_pkg.sv`
+
+`frp_m15_fixed_point_pkg.sv`
+
+`frp_m15_trig_lut_pkg.sv`
+
+`frp_m15_scheduler.sv`
+
+`frp_m15_transition_core.sv`
+
+`frp_m15_neutral_route_queue.sv`
+
+`frp_m15_delay_dynamics.sv`
+
+`frp_m15_thermal_field.sv`
+
+`frp_m15_gamma_drift.sv`
+
+`frp_m15_hierarchical_coupling.sv`
+
+`frp_m15_multiscale_coherence.sv`
+
+`frp_m15_stability_telemetry.sv`
+
+`frp_m15_top.sv`
+
+Validated mapping requirements:
+
+`actual_direct_events = 0`
+
+`tick_separated_neutral_routing = True`
+
+Validated scheduler mapping:
+
+`free`
+
+`7/1`
+
+`1/7`
+
+Validation result:
+
+`PASS`
+
+### RTL Assertion Correlation Mapping
+
+Added thirteen assertion-correlation domains:
+
+1. valid balanced ternary encoding;
+
+2. reserved-state exclusion;
+
+3. direct polarity-transition exclusion;
+
+4. active neutral-route insertion;
+
+5. target application after ready tick;
+
+6. `actual_direct_events = 0`;
+
+7. transition-limit enforcement;
+
+8. scheduler sequence;
+
+9. scheduler count consistency;
+
+10. phase-topology fixed-point normalization;
+
+11. thermal-topology fixed-point normalization;
+
+12. deterministic trace tick count;
+
+13. exact cycle-output comparison contract.
+
+Validated comparison rule:
+
+`actual integer field == expected integer field`
+
+Validation result:
+
+`PASS`
+
+### Qualification Closure Manifest
+
+Added:
+
+`qualification_closure_manifest`
+
+Validated closure domains:
+
+- balanced ternary state-sequence correlation;
+
+- scheduler-sequence correlation;
+
+- neutral-route-sequence correlation;
+
+- C_minus_P sign correlation;
+
+- stability-boundary ordering;
+
+- exact phase-topology fixed-point closure;
+
+- exact thermal-topology fixed-point closure;
+
+- deterministic shadow trace replay;
+
+- deterministic cell-trace replay;
+
+- complete vector package presence.
+
+Validated closure status:
+
+`PASS`
+
+### Scaling Qualification
+
+Added explicit qualification for:
+
+`8 cells`
+
+`16 cells`
+
+`32 cells`
+
+Validated 8-cell profile:
+
+`hierarchy_depth = 3`
+
+`request_lanes = 2`
+
+`packed state width = 16 bits`
+
+Validated 16-cell profile:
+
+`hierarchy_depth = 4`
+
+`request_lanes = 4`
+
+`packed state width = 32 bits`
+
+Validated 32-cell profile:
+
+`hierarchy_depth = 5`
+
+`request_lanes = 8`
+
+`packed state width = 64 bits`
+
+Every scaling profile preserves:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+`balanced_ternary_state_domain = True`
+
+`fixed_point_topology_sum_exact = True`
+
+`fixed_point_thermal_sum_exact = True`
+
+Validation result:
+
+`PASS`
+
+### Benchmark Matrix Extension
+
+Updated benchmark schema:
+
+`frp.m3.benchmark_matrix.v1.7.0`
+
+Validated architecture rows:
+
+1. `frp_v1_6_0_m14_floating_semantic_reference`;
+
+2. `frp_v1_7_0_quantized_hardware_shadow`;
+
+3. `frp_v1_7_0_cycle_exact_vector_package`;
+
+4. `frp_v1_7_0_systemverilog_correlation_contract`;
+
+5. `frp_v1_7_0_qualification_closure`.
+
+Validated row count:
+
+`5`
+
+Validation result:
+
+`PASS`
+
+### Architecture Document Contract Validation
+
+Validated document:
+
+`docs/m15_implementation_mapping_domain_interface_qualification_closure.md`
+
+Validated architecture markers include:
+
+`M14 floating semantic reference`
+
+`M15 quantized hardware shadow model`
+
+`cycle-exact integer golden trace`
+
+`synthesizable RTL reference core`
+
+`exact quantized shadow ↔ RTL equivalence`
+
+`actual_direct_events = 0`
+
+`-1 → 0 → 1`
+
+`1 → 0 → -1`
+
+`free`
+
+`7/1`
+
+`1/7`
+
+`S32Q16`
+
+`S32Q30`
+
+`PHASE_U32`
+
+`GAMMA_S32`
+
+`GAMMA_NOISE_TARGETS_Q`
+
+Validated primary vector-row ordering:
+
+`GAMMA_UPDATE_VALID`
+
+↓
+
+`GAMMA_NOISE_TARGETS_Q`
+
+↓
+
+`STATES_PACKED`
+
+Validation result:
+
+`PASS`
+
+### Candidate Invariants
+
+Preserved:
+
+`match = 1.000`
+
+`actual_direct_events = 0`
+
+`C_minus_P_min > 0`
+
+`switch_load_peak <= transition_fraction`
+
+`ticks_recorded = steps`
+
+`scheduler counts match selected cycle mode`
+
+`neutral-routed transition path is preserved`
+
+`neutralized_conflicts tracked`
+
+Added:
+
+`reserved_state_events = 0`
+
+`fixed_point_topology_sum_exact = True`
+
+`fixed_point_thermal_sum_exact = True`
+
+`quantized_state_sequence_match = 1.000`
+
+`quantized_scheduler_sequence_match = 1.000`
+
+`quantized_neutral_route_sequence_match = 1.000`
+
+`C_minus_P_sign_match = 1.000`
+
+`vector_repeat_match = 1.000`
+
+Validated reference-side exact replay markers:
+
+`shadow_replay_state_match = 1.000`
+
+`shadow_replay_scheduler_match = 1.000`
+
+`shadow_replay_pending_route_match = 1.000`
+
+`shadow_replay_counter_match = 1.000`
+
+`shadow_replay_trace_match = 1.000`
+
+`shadow_replay_cell_trace_match = 1.000`
+
+Validation result:
+
+`PASS`
+
+### Default Reference Validation Summary
+
+Validated configuration:
+
+`cells = 16`
+
+`hierarchy_depth = 4`
+
+`request_lanes = 4`
+
+`steps = 64`
+
+`seed = 76`
+
+`scheduler = 7/1`
+
+`transition_fraction = 0.25`
+
+`fractal_alpha = 0.70`
+
+`thermal_beta = 1.20`
+
+Validated results:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+`switch_load_peak = 0.25`
+
+`C_minus_P_min = 0.6142730712890625`
+
+`C_minus_P_final = 0.88287353515625`
+
+`boundary_detected = False`
+
+`fixed_point_topology_sum_exact = True`
+
+`fixed_point_thermal_sum_exact = True`
+
+Validation result:
+
+`PASS`
+
+### GitHub Actions Validation
+
+Validation status:
+
+`PASS`
+
+Validation environment:
+
+`GitHub Actions hardware-backed CI execution`
+
+Validated commit:
+
+`5fd9a4f`
+
+Validated workflow stack:
+
+- `FRP Structured Output #113`;
+
+- `FRP M15 Implementation Mapping and Qualification Closure #1`;
+
+- `FRP Self Test #154`;
+
+- `FRP Benchmark Smoke Test #152`.
+
+Overall validation result:
+
+`PASS`
+
+### Release Files
+
+M15 architecture document:
+
+- `docs/m15_implementation_mapping_domain_interface_qualification_closure.md`.
+
+M15 executable reference file:
+
+- `frp_prototype_v1_7_0.py`.
+
+M15 workflow:
+
+- `.github/workflows/frp-m15-implementation-mapping-qualification.yml`.
+
+M15 release-facing files:
+
+- `TEST_REPORT_v1_7_0.md`;
+
+- `RELEASE_NOTES_v1_7_0.md`;
+
+- `FRP_VALIDATION_INDEX_v1_7_0.md`;
+
+- `CHANGELOG.md`.
+
+### M15 Technical Chain
+
+`published M14 semantic reference`
+
+↓
+
+`hardware-facing numeric types`
+
+↓
+
+`balanced ternary binary encoding`
+
+↓
+
+`deterministic fixed-point arithmetic`
+
+↓
+
+`quantized hardware shadow execution`
+
+↓
+
+`cycle-exact golden trace`
+
+↓
+
+`RTL comparison vectors`
+
+↓
+
+`verification preload and deterministic stimulus`
+
+↓
+
+`SystemVerilog interface mapping`
+
+↓
+
+`RTL assertion correlation mapping`
+
+↓
+
+`floating semantic correlation`
+
+↓
+
+`exact quantized shadow deterministic replay`
+
+↓
+
+`qualification closure`
+
+### Next Architecture Layer
+
+Next planned architecture layer:
+
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
+
 ## [v1.6.0] — M14 Physical Implementation Correlation and Production Qualification Package
 
 ### Added
