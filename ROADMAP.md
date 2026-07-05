@@ -1,792 +1,447 @@
 # Roadmap — Fractal Resonance Processor (FRP)
 
-This roadmap defines the staged development path for the Fractal Resonance Processor (FRP) project.
+This roadmap defines the staged architecture progression of the Fractal Resonance Processor (FRP) project.
 
-Current candidate version:
+Current version:
 
-    v0.9.3-mobile
+`FRP v1.7.0`
 
-Main prototype file:
+Current milestone:
 
-    frp_prototype_v0_9_3_mobile.py
+`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
 
-Current test report:
+Main executable reference file:
 
-    TEST_REPORT_v0_9_3.md
+`frp_prototype_v1_7_0.py`
 
-Current public repository package:
+Current validation status:
 
-    software validation layer, documentation layer, reproducibility layer, benchmark layer, CI verification layer, hardware-facing documentation pathway, milestone structure, and funding brief
+`PASS`
+
+Next planned architecture layer:
+
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
 
 ## 1. Purpose
 
-The purpose of this roadmap is to define the staged engineering trajectory of FRP from the current validated software reference model toward structured output, expanded benchmarks, hardware-facing specification, FPGA mapping, ASIC mapping, physical validation planning, funding preparation, and stable public software architecture release.
+The purpose of this roadmap is to preserve the actual FRP architecture trajectory from the executable balanced ternary reference layer through implementation mapping, domain interfaces, deterministic quantized execution, RTL correlation, and qualification closure.
 
-The roadmap connects:
+The primary project path is:
 
-    software validation
-    → architecture stabilization
-    → archival release
-    → structured output
-    → expanded benchmark layer
-    → hardware-facing specification
-    → FPGA mapping study
-    → ASIC mapping study
-    → chip-oriented implementation research
-    → physical validation planning
-    → partner and funding package
-    → stable public software architecture release
+`balanced ternary computational kernel`
 
-## 2. Current Foundation
+↓
 
-FRP v0.9.3-mobile establishes the current public software validation layer.
+`structured executable validation`
 
-Current validated foundation:
+↓
 
-- executable Python prototype
-- balanced ternary state logic
-- neutral transition routing
-- direct polarity transition safety
-- distributed commit behavior
-- Kuramoto-Sakaguchi resonant phase layer
-- nonlinear cubic saturation
-- nonlinear compression
-- delay dynamics
-- scheduler modes
-- per-tick telemetry
-- processor instruction layer
-- demonstration mode
-- self-test mode
-- benchmark mode
-- reproducibility commands
-- benchmark output
-- GitHub Actions CI workflows
-- documentation package
-- release checklist
-- release notes
-- project structure guide
-- milestone structure
-- funding brief
-- hardware pathway document
-- implementation layers document
-- FPGA mapping study document
-- ASIC mapping study document
-- physical validation plan
-- citation metadata
-- Apache-2.0 license
+`hardware-facing signal and trace layers`
 
-Current candidate result:
+↓
 
-    PASS
+`RTL, formal, and FPGA-facing contracts`
 
-## 3. Current Candidate Invariants
+↓
 
-The current candidate is organized around the following invariants:
+`production release and stable interface freeze`
 
-| Invariant | Required Result |
-|---|---|
-| target match | match = 1.000 |
-| direct transition safety | actual_direct_events = 0 |
-| stability | C_minus_P_min > 0 |
-| transition load | switch_load_peak <= transition_fraction |
-| telemetry | ticks_recorded = steps |
-| scheduler | counts match selected cycle mode |
+↓
 
-These invariants define the current behavioral baseline and provide the reference point for future software, benchmark, hardware-facing, FPGA, ASIC, and physical validation stages.
+`silicon and heterogeneous implementation architecture`
 
-## 4. Current Validation Evidence
+↓
 
-Standard self-test command:
-
-    python3 frp_prototype_v0_9_3_mobile.py --mode test --steps 128 --seeds 5
+`tapeout, production integration, and external implementation handoff`
 
-Standard self-test result:
+↓
 
-    PASS
+`production iteration and stabilization`
 
-Heavy self-test command:
-
-    python3 frp_prototype_v0_9_3_mobile.py --mode test --steps 256 --seeds 10
-
-Heavy self-test result:
-
-    PASS
-
-Benchmark command:
-
-    python3 frp_prototype_v0_9_3_mobile.py --mode bench --steps 128 --seeds 5
-
-Benchmark-supported technical position:
-
-    FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct -1 ↔ 1 transitions in the tested operational domain.
-
-## 5. Current Repository Position
-
-Current repository position:
-
-    public software validation package with hardware-facing documentation pathway, milestone structure, and funding brief
-
-The current software layer has been executed and verified on general-purpose computing infrastructure.
-
-Validated through:
-
-- local Python execution path
-- reproducibility commands
-- benchmark execution
-- GitHub Actions workflow execution
-- CI status verification
-
-Engineering role:
-
-    establish an executable software reference model for hardware-facing specification and implementation-layer work
-
-## 6. Roadmap Overview
-
-| Stage | Target | Primary Output |
-|---|---|---|
-| Stage 0 | v0.9.3-mobile | repository stabilization and public software validation package |
-| Stage 1 | archival release | GitHub release, Zenodo archive, DOI |
-| Stage 2 | v0.9.4 | structured output and machine-readable summaries |
-| Stage 3 | v0.9.5 | expanded benchmark layer |
-| Stage 4 | FPGA mapping package | programmable-hardware mapping package |
-| Stage 5 | ASIC mapping package | chip-oriented implementation research package |
-| Stage 6 | physical validation protocol | measurement and validation planning package |
-| Stage 7 | funding and partner package | review package for partners, labs, grants, and investors |
-| Stage 8 | v1.0.0 | stable public software architecture release |
-
-## 7. Stage 0 — v0.9.3-mobile Repository Stabilization
-
-Current status:
-
-    active candidate package
-
-Objective:
-
-    stabilize the current public software validation package and align all repository navigation, release, milestone, and funding documents
-
-Primary outputs:
-
-- executable prototype
-- test report
-- benchmark output
-- CI workflows
-- release notes
-- release checklist
-- roadmap
-- milestones
-- funding brief
-- project structure guide
-- documentation index
-- hardware pathway documentation
-- implementation layer documentation
-- FPGA mapping study
-- ASIC mapping study
-- physical validation plan
-
-Acceptance criteria:
+↓
 
-- standard self-test documented
-- heavy self-test documented
-- benchmark documented
-- CI workflows passing
-- README badges passing
-- release checklist complete
-- release notes aligned
-- roadmap aligned
-- milestones aligned
-- funding brief present
-- project structure aligned
-- docs index aligned
-- repository ready for archival release preparation
+`physical implementation correlation and qualification`
 
-Related files:
+↓
 
-- README.md
-- TEST_REPORT_v0_9_3.md
-- RELEASE_NOTES_v0_9_3.md
-- RELEASE_CHECKLIST_v0_9_3.md
-- ROADMAP.md
-- MILESTONES.md
-- funding_brief.md
-- PROJECT_STRUCTURE.md
-- docs/README.md
-- docs/hardware_pathway.md
-- docs/implementation_layers.md
-- docs/fpga_mapping_study.md
-- docs/asic_mapping_study.md
-- docs/physical_validation_plan.md
+`fixed-point implementation mapping and qualification closure`
 
-## 8. Stage 1 — Archival Release and DOI
+↓
 
-Target:
+`RTL core realization and execution semantics`
 
-    archival release of v0.9.3-mobile
+Comparative benchmark work remains a supporting validation contour. It does not replace or redefine the FRP architecture progression.
 
-Objective:
+## 2. Current Architecture Layer
 
-    create a citable archival release of the current FRP software validation package
+FRP v1.7.0 establishes the M15 Implementation Mapping, Domain Interface, and Qualification Closure Package layer of the Fractal Resonance Processor reference architecture.
 
-Planned outputs:
+The current M15 bridge is:
 
-- GitHub release tag
-- GitHub release description
-- Zenodo archival release
-- DOI assignment
-- updated CITATION.cff
-- README DOI badge
-- updated changelog
-- updated release notes
-- archival metadata review
+`M14 floating semantic reference`
 
-Acceptance criteria:
+↓
 
-- GitHub release created
-- Zenodo record created
-- DOI assigned
-- CITATION.cff updated
-- README DOI badge added
-- changelog updated
-- release notes aligned with archival record
+`M15 quantized hardware shadow model`
 
-Related files:
+↓
 
-- CITATION.cff
-- README.md
-- CHANGELOG.md
-- RELEASE_NOTES_v0_9_3.md
-- RELEASE_CHECKLIST_v0_9_3.md
+`cycle-exact integer golden trace`
 
-Project value:
+↓
 
-    makes the FRP software validation package citable, archive-ready, and externally referenceable
+`deterministic RTL comparison vectors`
 
-## 9. Stage 2 — v0.9.4 Structured Output
+↓
 
-Target candidate:
+`SystemVerilog interface mapping`
 
-    v0.9.4
+↓
 
-Objective:
+`RTL assertion correlation mapping`
 
-    add machine-readable output for tests, benchmarks, reproducibility workflows, and external inspection
-
-Planned outputs:
+↓
 
-- JSON output mode
-- machine-readable self-test summary
-- machine-readable heavy self-test summary
-- machine-readable benchmark summary
-- structured telemetry export option
-- optional CSV output
-- updated output schema documentation
-- updated usage guide
-- updated reproducibility guide
-- updated CI validation for structured output
+`qualification closure`
 
-Candidate command direction:
+## 3. Preserved Computational Kernel
 
-    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json
+FRP v1.7.0 preserves the validated balanced ternary computational kernel.
 
-    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json
+State domain:
 
-Acceptance criteria:
+`{-1, 0, 1}`
 
-- test mode produces structured summary
-- benchmark mode produces structured summary
-- JSON fields match docs/output_schema.md
-- CI validates structured output markers
-- reproducibility guide includes structured output commands
-- test report updated for v0.9.4
+Active neutral state:
 
-Related files:
+`0`
 
-- docs/output_schema.md
-- USAGE.md
-- REPRODUCIBILITY.md
-- CI.md
-- TEST_REPORT
-- RELEASE_NOTES
-- CHANGELOG
+Mandatory opposite-polarity routes:
 
-Project value:
+`-1 → 0 → 1`
 
-    improves automated inspection, benchmark reproducibility, partner review, and integration readiness
+`1 → 0 → -1`
 
-## 10. Stage 3 — v0.9.5 Extended Benchmark Layer
+Execution relation:
 
-Target candidate:
+`tick N: active polarity → 0`
 
-    v0.9.5
+↓
 
-Objective:
+`pending neutral route retained`
 
-    expand the benchmark layer for stronger comparative analysis and reproducibility
+↓
 
-Planned outputs:
+`tick N+1 or later: 0 → target polarity`
 
-- additional benchmark seeds
-- additional vector sizes
-- additional scheduler profiles
-- expanded transition metrics
-- transition debt summaries
-- direct conflict fraction summaries
-- heat trajectory summaries
-- switch-load trajectory summaries
-- coherence trajectory summaries
-- benchmark export files
-- benchmark profile guide
-- updated benchmark interpretation
+Preserved scheduler modes:
 
-Candidate benchmark dimensions:
+- `free`;
+- `7/1`;
+- `1/7`.
 
-- seed count
-- vector size
-- step count
-- scheduler mode
-- transition fraction
-- delay depth
-- gamma parameter
-- coupling strength
-- damping strength
-- compression profile
+Preserved transition control:
 
-Acceptance criteria:
+- transition-fraction control;
+- deterministic request-lane ordering;
+- bounded pending-neutral-route queue handling;
+- reserved-state rejection.
 
-- benchmark profiles reproducible through documented commands
-- benchmark exports generated consistently
-- benchmark interpretation aligned with expanded output
-- CI runs benchmark smoke validation
-- documentation reflects expanded benchmark layer
-- release notes include benchmark expansion
+Core validated invariant:
 
-Related files:
+`actual_direct_events = 0`
 
-- docs/benchmark_interpretation.md
-- docs/output_schema.md
-- REPRODUCIBILITY.md
-- USAGE.md
-- CI.md
-- TEST_REPORT
-- RELEASE_NOTES
-- CHANGELOG
+## 4. Current M15 Artifact Layers
 
-Project value:
+FRP v1.7.0 defines ten M15 artifact layers:
 
-    strengthens comparative evidence and supports technical review by partners, labs, and funding reviewers
+1. `fixed_point_interface_profile`;
+2. `balanced_ternary_hardware_encoding_map`;
+3. `quantized_reference_shadow_model`;
+4. `cycle_exact_reference_trace`;
+5. `rtl_comparison_vector_package`;
+6. `systemverilog_testbench_interface_map`;
+7. `synthesizable_rtl_reference_core`;
+8. `rtl_assertion_correlation_harness`;
+9. `reference_rtl_equivalence_report`;
+10. `qualification_closure_manifest`.
 
-## 11. Stage 4 — FPGA Mapping Package
+These layers define the current implementation-mapping and qualification-closure boundary of the published FRP reference architecture.
 
-Target:
+## 5. Current Validation Evidence
 
-    FPGA-oriented implementation package
+Current validated release layer:
 
-Objective:
+`FRP v1.7.0 — M15 Implementation Mapping, Domain Interface, and Qualification Closure Package`
 
-    translate the validated FRP software reference behavior into programmable-hardware implementation planning
+Validated environment:
 
-Current foundation:
+`GitHub Actions hardware-backed CI execution`
 
-- docs/hardware_pathway.md
-- docs/implementation_layers.md
-- docs/fpga_mapping_study.md
-- software reference model
-- candidate invariants
-- benchmark output
+Validated commit:
 
-Planned outputs:
+`5fd9a4f`
 
-- FPGA state encoding proposal
-- neutral transition controller proposal
-- distributed commit scheduler proposal
-- register file mapping proposal
-- delay buffer mapping proposal
-- phase approximation proposal
-- nonlinear block approximation proposal
-- telemetry register proposal
-- FPGA testbench plan
-- Python-reference comparison plan
-- FPGA prototype planning structure
+Validated workflow stack:
 
-Acceptance criteria:
+- `FRP Structured Output #113`;
+- `FRP M15 Implementation Mapping and Qualification Closure #1`;
+- `FRP Self Test #154`;
+- `FRP Benchmark Smoke Test #152`.
 
-- FPGA mapping references current software behavior
-- candidate invariants mapped to FPGA validation criteria
-- telemetry mapping defined
-- testbench comparison structure defined
-- FPGA package documented
-- partner review package includes FPGA mapping summary
+Validated M15 self-test check count:
 
-Related files:
+`41`
 
-- docs/fpga_mapping_study.md
-- docs/hardware_pathway.md
-- docs/implementation_layers.md
-- docs/physical_validation_plan.md
-- MILESTONES.md
-- funding_brief.md
+All internal M15 self-test checks:
 
-Project value:
+`True`
 
-    creates the first programmable-hardware bridge from the software validation layer toward implementation-layer research
+Validation result:
 
-## 12. Stage 5 — ASIC Mapping Package
+`PASS`
 
-Target:
+Primary validation records:
 
-    ASIC-oriented implementation research package
+- `TEST_REPORT_v1_7_0.md`;
+- `RELEASE_NOTES_v1_7_0.md`;
+- `FRP_VALIDATION_INDEX_v1_7_0.md`.
 
-Objective:
+## 6. Completed Architecture Progression
 
-    translate the validated FRP software reference behavior into chip-oriented architectural study
+| Milestone | Version | Architecture layer | Status |
+|---|---|---|---|
+| M0 | v0.9.3-mobile | Repository stabilization | Completed |
+| M1 | v0.9.3 release path | Archival release and DOI | Completed |
+| M2 | v0.9.4 | Structured Output and Machine-Readable Validation | Completed |
+| M3 | v0.9.5 | Benchmark Export and Hardware Signal Mapping | Completed |
+| M4 | v0.9.6 | HDL Trace Export and Testbench Scaffold | Completed |
+| M5 | v0.9.7 | RTL Interface Contract and Assertion Harness | Completed |
+| M6 | v0.9.8 | Formal Verification Hooks and Equivalence Scaffold | Completed |
+| M7 | v0.9.9 | FPGA Synthesis Package and Timing Constraint Scaffold | Completed |
+| M8 | v1.0.0 | Production Release Package and Stable Interface Freeze | Completed |
+| M9 | v1.1.0 | Silicon and Heterogeneous Implementation Architecture | Completed |
+| M10 | v1.2.0 | Silicon Production and Tapeout Readiness Package | Completed |
+| M11 | v1.3.0 | Production Integration and External Implementation Handoff | Completed |
+| M12 | v1.4.0 | External Implementation Feedback and Production Iteration Loop | Completed |
+| M13 | v1.5.0 | Production Scaling and Implementation Stabilization Package | Completed |
+| M14 | v1.6.0 | Physical Implementation Correlation and Production Qualification Package | Completed |
+| M15 | v1.7.0 | Implementation Mapping, Domain Interface, and Qualification Closure Package | Current validated layer |
+| M16 | v1.8.0 | RTL Core Realization and Execution Semantics Package | Next planned layer |
 
-Current foundation:
+Historical release notes, test reports, and validation indices remain the release-specific source records for each completed layer.
 
-- docs/hardware_pathway.md
-- docs/implementation_layers.md
-- docs/fpga_mapping_study.md
-- docs/asic_mapping_study.md
-- software reference model
-- candidate invariants
-- benchmark output
+## 7. Architecture Progression Through M15
 
-Planned outputs:
+The validated FRP architecture progression now includes:
 
-- ternary state representation proposal
-- neutral routing cell proposal
-- local transition controller proposal
-- distributed commit timing proposal
-- scheduler control proposal
-- state storage proposal
-- phase approximation proposal
-- nonlinear response proposal
-- coherence and load tracking proposal
-- telemetry and test interface proposal
-- ASIC testbench plan
-- Python-reference comparison plan
-- chip-oriented implementation research structure
+`production reference prototype`
 
-Acceptance criteria:
+↓
 
-- ASIC mapping references current software behavior
-- candidate invariants mapped to ASIC validation criteria
-- neutral routing cell structure defined
-- distributed commit timing structure defined
-- telemetry and test interface defined
-- chip-oriented implementation research package documented
+`stable production release package`
 
-Related files:
+↓
 
-- docs/asic_mapping_study.md
-- docs/fpga_mapping_study.md
-- docs/hardware_pathway.md
-- docs/implementation_layers.md
-- docs/physical_validation_plan.md
-- MILESTONES.md
-- funding_brief.md
+`stable interface freeze`
 
-Project value:
+↓
 
-    establishes a chip-oriented implementation research path grounded in the validated software reference layer
+`silicon interface model`
 
-## 13. Stage 6 — Physical Validation Protocol
+↓
 
-Target:
+`heterogeneous implementation map`
 
-    physical validation protocol package
+↓
 
-Objective:
+`compute fabric mapping`
 
-    define how future physical FRP implementations can be measured and compared against the software reference model
+↓
 
-Current foundation:
+`memory/register interface map`
 
-- docs/physical_validation_plan.md
-- docs/fpga_mapping_study.md
-- docs/asic_mapping_study.md
-- software reference model
-- benchmark output
-- candidate invariants
+↓
 
-Planned outputs:
+`clock/reset domain map`
 
-- physical validation protocol
-- measurement setup structure
-- logical correctness test plan
-- direct transition safety test plan
-- neutral routing test plan
-- distributed commit test plan
-- scheduler validation plan
-- telemetry consistency plan
-- timing measurement plan
-- switching activity measurement plan
-- energy measurement plan
-- thermal measurement plan
-- benchmark repeatability plan
-- Python-reference comparison report structure
+↓
 
-Acceptance criteria:
+`signal pipeline architecture`
 
-- validation categories defined
-- measurement protocol structure defined
-- benchmark repeatability structure defined
-- reference comparison structure defined
-- validation deliverables listed
-- partner and lab review path documented
+↓
 
-Related files:
+`accelerator integration profile`
 
-- docs/physical_validation_plan.md
-- docs/hardware_pathway.md
-- docs/implementation_layers.md
-- docs/fpga_mapping_study.md
-- docs/asic_mapping_study.md
-- MILESTONES.md
-- funding_brief.md
+↓
 
-Project value:
+`FPGA-to-silicon migration path`
 
-    prepares FRP for measurable physical implementation review and laboratory collaboration
+↓
 
-## 14. Stage 7 — Funding and Partner Package
+`silicon production readiness manifest`
 
-Target:
+↓
 
-    partner and funding review package
+`tapeout readiness checklist`
 
-Objective:
+↓
 
-    prepare FRP for engineering partner review, laboratory collaboration, grant review, or investor-facing technical evaluation
+`production integration and external implementation handoff`
 
-Current foundation:
+↓
 
-- funding_brief.md
-- MILESTONES.md
-- ROADMAP.md
-- README.md
-- TEST_REPORT_v0_9_3.md
-- hardware pathway documentation
-- implementation layer documentation
-- FPGA mapping study
-- ASIC mapping study
-- physical validation plan
-
-Planned outputs:
-
-- executive summary
-- validated asset list
-- software validation evidence summary
-- benchmark evidence summary
-- CI verification summary
-- hardware-facing pathway summary
-- FPGA mapping summary
-- ASIC mapping summary
-- physical validation summary
-- funding milestone table
-- resource needs table
-- partner profile
-- review package checklist
-- presentation-ready technical summary
-
-Acceptance criteria:
-
-- funding brief complete
-- milestones complete
-- review package file list complete
-- project value proposition clear
-- engineering trajectory clear
-- technical assets documented
-- resource needs documented
-- partner review pathway documented
-
-Related files:
-
-- funding_brief.md
-- MILESTONES.md
-- README.md
-- ROADMAP.md
-- TEST_REPORT_v0_9_3.md
-- RELEASE_NOTES_v0_9_3.md
-- RELEASE_CHECKLIST_v0_9_3.md
-- docs/hardware_pathway.md
-- docs/implementation_layers.md
-- docs/fpga_mapping_study.md
-- docs/asic_mapping_study.md
-- docs/physical_validation_plan.md
-
-Project value:
-
-    creates a coherent package for funding, partnerships, laboratory collaboration, and technical due diligence
-
-## 15. Stage 8 — v1.0.0 Public Software Architecture Release
-
-Target candidate:
-
-    v1.0.0
-
-Objective:
-
-    establish the first stable public software architecture release of FRP
-
-Planned foundation:
-
-- stabilized v0.9.3-mobile package
-- structured output layer
-- expanded benchmark layer
-- hardware-facing documentation pathway
-- milestone structure
-- funding package
-- archival release metadata
-
-Candidate requirements:
-
-- stable source layout
-- stable command interface
-- stable output schema
-- stable benchmark profile
-- stable documentation layer
-- stable release checklist
-- stable citation metadata
-- stable roadmap
-- stable milestone structure
-- GitHub release tag
-- archival release package
-
-Acceptance criteria:
-
-- v1.0.0 candidate source finalized
-- test report finalized
-- benchmark report finalized
-- documentation package finalized
-- release notes finalized
-- release checklist finalized
-- citation metadata finalized
-- GitHub release created
-- archival package created
-
-Related files:
-
-- README.md
-- ROADMAP.md
-- MILESTONES.md
-- TEST_REPORT
-- RELEASE_NOTES
-- RELEASE_CHECKLIST
-- CITATION.cff
-- docs/README.md
-- docs/output_schema.md
-- docs/benchmark_interpretation.md
-- docs/hardware_pathway.md
-- docs/implementation_layers.md
-
-Project value:
-
-    establishes a stable public software architecture release ready for citation, review, and staged implementation-layer development
-
-## 16. Milestone Mapping
-
-| Roadmap Stage | Project Milestone |
-|---|---|
-| Stage 0 — v0.9.3-mobile Repository Stabilization | M0 |
-| Stage 1 — Archival Release and DOI | M1 |
-| Stage 2 — v0.9.4 Structured Output | M2 |
-| Stage 3 — v0.9.5 Extended Benchmark Layer | M3 |
-| Stage 4 — FPGA Mapping Package | M4 |
-| Stage 5 — ASIC Mapping Package | M5 |
-| Stage 6 — Physical Validation Protocol | M6 |
-| Stage 7 — Funding and Partner Package | M7 |
-| Stage 8 — v1.0.0 Public Software Architecture Release | M8 |
-
-Milestone document:
-
-    MILESTONES.md
-
-## 17. Review Package Path
-
-Current review package files:
-
-- README.md
-- funding_brief.md
-- MILESTONES.md
-- ROADMAP.md
-- TEST_REPORT_v0_9_3.md
-- RELEASE_NOTES_v0_9_3.md
-- RELEASE_CHECKLIST_v0_9_3.md
-- PROJECT_STRUCTURE.md
-- docs/hardware_pathway.md
-- docs/implementation_layers.md
-- docs/fpga_mapping_study.md
-- docs/asic_mapping_study.md
-- docs/physical_validation_plan.md
-- docs/benchmark_interpretation.md
-- docs/output_schema.md
-- REPRODUCIBILITY.md
-- CI.md
-- CITATION.cff
-- LICENSE
-
-Review package role:
-
-    support repository-level review, technical partner review, laboratory collaboration discussion, grant preparation, investor-facing technical evaluation, and milestone-based resource planning
-
-## 18. Release and Archival Path
-
-Recommended archival sequence:
-
-1. complete repository synchronization
-2. confirm CI workflows passing
-3. confirm README badges passing
-4. confirm release checklist
-5. confirm release notes
-6. confirm CITATION.cff metadata
-7. create GitHub release tag
-8. create Zenodo archival release
-9. obtain DOI
-10. update CITATION.cff with DOI
-11. update README with DOI badge
-12. update CHANGELOG with DOI reference
-13. prepare partner and funding package for external review
-
-## 19. Documentation Alignment Rule
-
-When a roadmap stage changes, review whether the following files require updates:
-
-- README.md
-- ROADMAP.md
-- MILESTONES.md
-- funding_brief.md
-- PROJECT_STRUCTURE.md
-- RELEASE_NOTES_v0_9_3.md
-- RELEASE_CHECKLIST_v0_9_3.md
-- CHANGELOG.md
-- docs/README.md
-- docs/output_schema.md
-- docs/benchmark_interpretation.md
-- docs/hardware_pathway.md
-- docs/implementation_layers.md
-- docs/fpga_mapping_study.md
-- docs/asic_mapping_study.md
-- docs/physical_validation_plan.md
-- REPRODUCIBILITY.md
-- USAGE.md
-- CI.md
-
-Documentation should remain aligned with executable behavior, benchmark output, CI status, release readiness, milestones, funding structure, and current engineering trajectory.
-
-## 20. Current Status
-
-FRP v0.9.3-mobile currently establishes:
-
-- public software validation layer
-- reproducibility and benchmark layer
-- CI verification layer
-- documentation layer
-- hardware-facing documentation pathway
-- FPGA mapping study path
-- ASIC mapping study path
-- physical validation planning structure
-- milestone structure
-- funding and partner-facing brief
+`external implementation feedback and production iteration`
+
+↓
+
+`production scaling and implementation stabilization`
+
+↓
+
+`hierarchical ultrametric topology model`
+
+↓
+
+`multiscale phase-coherence map`
+
+↓
+
+`cluster-local thermal field`
+
+↓
+
+`physical-domain correlation package`
+
+↓
+
+`fixed-point interface profile`
+
+↓
+
+`balanced ternary hardware encoding map`
+
+↓
+
+`quantized reference shadow model`
+
+↓
+
+`cycle-exact reference trace`
+
+↓
+
+`RTL comparison vector package`
+
+↓
+
+`SystemVerilog testbench interface map`
+
+↓
+
+`synthesizable RTL reference-core map`
+
+↓
+
+`RTL assertion correlation harness`
+
+↓
+
+`reference RTL equivalence report`
+
+↓
+
+`qualification closure manifest`
+
+## 8. Comparative Benchmark Role
+
+The comparative architecture benchmark suite is a supporting validation layer.
+
+Its role is to provide reproducible comparison profiles and sensitivity analysis without replacing the FRP architecture chain.
+
+Current benchmark contours remain separated:
+
+- the original v0.9.3 thermal benchmark;
+- the current comparative architecture benchmark suite;
+- the hardware-informed sensitivity qualification layer.
+
+The comparative benchmark layer is not an architecture milestone and does not alter the M0–M16 release progression.
+
+Related repository paths:
+
+- `benchmarks/architecture_comparison/`;
+- `.github/workflows/frp-architecture-comparison.yml`;
+- `.github/workflows/frp-hardware-sensitivity-comparison.yml`;
+- `.github/workflows/frp-hardware-sensitivity-profile.yml`.
+
+## 9. Current M15 Release Files
+
+Current architecture document:
+
+`docs/m15_implementation_mapping_domain_interface_qualification_closure.md`
+
+Current executable reference file:
+
+`frp_prototype_v1_7_0.py`
+
+Current validation workflow:
+
+`.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+
+Current release-facing records:
+
+- `TEST_REPORT_v1_7_0.md`;
+- `RELEASE_NOTES_v1_7_0.md`;
+- `FRP_VALIDATION_INDEX_v1_7_0.md`.
+
+## 10. Next Architecture Layer
+
+Next planned architecture layer:
+
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
+
+The current repository defines this as the next architecture boundary after M15 qualification closure.
+
+## 11. Repository Alignment Rule
+
+When the current architecture layer changes, review the following files for version, milestone, validation, and architecture-boundary alignment:
+
+- `README.md`;
+- `ROADMAP.md`;
+- `MILESTONES.md`;
+- `PROJECT_STRUCTURE.md`;
+- `CHANGELOG.md`;
+- `CI.md`;
+- `REPRODUCIBILITY.md`;
+- current `TEST_REPORT`;
+- current `RELEASE_NOTES`;
+- current `FRP_VALIDATION_INDEX`;
+- current architecture document;
+- current milestone workflow.
+
+Historical release records must remain historical and must not be rewritten as current-state documents.
+
+## 12. Current Status
+
+FRP v1.7.0 currently establishes:
+
+- the M15 implementation-mapping layer;
+- deterministic hardware-facing numeric representations;
+- balanced ternary hardware encoding;
+- stateful quantized hardware shadow execution;
+- cycle-exact reference traces;
+- deterministic RTL comparison vectors;
+- SystemVerilog testbench interface mapping;
+- synthesizable RTL reference-core mapping;
+- RTL assertion correlation mapping;
+- floating semantic reference-to-quantized shadow correlation;
+- exact deterministic quantized shadow replay;
+- qualification closure.
 
 Current repository role:
 
-    provide a validated public software reference package for staged engineering development, archival release preparation, hardware-facing specification planning, partner review, and funding preparation
+`preserve and extend the validated Fractal Resonance Processor reference architecture from the balanced ternary computational kernel through implementation mapping, deterministic hardware-facing execution, RTL correlation, and qualification closure`
+
+Next architecture target:
+
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
