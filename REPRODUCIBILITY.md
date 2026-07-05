@@ -1,6 +1,136 @@
-# Reproducibility — Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor
+# Fractal Resonance Processor (FRP)
 
-This document defines the reproducibility path for the current Fractal Resonance Processor (FRP) release layer.
+**Ternary Resonant Coherence Processor — Structured Output Prototype**
+
+## Reproducibility
+
+This document defines the complete reproducibility path for the current Fractal Resonance Processor (FRP) executable reference, resonant computational mechanism, balanced ternary state-retention mechanism, M15 deterministic implementation mapping, and qualification closure.
+
+FRP is a ternary resonant coherence processor.
+
+Its computation is not reducible to static switching between the symbols `-1`, `0`, and `1`.
+
+The complete current computational path combines:
+
+`balanced ternary state and retained-result domain {-1, 0, 1}`
+
+↓
+
+`cell phase and frequency state`
+
+↓
+
+`Kuramoto-Sakaguchi resonant phase coupling`
+
+↓
+
+`asymmetric Sakaguchi phase lag gamma`
+
+↓
+
+`hierarchical fractal coupling`
+
+↓
+
+`phase evolution`
+
+↓
+
+`resonance selection`
+
+↓
+
+`Kuramoto order parameter R`
+
+↓
+
+`multiscale phase-coherence evaluation`
+
+↓
+
+`delay dynamics`
+
+↓
+
+`local thermal-phase interaction`
+
+↓
+
+`local gamma drift`
+
+↓
+
+`nonlinear coherence compression`
+
+↓
+
+`dynamic stability C(t) - P(t)`
+
+↓
+
+`phase-derived ternary target`
+
+↓
+
+`distributed ternary commit`
+
+↓
+
+`mandatory tick-separated routing through active neutral state 0`
+
+↓
+
+`retained coherent ternary state`
+
+↓
+
+`deterministic fixed-point implementation mapping`
+
+↓
+
+`stateful quantized hardware shadow execution`
+
+↓
+
+`cycle-exact integer golden trace`
+
+↓
+
+`deterministic RTL comparison vectors`
+
+↓
+
+`SystemVerilog interface mapping`
+
+↓
+
+`RTL assertion correlation`
+
+↓
+
+`reference equivalence`
+
+↓
+
+`qualification closure`
+
+The balanced ternary state and retained-result domain is:
+
+`{-1, 0, 1}`
+
+The active neutral state is:
+
+`0`
+
+Validated opposite-polarity routes are:
+
+`-1 → 0 → 1`
+
+`1 → 0 → -1`
+
+Validated kernel invariant:
+
+`actual_direct_events = 0`
 
 Current version:
 
@@ -13,6 +143,10 @@ Current milestone:
 Main executable reference file:
 
 `frp_prototype_v1_7_0.py`
+
+Current structured-output schema:
+
+`frp.structured_output.v1.7.0`
 
 Current architecture document:
 
@@ -34,13 +168,21 @@ Current primary qualification workflow:
 
 `.github/workflows/frp-m15-implementation-mapping-qualification.yml`
 
-Current published release validation status:
+Current published validation status:
 
 `PASS`
 
+Current validated M15 self-test result:
+
+`41/41 PASS`
+
 ## 1. Reproducibility Target
 
-The current reproducibility chain is:
+The reproducibility target is not only the final ternary state vector.
+
+A complete reproduction must preserve the dynamic computational path that produces and retains that state.
+
+The primary reproducibility chain is:
 
 `source revision`
 
@@ -50,109 +192,270 @@ The current reproducibility chain is:
 
 ↓
 
-`Python compilation`
+`deterministic initialization`
 
 ↓
 
-`M15 self-test matrix`
+`processor configuration`
 
 ↓
 
-`structured reference execution`
+`balanced ternary state domain`
 
 ↓
 
-`fixed-point interface artifacts`
+`phase and frequency initialization`
 
 ↓
 
-`quantized hardware shadow execution`
+`hierarchical coupling topology`
 
 ↓
 
-`cycle-exact integer reference traces`
+`Kuramoto-Sakaguchi phase interaction`
 
 ↓
 
-`deterministic RTL comparison vectors`
+`delay and thermal dynamics`
 
 ↓
 
-`SystemVerilog interface mapping`
+`local gamma dynamics`
 
 ↓
 
-`RTL assertion correlation`
+`phase evolution`
 
 ↓
 
-`reference equivalence validation`
+`global and multiscale phase coherence`
+
+↓
+
+`nonlinear coherence compression`
+
+↓
+
+`dynamic stability`
+
+↓
+
+`phase-derived ternary target formation`
+
+↓
+
+`distributed commit`
+
+↓
+
+`active neutral routing`
+
+↓
+
+`retained state`
+
+↓
+
+`structured telemetry`
+
+↓
+
+`independent deterministic repeat`
+
+↓
+
+`M15 fixed-point mapping`
+
+↓
+
+`quantized hardware shadow`
+
+↓
+
+`cycle-exact reference trace`
+
+↓
+
+`deterministic RTL vector regeneration`
+
+↓
+
+`reference equivalence`
 
 ↓
 
 `qualification closure`
 
-The primary reproducibility target is the current FRP v1.7.0 M15 architecture layer.
+A reproduction is incomplete if it verifies only:
 
-Comparative architecture and hardware-sensitivity suites remain supporting validation contours and are reproduced separately.
+- the final `{-1, 0, 1}` vector;
+- the two-bit ternary encoding;
+- one M15 artifact;
+- one self-test marker.
 
-## 2. Environment
+The resonant phase-coherence path and the retained ternary state path must remain connected.
+
+## 2. Two Inseparable Reproducibility Domains
+
+The FRP computational core contains two inseparable reproducibility domains.
+
+### 2.1 Resonant dynamic domain
+
+The resonant dynamic domain contains:
+
+- cell phase;
+- base frequency;
+- target frequency;
+- current frequency;
+- Kuramoto-Sakaguchi interaction;
+- asymmetric phase lag;
+- hierarchical fractal coupling;
+- scheduler-dependent phase push;
+- delayed frequency response;
+- distributed thermal state;
+- local thermal coupling degradation;
+- local gamma drift;
+- phase evolution;
+- global phase order;
+- multiscale phase coherence;
+- nonlinear coherence compression;
+- dynamic stability.
+
+### 2.2 Balanced ternary state and retention domain
+
+The balanced ternary domain contains:
+
+- states `{-1, 0, 1}`;
+- active neutral state `0`;
+- phase-derived ternary targets;
+- transition requests;
+- distributed commit;
+- transition-fraction limits;
+- pending neutral routes;
+- mandatory tick separation;
+- scheduler-controlled execution;
+- retained ternary state.
+
+The resonant dynamic domain drives the evolving computation.
+
+The ternary domain provides the target, state, transition, and retained-result layer.
+
+A valid reproduction must preserve both.
+
+## 3. Current Executable Reference
+
+Use:
+
+`frp_prototype_v1_7_0.py`
+
+Do not substitute an earlier executable file when reproducing the current FRP v1.7.0 M15 layer.
+
+Historical executable references remain preserved for their corresponding historical architecture layers.
+
+The current executable reference contains:
+
+- the floating semantic reference path inherited through M14;
+- the current M15 fixed-point interface contract;
+- the stateful quantized hardware shadow;
+- deterministic reference traces;
+- deterministic vector generation;
+- SystemVerilog interface mapping;
+- RTL correlation contracts;
+- qualification closure.
+
+## 4. Environment
 
 Current M15 GitHub Actions environment:
 
-- runner: `ubuntu-latest`;
-- Python: `3.12`;
-- workflow timeout: `30 minutes`.
+| Parameter | Value |
+|---|---|
+| runner | `ubuntu-latest` |
+| Python | `3.12` |
+| workflow timeout | `30 minutes` |
 
 Recommended local environment:
 
-    Python 3.12
+`Python 3.12`
 
-Install declared dependencies from the repository root:
+The declared dependency file is:
+
+`requirements.txt`
+
+Current declared external dependency:
+
+`numpy>=1.26.0`
+
+Install from the repository root:
 
     python -m pip install --upgrade pip
     python -m pip install -r requirements.txt
 
-Current declared dependency:
+On systems where the interpreter command is:
 
-    numpy>=1.26.0
+`python3`
 
-Before execution, record:
+replace `python` with `python3`.
+
+## 5. Record the Exact Source State
+
+Before running a reproducibility sequence, record:
 
     git rev-parse HEAD
     git status --short
     python --version
     python -m pip freeze
 
-A clean reproducibility record should preserve:
+Preserve:
 
 - exact commit hash;
-- clean or explicitly documented working-tree state;
+- working-tree state;
 - Python version;
-- installed dependency versions.
+- installed dependency versions;
+- operating environment;
+- execution date;
+- exact commands used.
 
-## 3. Required Current Files
+A dirty working tree is not automatically invalid.
 
-Current M15 reproduction requires:
+It must, however, be explicitly recorded because uncommitted source differences can alter deterministic output.
+
+## 6. Required Current Files
+
+Primary executable and dependency files:
 
 - `frp_prototype_v1_7_0.py`;
-- `requirements.txt`;
+- `requirements.txt`.
+
+Current architecture and validation files:
+
+- `README.md`;
+- `INSTALL.md`;
+- `USAGE.md`;
+- `REPRODUCIBILITY.md`;
+- `CI.md`;
+- `docs/core_principles.md`;
+- `docs/resonance_computation.md`;
 - `docs/m15_implementation_mapping_domain_interface_qualification_closure.md`;
-- `.github/workflows/frp-m15-implementation-mapping-qualification.yml`.
-
-Current release-traceability records:
-
 - `TEST_REPORT_v1_7_0.md`;
 - `FRP_VALIDATION_INDEX_v1_7_0.md`;
 - `RELEASE_NOTES_v1_7_0.md`.
 
-Historical executable references and historical release records remain version-specific evidence.
+Current primary qualification workflow:
 
-They are not substituted for the current M15 executable reference.
+- `.github/workflows/frp-m15-implementation-mapping-qualification.yml`.
 
-## 4. Compile Gate
+Historical files remain historical release evidence.
 
-Run from the repository root:
+They are not substituted for the current v1.7.0 reproduction path.
+
+## 7. Install and Compile
+
+Install dependencies:
+
+    python -m pip install --upgrade pip
+    python -m pip install -r requirements.txt
+
+Compile the current executable reference:
 
     python -m py_compile frp_prototype_v1_7_0.py
 
@@ -160,9 +463,913 @@ Required result:
 
 `PASS`
 
-## 5. M15 Self-Test Matrix
+A successful compile gate returns without an error message.
 
-Default self-test:
+## 8. Current Default Configuration
+
+The current default execution configuration is:
+
+| Parameter | Default |
+|---|---:|
+| cells | `16` |
+| steps | `64` |
+| seed | `76` |
+| scheduler | `7/1` |
+| transition fraction | `0.25` |
+| gamma | `0.30 × pi` |
+| fractal alpha | `0.70` |
+| thermal beta | `1.20` |
+| ambient heat | `0.05` |
+| thermal time constant | `14.0` |
+| thermal soft limit | `0.22` |
+| thermal hard limit | `0.90` |
+| nominal coupling | `0.28` |
+| delay alpha | `0.30` |
+| thermal diffusion gain | `0.035` |
+| equivalence tolerance | `1e-12` |
+
+Derived default values:
+
+| Derived parameter | Value |
+|---|---:|
+| hierarchy depth | `4` |
+| request lanes | `4` |
+| packed ternary state width | `32 bits` |
+
+## 9. Internal Deterministic Constants
+
+The current executable also contains internal constants that contribute to deterministic behavior.
+
+Frequency and delay:
+
+| Parameter | Value |
+|---|---:|
+| state frequency gain | `0.06` |
+| switching frequency gain | `0.12` |
+| delay alpha | `0.30` |
+
+Thermal generation:
+
+| Parameter | Value |
+|---|---:|
+| base power per cell | `0.0018` |
+| switching power gain | `0.052` |
+| frequency-lag power gain | `0.018` |
+
+Thermal coupling:
+
+| Parameter | Value |
+|---|---:|
+| thermal coupling gain | `2.50` |
+
+Gamma dynamics:
+
+| Parameter | Value |
+|---|---:|
+| gamma correlation alpha | `0.15` |
+| gamma thermal gain | `0.08` |
+
+Nonlinear coherence compression:
+
+| Parameter | Value |
+|---|---:|
+| thermal compression gain | `3.0` |
+| margin compression gain | `1.5` |
+| stability soft margin | `0.25` |
+
+Scheduler phase push:
+
+| Scheduler state | Phase push |
+|---|---:|
+| `commit` | `0.010` |
+| `excite` | `0.006` |
+| all other states | `0.003` |
+
+These constants are part of the current executable reference behavior.
+
+## 10. Deterministic Initialization
+
+Current default deterministic seed:
+
+`76`
+
+Use:
+
+    python frp_prototype_v1_7_0.py --seed 76 --mode demo --output json
+
+The seed contributes to deterministic initialization and deterministic correlated gamma-noise behavior.
+
+A reproducibility record must preserve the exact seed.
+
+Changing the seed creates a different deterministic execution.
+
+## 11. Exact Tick Execution Order
+
+The current floating reference tick executes in this order:
+
+`scheduler-state selection`
+
+↓
+
+`switch-activity reset`
+
+↓
+
+`maximum transition capacity calculation`
+
+↓
+
+`pending neutral-route processing`
+
+↓
+
+`explicit transition-request processing`
+
+↓
+
+`phase-derived ternary target processing`
+
+↓
+
+`switch-load update`
+
+↓
+
+`delay-dynamics update`
+
+↓
+
+`local thermal-field update`
+
+↓
+
+`local gamma-drift update`
+
+↓
+
+`thermal coupling-factor update`
+
+↓
+
+`Kuramoto-Sakaguchi phase-field update`
+
+↓
+
+`multiscale phase-coherence evaluation`
+
+↓
+
+`cluster-metric evaluation`
+
+↓
+
+`nonlinear coherence compression and global stability update`
+
+↓
+
+`structured telemetry capture`
+
+This order is part of the current semantic reference.
+
+A change in update order can alter deterministic behavior even if every individual formula remains unchanged.
+
+## 12. Phase-to-Target Temporal Relation
+
+The current tick extracts automatic ternary targets from the phase field that exists at the beginning of the target-processing stage.
+
+The same tick then updates:
+
+- delay state;
+- thermal state;
+- gamma state;
+- coupling field;
+- phase state;
+- coherence state.
+
+Therefore, across successive ticks, the temporal relation is:
+
+`phase field produced by previous evolution`
+
+↓
+
+`current tick ternary target extraction`
+
+↓
+
+`distributed transition`
+
+↓
+
+`delay and thermal update`
+
+↓
+
+`Kuramoto-Sakaguchi phase evolution`
+
+↓
+
+`new phase field`
+
+↓
+
+`next tick ternary target extraction`
+
+This distinction must be preserved.
+
+A reproduction must not replace this stateful cross-tick relation with immediate same-step symbolic assignment.
+
+## 13. Kuramoto-Sakaguchi Resonant Phase Interaction
+
+The current floating reference uses the phase-interaction term:
+
+`sin(phase_j - phase_i - gamma_effective_i)`
+
+The dense reference path evaluates:
+
+`coupling_nominal × sum(weight_ij × thermal_factor_i × thermal_factor_j × sin(phase_j - phase_i - gamma_effective_i))`
+
+The current default nominal coupling strength is:
+
+`0.28`
+
+The current default nominal phase lag is:
+
+`0.30 × pi`
+
+The current hierarchical path evaluates the same interaction through dyadic shell aggregation.
+
+The dense and hierarchical paths remain separate reference representations for correlation and equivalence work.
+
+## 14. Hierarchical Fractal Coupling
+
+The current architecture uses a dyadic hierarchical ultrametric topology.
+
+The cell count must be:
+
+- a power of two;
+- at least `2`.
+
+Hierarchy depth:
+
+`cells.bit_length() - 1`
+
+Current default:
+
+`16 cells → hierarchy depth 4`
+
+Hierarchical distance between two distinct cells:
+
+`(i XOR j).bit_length()`
+
+Shell population:
+
+`2^(distance - 1)`
+
+Current default fractal exponent:
+
+`0.70`
+
+The current shell-normalized coupling weights preserve exact normalized closure in the M15 fixed-point representation.
+
+Required marker:
+
+`fixed_point_topology_sum_exact = True`
+
+## 15. Hierarchical Coupling Reproducibility
+
+Changes affecting:
+
+- cell count;
+- hierarchy depth;
+- hierarchical distance;
+- shell population;
+- coupling weight normalization;
+- fractal exponent;
+- dense reference path;
+- hierarchical accelerated path;
+
+must reproduce:
+
+- deterministic topology;
+- exact fixed-point topology closure;
+- reference correlation;
+- phase-field behavior;
+- multiscale coherence behavior.
+
+A final state match alone is not sufficient for a topology change.
+
+## 16. Phase Velocity
+
+The current floating reference phase velocity is:
+
+`phase_velocity_i = 0.060 × current_frequency_i + scheduler_push + coupling_field_i`
+
+The scheduler push is:
+
+`commit → 0.010`
+
+`excite → 0.006`
+
+`other scheduler states → 0.003`
+
+The phase then evolves as:
+
+`phase_i = (phase_i + phase_velocity_i) mod 2π`
+
+A valid reproduction must preserve:
+
+- frequency contribution;
+- scheduler contribution;
+- coupling contribution;
+- phase wrapping.
+
+## 17. Global Kuramoto Order Parameter R
+
+The current global phase order is:
+
+`R = sqrt(mean(cos(phase))² + mean(sin(phase))²)`
+
+The executable calculates this through:
+
+`phase_order(phases)`
+
+The same phase-order calculation is used for hierarchical coherence domains.
+
+A reproduction must not treat `R` as an optional decorative metric.
+
+The phase-order path is part of the processor operational state.
+
+## 18. Multiscale Phase-Coherence Reproduction
+
+Current coherence domains include:
+
+- pair domain;
+- cluster domain;
+- supercluster domain;
+- global domain.
+
+Current telemetry includes:
+
+- pair-domain coherence mean;
+- pair-domain coherence minimum;
+- cluster coherence mean;
+- cluster coherence minimum;
+- supercluster coherence mean;
+- supercluster coherence minimum;
+- global phase coherence;
+- coherence dispersion across clusters.
+
+A change affecting the phase field should inspect all affected scales.
+
+Global phase order alone is not sufficient when local or hierarchical dynamics change.
+
+## 19. Delay Dynamics
+
+Each cell maintains:
+
+- base frequency;
+- frequency target;
+- current frequency.
+
+The current frequency target is:
+
+`base_frequency`
+
++
+
+`0.06 × abs(ternary state)`
+
++
+
+`0.12 × local switching activity`
+
+The delayed update is:
+
+`frequency_current += 0.30 × (frequency_target - frequency_current)`
+
+The remaining frequency lag is:
+
+`abs(frequency_target - frequency_current)`
+
+Frequency lag contributes to:
+
+- phase velocity;
+- generated power;
+- operational coherence;
+- dynamic stability.
+
+A valid reproduction must preserve the stateful delayed frequency path.
+
+## 20. Local Thermal Field
+
+The current generated power per cell is:
+
+`base power`
+
++
+
+`switching power`
+
++
+
+`frequency-lag power`
+
+Current relation:
+
+`generated_power_i = 0.0018 + 0.052 × switch_activity_i + 0.018 × frequency_lag_i`
+
+Current thermal dissipation relation:
+
+`thermal_dissipation_i = (previous_heat_i - ambient_heat) / thermal_time_constant`
+
+Current thermal diffusion relation uses:
+
+- the hierarchical thermal matrix;
+- temperature differences between cells;
+- thermal diffusion gain.
+
+The next local heat state is bounded below by ambient heat.
+
+Current default ambient heat:
+
+`0.05`
+
+Current default thermal time constant:
+
+`14.0`
+
+Current default thermal diffusion gain:
+
+`0.035`
+
+## 21. Thermal Overload
+
+Current local thermal overload is:
+
+`max(0, local_heat - thermal_soft_limit)`
+
+Current default thermal soft limit:
+
+`0.22`
+
+The overload field affects:
+
+- local thermal coupling degradation;
+- local gamma drift;
+- nonlinear coherence compression.
+
+The thermal field is therefore coupled back into the resonant phase computation.
+
+## 22. Thermal Coupling Degradation
+
+Current local thermal node factor:
+
+`exp(-0.5 × thermal_coupling_gain × overload)`
+
+Current thermal coupling gain:
+
+`2.50`
+
+The dense pair interaction uses:
+
+`thermal_node_factor_i × thermal_node_factor_j`
+
+The hierarchical path preserves the same local thermal weighting structure.
+
+A valid reproduction must preserve the feedback chain:
+
+`local thermal overload`
+
+↓
+
+`thermal node factor`
+
+↓
+
+`effective coupling`
+
+↓
+
+`phase evolution`
+
+↓
+
+`coherence`
+
+↓
+
+`stability`
+
+## 23. Local Gamma Drift
+
+The current gamma-noise target field is refreshed every:
+
+`8 ticks`
+
+Current target range:
+
+`[-1.0, 1.0]`
+
+The correlated gamma-noise state approaches its target through:
+
+`gamma_noise_state += 0.15 × (gamma_noise_target - gamma_noise_state)`
+
+The effective local gamma is:
+
+`gamma_nominal + 0.08 × thermal_overload × gamma_noise_state`
+
+The local gamma drift is:
+
+`gamma_effective - gamma_nominal`
+
+The resulting local gamma enters the Kuramoto-Sakaguchi phase interaction.
+
+A valid reproduction must preserve:
+
+- deterministic target generation;
+- update cadence;
+- correlated state evolution;
+- thermal coupling;
+- effective local phase lag.
+
+## 24. Nonlinear Coherence Compression
+
+The current processor applies nonlinear compression to raw phase coherence.
+
+Thermal overload mean:
+
+`mean(local thermal overload)`
+
+Margin pressure:
+
+`max(0, stability_soft_margin - previous_C_minus_P)`
+
+Current stability soft margin:
+
+`0.25`
+
+Current compression relation:
+
+`coherence_compression = exp(-(3.0 × thermal_overload_mean² + 1.5 × margin_pressure²))`
+
+Effective coherence:
+
+`effective_coherence = raw_phase_coherence × coherence_compression`
+
+This nonlinear relation is part of current v1.7.0 execution.
+
+A reproduction must not substitute raw phase coherence directly for effective coherence.
+
+## 25. Dynamic Stability
+
+The current processor tracks:
+
+`C(t)`
+
+`P(t)`
+
+`C(t) - P(t)`
+
+Current operational coherence:
+
+`C = 0.82`
+
++
+
+`0.34 × effective_coherence`
+
++
+
+`0.16 × cluster_coherence_mean`
+
++
+
+`0.08 × neutral_fraction`
+
+-
+
+`0.10 × mean_frequency_lag`
+
+Current destabilizing load:
+
+`P = heat + switch_load`
+
+Current stability margin:
+
+`C_minus_P = C - P`
+
+Required default validation condition:
+
+`C_minus_P_min > 0.0`
+
+A reproduction must preserve the relationship between:
+
+- phase coherence;
+- multiscale coherence;
+- neutral-state fraction;
+- frequency lag;
+- heat;
+- switching load.
+
+## 26. Phase-Derived Ternary Target
+
+Current target mapping:
+
+`sin(phase) > 0.33 → 1`
+
+`sin(phase) < -0.33 → -1`
+
+`otherwise → 0`
+
+This mapping connects:
+
+`resonant phase field`
+
+to:
+
+`balanced ternary target domain`
+
+The derived target remains subject to:
+
+- transition-fraction limits;
+- distributed commit;
+- pending routes;
+- active neutral routing.
+
+The target is not applied as unrestricted immediate replacement.
+
+## 27. Balanced Ternary State Domain
+
+The state and retained-result domain is:
+
+`{-1, 0, 1}`
+
+Valid states:
+
+`-1`
+
+`0`
+
+`1`
+
+Active neutral state:
+
+`0`
+
+Required marker:
+
+`balanced_ternary_state_domain = True`
+
+Reserved-state requirement:
+
+`reserved_state_events = 0`
+
+## 28. Mandatory Active-Neutral Routing
+
+Direct opposite-polarity execution is prohibited.
+
+Prohibited direct execution:
+
+`-1 ↔ 1`
+
+Validated routes:
+
+`-1 → 0 → 1`
+
+`1 → 0 → -1`
+
+Current execution rule:
+
+`tick N: active polarity → 0`
+
+↓
+
+`pending neutral route retained`
+
+↓
+
+`tick N+1 or later: 0 → target polarity`
+
+Required invariant:
+
+`actual_direct_events = 0`
+
+The transition history must preserve the route.
+
+A final state vector is not sufficient evidence.
+
+## 29. Pending Neutral Routes
+
+Pending neutral routes preserve:
+
+- cell index;
+- target polarity;
+- earliest ready tick.
+
+A route is applied only when:
+
+- its ready tick has been reached;
+- transition capacity remains;
+- the current state is neutral.
+
+Current required conditions include:
+
+`actual_direct_events = 0`
+
+`queue_overflow_events = 0`
+
+Changes affecting pending routes require exact trace validation.
+
+## 30. Distributed Commit
+
+Current default transition fraction:
+
+`0.25`
+
+Maximum state changes per tick:
+
+`max(1, round(cells × transition_fraction))`
+
+Default:
+
+`16 cells × 0.25 → 4 request lanes`
+
+Current required default boundary:
+
+`switch_load_peak <= 0.25`
+
+Distributed commit is part of the connection between:
+
+`phase-derived target`
+
+and:
+
+`retained ternary state`
+
+## 31. Standard Structured Reproduction
+
+Run:
+
+    python frp_prototype_v1_7_0.py --mode demo --output json > demo-a.json
+
+Expected schema:
+
+`frp.structured_output.v1.7.0`
+
+Expected version:
+
+`1.7.0`
+
+Expected milestone:
+
+`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+
+Required default summary values:
+
+| Field | Required value |
+|---|---|
+| `cells` | `16` |
+| `hierarchy_depth` | `4` |
+| `request_lanes` | `4` |
+| `ticks_recorded` | `64` |
+| `scheduler` | `7/1` |
+| `scheduler_counts.balance` | `56` |
+| `scheduler_counts.commit` | `8` |
+| `scheduler_counts_valid` | `True` |
+| `balanced_ternary_state_domain` | `True` |
+| `reserved_state_events` | `0` |
+| `actual_direct_events` | `0` |
+| `queue_overflow_events` | `0` |
+| `fixed_point_topology_sum_exact` | `True` |
+| `fixed_point_thermal_sum_exact` | `True` |
+
+Additional required conditions:
+
+`switch_load_peak <= 0.25`
+
+`C_minus_P_min > 0.0`
+
+## 32. Independent Structured Repeat
+
+Generate the first output:
+
+    python frp_prototype_v1_7_0.py --mode demo --output json > demo-a.json
+
+Generate an independent second output:
+
+    python frp_prototype_v1_7_0.py --mode demo --output json > demo-b.json
+
+Compare:
+
+    cmp demo-a.json demo-b.json
+
+Required result:
+
+`byte-identical`
+
+The two runs must use:
+
+- the same source revision;
+- the same Python environment;
+- the same dependency versions;
+- the same configuration;
+- the same seed.
+
+## 33. Full Trace Reproduction
+
+Run:
+
+    python frp_prototype_v1_7_0.py --mode demo --output json --include-trace > demo-full-trace.json
+
+The full output adds:
+
+- `trace`;
+- `cell_trace`;
+- `route_events`.
+
+Default expected sizes:
+
+`trace = 64 processor-tick rows`
+
+`cell_trace = 1024 cell-tick rows`
+
+The full trace exposes:
+
+- scheduler state;
+- ternary cell state;
+- phase state;
+- frequency target;
+- current frequency;
+- frequency lag;
+- switching load;
+- generated power;
+- thermal dissipation;
+- thermal diffusion;
+- local heat;
+- thermal overload;
+- effective gamma;
+- gamma drift;
+- thermal coupling factors;
+- coupling field;
+- raw phase coherence;
+- coherence compression;
+- effective coherence;
+- multiscale coherence;
+- C(t);
+- P(t);
+- C(t) - P(t);
+- direct-event counters;
+- neutral-route counters;
+- pending-route count.
+
+## 34. Digest Reproduction
+
+Without:
+
+`--include-trace`
+
+the current structured output preserves:
+
+- preload digest;
+- trace digest;
+- cell-trace digest.
+
+Use digest-only execution for:
+
+- compact deterministic identity;
+- routine CI validation;
+- reproducibility comparisons.
+
+Use full trace output for:
+
+- phase-dynamics inspection;
+- route inspection;
+- cell-level analysis;
+- correlation work.
+
+## 35. Standard Self-Test
+
+Run:
+
+    python frp_prototype_v1_7_0.py --mode self-test --output json
+
+Required result:
+
+| Field | Required value |
+|---|---|
+| `schema` | `frp.structured_output.v1.7.0` |
+| `version` | `1.7.0` |
+| `status` | `PASS` |
+| `check_count` | `41` |
+| all values in `checks` | `True` |
+
+Current validated result:
+
+`41/41 PASS`
+
+## 36. Complete Scheduler Self-Test Matrix
+
+Default profile:
 
     python frp_prototype_v1_7_0.py --mode self-test --output json
 
@@ -178,180 +1385,179 @@ Free scheduler:
 
     python frp_prototype_v1_7_0.py --mode self-test --scheduler 1/7 --output json
 
-Every self-test output must satisfy:
+Every output must report:
 
-| Field | Required value |
+`status = PASS`
+
+`check_count = 41`
+
+All checks must be:
+
+`True`
+
+## 37. Scheduler Reproduction
+
+Current scheduler modes:
+
+- `free`;
+- `7/1`;
+- `1/7`.
+
+Validated 16-tick profiles:
+
+| Scheduler | Required counts |
 |---|---|
-| `schema` | `frp.structured_output.v1.7.0` |
-| `version` | `1.7.0` |
-| `status` | `PASS` |
-| `check_count` | `41` |
-| all values in `checks` | `True` |
+| `free` | `free = 16` |
+| `7/1` | `balance = 14`, `commit = 2` |
+| `1/7` | `excite = 2`, `neutralize = 14` |
 
-Current validated result:
+Validated default 64-tick profile:
 
-`41/41 PASS`
+`balance = 56`
 
-## 6. Structured Reference Execution
+`commit = 8`
 
-Generate the default M15 structured output:
+Required relation:
 
-    python frp_prototype_v1_7_0.py --mode demo --output json > structured-output.json
+`sum(scheduler_counts) = ticks_recorded`
 
-Required values:
+Required marker:
 
-| Field | Required value |
-|---|---|
-| `schema` | `frp.structured_output.v1.7.0` |
-| `version` | `1.7.0` |
-| `milestone` | `M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package` |
-| `summary.cells` | `16` |
-| `summary.hierarchy_depth` | `4` |
-| `summary.request_lanes` | `4` |
-| `summary.ticks_recorded` | `64` |
-| `summary.scheduler` | `7/1` |
-| `summary.scheduler_counts.balance` | `56` |
-| `summary.scheduler_counts.commit` | `8` |
-| `summary.scheduler_counts_valid` | `True` |
-| `summary.balanced_ternary_state_domain` | `True` |
-| `summary.reserved_state_events` | `0` |
-| `summary.actual_direct_events` | `0` |
-| `summary.queue_overflow_events` | `0` |
-| `summary.fixed_point_topology_sum_exact` | `True` |
-| `summary.fixed_point_thermal_sum_exact` | `True` |
+`scheduler_counts_valid = True`
 
-Additional required conditions:
+## 38. Current M15 Artifact Layers
 
-- `summary.switch_load_peak <= 0.25`;
-- `summary.C_minus_P_min > 0.0`.
+FRP v1.7.0 defines ten M15 artifact layers:
 
-## 7. Preserved Computational Kernel Invariants
+1. `fixed_point_interface_profile`;
+2. `balanced_ternary_hardware_encoding_map`;
+3. `quantized_reference_shadow_model`;
+4. `cycle_exact_reference_trace`;
+5. `rtl_comparison_vector_package`;
+6. `systemverilog_testbench_interface_map`;
+7. `synthesizable_rtl_reference_core`;
+8. `rtl_assertion_correlation_harness`;
+9. `reference_rtl_equivalence_report`;
+10. `qualification_closure_manifest`.
 
-Balanced ternary state domain:
+The current M15 chain maps the complete processor behavior into deterministic hardware-facing representation.
 
-`{-1, 0, 1}`
+It does not replace the resonant phase-coherence computational core.
 
-Active neutral state:
+## 39. Generate the M15 Qualification Directory
 
-`0`
-
-Mandatory opposite-polarity routes:
-
-`-1 → 0 → 1`
-
-`1 → 0 → -1`
-
-Tick-separated execution relation:
-
-`tick N: active polarity → 0`
-
-↓
-
-`pending neutral route retained`
-
-↓
-
-`tick N+1 or later: 0 → target polarity`
-
-Required invariants:
-
-- `actual_direct_events = 0`;
-- `reserved_state_events = 0`;
-- `queue_overflow_events = 0`;
-- balanced ternary state-domain validity;
-- scheduler-count validity;
-- exact fixed-point topology sum;
-- exact fixed-point thermal sum.
-
-The reproducibility path must not relax these invariants.
-
-## 8. Generate the Current M15 Artifact Package
-
-Create directories:
+Create:
 
     mkdir -p artifacts/m15/vectors_a
     mkdir -p artifacts/m15/vectors_b
 
-Generate the fixed-point interface profile:
+Generate the standard structured output:
+
+    python frp_prototype_v1_7_0.py --mode demo --output json > artifacts/m15/structured-output.json
+
+Generate the self-test matrix:
+
+    python frp_prototype_v1_7_0.py --mode self-test --output json > artifacts/m15/self-test.json
+
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler free --output json > artifacts/m15/self-test-free.json
+
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler 7/1 --output json > artifacts/m15/self-test-7-1.json
+
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler 1/7 --output json > artifacts/m15/self-test-1-7.json
+
+## 40. Generate the Ten M15 Artifact Layers
+
+Fixed-point interface profile:
 
     python frp_prototype_v1_7_0.py --export-fixed-point-interface-profile > artifacts/m15/fixed-point-interface-profile.json
 
-Generate the balanced ternary hardware encoding map:
+Balanced ternary hardware encoding map:
 
     python frp_prototype_v1_7_0.py --export-balanced-ternary-hardware-encoding-map > artifacts/m15/balanced-ternary-hardware-encoding-map.json
 
-Generate the quantized reference shadow model:
+Quantized reference shadow model:
 
     python frp_prototype_v1_7_0.py --export-quantized-reference-shadow-model > artifacts/m15/quantized-reference-shadow-model.json
 
-Generate the cycle-exact reference trace:
+Cycle-exact reference trace:
 
     python frp_prototype_v1_7_0.py --export-cycle-exact-reference-trace > artifacts/m15/cycle-exact-reference-trace.json
 
-Generate the RTL comparison vector package:
+RTL comparison vector package:
 
     python frp_prototype_v1_7_0.py --export-rtl-comparison-vector-package > artifacts/m15/rtl-comparison-vector-package.json
 
-Generate the SystemVerilog testbench interface map:
+SystemVerilog testbench interface map:
 
     python frp_prototype_v1_7_0.py --export-systemverilog-testbench-interface-map > artifacts/m15/systemverilog-testbench-interface-map.json
 
-Generate the synthesizable RTL reference core:
+Synthesizable RTL reference core:
 
     python frp_prototype_v1_7_0.py --export-synthesizable-rtl-reference-core > artifacts/m15/synthesizable-rtl-reference-core.json
 
-Generate the RTL assertion correlation harness:
+RTL assertion correlation harness:
 
     python frp_prototype_v1_7_0.py --export-rtl-assertion-correlation-harness > artifacts/m15/rtl-assertion-correlation-harness.json
 
-Generate the reference RTL equivalence report:
+Reference RTL equivalence report:
 
     python frp_prototype_v1_7_0.py --export-reference-rtl-equivalence-report > artifacts/m15/reference-rtl-equivalence-report.json
 
-Generate the qualification closure manifest:
+Qualification closure manifest:
 
     python frp_prototype_v1_7_0.py --export-qualification-closure-manifest > artifacts/m15/qualification-closure-manifest.json
 
-## 9. Expected M15 Artifact Schemas
+## 41. Expected M15 Schemas
 
 | Artifact | Required schema |
 |---|---|
-| `fixed-point-interface-profile.json` | `frp.m15.fixed_point_interface_profile.v1.7.0` |
-| `balanced-ternary-hardware-encoding-map.json` | `frp.m15.balanced_ternary_hardware_encoding_map.v1.7.0` |
-| `quantized-reference-shadow-model.json` | `frp.m15.quantized_reference_shadow_model.v1.7.0` |
-| `cycle-exact-reference-trace.json` | `frp.m15.cycle_exact_reference_trace.v1.7.0` |
-| `rtl-comparison-vector-package.json` | `frp.m15.rtl_comparison_vector_package.v1.7.0` |
-| `systemverilog-testbench-interface-map.json` | `frp.m15.systemverilog_testbench_interface_map.v1.7.0` |
-| `synthesizable-rtl-reference-core.json` | `frp.m15.synthesizable_rtl_reference_core.v1.7.0` |
-| `rtl-assertion-correlation-harness.json` | `frp.m15.rtl_assertion_correlation_harness.v1.7.0` |
-| `reference-rtl-equivalence-report.json` | `frp.m15.reference_rtl_equivalence_report.v1.7.0` |
-| `qualification-closure-manifest.json` | `frp.m15.qualification_closure_manifest.v1.7.0` |
+| fixed-point interface profile | `frp.m15.fixed_point_interface_profile.v1.7.0` |
+| balanced ternary hardware encoding map | `frp.m15.balanced_ternary_hardware_encoding_map.v1.7.0` |
+| quantized reference shadow model | `frp.m15.quantized_reference_shadow_model.v1.7.0` |
+| cycle-exact reference trace | `frp.m15.cycle_exact_reference_trace.v1.7.0` |
+| RTL comparison vector package | `frp.m15.rtl_comparison_vector_package.v1.7.0` |
+| SystemVerilog testbench interface map | `frp.m15.systemverilog_testbench_interface_map.v1.7.0` |
+| synthesizable RTL reference core | `frp.m15.synthesizable_rtl_reference_core.v1.7.0` |
+| RTL assertion correlation harness | `frp.m15.rtl_assertion_correlation_harness.v1.7.0` |
+| reference RTL equivalence report | `frp.m15.reference_rtl_equivalence_report.v1.7.0` |
+| qualification closure manifest | `frp.m15.qualification_closure_manifest.v1.7.0` |
 
-Every artifact must also report:
+Every artifact must report:
 
-- version `1.7.0`;
-- milestone `M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`.
+`version = 1.7.0`
 
-## 10. Fixed-Point Contract
+and:
 
-Required representations:
+`milestone = M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+
+## 42. Fixed-Point Interface Reproduction
+
+Current hardware-facing numeric representations:
 
 | Domain | Representation |
 |---|---|
-| general scalar | `S32Q16` |
+| general dynamic scalar | `S32Q16` |
 | normalized coefficient | `S32Q30` |
 | phase | `PHASE_U32` |
-| gamma | `GAMMA_S32` |
-| trigonometric table entries | `4096` |
+| Sakaguchi gamma offset | `GAMMA_S32` |
+
+Current trigonometric profile:
+
+`4096-entry full-cycle lookup table`
 
 Required exactness markers:
 
-- `fixed_point_topology_sum_exact = True`;
-- `fixed_point_thermal_sum_exact = True`.
+`fixed_point_topology_sum_exact = True`
 
-## 11. Balanced Ternary Hardware Encoding
+`fixed_point_thermal_sum_exact = True`
 
-Canonical two-bit encoding:
+The fixed-point mapping includes the resonant phase domain.
+
+It is not limited to ternary state encoding.
+
+## 43. Balanced Ternary Hardware Encoding
+
+Current two-bit encoding:
 
 `-1 → 2'b11`
 
@@ -363,7 +1569,7 @@ Reserved encoding:
 
 `2'b10`
 
-Canonical integer encoding map:
+Canonical integer encoding:
 
 `-1 → 3`
 
@@ -377,14 +1583,75 @@ Reserved integer code:
 
 Required interface values:
 
-- `request_lanes = 4`;
-- `cell_id_width = 4`.
+`request_lanes = 4`
+
+`cell_id_width = 4`
 
 Required invariant:
 
 `reserved_state_events = 0`
 
-## 12. Deterministic RTL Vector Package
+The encoding represents the ternary state domain.
+
+It is not the whole processor computation.
+
+## 44. Quantized Hardware Shadow Reproduction
+
+Generate:
+
+    python frp_prototype_v1_7_0.py --export-quantized-reference-shadow-model > quantized-reference-shadow-model.json
+
+The stateful quantized shadow preserves processor domains including:
+
+- ternary state;
+- scheduler state;
+- pending neutral routes;
+- phase;
+- frequency;
+- gamma;
+- thermal state;
+- coherence;
+- stability;
+- event counters.
+
+Required summary conditions:
+
+- `actual_direct_events = 0`;
+- `reserved_state_events = 0`;
+- `queue_overflow_events = 0`;
+- balanced ternary state-domain validity;
+- valid scheduler counts;
+- `ticks_recorded = 64`;
+- `switch_load_peak <= 0.25`;
+- `C_minus_P_min > 0.0`;
+- exact fixed-point topology sum;
+- exact fixed-point thermal sum.
+
+## 45. Cycle-Exact Reference Trace
+
+Generate:
+
+    python frp_prototype_v1_7_0.py --export-cycle-exact-reference-trace > cycle-exact-reference-trace.json
+
+Current default trace length:
+
+`64`
+
+Required trace conditions:
+
+- every row has zero actual direct events;
+- every row has zero reserved-state events;
+- each row contains gamma-noise target data for all 16 cells.
+
+The cycle-exact trace is the integer reference path between:
+
+`stateful quantized processor execution`
+
+and:
+
+`deterministic RTL comparison`
+
+## 46. Deterministic RTL Vector Package
 
 Generate package A:
 
@@ -394,15 +1661,7 @@ Generate package B independently:
 
     python frp_prototype_v1_7_0.py --export-rtl-comparison-vector-package --vector-output-dir artifacts/m15/vectors_b > artifacts/m15/vector-package-b.json
 
-Compare both directories:
-
-    diff -qr artifacts/m15/vectors_a artifacts/m15/vectors_b
-
-Required result:
-
-`no differences`
-
-Expected files:
+Expected files in each vector directory:
 
 - `frp_m15_kernel_vectors.vec`;
 - `frp_m15_pending_routes.trace`;
@@ -415,58 +1674,175 @@ Expected files:
 - `frp_m15_trig_lut_q30.vec`;
 - `frp_m15_sha256_manifest.json`.
 
-Both independently generated packages must be byte-identical.
+Expected file count:
 
-## 13. Cycle-Exact Trace Contract
+`10`
 
-The cycle-exact reference trace must preserve:
+## 47. Deterministic Vector Repeat
 
-- exactly `64` trace rows;
-- `actual_direct_events = 0`;
-- `reserved_state_events = 0`;
-- deterministic gamma-noise target vectors for all `16` cells.
+Compare:
 
-The cycle-exact trace is the integer reference path between the quantized hardware shadow and the deterministic RTL comparison vector domain.
+    diff -qr artifacts/m15/vectors_a artifacts/m15/vectors_b
 
-## 14. Scaling Reproduction
+Required result:
 
-Generate the 8-cell output:
+`no differences`
 
-    python frp_prototype_v1_7_0.py --cells 8 --steps 16 --mode demo --output json > artifacts/m15/scaling-8.json
+Every corresponding generated file must be byte-identical.
 
-Generate the 16-cell output:
+Semantic similarity is not sufficient.
 
-    python frp_prototype_v1_7_0.py --cells 16 --steps 16 --mode demo --output json > artifacts/m15/scaling-16.json
+## 48. Vector SHA-256 Integrity
 
-Generate the 32-cell output:
+Each generated vector directory contains:
 
-    python frp_prototype_v1_7_0.py --cells 32 --steps 16 --mode demo --output json > artifacts/m15/scaling-32.json
+`frp_m15_sha256_manifest.json`
 
-Expected structure:
+The manifest contains SHA-256 digests for the nine non-manifest vector files.
 
-| Cells | Hierarchy depth | Request lanes | Packed state width |
-|---|---|---|---|
-| `8` | `3` | `2` | `16 bits` |
-| `16` | `4` | `4` | `32 bits` |
-| `32` | `5` | `8` | `64 bits` |
+A complete integrity check must:
 
-Packed state width is derived as:
+1. load the manifest;
+2. locate every named vector file;
+3. calculate its SHA-256 digest;
+4. compare it with the recorded digest;
+5. require exact equality.
 
-`2 × cells`
+The two independently generated vector directories must also be byte-identical.
 
-Every scaling output must preserve:
+## 49. SystemVerilog Interface Mapping
 
-- `actual_direct_events = 0`;
-- `reserved_state_events = 0`;
-- `queue_overflow_events = 0`;
-- balanced ternary state-domain validity;
-- scheduler-count validity;
-- exact fixed-point topology sum;
-- exact fixed-point thermal sum.
+Generate:
 
-## 15. M15 Benchmark Matrix
+    python frp_prototype_v1_7_0.py --export-systemverilog-testbench-interface-map > systemverilog-testbench-interface-map.json
 
-Generate the current M15 benchmark matrix:
+Current default interface parameters:
+
+| Parameter | Value |
+|---|---:|
+| `NUM_CELLS` | `16` |
+| `HIERARCHY_DEPTH` | `4` |
+| `REQUEST_LANES` | `4` |
+| `CELL_ID_WIDTH` | `4` |
+| `STATE_VECTOR_WIDTH` | `32` |
+| `SCALAR_WIDTH` | `32` |
+| `PHASE_WIDTH` | `32` |
+
+The verification stimulus interface includes:
+
+`gamma_noise_target_q`
+
+This preserves deterministic externalization of gamma-noise targets.
+
+## 50. Synthesizable RTL Reference-Core Contract
+
+Generate:
+
+    python frp_prototype_v1_7_0.py --export-synthesizable-rtl-reference-core > synthesizable-rtl-reference-core.json
+
+The current export defines:
+
+`26`
+
+exact tick-execution stages.
+
+Required kernel conditions include:
+
+`actual_direct_events = 0`
+
+`tick_separated_neutral_routing = True`
+
+Supported scheduler modes:
+
+- `free`;
+- `7/1`;
+- `1/7`.
+
+The RTL mapping remains a representation of the full processor execution semantics.
+
+## 51. RTL Assertion Correlation
+
+Generate:
+
+    python frp_prototype_v1_7_0.py --export-rtl-assertion-correlation-harness > rtl-assertion-correlation-harness.json
+
+Current assertion count:
+
+`13`
+
+Current exact comparison rule:
+
+`actual integer field == expected integer field`
+
+The assertion layer connects RTL-facing execution to deterministic reference vectors.
+
+## 52. Floating Reference to Quantized Shadow Equivalence
+
+Generate:
+
+    python frp_prototype_v1_7_0.py --export-reference-rtl-equivalence-report > reference-rtl-equivalence-report.json
+
+Required exact sequence matches:
+
+- state sequence match `1.0`;
+- scheduler sequence match `1.0`;
+- neutral-route sequence match `1.0`;
+- `C_minus_P` sign match `1.0`;
+- boundary-order match `1.0`.
+
+Required maximum error bounds:
+
+| Field | Maximum error |
+|---|---:|
+| phase | `0.02` |
+| frequency | `0.0001` |
+| heat | `0.001` |
+| gamma | `0.000001` |
+| coherence | `0.01` |
+| `C` | `0.01` |
+| `P` | `0.001` |
+| `C_minus_P` | `0.01` |
+
+These thresholds correlate the floating semantic reference with the quantized hardware shadow.
+
+## 53. Exact Quantized Shadow Replay
+
+The same equivalence report validates exact deterministic replay.
+
+Required exact values:
+
+- state match `1.0`;
+- scheduler match `1.0`;
+- pending-route match `1.0`;
+- counter match `1.0`;
+- trace match `1.0`;
+- cell-trace match `1.0`.
+
+This is a stricter boundary than floating-to-quantized numeric correlation.
+
+## 54. Qualification Closure
+
+Generate:
+
+    python frp_prototype_v1_7_0.py --export-qualification-closure-manifest > qualification-closure-manifest.json
+
+Required result:
+
+`status = PASS`
+
+All closure checks must be:
+
+`True`
+
+Current artifact-layer count:
+
+`10`
+
+The qualification closure manifest is the current M15 qualification endpoint.
+
+## 55. M15 Benchmark Matrix
+
+Generate:
 
     python frp_prototype_v1_7_0.py --export-benchmark-matrix > artifacts/m15/benchmark-matrix.json
 
@@ -486,97 +1862,210 @@ Expected architecture order:
 4. `frp_v1_7_0_systemverilog_correlation_contract`;
 5. `frp_v1_7_0_qualification_closure`.
 
-This matrix belongs to the M15 qualification package and does not replace the primary M15 architecture-validation path.
+This matrix represents the M15 implementation-mapping chain.
 
-## 16. Reference Equivalence Contract
+It is separate from the Comparative Architecture Benchmark Suite.
 
-### Floating reference to quantized shadow
+## 56. Scaling Reproduction
 
-Required exact sequence matches:
+Generate 8-cell execution:
 
-- state sequence match `1.0`;
-- scheduler sequence match `1.0`;
-- neutral-route sequence match `1.0`;
-- `C_minus_P` sign match `1.0`;
-- boundary-order match `1.0`.
+    python frp_prototype_v1_7_0.py --cells 8 --steps 16 --mode demo --output json > artifacts/m15/scaling-8.json
 
-Required maximum error bounds:
+Generate 16-cell execution:
 
-| Field | Maximum error |
-|---|---|
-| phase | `0.02` |
-| frequency | `0.0001` |
-| heat | `0.001` |
-| gamma | `0.000001` |
-| coherence | `0.01` |
-| `C` | `0.01` |
-| `P` | `0.001` |
-| `C_minus_P` | `0.01` |
+    python frp_prototype_v1_7_0.py --cells 16 --steps 16 --mode demo --output json > artifacts/m15/scaling-16.json
 
-### Quantized shadow deterministic replay
+Generate 32-cell execution:
 
-Required exact replay matches:
+    python frp_prototype_v1_7_0.py --cells 32 --steps 16 --mode demo --output json > artifacts/m15/scaling-32.json
 
-- state match `1.0`;
-- scheduler match `1.0`;
-- pending-route match `1.0`;
-- counter match `1.0`;
-- trace match `1.0`;
-- cell-trace match `1.0`.
+Expected structure:
 
-## 17. Qualification Closure
+| Cells | Hierarchy depth | Request lanes | Packed state width |
+|---|---:|---:|---:|
+| `8` | `3` | `2` | `16 bits` |
+| `16` | `4` | `4` | `32 bits` |
+| `32` | `5` | `8` | `64 bits` |
 
-The qualification closure manifest must report:
+## 57. Scaling Invariants
 
-- status `PASS`;
-- all values in `checks` equal `True`;
-- exactly ten M15 artifact layers.
+Every scaling output must preserve:
 
-The qualification closure manifest is the current M15 release-validation endpoint.
+- balanced ternary state-domain validity;
+- `actual_direct_events = 0`;
+- `reserved_state_events = 0`;
+- `queue_overflow_events = 0`;
+- valid scheduler counts;
+- exact fixed-point topology sum;
+- exact fixed-point thermal sum.
 
-## 18. Independent Repeat Rule
+Scaling also changes:
 
-A deterministic reproducibility claim requires an independent repeat.
+- hierarchy depth;
+- shell structure;
+- phase-coupling topology;
+- thermal topology;
+- multiscale coherence domains;
+- request-lane count;
+- packed ternary state width.
 
-Required procedure:
+A complete scaling analysis should inspect these coupled changes.
 
-1. generate the first output;
-2. generate the second output independently from the same declared source state and inputs;
-3. compare the complete files or directories;
-4. require byte-identical equality.
+## 58. Reproducibility Acceptance Criteria
 
-Accepted comparison commands:
+The current FRP v1.7.0 M15 layer is reproducible when:
 
-    cmp first.json second.json
+- the source revision is recorded;
+- the working-tree state is recorded;
+- the Python version is recorded;
+- dependency versions are recorded;
+- the executable compiles;
+- deterministic initialization is preserved;
+- the default structured run completes;
+- an independent structured repeat is byte-identical;
+- the Kuramoto-Sakaguchi phase path executes;
+- phase evolution remains deterministic;
+- global phase order remains available;
+- multiscale coherence remains available;
+- delay dynamics remain stateful;
+- local thermal behavior remains coupled;
+- local gamma drift remains deterministic;
+- nonlinear coherence compression remains active;
+- dynamic stability remains positive in the validated default profile;
+- phase-derived ternary targets remain connected to the evolving phase field;
+- balanced ternary state-domain validity remains true;
+- `actual_direct_events = 0`;
+- `reserved_state_events = 0`;
+- `queue_overflow_events = 0`;
+- all four self-test profiles report `41/41 PASS`;
+- all ten M15 artifact layers are generated;
+- every M15 artifact reports the expected schema;
+- the quantized hardware shadow preserves the kernel invariants;
+- the cycle-exact trace contains 64 rows;
+- independently generated vector directories are byte-identical;
+- SHA-256 vector integrity passes;
+- floating-to-quantized correlation stays within contract;
+- exact quantized replay reports full equality;
+- the qualification closure manifest reports `PASS`.
 
-or:
+## 59. Minimal Current Reproduction Sequence
 
-    diff -qr first_directory second_directory
+Record source state:
 
-Semantic resemblance is not a deterministic repeat.
+    git rev-parse HEAD
+    git status --short
+    python --version
+    python -m pip freeze
 
-## 19. SHA-256 Evidence
+Compile:
 
-Record SHA-256 values after successful generation.
+    python -m py_compile frp_prototype_v1_7_0.py
 
-M15 JSON artifacts:
+Run the current processor:
 
-    sha256sum artifacts/m15/*.json > artifacts/m15/sha256-manifest.txt
+    python frp_prototype_v1_7_0.py --mode demo --output json > demo-a.json
 
-Deterministic vector packages:
+Repeat independently:
 
-    sha256sum artifacts/m15/vectors_a/* > artifacts/m15/vectors-a-sha256.txt
-    sha256sum artifacts/m15/vectors_b/* > artifacts/m15/vectors-b-sha256.txt
+    python frp_prototype_v1_7_0.py --mode demo --output json > demo-b.json
 
-Retain the manifests with:
+Compare:
 
-- source commit;
-- Python version;
-- dependency versions;
-- execution date;
-- operating environment.
+    cmp demo-a.json demo-b.json
 
-## 20. Published FRP v1.7.0 Validation Evidence
+Run the full scheduler self-test matrix:
+
+    python frp_prototype_v1_7_0.py --mode self-test --output json
+
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler free --output json
+
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler 7/1 --output json
+
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler 1/7 --output json
+
+Generate qualification closure:
+
+    python frp_prototype_v1_7_0.py --export-qualification-closure-manifest
+
+Required results:
+
+`Python compilation PASS`
+
+`structured repeat byte-identical`
+
+`all self-tests 41/41 PASS`
+
+`qualification closure PASS`
+
+## 60. Complete M15 Reproduction Sequence
+
+Create the artifact directories:
+
+    mkdir -p artifacts/m15/vectors_a
+    mkdir -p artifacts/m15/vectors_b
+
+Generate structured output and self-tests:
+
+    python frp_prototype_v1_7_0.py --mode demo --output json > artifacts/m15/structured-output.json
+
+    python frp_prototype_v1_7_0.py --mode self-test --output json > artifacts/m15/self-test.json
+
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler free --output json > artifacts/m15/self-test-free.json
+
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler 7/1 --output json > artifacts/m15/self-test-7-1.json
+
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler 1/7 --output json > artifacts/m15/self-test-1-7.json
+
+Generate all ten M15 exports:
+
+    python frp_prototype_v1_7_0.py --export-fixed-point-interface-profile > artifacts/m15/fixed-point-interface-profile.json
+
+    python frp_prototype_v1_7_0.py --export-balanced-ternary-hardware-encoding-map > artifacts/m15/balanced-ternary-hardware-encoding-map.json
+
+    python frp_prototype_v1_7_0.py --export-quantized-reference-shadow-model > artifacts/m15/quantized-reference-shadow-model.json
+
+    python frp_prototype_v1_7_0.py --export-cycle-exact-reference-trace > artifacts/m15/cycle-exact-reference-trace.json
+
+    python frp_prototype_v1_7_0.py --export-rtl-comparison-vector-package > artifacts/m15/rtl-comparison-vector-package.json
+
+    python frp_prototype_v1_7_0.py --export-systemverilog-testbench-interface-map > artifacts/m15/systemverilog-testbench-interface-map.json
+
+    python frp_prototype_v1_7_0.py --export-synthesizable-rtl-reference-core > artifacts/m15/synthesizable-rtl-reference-core.json
+
+    python frp_prototype_v1_7_0.py --export-rtl-assertion-correlation-harness > artifacts/m15/rtl-assertion-correlation-harness.json
+
+    python frp_prototype_v1_7_0.py --export-reference-rtl-equivalence-report > artifacts/m15/reference-rtl-equivalence-report.json
+
+    python frp_prototype_v1_7_0.py --export-qualification-closure-manifest > artifacts/m15/qualification-closure-manifest.json
+
+Generate benchmark matrix:
+
+    python frp_prototype_v1_7_0.py --export-benchmark-matrix > artifacts/m15/benchmark-matrix.json
+
+Generate scaling outputs:
+
+    python frp_prototype_v1_7_0.py --cells 8 --steps 16 --mode demo --output json > artifacts/m15/scaling-8.json
+
+    python frp_prototype_v1_7_0.py --cells 16 --steps 16 --mode demo --output json > artifacts/m15/scaling-16.json
+
+    python frp_prototype_v1_7_0.py --cells 32 --steps 16 --mode demo --output json > artifacts/m15/scaling-32.json
+
+Generate independent vector packages:
+
+    python frp_prototype_v1_7_0.py --export-rtl-comparison-vector-package --vector-output-dir artifacts/m15/vectors_a > artifacts/m15/vector-package-a.json
+
+    python frp_prototype_v1_7_0.py --export-rtl-comparison-vector-package --vector-output-dir artifacts/m15/vectors_b > artifacts/m15/vector-package-b.json
+
+Compare:
+
+    diff -qr artifacts/m15/vectors_a artifacts/m15/vectors_b
+
+Required result:
+
+`no differences`
+
+## 61. Published FRP v1.7.0 Validation Evidence
 
 Published release layer:
 
@@ -597,7 +2086,7 @@ Validated workflow runs recorded in `TEST_REPORT_v1_7_0.md`:
 - `FRP Self Test #154`;
 - `FRP Benchmark Smoke Test #152`.
 
-Published validation result:
+Published result:
 
 `PASS`
 
@@ -605,51 +2094,82 @@ Published M15 self-test result:
 
 `41/41 PASS`
 
-These values are release evidence for the validated v1.7.0 layer and are not statements about later documentation-only commits.
+These values are release-specific validation evidence.
 
-## 21. Historical Release Rule
+Later documentation or maintenance commits must not be presented as the original validated release commit.
 
-Historical executable references remain bound to their historical release records and workflows.
+## 62. Historical Release Preservation
+
+Historical executable references remain bound to their own release layers.
 
 Examples:
 
-- `frp_prototype_v0_9_3_mobile.py` remains bound to the foundational self-test and benchmark smoke workflows;
-- `frp_prototype_v0_9_4.py` remains bound to the structured-output workflow;
-- M3 through M14 executable references remain bound to their release-specific milestone workflows;
-- `frp_prototype_v1_7_0.py` remains the current M15 executable reference.
+- `frp_prototype_v0_9_3_mobile.py`;
+- `frp_prototype_v0_9_4.py`;
+- `frp_prototype_v0_9_5.py`;
+- `frp_prototype_v0_9_6.py`;
+- `frp_prototype_v0_9_7.py`;
+- `frp_prototype_v0_9_8.py`;
+- `frp_prototype_v0_9_9.py`;
+- `frp_prototype_v1_0_0.py`;
+- `frp_prototype_v1_1_0.py`;
+- `frp_prototype_v1_2_0.py`;
+- `frp_prototype_v1_3_0.py`;
+- `frp_prototype_v1_4_0.py`;
+- `frp_prototype_v1_5_0.py`;
+- `frp_prototype_v1_6_0.py`;
+- `frp_prototype_v1_7_0.py`.
 
-Historical workflows must not be silently redirected to the current executable reference.
+Historical workflows must not be silently redirected to the current executable.
 
-Current reproducibility must not rewrite historical release evidence.
+Historical schemas must not be silently rewritten as current schemas.
 
-## 22. Supporting Comparative Architecture Reproduction
+Historical test reports remain release-specific records.
 
-The comparative architecture benchmark is a supporting validation contour.
+## 63. Supporting Comparative Architecture Reproduction
+
+The Comparative Architecture Benchmark Suite is a separate supporting validation contour.
 
 Directory:
 
 `benchmarks/architecture_comparison/`
 
-Compared references:
+Compared architecture references:
 
 1. `binary_synchronous_reference`;
 2. `binary_clock_gated_reference`;
 3. `direct_ternary_reference`;
 4. `frp_v1_7_0_quantized_shadow`.
 
-From `benchmarks/architecture_comparison/`, prepare the local qualification directory:
+The FRP reference remains a resonant phase-coherence architecture.
 
-    mkdir -p .qualification
+It must not be interpreted as a static ternary switch model.
 
-Run the end-to-end self-test:
+## 64. Comparative Architecture Self-Test
+
+Enter:
+
+    cd benchmarks/architecture_comparison
+
+Run:
 
     python run_architecture_comparison.py --self-test --output text
 
-Generate the canonical comparison package:
+The comparison suite is separate from the primary M15 qualification path.
+
+## 65. Canonical Comparative Architecture Run
+
+From:
+
+`benchmarks/architecture_comparison/`
+
+run:
 
     python run_architecture_comparison.py --workload-profile profiles/workload_profile_v1.json --cost-profile profiles/normalized_cost_profile_v1.json --thermal-profile profiles/thermal_proxy_profile_v1.json --frp-scheduler "7/1" --write results/reference_comparison_seed_76.json --output text
 
 Generate an independent repeat:
+
+    mkdir -p .qualification
 
     python run_architecture_comparison.py --workload-profile profiles/workload_profile_v1.json --cost-profile profiles/normalized_cost_profile_v1.json --thermal-profile profiles/thermal_proxy_profile_v1.json --frp-scheduler "7/1" --write .qualification/reference_comparison_seed_76_repeat.json --output text
 
@@ -661,7 +2181,9 @@ Required result:
 
 `byte-identical`
 
-Qualification policy:
+## 66. Comparative Qualification Policy
+
+Current qualification policy:
 
 `integrity_only_no_winner_assertions`
 
@@ -669,15 +2191,27 @@ Required winner assertions:
 
 `[]`
 
-This supporting benchmark does not define the FRP architecture milestone chain.
+The comparison result remains data.
 
-## 23. Supporting Hardware-Sensitivity Reproduction
+The validation workflow must not assert:
 
-From `benchmarks/architecture_comparison/`, prepare the local qualification directory:
+`FRP energy < binary energy`
 
-    mkdir -p .qualification
+`FRP temperature < binary temperature`
 
-Validate the profile:
+`FRP latency < binary latency`
+
+Reproducibility verifies comparison integrity.
+
+It does not manufacture a winner.
+
+## 67. Supporting Hardware-Sensitivity Reproduction
+
+From:
+
+`benchmarks/architecture_comparison/`
+
+validate the profile:
 
     python validate_hardware_sensitivity_profile.py --profile profiles/hardware_sensitivity_cost_profile_v1.json --output text
 
@@ -685,7 +2219,7 @@ Run the profile validator self-test:
 
     python validate_hardware_sensitivity_profile.py --profile profiles/hardware_sensitivity_cost_profile_v1.json --self-test --output text
 
-Run the sensitivity comparison self-test:
+Run the hardware-sensitivity comparison self-test:
 
     python run_hardware_sensitivity_comparison.py --hardware-sensitivity-profile profiles/hardware_sensitivity_cost_profile_v1.json --self-test --output json
 
@@ -705,56 +2239,396 @@ Required result:
 
 `byte-identical`
 
-The hardware-sensitivity layer remains separate from the primary M15 architecture-validation path.
+## 68. Failure Diagnosis
 
-## 24. Reproducibility Acceptance Criteria
+When a reproduction fails, first record:
 
-The current FRP v1.7.0 M15 layer is reproducible when:
+    git rev-parse HEAD
+    git status --short
+    python --version
+    python -m pip freeze
 
-- source revision is recorded;
-- environment is recorded;
-- `frp_prototype_v1_7_0.py` compiles;
-- all four self-test variants report `41/41 PASS`;
-- structured output matches the v1.7.0 schema and M15 milestone;
-- balanced ternary state-domain validity remains true;
-- `actual_direct_events = 0`;
-- `reserved_state_events = 0`;
-- `queue_overflow_events = 0`;
-- fixed-point topology sum remains exact;
-- fixed-point thermal sum remains exact;
-- all ten M15 artifact layers are generated;
-- every M15 artifact reports the expected schema, version, and milestone;
-- deterministic vector packages are byte-identical;
-- scaling outputs preserve all required invariants;
-- reference equivalence checks satisfy their exact-match and bounded-error contracts;
-- qualification closure reports `PASS`.
+Then identify which boundary failed.
 
-Supporting comparative claims additionally require their own independent byte-identical regeneration.
+### Compile failure
 
-## 25. Repository Alignment Rule
+Check:
+
+- Python version;
+- source integrity;
+- incomplete file replacement;
+- merge markers.
+
+### Structured-output mismatch
+
+Check:
+
+- seed;
+- scheduler;
+- cell count;
+- steps;
+- command-line parameters;
+- source revision.
+
+### Phase or coherence mismatch
+
+Check:
+
+- gamma;
+- fractal alpha;
+- nominal coupling;
+- delay alpha;
+- scheduler state;
+- thermal parameters;
+- update order.
+
+### Ternary-state mismatch
+
+Check:
+
+- phase-derived target mapping;
+- transition fraction;
+- pending neutral routes;
+- scheduler behavior;
+- active neutral routing.
+
+### M15 quantized mismatch
+
+Check:
+
+- fixed-point formats;
+- rounding behavior;
+- phase wrapping;
+- trigonometric lookup;
+- quantized hierarchy weights;
+- gamma stimulus.
+
+### Vector mismatch
+
+Check:
+
+- source revision;
+- output directory contents;
+- deterministic seed;
+- generator changes;
+- manifest digests.
+
+Do not relax thresholds merely to hide a regression.
+
+## 69. Reproducibility Record Template
+
+A reproducibility record should preserve:
+
+### Source
+
+`commit:`
+
+`working tree:`
+
+### Environment
+
+`operating system:`
+
+`Python version:`
+
+`dependency versions:`
+
+### Processor configuration
+
+`cells:`
+
+`steps:`
+
+`seed:`
+
+`scheduler:`
+
+`transition fraction:`
+
+`gamma:`
+
+`fractal alpha:`
+
+`thermal beta:`
+
+`ambient heat:`
+
+`thermal time constant:`
+
+`thermal limits:`
+
+`nominal coupling:`
+
+`delay alpha:`
+
+`thermal diffusion gain:`
+
+### Commands
+
+`exact commands executed:`
+
+### Dynamic result
+
+`structured-output schema:`
+
+`trace digest:`
+
+`cell-trace digest:`
+
+`actual_direct_events:`
+
+`C_minus_P_min:`
+
+`phase-coherence markers:`
+
+### Self-test result
+
+`status:`
+
+`check count:`
+
+### M15 result
+
+`artifact schemas:`
+
+`vector repeat:`
+
+`equivalence result:`
+
+`qualification closure:`
+
+## 70. Repository Alignment Rule
 
 When the current architecture layer changes, review:
 
 - `README.md`;
+- `INSTALL.md`;
+- `USAGE.md`;
+- `REPRODUCIBILITY.md`;
+- `CI.md`;
+- `PROJECT_STRUCTURE.md`;
 - `ROADMAP.md`;
 - `MILESTONES.md`;
-- `PROJECT_STRUCTURE.md`;
-- `CI.md`;
-- `REPRODUCIBILITY.md`;
-- `USAGE.md`;
+- `CHANGELOG.md`;
 - current executable reference;
 - current test report;
 - current validation index;
 - current release notes;
 - current architecture document;
 - current milestone workflow;
-- `docs/README.md`.
+- `docs/README.md`;
+- `docs/core_principles.md`;
+- `docs/resonance_computation.md`.
 
-Historical release records remain historical.
+A file describing what FRP computes must not collapse the processor into static ternary switching.
 
-Supporting comparative validation remains separate from the primary FRP architecture progression.
+The complete computational subject must remain visible where relevant:
 
-## 26. Current Status
+`Kuramoto-Sakaguchi resonant phase dynamics`
+
+↓
+
+`phase evolution`
+
+↓
+
+`resonance selection`
+
+↓
+
+`phase coherence`
+
+↓
+
+`delay and thermal feedback`
+
+↓
+
+`nonlinear coherence compression`
+
+↓
+
+`dynamic stability`
+
+↓
+
+`phase-derived ternary target`
+
+↓
+
+`distributed commit`
+
+↓
+
+`active neutral routing`
+
+↓
+
+`retained ternary state`
+
+## 71. Complete Current Technical Chain
+
+The current reproducible technical chain is:
+
+`balanced ternary state and retained-result domain {-1, 0, 1}`
+
+↓
+
+`deterministic phase and frequency initialization`
+
+↓
+
+`dyadic hierarchical ultrametric topology`
+
+↓
+
+`Kuramoto-Sakaguchi resonant phase coupling`
+
+↓
+
+`asymmetric local phase lag gamma`
+
+↓
+
+`hierarchical fractal phase interaction`
+
+↓
+
+`stateful delay dynamics`
+
+↓
+
+`distributed local thermal field`
+
+↓
+
+`thermal coupling degradation`
+
+↓
+
+`local correlated gamma drift`
+
+↓
+
+`phase velocity`
+
+↓
+
+`phase evolution`
+
+↓
+
+`Kuramoto order parameter R`
+
+↓
+
+`multiscale phase coherence`
+
+↓
+
+`nonlinear coherence compression`
+
+↓
+
+`dynamic stability C(t) - P(t)`
+
+↓
+
+`phase-derived ternary target`
+
+↓
+
+`distributed transition limit`
+
+↓
+
+`mandatory active-neutral route`
+
+↓
+
+`retained coherent ternary state`
+
+↓
+
+`structured machine-readable telemetry`
+
+↓
+
+`independent byte-identical execution repeat`
+
+↓
+
+`fixed-point implementation profile`
+
+↓
+
+`balanced ternary hardware encoding`
+
+↓
+
+`stateful quantized hardware shadow`
+
+↓
+
+`cycle-exact integer golden trace`
+
+↓
+
+`deterministic RTL comparison vectors`
+
+↓
+
+`SystemVerilog interface mapping`
+
+↓
+
+`synthesizable RTL reference-core mapping`
+
+↓
+
+`RTL assertion correlation`
+
+↓
+
+`floating-to-quantized reference correlation`
+
+↓
+
+`exact quantized deterministic replay`
+
+↓
+
+`qualification closure`
+
+The resonant phase-coherence mechanism remains the computational core throughout this chain.
+
+The balanced ternary domain remains the state and retained-result domain throughout this chain.
+
+## 72. Current Status
+
+Processor:
+
+`Fractal Resonance Processor (FRP)`
+
+Processor class:
+
+`Ternary Resonant Coherence Processor`
+
+Computational mechanism:
+
+`Kuramoto-Sakaguchi resonant phase dynamics with asymmetric phase lag, hierarchical fractal coupling, phase evolution, Kuramoto order parameter R, multiscale phase coherence, stateful delay dynamics, local thermal-phase interaction, local correlated gamma drift, nonlinear coherence compression, dynamic stability evaluation, phase-derived ternary targets, distributed commit, mandatory active-neutral routing, and retained coherent ternary state`
+
+State and retained-result domain:
+
+`{-1, 0, 1}`
+
+Active neutral state:
+
+`0`
+
+Current executable form:
+
+`Ternary Resonant Coherence Processor — Structured Output Prototype`
 
 Current version:
 
@@ -768,21 +2642,21 @@ Current executable reference:
 
 `frp_prototype_v1_7_0.py`
 
-Current primary qualification workflow:
+Current structured-output schema:
 
-`.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+`frp.structured_output.v1.7.0`
 
-Current published release validation result:
+Current published validation result:
 
 `PASS`
 
-Current validated M15 self-test count:
+Current validated self-test result:
 
-`41/41`
+`41/41 PASS`
 
-Current reproducibility role:
+Current primary qualification workflow:
 
-`preserve exact traceability from the FRP v1.7.0 source revision through deterministic M15 execution, hardware-facing artifact generation, reference equivalence validation, and qualification closure`
+`.github/workflows/frp-m15-implementation-mapping-qualification.yml`
 
 Next planned architecture layer:
 
