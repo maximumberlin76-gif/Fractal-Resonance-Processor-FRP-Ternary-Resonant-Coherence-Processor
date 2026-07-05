@@ -1,454 +1,789 @@
-# Reproducibility — Fractal Resonance Processor (FRP)
+# Reproducibility — Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor
 
-This document defines the reproducibility procedure for the Fractal Resonance Processor (FRP) prototype.
+This document defines the reproducibility path for the current Fractal Resonance Processor (FRP) release layer.
 
-Current structured-output version:
+Current version:
 
-    v0.9.4
+`FRP v1.7.0`
 
-Current prototype file:
+Current milestone:
 
-    frp_prototype_v0_9_4.py
+`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
 
-Previous reference prototype:
+Main executable reference file:
 
-    frp_prototype_v0_9_3_mobile.py
+`frp_prototype_v1_7_0.py`
 
-Current schema marker:
+Current architecture document:
 
-    frp.structured_output.v0.9.4
+`docs/m15_implementation_mapping_domain_interface_qualification_closure.md`
 
-## 1. Purpose
+Current test report:
 
-FRP v0.9.4 adds structured machine-readable output to the existing reproducibility workflow.
+`TEST_REPORT_v1_7_0.md`
 
-The purpose of this document is to make the current FRP results reproducible through:
+Current validation index:
 
-- installation commands
-- text self-test execution
-- text benchmark execution
-- JSON self-test execution
-- JSON benchmark execution
-- JSON schema inspection
-- telemetry export checks
-- CI-oriented validation commands
+`FRP_VALIDATION_INDEX_v1_7_0.md`
 
-The v0.9.4 reproducibility layer preserves the v0.9.3 processor logic while adding structured output for automated validation and future hardware-facing comparison.
+Current release notes:
+
+`RELEASE_NOTES_v1_7_0.md`
+
+Current primary qualification workflow:
+
+`.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+
+Current published release validation status:
+
+`PASS`
+
+## 1. Reproducibility Target
+
+The current reproducibility chain is:
+
+`source revision`
+
+↓
+
+`execution environment`
+
+↓
+
+`Python compilation`
+
+↓
+
+`M15 self-test matrix`
+
+↓
+
+`structured reference execution`
+
+↓
+
+`fixed-point interface artifacts`
+
+↓
+
+`quantized hardware shadow execution`
+
+↓
+
+`cycle-exact integer reference traces`
+
+↓
+
+`deterministic RTL comparison vectors`
+
+↓
+
+`SystemVerilog interface mapping`
+
+↓
+
+`RTL assertion correlation`
+
+↓
+
+`reference equivalence validation`
+
+↓
+
+`qualification closure`
+
+The primary reproducibility target is the current FRP v1.7.0 M15 architecture layer.
+
+Comparative architecture and hardware-sensitivity suites remain supporting validation contours and are reproduced separately.
 
 ## 2. Environment
 
-Recommended environment:
+Current M15 GitHub Actions environment:
 
-    Python 3.10 or newer
+- runner: `ubuntu-latest`;
+- Python: `3.12`;
+- workflow timeout: `30 minutes`.
 
-Install dependencies from the repository root:
+Recommended local environment:
 
-    pip install -r requirements.txt
+    Python 3.12
 
-Current dependency:
+Install declared dependencies from the repository root:
+
+    python -m pip install --upgrade pip
+    python -m pip install -r requirements.txt
+
+Current declared dependency:
 
     numpy>=1.26.0
 
-## 3. Files Required
+Before execution, record:
 
-Required files for v0.9.4 reproducibility:
+    git rev-parse HEAD
+    git status --short
+    python --version
+    python -m pip freeze
 
-    frp_prototype_v0_9_4.py
-    requirements.txt
-    docs/output_schema.md
-    USAGE.md
-    REPRODUCIBILITY.md
+A clean reproducibility record should preserve:
 
-Reference validation files:
+- exact commit hash;
+- clean or explicitly documented working-tree state;
+- Python version;
+- installed dependency versions.
 
-    frp_prototype_v0_9_3_mobile.py
-    TEST_REPORT_v0_9_3.md
+## 3. Required Current Files
 
-## 4. Reproducibility Scope
+Current M15 reproduction requires:
 
-Current reproducibility scope:
+- `frp_prototype_v1_7_0.py`;
+- `requirements.txt`;
+- `docs/m15_implementation_mapping_domain_interface_qualification_closure.md`;
+- `.github/workflows/frp-m15-implementation-mapping-qualification.yml`.
 
-    software validation layer
-    structured output layer
-    benchmark layer
-    CI verification layer
-    telemetry export layer
+Current release-traceability records:
 
-The current reproducibility package verifies:
+- `TEST_REPORT_v1_7_0.md`;
+- `FRP_VALIDATION_INDEX_v1_7_0.md`;
+- `RELEASE_NOTES_v1_7_0.md`.
 
-- executable Python reference model
-- balanced ternary state behavior
-- neutral transition routing
-- direct polarity transition safety
-- distributed commit behavior
-- Kuramoto-Sakaguchi resonant phase layer
-- nonlinear saturation
-- nonlinear compression
-- delay dynamics
-- scheduler modes
-- per-tick telemetry
-- self-test result
-- benchmark result
-- JSON output parsing
-- schema marker
-- machine-readable validation markers
+Historical executable references and historical release records remain version-specific evidence.
 
-## 5. Standard Text Self-Test
+They are not substituted for the current M15 executable reference.
 
-Run:
+## 4. Compile Gate
 
-    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5
+Run from the repository root:
 
-Expected text markers:
+    python -m py_compile frp_prototype_v1_7_0.py
 
-    FRP SELF TEST v0.9.4
-    failures=0
-    result=PASS
+Required result:
 
-Expected candidate result:
+`PASS`
 
-    PASS
+## 5. M15 Self-Test Matrix
 
-Expected invariant state:
+Default self-test:
 
-| Invariant | Required Result |
+    python frp_prototype_v1_7_0.py --mode self-test --output json
+
+Free scheduler:
+
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler free --output json
+
+7/1 scheduler:
+
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler 7/1 --output json
+
+1/7 scheduler:
+
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler 1/7 --output json
+
+Every self-test output must satisfy:
+
+| Field | Required value |
 |---|---|
-| target match | match = 1.000 |
-| direct transition safety | actual_direct_events = 0 |
-| stability | C_minus_P_min > 0 |
-| transition load | switch_load_peak <= transition_fraction |
-| telemetry | ticks_recorded = steps |
-| scheduler | counts match selected cycle mode |
+| `schema` | `frp.structured_output.v1.7.0` |
+| `version` | `1.7.0` |
+| `status` | `PASS` |
+| `check_count` | `41` |
+| all values in `checks` | `True` |
 
-## 6. Heavy Text Self-Test
+Current validated result:
 
-Run:
+`41/41 PASS`
 
-    python3 frp_prototype_v0_9_4.py --mode test --steps 256 --seeds 10
+## 6. Structured Reference Execution
 
-Expected text markers:
+Generate the default M15 structured output:
 
-    FRP SELF TEST v0.9.4
-    failures=0
-    result=PASS
+    python frp_prototype_v1_7_0.py --mode demo --output json > structured-output.json
 
-Expected candidate result:
+Required values:
 
-    PASS
-
-This command provides a heavier validation profile over more steps and seeds.
-
-## 7. Standard Text Benchmark
-
-Run:
-
-    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5
-
-Expected text marker:
-
-    FRP BENCHMARK v0.9.4
-
-Expected benchmark architecture labels:
-
-    binary_style_forced_switch
-    direct_ternary_commit
-    distributed_neutral_ternary
-    frp_distributed_resonant
-
-The benchmark compares FRP distributed resonant behavior against baseline transition architectures.
-
-## 8. JSON Self-Test
-
-Run:
-
-    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json
-
-Expected JSON markers:
-
-    "schema": "frp.structured_output.v0.9.4"
-    "version": "v0.9.4"
-    "kind": "self_test"
-    "failures": 0
-    "result": "PASS"
-
-Expected JSON metric conditions:
-
-    metrics.actual_direct_events = 0
-    metrics.C_minus_P_min > 0
-    metrics.switch_load_peak <= transition_fraction
-
-## 9. JSON Benchmark
-
-Run:
-
-    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json
-
-Expected JSON markers:
-
-    "schema": "frp.structured_output.v0.9.4"
-    "version": "v0.9.4"
-    "kind": "benchmark"
-
-Expected architecture labels inside `architectures`:
-
-    binary_style_forced_switch
-    direct_ternary_commit
-    distributed_neutral_ternary
-    frp_distributed_resonant
-
-Expected benchmark-supported technical position:
-
-    FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct -1 <-> 1 transitions in the tested operational domain.
-
-## 10. JSON Demo
-
-Run:
-
-    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json
-
-Expected JSON markers:
-
-    "schema": "frp.structured_output.v0.9.4"
-    "version": "v0.9.4"
-    "kind": "demo"
-
-Expected top-level demo fields:
-
-    schema
-    project
-    version
-    kind
-    parameters
-    log
-    final_report
-
-## 11. JSON Demo With Telemetry
-
-Run:
-
-    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json --include-telemetry
-
-Expected behavior:
-
-    operation results inside the demo log include telemetry arrays where applicable
-
-Telemetry fields include:
-
-- tick
-- phase
-- R
-- phi
-- neutral
-- positive
-- negative
-- heat
-- thermal_scale
-- switch_load
-- actual_direct_events_delta
-- prevented_direct_events_delta
-- neutralized_conflicts_delta
-- logical_match
-- transition_debt
-- direct_conflict_fraction
-- C
-- P
-- C_minus_P
-
-Telemetry role:
-
-    Python model
-    → JSON telemetry
-    → benchmark export
-    → hardware-facing signal map
-    → FPGA register map
-    → testbench comparison
-
-## 12. JSON File Export
-
-Export self-test JSON:
-
-    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json > frp_self_test_v0_9_4.json
-
-Inspect self-test JSON:
-
-    python3 -m json.tool frp_self_test_v0_9_4.json
-
-Export benchmark JSON:
-
-    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json > frp_benchmark_v0_9_4.json
-
-Inspect benchmark JSON:
-
-    python3 -m json.tool frp_benchmark_v0_9_4.json
-
-Export demo telemetry JSON:
-
-    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json --include-telemetry > frp_demo_telemetry_v0_9_4.json
-
-Inspect demo telemetry JSON:
-
-    python3 -m json.tool frp_demo_telemetry_v0_9_4.json
-
-## 13. Machine-Readable Self-Test Validation
-
-A successful self-test JSON output must satisfy:
-
-| Field | Required Value |
+| Field | Required value |
 |---|---|
-| `schema` | `frp.structured_output.v0.9.4` |
-| `version` | `v0.9.4` |
-| `kind` | `self_test` |
-| `result` | `PASS` |
-| `failures` | `0` |
-| `metrics.actual_direct_events` | `0` |
-| `metrics.C_minus_P_min` | greater than `0` |
+| `schema` | `frp.structured_output.v1.7.0` |
+| `version` | `1.7.0` |
+| `milestone` | `M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package` |
+| `summary.cells` | `16` |
+| `summary.hierarchy_depth` | `4` |
+| `summary.request_lanes` | `4` |
+| `summary.ticks_recorded` | `64` |
+| `summary.scheduler` | `7/1` |
+| `summary.scheduler_counts.balance` | `56` |
+| `summary.scheduler_counts.commit` | `8` |
+| `summary.scheduler_counts_valid` | `True` |
+| `summary.balanced_ternary_state_domain` | `True` |
+| `summary.reserved_state_events` | `0` |
+| `summary.actual_direct_events` | `0` |
+| `summary.queue_overflow_events` | `0` |
+| `summary.fixed_point_topology_sum_exact` | `True` |
+| `summary.fixed_point_thermal_sum_exact` | `True` |
 
-The following command can be used for manual inspection:
+Additional required conditions:
 
-    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json
+- `summary.switch_load_peak <= 0.25`;
+- `summary.C_minus_P_min > 0.0`.
 
-## 14. Machine-Readable Benchmark Validation
+## 7. Preserved Computational Kernel Invariants
 
-A successful benchmark JSON output must satisfy:
+Balanced ternary state domain:
 
-| Field | Required Value |
+`{-1, 0, 1}`
+
+Active neutral state:
+
+`0`
+
+Mandatory opposite-polarity routes:
+
+`-1 → 0 → 1`
+
+`1 → 0 → -1`
+
+Tick-separated execution relation:
+
+`tick N: active polarity → 0`
+
+↓
+
+`pending neutral route retained`
+
+↓
+
+`tick N+1 or later: 0 → target polarity`
+
+Required invariants:
+
+- `actual_direct_events = 0`;
+- `reserved_state_events = 0`;
+- `queue_overflow_events = 0`;
+- balanced ternary state-domain validity;
+- scheduler-count validity;
+- exact fixed-point topology sum;
+- exact fixed-point thermal sum.
+
+The reproducibility path must not relax these invariants.
+
+## 8. Generate the Current M15 Artifact Package
+
+Create directories:
+
+    mkdir -p artifacts/m15/vectors_a
+    mkdir -p artifacts/m15/vectors_b
+
+Generate the fixed-point interface profile:
+
+    python frp_prototype_v1_7_0.py --export-fixed-point-interface-profile > artifacts/m15/fixed-point-interface-profile.json
+
+Generate the balanced ternary hardware encoding map:
+
+    python frp_prototype_v1_7_0.py --export-balanced-ternary-hardware-encoding-map > artifacts/m15/balanced-ternary-hardware-encoding-map.json
+
+Generate the quantized reference shadow model:
+
+    python frp_prototype_v1_7_0.py --export-quantized-reference-shadow-model > artifacts/m15/quantized-reference-shadow-model.json
+
+Generate the cycle-exact reference trace:
+
+    python frp_prototype_v1_7_0.py --export-cycle-exact-reference-trace > artifacts/m15/cycle-exact-reference-trace.json
+
+Generate the RTL comparison vector package:
+
+    python frp_prototype_v1_7_0.py --export-rtl-comparison-vector-package > artifacts/m15/rtl-comparison-vector-package.json
+
+Generate the SystemVerilog testbench interface map:
+
+    python frp_prototype_v1_7_0.py --export-systemverilog-testbench-interface-map > artifacts/m15/systemverilog-testbench-interface-map.json
+
+Generate the synthesizable RTL reference core:
+
+    python frp_prototype_v1_7_0.py --export-synthesizable-rtl-reference-core > artifacts/m15/synthesizable-rtl-reference-core.json
+
+Generate the RTL assertion correlation harness:
+
+    python frp_prototype_v1_7_0.py --export-rtl-assertion-correlation-harness > artifacts/m15/rtl-assertion-correlation-harness.json
+
+Generate the reference RTL equivalence report:
+
+    python frp_prototype_v1_7_0.py --export-reference-rtl-equivalence-report > artifacts/m15/reference-rtl-equivalence-report.json
+
+Generate the qualification closure manifest:
+
+    python frp_prototype_v1_7_0.py --export-qualification-closure-manifest > artifacts/m15/qualification-closure-manifest.json
+
+## 9. Expected M15 Artifact Schemas
+
+| Artifact | Required schema |
 |---|---|
-| `schema` | `frp.structured_output.v0.9.4` |
-| `version` | `v0.9.4` |
-| `kind` | `benchmark` |
+| `fixed-point-interface-profile.json` | `frp.m15.fixed_point_interface_profile.v1.7.0` |
+| `balanced-ternary-hardware-encoding-map.json` | `frp.m15.balanced_ternary_hardware_encoding_map.v1.7.0` |
+| `quantized-reference-shadow-model.json` | `frp.m15.quantized_reference_shadow_model.v1.7.0` |
+| `cycle-exact-reference-trace.json` | `frp.m15.cycle_exact_reference_trace.v1.7.0` |
+| `rtl-comparison-vector-package.json` | `frp.m15.rtl_comparison_vector_package.v1.7.0` |
+| `systemverilog-testbench-interface-map.json` | `frp.m15.systemverilog_testbench_interface_map.v1.7.0` |
+| `synthesizable-rtl-reference-core.json` | `frp.m15.synthesizable_rtl_reference_core.v1.7.0` |
+| `rtl-assertion-correlation-harness.json` | `frp.m15.rtl_assertion_correlation_harness.v1.7.0` |
+| `reference-rtl-equivalence-report.json` | `frp.m15.reference_rtl_equivalence_report.v1.7.0` |
+| `qualification-closure-manifest.json` | `frp.m15.qualification_closure_manifest.v1.7.0` |
 
-The benchmark architecture list must contain:
+Every artifact must also report:
 
-    binary_style_forced_switch
-    direct_ternary_commit
-    distributed_neutral_ternary
-    frp_distributed_resonant
+- version `1.7.0`;
+- milestone `M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`.
 
-The following command can be used for manual inspection:
+## 10. Fixed-Point Contract
 
-    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json
+Required representations:
 
-## 15. Scheduler Reproducibility
-
-Scheduler modes:
-
-| Mode | Behavior |
+| Domain | Representation |
 |---|---|
-| `free` | commit every tick |
-| `7/1` | seven balance ticks and one commit tick |
-| `1/7` | one excite tick and seven neutralize ticks |
+| general scalar | `S32Q16` |
+| normalized coefficient | `S32Q30` |
+| phase | `PHASE_U32` |
+| gamma | `GAMMA_S32` |
+| trigonometric table entries | `4096` |
 
-The self-test checks scheduler counts against expected scheduler behavior.
+Required exactness markers:
 
-For a selected number of steps, expected scheduler counts are computed internally and compared with observed counts.
+- `fixed_point_topology_sum_exact = True`;
+- `fixed_point_thermal_sum_exact = True`.
 
-Scheduler mismatch is reported as a failure.
+## 11. Balanced Ternary Hardware Encoding
 
-## 16. Operational Domain
+Canonical two-bit encoding:
 
-The tested operational domain remains:
+`-1 → 2'b11`
 
-    N >= 8
+`0 → 2'b00`
 
-The standard self-test uses:
+`+1 → 2'b01`
 
-    N = 8, 16, 32, 64
+Reserved encoding:
 
-Default transition fraction:
+`2'b10`
 
-    transition_fraction = 0.25
+Canonical integer encoding map:
 
-Default Kuramoto-Sakaguchi phase shift:
+`-1 → 3`
 
-    gamma = 0.30 pi
+`0 → 0`
 
-Default telemetry interval:
+`+1 → 1`
 
-    telemetry_every = 1
+Reserved integer code:
 
-Telemetry rule:
+`2`
 
-    per-tick telemetry is mandatory in the internal model
+Required interface values:
 
-Output rule:
+- `request_lanes = 4`;
+- `cell_id_width = 4`.
 
-    --include-telemetry controls whether telemetry is emitted in JSON output
+Required invariant:
 
-## 17. Baseline Comparison
+`reserved_state_events = 0`
 
-The benchmark compares:
+## 12. Deterministic RTL Vector Package
 
-| Architecture | Role |
+Generate package A:
+
+    python frp_prototype_v1_7_0.py --export-rtl-comparison-vector-package --vector-output-dir artifacts/m15/vectors_a > artifacts/m15/vector-package-a.json
+
+Generate package B independently:
+
+    python frp_prototype_v1_7_0.py --export-rtl-comparison-vector-package --vector-output-dir artifacts/m15/vectors_b > artifacts/m15/vector-package-b.json
+
+Compare both directories:
+
+    diff -qr artifacts/m15/vectors_a artifacts/m15/vectors_b
+
+Required result:
+
+`no differences`
+
+Expected files:
+
+- `frp_m15_kernel_vectors.vec`;
+- `frp_m15_pending_routes.trace`;
+- `frp_m15_scheduler_free_vectors.vec`;
+- `frp_m15_scheduler_7_1_vectors.vec`;
+- `frp_m15_scheduler_1_7_vectors.vec`;
+- `frp_m15_full_correlation_vectors.vec`;
+- `frp_m15_cell_trace.vec`;
+- `frp_m15_reference_preload.json`;
+- `frp_m15_trig_lut_q30.vec`;
+- `frp_m15_sha256_manifest.json`.
+
+Both independently generated packages must be byte-identical.
+
+## 13. Cycle-Exact Trace Contract
+
+The cycle-exact reference trace must preserve:
+
+- exactly `64` trace rows;
+- `actual_direct_events = 0`;
+- `reserved_state_events = 0`;
+- deterministic gamma-noise target vectors for all `16` cells.
+
+The cycle-exact trace is the integer reference path between the quantized hardware shadow and the deterministic RTL comparison vector domain.
+
+## 14. Scaling Reproduction
+
+Generate the 8-cell output:
+
+    python frp_prototype_v1_7_0.py --cells 8 --steps 16 --mode demo --output json > artifacts/m15/scaling-8.json
+
+Generate the 16-cell output:
+
+    python frp_prototype_v1_7_0.py --cells 16 --steps 16 --mode demo --output json > artifacts/m15/scaling-16.json
+
+Generate the 32-cell output:
+
+    python frp_prototype_v1_7_0.py --cells 32 --steps 16 --mode demo --output json > artifacts/m15/scaling-32.json
+
+Expected structure:
+
+| Cells | Hierarchy depth | Request lanes | Packed state width |
+|---|---|---|---|
+| `8` | `3` | `2` | `16 bits` |
+| `16` | `4` | `4` | `32 bits` |
+| `32` | `5` | `8` | `64 bits` |
+
+Packed state width is derived as:
+
+`2 × cells`
+
+Every scaling output must preserve:
+
+- `actual_direct_events = 0`;
+- `reserved_state_events = 0`;
+- `queue_overflow_events = 0`;
+- balanced ternary state-domain validity;
+- scheduler-count validity;
+- exact fixed-point topology sum;
+- exact fixed-point thermal sum.
+
+## 15. M15 Benchmark Matrix
+
+Generate the current M15 benchmark matrix:
+
+    python frp_prototype_v1_7_0.py --export-benchmark-matrix > artifacts/m15/benchmark-matrix.json
+
+Expected schema:
+
+`frp.m3.benchmark_matrix.v1.7.0`
+
+Expected row count:
+
+`5`
+
+Expected architecture order:
+
+1. `frp_v1_6_0_m14_floating_semantic_reference`;
+2. `frp_v1_7_0_quantized_hardware_shadow`;
+3. `frp_v1_7_0_cycle_exact_vector_package`;
+4. `frp_v1_7_0_systemverilog_correlation_contract`;
+5. `frp_v1_7_0_qualification_closure`.
+
+This matrix belongs to the M15 qualification package and does not replace the primary M15 architecture-validation path.
+
+## 16. Reference Equivalence Contract
+
+### Floating reference to quantized shadow
+
+Required exact sequence matches:
+
+- state sequence match `1.0`;
+- scheduler sequence match `1.0`;
+- neutral-route sequence match `1.0`;
+- `C_minus_P` sign match `1.0`;
+- boundary-order match `1.0`.
+
+Required maximum error bounds:
+
+| Field | Maximum error |
 |---|---|
-| `binary_style_forced_switch` | binary-style forced switch baseline |
-| `direct_ternary_commit` | direct ternary commit baseline |
-| `distributed_neutral_ternary` | distributed neutral ternary baseline |
-| `frp_distributed_resonant` | FRP distributed resonant mode |
+| phase | `0.02` |
+| frequency | `0.0001` |
+| heat | `0.001` |
+| gamma | `0.000001` |
+| coherence | `0.01` |
+| `C` | `0.01` |
+| `P` | `0.001` |
+| `C_minus_P` | `0.01` |
 
-Benchmark-supported technical position:
+### Quantized shadow deterministic replay
 
-    FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct -1 <-> 1 transitions in the tested operational domain.
+Required exact replay matches:
 
-## 18. Expected v0.9.4 Role
+- state match `1.0`;
+- scheduler match `1.0`;
+- pending-route match `1.0`;
+- counter match `1.0`;
+- trace match `1.0`;
+- cell-trace match `1.0`.
 
-FRP v0.9.4 provides the M2 structured output layer.
+## 17. Qualification Closure
 
-This release stage adds:
+The qualification closure manifest must report:
 
-- JSON self-test output
-- JSON benchmark output
-- JSON demo output
-- optional telemetry export
-- machine-readable schema marker
-- reproducibility inspection commands
-- CI-oriented JSON validation path
+- status `PASS`;
+- all values in `checks` equal `True`;
+- exactly ten M15 artifact layers.
 
-The v0.9.4 layer prepares the project for:
+The qualification closure manifest is the current M15 release-validation endpoint.
 
-- expanded benchmark profiles
-- automated result comparison
-- structured telemetry export
-- hardware-facing signal mapping
-- FPGA register mapping
-- testbench comparison
+## 18. Independent Repeat Rule
 
-## 19. Recommended Reproducibility Sequence
+A deterministic reproducibility claim requires an independent repeat.
 
-Run the following sequence from the repository root:
+Required procedure:
 
-    pip install -r requirements.txt
+1. generate the first output;
+2. generate the second output independently from the same declared source state and inputs;
+3. compare the complete files or directories;
+4. require byte-identical equality.
 
-    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5
+Accepted comparison commands:
 
-    python3 frp_prototype_v0_9_4.py --mode test --steps 256 --seeds 10
+    cmp first.json second.json
 
-    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5
+or:
 
-    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json
+    diff -qr first_directory second_directory
 
-    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json
+Semantic resemblance is not a deterministic repeat.
 
-    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json --include-telemetry
+## 19. SHA-256 Evidence
 
-Expected overall result:
+Record SHA-256 values after successful generation.
 
-    text self-test PASS
-    heavy text self-test PASS
-    benchmark architecture labels present
-    JSON self-test parses successfully
-    JSON benchmark parses successfully
-    JSON demo telemetry parses successfully
+M15 JSON artifacts:
 
-## 20. Current Status
+    sha256sum artifacts/m15/*.json > artifacts/m15/sha256-manifest.txt
 
-FRP v0.9.4 reproducibility confirms the structured output layer.
+Deterministic vector packages:
 
-Current reproducibility path supports:
+    sha256sum artifacts/m15/vectors_a/* > artifacts/m15/vectors-a-sha256.txt
+    sha256sum artifacts/m15/vectors_b/* > artifacts/m15/vectors-b-sha256.txt
 
-- text validation
-- JSON validation
-- benchmark inspection
-- telemetry export
-- schema marker inspection
-- CI-oriented structured checks
-- future hardware-facing comparison workflow
+Retain the manifests with:
+
+- source commit;
+- Python version;
+- dependency versions;
+- execution date;
+- operating environment.
+
+## 20. Published FRP v1.7.0 Validation Evidence
+
+Published release layer:
+
+`FRP v1.7.0 — M15 Implementation Mapping, Domain Interface, and Qualification Closure Package`
+
+Validation environment:
+
+`GitHub Actions hardware-backed CI execution`
+
+Validated release commit:
+
+`5fd9a4f`
+
+Validated workflow runs recorded in `TEST_REPORT_v1_7_0.md`:
+
+- `FRP Structured Output #113`;
+- `FRP M15 Implementation Mapping and Qualification Closure #1`;
+- `FRP Self Test #154`;
+- `FRP Benchmark Smoke Test #152`.
+
+Published validation result:
+
+`PASS`
+
+Published M15 self-test result:
+
+`41/41 PASS`
+
+These values are release evidence for the validated v1.7.0 layer and are not statements about later documentation-only commits.
+
+## 21. Historical Release Rule
+
+Historical executable references remain bound to their historical release records and workflows.
+
+Examples:
+
+- `frp_prototype_v0_9_3_mobile.py` remains bound to the foundational self-test and benchmark smoke workflows;
+- `frp_prototype_v0_9_4.py` remains bound to the structured-output workflow;
+- M3 through M14 executable references remain bound to their release-specific milestone workflows;
+- `frp_prototype_v1_7_0.py` remains the current M15 executable reference.
+
+Historical workflows must not be silently redirected to the current executable reference.
+
+Current reproducibility must not rewrite historical release evidence.
+
+## 22. Supporting Comparative Architecture Reproduction
+
+The comparative architecture benchmark is a supporting validation contour.
+
+Directory:
+
+`benchmarks/architecture_comparison/`
+
+Compared references:
+
+1. `binary_synchronous_reference`;
+2. `binary_clock_gated_reference`;
+3. `direct_ternary_reference`;
+4. `frp_v1_7_0_quantized_shadow`.
+
+From `benchmarks/architecture_comparison/`, prepare the local qualification directory:
+
+    mkdir -p .qualification
+
+Run the end-to-end self-test:
+
+    python run_architecture_comparison.py --self-test --output text
+
+Generate the canonical comparison package:
+
+    python run_architecture_comparison.py --workload-profile profiles/workload_profile_v1.json --cost-profile profiles/normalized_cost_profile_v1.json --thermal-profile profiles/thermal_proxy_profile_v1.json --frp-scheduler "7/1" --write results/reference_comparison_seed_76.json --output text
+
+Generate an independent repeat:
+
+    python run_architecture_comparison.py --workload-profile profiles/workload_profile_v1.json --cost-profile profiles/normalized_cost_profile_v1.json --thermal-profile profiles/thermal_proxy_profile_v1.json --frp-scheduler "7/1" --write .qualification/reference_comparison_seed_76_repeat.json --output text
+
+Compare:
+
+    cmp results/reference_comparison_seed_76.json .qualification/reference_comparison_seed_76_repeat.json
+
+Required result:
+
+`byte-identical`
+
+Qualification policy:
+
+`integrity_only_no_winner_assertions`
+
+Required winner assertions:
+
+`[]`
+
+This supporting benchmark does not define the FRP architecture milestone chain.
+
+## 23. Supporting Hardware-Sensitivity Reproduction
+
+From `benchmarks/architecture_comparison/`, prepare the local qualification directory:
+
+    mkdir -p .qualification
+
+Validate the profile:
+
+    python validate_hardware_sensitivity_profile.py --profile profiles/hardware_sensitivity_cost_profile_v1.json --output text
+
+Run the profile validator self-test:
+
+    python validate_hardware_sensitivity_profile.py --profile profiles/hardware_sensitivity_cost_profile_v1.json --self-test --output text
+
+Run the sensitivity comparison self-test:
+
+    python run_hardware_sensitivity_comparison.py --hardware-sensitivity-profile profiles/hardware_sensitivity_cost_profile_v1.json --self-test --output json
+
+Generate the canonical sensitivity result:
+
+    python run_hardware_sensitivity_comparison.py --workload-profile profiles/workload_profile_v1.json --hardware-sensitivity-profile profiles/hardware_sensitivity_cost_profile_v1.json --thermal-profile profiles/thermal_proxy_profile_v1.json --frp-scheduler "7/1" --write results/reference_comparison_seed_76_hardware_sensitivity_v1.json --output text
+
+Generate an independent repeat:
+
+    python run_hardware_sensitivity_comparison.py --workload-profile profiles/workload_profile_v1.json --hardware-sensitivity-profile profiles/hardware_sensitivity_cost_profile_v1.json --thermal-profile profiles/thermal_proxy_profile_v1.json --frp-scheduler "7/1" --write .qualification/reference_comparison_seed_76_hardware_sensitivity_v1_repeat.json --output text
+
+Compare:
+
+    cmp results/reference_comparison_seed_76_hardware_sensitivity_v1.json .qualification/reference_comparison_seed_76_hardware_sensitivity_v1_repeat.json
+
+Required result:
+
+`byte-identical`
+
+The hardware-sensitivity layer remains separate from the primary M15 architecture-validation path.
+
+## 24. Reproducibility Acceptance Criteria
+
+The current FRP v1.7.0 M15 layer is reproducible when:
+
+- source revision is recorded;
+- environment is recorded;
+- `frp_prototype_v1_7_0.py` compiles;
+- all four self-test variants report `41/41 PASS`;
+- structured output matches the v1.7.0 schema and M15 milestone;
+- balanced ternary state-domain validity remains true;
+- `actual_direct_events = 0`;
+- `reserved_state_events = 0`;
+- `queue_overflow_events = 0`;
+- fixed-point topology sum remains exact;
+- fixed-point thermal sum remains exact;
+- all ten M15 artifact layers are generated;
+- every M15 artifact reports the expected schema, version, and milestone;
+- deterministic vector packages are byte-identical;
+- scaling outputs preserve all required invariants;
+- reference equivalence checks satisfy their exact-match and bounded-error contracts;
+- qualification closure reports `PASS`.
+
+Supporting comparative claims additionally require their own independent byte-identical regeneration.
+
+## 25. Repository Alignment Rule
+
+When the current architecture layer changes, review:
+
+- `README.md`;
+- `ROADMAP.md`;
+- `MILESTONES.md`;
+- `PROJECT_STRUCTURE.md`;
+- `CI.md`;
+- `REPRODUCIBILITY.md`;
+- `USAGE.md`;
+- current executable reference;
+- current test report;
+- current validation index;
+- current release notes;
+- current architecture document;
+- current milestone workflow;
+- `docs/README.md`.
+
+Historical release records remain historical.
+
+Supporting comparative validation remains separate from the primary FRP architecture progression.
+
+## 26. Current Status
+
+Current version:
+
+`FRP v1.7.0`
+
+Current milestone:
+
+`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+
+Current executable reference:
+
+`frp_prototype_v1_7_0.py`
+
+Current primary qualification workflow:
+
+`.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+
+Current published release validation result:
+
+`PASS`
+
+Current validated M15 self-test count:
+
+`41/41`
+
+Current reproducibility role:
+
+`preserve exact traceability from the FRP v1.7.0 source revision through deterministic M15 execution, hardware-facing artifact generation, reference equivalence validation, and qualification closure`
+
+Next planned architecture layer:
+
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
