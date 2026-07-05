@@ -181,7 +181,7 @@ jobs:
               "binary_synchronous_adapter": binary_sync_self_test(profile),
               "binary_clock_gated_adapter": binary_gated_self_test(profile),
               "direct_ternary_adapter": direct_ternary_self_test(profile),
-              "frp_v1_7_0_adapter": frp_self_test(profile),
+              "frp_v1_7_0_adapter": frp_self_test(),
           }
 
           assert all(
