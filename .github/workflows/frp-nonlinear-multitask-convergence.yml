@@ -1,0 +1,405 @@
+name: FRP Nonlinear Multitask Workload Qualification
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frp_prototype_v1_7_0.py"
+      - "benchmarks/architecture_comparison/profiles/thermal_proxy_profile_v1.json"
+      - "benchmarks/architecture_comparison/profiles/hardware_sensitivity_cost_profile_v1.json"
+      - "benchmarks/nonlinear_multitask_convergence/README.md"
+      - "benchmarks/nonlinear_multitask_convergence/workloads/nonlinear_multitask_workload_v1.json"
+      - "benchmarks/nonlinear_multitask_convergence/validate_nonlinear_multitask_workload.py"
+      - ".github/workflows/frp-nonlinear-multitask-convergence.yml"
+
+  pull_request:
+    paths:
+      - "frp_prototype_v1_7_0.py"
+      - "benchmarks/architecture_comparison/profiles/thermal_proxy_profile_v1.json"
+      - "benchmarks/architecture_comparison/profiles/hardware_sensitivity_cost_profile_v1.json"
+      - "benchmarks/nonlinear_multitask_convergence/README.md"
+      - "benchmarks/nonlinear_multitask_convergence/workloads/nonlinear_multitask_workload_v1.json"
+      - "benchmarks/nonlinear_multitask_convergence/validate_nonlinear_multitask_workload.py"
+      - ".github/workflows/frp-nonlinear-multitask-convergence.yml"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-nonlinear-multitask-workload-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  nonlinear-multitask-workload:
+    name: Nonlinear Multitask Workload Qualification
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 15
+
+    env:
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      LC_ALL: C.UTF-8
+      TZ: UTC
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: benchmarks/nonlinear_multitask_convergence
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Show qualification environment
+        run: |
+          python --version
+          pwd
+
+          test -f README.md
+          test -f workloads/nonlinear_multitask_workload_v1.json
+          test -f validate_nonlinear_multitask_workload.py
+          test -f ../../frp_prototype_v1_7_0.py
+          test -f ../architecture_comparison/profiles/thermal_proxy_profile_v1.json
+          test -f ../architecture_comparison/profiles/hardware_sensitivity_cost_profile_v1.json
+
+      - name: Compile nonlinear multitask workload validator
+        run: |
+          python -m py_compile \
+            validate_nonlinear_multitask_workload.py
+
+      - name: Create qualification directory
+        run: |
+          mkdir -p .qualification
+
+      - name: Validate canonical nonlinear multitask workload
+        run: |
+          python validate_nonlinear_multitask_workload.py \
+            --profile workloads/nonlinear_multitask_workload_v1.json \
+            --output text
+
+      - name: Record canonical workload validation result
+        run: |
+          python validate_nonlinear_multitask_workload.py \
+            --profile workloads/nonlinear_multitask_workload_v1.json \
+            --output json \
+            > .qualification/nonlinear_multitask_workload_validation.json
+
+          cat .qualification/nonlinear_multitask_workload_validation.json
+
+      - name: Run validator self-test
+        run: |
+          python validate_nonlinear_multitask_workload.py \
+            --profile workloads/nonlinear_multitask_workload_v1.json \
+            --self-test \
+            --output text
+
+      - name: Record validator self-test result
+        run: |
+          python validate_nonlinear_multitask_workload.py \
+            --profile workloads/nonlinear_multitask_workload_v1.json \
+            --self-test \
+            --output json \
+            > .qualification/nonlinear_multitask_workload_self_test.json
+
+          cat .qualification/nonlinear_multitask_workload_self_test.json
+
+      - name: Regenerate workload validation independently
+        run: |
+          python validate_nonlinear_multitask_workload.py \
+            --profile workloads/nonlinear_multitask_workload_v1.json \
+            --output json \
+            > .qualification/nonlinear_multitask_workload_validation_repeat.json
+
+      - name: Regenerate validator self-test independently
+        run: |
+          python validate_nonlinear_multitask_workload.py \
+            --profile workloads/nonlinear_multitask_workload_v1.json \
+            --self-test \
+            --output json \
+            > .qualification/nonlinear_multitask_workload_self_test_repeat.json
+
+      - name: Verify byte-identical deterministic validation
+        run: |
+          cmp \
+            .qualification/nonlinear_multitask_workload_validation.json \
+            .qualification/nonlinear_multitask_workload_validation_repeat.json
+
+      - name: Verify byte-identical deterministic self-test
+        run: |
+          cmp \
+            .qualification/nonlinear_multitask_workload_self_test.json \
+            .qualification/nonlinear_multitask_workload_self_test_repeat.json
+
+      - name: Verify qualification result contract
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          validation_path = Path(
+              ".qualification/"
+              "nonlinear_multitask_workload_validation.json"
+          )
+
+          self_test_path = Path(
+              ".qualification/"
+              "nonlinear_multitask_workload_self_test.json"
+          )
+
+          workload_path = Path(
+              "workloads/"
+              "nonlinear_multitask_workload_v1.json"
+          )
+
+          validation = json.loads(
+              validation_path.read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          self_test = json.loads(
+              self_test_path.read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          workload = json.loads(
+              workload_path.read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          expected_domain_sizes = [
+              8,
+              16,
+              32,
+          ]
+
+          expected_concurrent_domain_counts = [
+              1,
+              2,
+              4,
+              8,
+          ]
+
+          expected_nonlinearity_classes = [
+              "low",
+              "medium",
+              "high",
+          ]
+
+          expected_self_tests = [
+              "reject_architecture_order_change",
+              "reject_case_count_change",
+              "reject_thermal_ceiling_change",
+              "reject_winner_assertion",
+              "reject_obsolete_frp_source_digest",
+              "reject_cost_profile_digest_change",
+              "reject_workload_digest_mismatch",
+          ]
+
+          assert (
+              validation["status"]
+              == "PASS"
+          )
+
+          assert (
+              validation["schema"]
+              ==
+              "frp.benchmark."
+              "nonlinear_multitask_workload_profile.v1"
+          )
+
+          assert (
+              validation["profile_name"]
+              ==
+              "nonlinear_multitask_workload_v1"
+          )
+
+          assert (
+              validation["seed"]
+              == 76
+          )
+
+          assert (
+              validation["case_count"]
+              == 36
+          )
+
+          assert (
+              validation["case_matrix"]["domain_sizes"]
+              == expected_domain_sizes
+          )
+
+          assert (
+              validation["case_matrix"][
+                  "concurrent_domain_counts"
+              ]
+              == expected_concurrent_domain_counts
+          )
+
+          assert (
+              validation["case_matrix"][
+                  "nonlinearity_classes"
+              ]
+              == expected_nonlinearity_classes
+          )
+
+          assert (
+              validation["thermal_ceiling"]
+              == 1.0
+          )
+
+          assert (
+              validation["activity_quantum"]
+              == 4.0
+          )
+
+          assert (
+              validation["cost_scenario"]
+              == "nominal"
+          )
+
+          assert (
+              validation["winner_assertions"]
+              == []
+          )
+
+          assert (
+              validation["workload_profile_sha256"]
+              ==
+              workload["workload_profile_sha256"]
+          )
+
+          assert (
+              len(
+                  validation["workload_profile_sha256"]
+              )
+              == 64
+          )
+
+          assert (
+              validation["repository_bindings"][
+                  "frp_source"
+              ]
+              == "frp_prototype_v1_7_0.py"
+          )
+
+          assert (
+              validation["repository_bindings"][
+                  "thermal_profile"
+              ]
+              ==
+              "benchmarks/architecture_comparison/"
+              "profiles/thermal_proxy_profile_v1.json"
+          )
+
+          assert (
+              validation["repository_bindings"][
+                  "cost_profile"
+              ]
+              ==
+              "benchmarks/architecture_comparison/"
+              "profiles/"
+              "hardware_sensitivity_cost_profile_v1.json"
+          )
+
+          assert (
+              self_test["status"]
+              == "PASS"
+          )
+
+          assert (
+              self_test["self_test_count"]
+              == 7
+          )
+
+          assert (
+              self_test["self_tests"]
+              == expected_self_tests
+          )
+
+          assert (
+              workload["case_count"]
+              == 36
+          )
+
+          assert (
+              workload["validation_contract"][
+                  "winner_assertions"
+              ]
+              == []
+          )
+
+          assert (
+              workload["thermal_ceiling_contract"][
+                  "thermal_ceiling"
+              ]
+              == 1.0
+          )
+
+          assert (
+              workload["thermal_ceiling_contract"][
+                  "normalized_activity_quantum_per_benchmark_tick"
+              ]
+              == 4.0
+          )
+
+          assert (
+              workload["thermal_ceiling_contract"][
+                  "cost_scenario"
+              ]
+              == "nominal"
+          )
+
+          print(
+              "nonlinear multitask workload "
+              "qualification contract: PASS"
+          )
+
+          print(
+              "workload_profile_sha256="
+              f"{validation['workload_profile_sha256']}"
+          )
+          PY
+
+      - name: Build SHA-256 qualification manifest
+        run: |
+          sha256sum \
+            README.md \
+            workloads/nonlinear_multitask_workload_v1.json \
+            validate_nonlinear_multitask_workload.py \
+            ../../frp_prototype_v1_7_0.py \
+            ../architecture_comparison/profiles/thermal_proxy_profile_v1.json \
+            ../architecture_comparison/profiles/hardware_sensitivity_cost_profile_v1.json \
+            .qualification/nonlinear_multitask_workload_validation.json \
+            .qualification/nonlinear_multitask_workload_validation_repeat.json \
+            .qualification/nonlinear_multitask_workload_self_test.json \
+            .qualification/nonlinear_multitask_workload_self_test_repeat.json \
+            > .qualification/nonlinear_multitask_workload_sha256_manifest.txt
+
+          cat .qualification/nonlinear_multitask_workload_sha256_manifest.txt
+
+      - name: Upload nonlinear multitask workload qualification artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-nonlinear-multitask-workload-qualification
+          path: |
+            benchmarks/nonlinear_multitask_convergence/.qualification/nonlinear_multitask_workload_validation.json
+            benchmarks/nonlinear_multitask_convergence/.qualification/nonlinear_multitask_workload_validation_repeat.json
+            benchmarks/nonlinear_multitask_convergence/.qualification/nonlinear_multitask_workload_self_test.json
+            benchmarks/nonlinear_multitask_convergence/.qualification/nonlinear_multitask_workload_self_test_repeat.json
+            benchmarks/nonlinear_multitask_convergence/.qualification/nonlinear_multitask_workload_sha256_manifest.txt
+          if-no-files-found: error
+          retention-days: 90
