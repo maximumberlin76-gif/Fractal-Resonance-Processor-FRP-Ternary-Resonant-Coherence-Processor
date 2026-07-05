@@ -136,10 +136,10 @@
   "thermal_ceiling_contract": {
     "thermal_profile_path": "benchmarks/architecture_comparison/profiles/thermal_proxy_profile_v1.json",
     "thermal_profile_name": "common_rc_thermal_proxy_v1",
-    "thermal_profile_sha256": "8cc2992f5699c47c88e81c17a4a5f0c8ff5bb7a5b32ebf73ab0e5a0f9c5494c8",
+    "thermal_profile_sha256": "aeafebc3e71d1311a3445bd1528cbe7322546f79d6a5099dfed3a9590fc4a25b",
     "cost_profile_path": "benchmarks/architecture_comparison/profiles/hardware_sensitivity_cost_profile_v1.json",
     "cost_profile_name": "literature_anchored_cmos45_sensitivity_v1",
-    "cost_profile_sha256": "3814925a54d274bd43ab4576b6e60b53f60a2dfca9520d533ab49700c11dd553",
+    "cost_profile_sha256": "79c1c17c924bde6947dce477c2b8b64600684c993e7f42c1f00f6ffca0228a1c",
     "cost_scenario": "nominal",
     "temperature_unit": "normalized_temperature_proxy",
     "ambient_temperature_proxy": 0.0,
@@ -218,5 +218,5 @@
     "canonicalization": "json.dumps(sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False)",
     "excluded_field": "workload_profile_sha256"
   },
-  "workload_profile_sha256": "90658dbd424e2b4d08bc9e230c1bd62426dbce1f7716dacdf2249d2e688d3ca8"
+  "workload_profile_sha256": "f832b49992ae74969dc38463220445b8ad072eab34fcc62f06a1f3b30abe1007"
 }
