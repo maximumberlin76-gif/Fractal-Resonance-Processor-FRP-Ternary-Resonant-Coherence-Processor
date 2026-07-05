@@ -1,12 +1,80 @@
-# Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor
+# Fractal Resonance Processor (FRP)
 
 **Ternary Resonant Coherence Processor — Structured Output Prototype**
 
 ## Installation
 
-This document defines the installation and first-run path for the current Fractal Resonance Processor (FRP) release layer.
+This document defines the installation, first-run, validation, and deterministic reproduction path for the current Fractal Resonance Processor (FRP) release layer.
 
-FRP is a balanced ternary resonant coherence processor operating on the state domain:
+FRP is a ternary resonant coherence processor.
+
+Its computational mechanism is not static enumeration or direct switching of the ternary symbols `-1`, `0`, and `1`.
+
+The processor combines:
+
+`balanced ternary state and retained-result domain {-1, 0, 1}`
+
+↓
+
+`cell phase and frequency state`
+
+↓
+
+`Kuramoto-Sakaguchi resonant phase coupling`
+
+↓
+
+`asymmetric phase lag gamma`
+
+↓
+
+`hierarchical fractal coupling`
+
+↓
+
+`phase evolution`
+
+↓
+
+`resonance selection`
+
+↓
+
+`Kuramoto order parameter R and multiscale phase coherence`
+
+↓
+
+`delay dynamics`
+
+↓
+
+`local thermal-phase interaction`
+
+↓
+
+`nonlinear coherence compression`
+
+↓
+
+`dynamic stability C(t) - P(t)`
+
+↓
+
+`phase-derived ternary target`
+
+↓
+
+`distributed ternary commit`
+
+↓
+
+`mandatory tick-separated routing through active neutral state 0`
+
+↓
+
+`retained coherent ternary state`
+
+The balanced ternary domain is:
 
 `{-1, 0, 1}`
 
@@ -14,7 +82,7 @@ The neutral state is:
 
 `0`
 
-The neutral state is an active balancing, damping, transition, and stabilization state.
+The neutral state remains an active balancing, damping, transition, and stabilization state.
 
 Validated opposite-polarity routes:
 
@@ -22,25 +90,9 @@ Validated opposite-polarity routes:
 
 `1 → 0 → -1`
 
-Validated execution relation:
-
-`tick N: active polarity → 0`
-
-↓
-
-`pending neutral route retained`
-
-↓
-
-`tick N+1 or later: 0 → target polarity`
-
 Validated kernel invariant:
 
 `actual_direct_events = 0`
-
-FRP v1.7.0 is the current ready executable structured-output prototype and current reference architecture of the processor.
-
-The repository preserves the complete published technical specification chain from executable reference behavior through structured validation, hardware-facing signal mapping, HDL and testbench preparation, RTL interface and assertion layers, formal verification and equivalence scaffolds, FPGA synthesis and timing structures, stable production interfaces, silicon and heterogeneous architecture, silicon production and tapeout readiness, production integration and external handoff, production scaling and stabilization, physical implementation correlation, deterministic implementation mapping, cycle-exact reference execution, SystemVerilog interface mapping, RTL correlation, and qualification closure.
 
 Current version:
 
@@ -54,111 +106,518 @@ Main executable reference file:
 
 `frp_prototype_v1_7_0.py`
 
-Dependency file:
+Current architecture document:
 
-`requirements.txt`
+`docs/m15_implementation_mapping_domain_interface_qualification_closure.md`
+
+Current test report:
+
+`TEST_REPORT_v1_7_0.md`
+
+Current validation index:
+
+`FRP_VALIDATION_INDEX_v1_7_0.md`
+
+Current release notes:
+
+`RELEASE_NOTES_v1_7_0.md`
 
 Current primary qualification workflow:
 
 `.github/workflows/frp-m15-implementation-mapping-qualification.yml`
 
-Current published release validation status:
+Current published validation status:
 
 `PASS`
 
-## 1. Processor Identity and Preserved Kernel
+Current validated self-test result:
 
-The processor operates on three balanced ternary states:
+`41/41 PASS`
 
-`-1`
+## 1. Processor Identity and Computational Core
 
-`0`
+FRP v1.7.0 is the current executable structured-output prototype and reference architecture of the processor.
 
-`1`
+The word `prototype` identifies the executable reference form.
 
-The preserved computational kernel is defined by:
+The processor computational core contains two inseparable domains.
 
-- balanced ternary state domain `{-1, 0, 1}`;
+### 1.1 Resonant dynamic domain
+
+The resonant dynamic domain contains:
+
+- cell phases;
+- cell frequencies;
+- Kuramoto-Sakaguchi phase interaction;
+- asymmetric phase lag;
+- hierarchical fractal coupling;
+- phase evolution;
+- resonance selection;
+- global and multiscale phase coherence;
+- delay dynamics;
+- local thermal interaction;
+- gamma drift;
+- nonlinear coherence compression;
+- dynamic stability evaluation.
+
+### 1.2 Ternary state and retention domain
+
+The ternary state and retained-result domain contains:
+
+- balanced ternary states `{-1, 0, 1}`;
 - active neutral state `0`;
-- no direct opposite-polarity execution;
-- tick-separated neutral routing;
-- retained pending target polarity;
-- scheduler modes `free`, `7/1`, and `1/7`;
+- phase-derived ternary targets;
+- distributed commit;
 - transition-fraction control;
-- deterministic request-lane ordering.
+- pending neutral routes;
+- mandatory tick-separated opposite-polarity routing;
+- retained ternary state.
 
-The core route invariant remains:
+The resonant phase layer drives the dynamic computation.
 
-`-1 → 0 → 1`
+The ternary layer provides the state, target, transition, and retained-result domain.
 
-`1 → 0 → -1`
+Neither layer alone is the complete FRP computational mechanism.
 
-The validated direct-transition invariant remains:
-
-`actual_direct_events = 0`
-
-The M15 layer extends this preserved processor kernel into deterministic hardware-facing representation and qualification layers.
-
-## 2. Current Technical Position
+## 2. What the Current Executable Runs
 
 The current executable reference is:
 
 `frp_prototype_v1_7_0.py`
 
-The current M15 architecture defines the bridge:
+The default execution path performs the following sequence on every tick:
 
-`M14 floating semantic reference`
-
-↓
-
-`M15 quantized hardware shadow model`
+`scheduler state selection`
 
 ↓
 
-`cycle-exact integer golden trace`
+`pending neutral-route processing`
 
 ↓
 
-`deterministic RTL comparison vectors`
+`transition-request processing`
 
 ↓
 
-`SystemVerilog interface mapping`
+`phase-derived target-state processing`
 
 ↓
 
-`RTL assertion correlation mapping`
+`distributed transition-limit enforcement`
 
 ↓
 
-`qualification closure`
+`frequency-delay update`
 
-The current M15 artifact layers are:
+↓
 
-1. `fixed_point_interface_profile`;
-2. `balanced_ternary_hardware_encoding_map`;
-3. `quantized_reference_shadow_model`;
-4. `cycle_exact_reference_trace`;
-5. `rtl_comparison_vector_package`;
-6. `systemverilog_testbench_interface_map`;
-7. `synthesizable_rtl_reference_core`;
-8. `rtl_assertion_correlation_harness`;
-9. `reference_rtl_equivalence_report`;
-10. `qualification_closure_manifest`.
+`local thermal-field update`
 
-## 3. Required Tools
+↓
+
+`local gamma-drift update`
+
+↓
+
+`thermal coupling-factor update`
+
+↓
+
+`hierarchical Kuramoto-Sakaguchi phase-field update`
+
+↓
+
+`multiscale phase-coherence evaluation`
+
+↓
+
+`nonlinear coherence compression`
+
+↓
+
+`C(t), P(t), and C(t) - P(t) evaluation`
+
+↓
+
+`structured telemetry and trace capture`
+
+Across successive ticks, this execution produces the complete computational relation:
+
+`phase evolution`
+
+↓
+
+`resonance selection`
+
+↓
+
+`phase-coherence accumulation`
+
+↓
+
+`phase-derived ternary target`
+
+↓
+
+`distributed commit`
+
+↓
+
+`active neutral routing`
+
+↓
+
+`retained ternary state`
+
+This is the current processor execution path that the installation commands below prepare and run.
+
+## 3. Kuramoto-Sakaguchi Resonant Phase Layer
+
+Each processor cell has a phase.
+
+The current floating reference coupling path evaluates phase interaction through the term:
+
+`sin(phase_j - phase_i - gamma_effective_i)`
+
+The interaction is combined with:
+
+- hierarchical coupling weights;
+- local thermal coupling factors;
+- nominal coupling strength;
+- local effective gamma.
+
+Current default nominal phase lag:
+
+`gamma = 0.30 × pi`
+
+Current default nominal coupling strength:
+
+`coupling_nominal = 0.28`
+
+Current default fractal coupling exponent:
+
+`fractal_alpha = 0.70`
+
+The current phase velocity is composed from:
+
+`0.060 × current frequency`
+
++
+
+`scheduler push`
+
++
+
+`coupling field`
+
+The phase then evolves as:
+
+`phase_i = (phase_i + phase_velocity_i) mod 2π`
+
+This resonant phase evolution separates FRP from a static ternary transition model.
+
+## 4. Phase Coherence and Kuramoto Order Parameter R
+
+The current executable calculates global phase coherence through the Kuramoto order parameter:
+
+`R = sqrt(mean(cos(phase))² + mean(sin(phase))²)`
+
+The same phase-order calculation is applied across hierarchical domains.
+
+Current multiscale coherence includes:
+
+- pair-domain coherence;
+- cluster coherence;
+- supercluster coherence;
+- global phase coherence;
+- coherence dispersion across clusters.
+
+The phase field and coherence field are part of the computation.
+
+A final ternary vector alone is not a complete description of the FRP execution path.
+
+## 5. Hierarchical Fractal Coupling
+
+The current reference architecture uses a dyadic hierarchical ultrametric topology.
+
+Current default cell count:
+
+`16`
+
+Current default hierarchy depth:
+
+`4`
+
+Current default fractal coupling exponent:
+
+`0.70`
+
+The coupling field is constructed from hierarchy-level interactions rather than one undifferentiated global connection weight.
+
+The hierarchical path includes:
+
+- dyadic hierarchy depth;
+- hierarchical distance;
+- shell population;
+- level-dependent phase-coupling weights;
+- exact normalized fixed-point topology closure.
+
+Current validated topology exactness marker:
+
+`fixed_point_topology_sum_exact = True`
+
+The current floating reference also preserves a dense interaction path for correlation and equivalence analysis.
+
+## 6. Delay Dynamics
+
+Current default delay coefficient:
+
+`delay_alpha = 0.30`
+
+Each cell maintains:
+
+- base frequency;
+- frequency target;
+- current frequency.
+
+The current frequency target includes contributions from:
+
+- base frequency;
+- current ternary state;
+- switching activity.
+
+The current frequency approaches its target through the delayed relation:
+
+`current frequency += delay_alpha × (target frequency - current frequency)`
+
+The resulting frequency lag contributes to:
+
+- local generated power;
+- phase evolution;
+- coherence evaluation;
+- dynamic stability.
+
+The delay layer is therefore part of the resonant computational path.
+
+## 7. Local Thermal-Phase Interaction
+
+The current architecture tracks distributed local thermal state.
+
+Each cell contains:
+
+- generated power;
+- thermal dissipation;
+- thermal diffusion;
+- local heat;
+- thermal overload.
+
+The local thermal field is affected by:
+
+- switching activity;
+- frequency lag;
+- ambient heat;
+- thermal relaxation;
+- thermal diffusion.
+
+Thermal state feeds back into the resonant phase layer through:
+
+- local thermal coupling factors;
+- local gamma drift;
+- nonlinear coherence compression.
+
+The current processor therefore contains a coupled dynamic relation:
+
+`phase and frequency dynamics`
+
+↓
+
+`local generated power`
+
+↓
+
+`thermal field`
+
+↓
+
+`effective coupling and gamma drift`
+
+↓
+
+`phase evolution`
+
+↓
+
+`coherence`
+
+↓
+
+`stability`
+
+## 8. Local Gamma Drift
+
+The current architecture uses:
+
+- nominal gamma;
+- deterministic correlated gamma-noise targets;
+- gamma-noise state;
+- thermal overload;
+- effective local gamma.
+
+The effective local gamma is derived from the nominal phase lag plus a thermal and correlated-noise contribution.
+
+The resulting local gamma enters the Kuramoto-Sakaguchi phase interaction.
+
+The current M15 hardware-facing path also externalizes deterministic gamma-noise targets into the verification stimulus stream.
+
+Validated verification fields include:
+
+`gamma_noise_update_valid`
+
+`gamma_noise_target_q[cell]`
+
+## 9. Nonlinear Coherence Compression
+
+The current executable applies nonlinear coherence compression to raw phase coherence.
+
+The resulting relation is:
+
+`effective coherence = raw phase coherence × coherence compression`
+
+The compression factor decreases under increasing:
+
+- thermal overload;
+- stability-margin pressure.
+
+This nonlinear layer preserves a bounded effective coherence response under increasing coupled load.
+
+It is part of the current v1.7.0 processor behavior.
+
+## 10. Dynamic Stability
+
+The current processor tracks:
+
+`C(t)`
+
+`P(t)`
+
+`C(t) - P(t)`
+
+Current destabilizing load:
+
+`P(t) = heat + switch_load`
+
+Required validated condition:
+
+`C_minus_P_min > 0.0`
+
+The current coherence state includes contributions from:
+
+- effective phase coherence;
+- cluster coherence;
+- neutral-state fraction;
+- frequency-lag penalty.
+
+The stability layer therefore remains coupled to the phase, delay, thermal, coherence, and ternary-transition layers.
+
+## 11. Phase-Derived Ternary Targets
+
+The current executable derives automatic ternary targets from the evolving phase field.
+
+Current mapping:
+
+`sin(phase) > 0.33 → 1`
+
+`sin(phase) < -0.33 → -1`
+
+`otherwise → 0`
+
+This mapping connects the resonant phase domain to the balanced ternary state domain.
+
+The ternary target is not applied as an unrestricted immediate state replacement.
+
+It remains subject to:
+
+- transition-fraction control;
+- distributed commit;
+- active neutral routing;
+- pending-route retention;
+- scheduler timing.
+
+## 12. Active Neutral Routing
+
+The current processor prohibits actual direct opposite-polarity execution.
+
+Prohibited direct transition:
+
+`-1 ↔ 1`
+
+Validated routes:
+
+`-1 → 0 → 1`
+
+`1 → 0 → -1`
+
+Validated tick-separated relation:
+
+`tick N: active polarity → 0`
+
+↓
+
+`pending neutral route retained`
+
+↓
+
+`tick N+1 or later: 0 → target polarity`
+
+Required invariant:
+
+`actual_direct_events = 0`
+
+Additional current invariants:
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+## 13. Distributed Commit
+
+The current processor does not force the complete ternary state vector to switch at once by default.
+
+Current default transition fraction:
+
+`0.25`
+
+Current relation:
+
+`maximum changes per tick = round(cells × transition_fraction)`
+
+For the default 16-cell configuration:
+
+`request_lanes = 4`
+
+The current default validated switching boundary is:
+
+`switch_load_peak <= 0.25`
+
+Distributed commit connects the resonant phase-derived target path to bounded state transition and retained ternary state.
+
+## 14. Requirements
 
 Use the current CI-aligned Python environment:
 
 `Python 3.12`
 
-Required:
+Required tools:
 
 - Python;
 - pip;
 - Git when cloning the repository.
 
-The current dependency file declares:
+The current dependency file is:
+
+`requirements.txt`
+
+Current declared external dependency:
 
 `numpy>=1.26.0`
 
@@ -174,7 +633,7 @@ On systems where the interpreter command is:
 
 replace `python` with `python3` throughout.
 
-## 4. Obtain the Repository
+## 15. Obtain the Repository
 
 Clone:
 
@@ -192,7 +651,9 @@ Required result:
 
 `frp_prototype_v1_7_0.py True`
 
-## 5. Create a Virtual Environment
+When using a downloaded archive instead of Git, unpack the complete archive and run the remaining commands from the repository root.
+
+## 16. Create a Virtual Environment
 
 Create:
 
@@ -220,13 +681,13 @@ After activation, verify:
 
     python --version
 
-## 6. Install Dependencies
+## 17. Install Dependencies
 
 Upgrade pip:
 
     python -m pip install --upgrade pip
 
-Install the declared dependencies:
+Install the declared dependency set:
 
     python -m pip install -r requirements.txt
 
@@ -238,7 +699,7 @@ The installed version must satisfy:
 
 `numpy>=1.26.0`
 
-## 7. Compile Gate
+## 18. Compile Gate
 
 Run:
 
@@ -250,13 +711,13 @@ Required result:
 
 A successful compile gate returns without an error message.
 
-## 8. Inspect the Current Command Interface
+## 19. Inspect the Current Command Interface
 
 Run:
 
     python frp_prototype_v1_7_0.py --help
 
-The current command interface includes:
+The current interface includes:
 
 - `--mode {demo,self-test,benchmark}`;
 - `--output {text,json}`;
@@ -278,12 +739,21 @@ The current command interface includes:
 - `--thermal-diffusion-gain`;
 - `--equivalence-tolerance`;
 - `--vector-output-dir`;
-- ten M15 export flags;
+- `--export-fixed-point-interface-profile`;
+- `--export-balanced-ternary-hardware-encoding-map`;
+- `--export-quantized-reference-shadow-model`;
+- `--export-cycle-exact-reference-trace`;
+- `--export-rtl-comparison-vector-package`;
+- `--export-systemverilog-testbench-interface-map`;
+- `--export-synthesizable-rtl-reference-core`;
+- `--export-rtl-assertion-correlation-harness`;
+- `--export-reference-rtl-equivalence-report`;
+- `--export-qualification-closure-manifest`;
 - `--export-benchmark-matrix`.
 
-## 9. First Processor Run
+## 20. First Processor Run
 
-Run the current FRP v1.7.0 executable reference:
+Run the current executable reference:
 
     python frp_prototype_v1_7_0.py --mode demo
 
@@ -313,7 +783,65 @@ Default 64-tick scheduler counts:
 
 `commit = 8`
 
-## 10. Structured JSON First Run
+## 21. What the First Run Demonstrates
+
+The first run is not a static ternary printout.
+
+It executes the current coupled processor path:
+
+`phase and frequency state`
+
+↓
+
+`Kuramoto-Sakaguchi coupling`
+
+↓
+
+`hierarchical resonant interaction`
+
+↓
+
+`phase evolution`
+
+↓
+
+`resonance selection`
+
+↓
+
+`global and multiscale coherence`
+
+↓
+
+`delay and thermal feedback`
+
+↓
+
+`nonlinear coherence compression`
+
+↓
+
+`dynamic stability evaluation`
+
+↓
+
+`phase-derived ternary target`
+
+↓
+
+`distributed transition`
+
+↓
+
+`active neutral routing`
+
+↓
+
+`retained ternary state`
+
+The first run therefore exercises both the resonant computational mechanism and the balanced ternary state-retention mechanism.
+
+## 22. Structured JSON First Run
 
 Run:
 
@@ -342,6 +870,10 @@ Default configuration:
 | seed | `76` |
 | scheduler | `7/1` |
 | transition fraction | `0.25` |
+| gamma | `0.30 × pi` |
+| fractal alpha | `0.70` |
+| coupling nominal | `0.28` |
+| delay alpha | `0.30` |
 
 Required default summary invariants:
 
@@ -355,7 +887,29 @@ Required default summary invariants:
 - `switch_load_peak <= 0.25`;
 - `C_minus_P_min > 0.0`.
 
-## 11. Standard Self-Test
+## 23. Full Trace Output
+
+Run:
+
+    python frp_prototype_v1_7_0.py --mode demo --output json --include-trace
+
+The full structured output adds:
+
+- `trace`;
+- `cell_trace`;
+- `route_events`.
+
+The default configuration records:
+
+- `64` processor ticks;
+- `1024` cell-tick rows;
+- route-event history;
+- phase and coherence telemetry;
+- thermal and stability telemetry.
+
+Use full trace output when exact tick-by-tick or cell-by-cell inspection is required.
+
+## 24. Standard Self-Test
 
 Run:
 
@@ -375,21 +929,21 @@ Current validated result:
 
 `41/41 PASS`
 
-## 12. Full Scheduler Self-Test Matrix
+## 25. Full Scheduler Self-Test Matrix
 
-Default profile:
+Run the default profile:
 
     python frp_prototype_v1_7_0.py --mode self-test --output json
 
-Free scheduler:
+Run the free scheduler:
 
     python frp_prototype_v1_7_0.py --mode self-test --scheduler free --output json
 
-7/1 scheduler:
+Run the 7/1 scheduler:
 
     python frp_prototype_v1_7_0.py --mode self-test --scheduler 7/1 --output json
 
-1/7 scheduler:
+Run the 1/7 scheduler:
 
     python frp_prototype_v1_7_0.py --mode self-test --scheduler 1/7 --output json
 
@@ -403,15 +957,15 @@ All 41 checks must be:
 
 `True`
 
-## 13. Scheduler Layer
+## 26. Scheduler Layer
 
-FRP v1.7.0 preserves three scheduler modes.
+The current executable preserves three scheduler modes.
 
-| Scheduler | Validated profile |
+| Scheduler | 16-tick validated profile |
 |---|---|
-| `free` | `16 ticks → free = 16` |
-| `7/1` | `16 ticks → balance = 14, commit = 2` |
-| `1/7` | `16 ticks → excite = 2, neutralize = 14` |
+| `free` | `free = 16` |
+| `7/1` | `balance = 14`, `commit = 2` |
+| `1/7` | `excite = 2`, `neutralize = 14` |
 
 Validated default 64-tick 7/1 profile:
 
@@ -419,11 +973,30 @@ Validated default 64-tick 7/1 profile:
 
 `commit = 8`
 
-Validated relation:
+The scheduler is not isolated from the resonant phase layer.
 
-`sum(scheduler_counts) = ticks_recorded`
+The current executable also applies scheduler-dependent phase push during phase evolution.
 
-## 14. Balanced Ternary Hardware Encoding
+## 27. Cell-Count Rule
+
+The `--cells` value must be:
+
+- a power of two;
+- at least `2`.
+
+Valid examples:
+
+`2`
+
+`8`
+
+`16`
+
+`32`
+
+Invalid cell counts are rejected by the current command interface.
+
+## 28. Balanced Ternary Hardware Encoding
 
 FRP v1.7.0 defines the canonical two-bit balanced ternary encoding:
 
@@ -437,11 +1010,50 @@ Reserved encoding:
 
 `2'b10`
 
-Validated invariant:
+Canonical integer encoding:
+
+`-1 → 3`
+
+`0 → 0`
+
+`+1 → 1`
+
+Reserved integer code:
+
+`2`
+
+Required invariant:
 
 `reserved_state_events = 0`
 
-## 15. Benchmark-Matrix Smoke Check
+The hardware encoding represents the ternary state domain.
+
+It is not the complete FRP computational mechanism.
+
+The resonant phase-coherence core remains upstream of the ternary target, transition, and retained-state path.
+
+## 29. M15 Hardware-Facing Numeric Profile
+
+Current primary numeric representations:
+
+| Domain | Representation |
+|---|---|
+| general dynamic scalar | `S32Q16` |
+| normalized coefficient | `S32Q30` |
+| phase | `PHASE_U32` |
+| Sakaguchi gamma offset | `GAMMA_S32` |
+
+Current deterministic trigonometric profile:
+
+`4096-entry full-cycle lookup table`
+
+Validated exactness markers:
+
+`fixed_point_topology_sum_exact = True`
+
+`fixed_point_thermal_sum_exact = True`
+
+## 30. Benchmark-Matrix Smoke Check
 
 Run:
 
@@ -467,7 +1079,7 @@ Equivalent export command:
 
     python frp_prototype_v1_7_0.py --export-benchmark-matrix
 
-## 16. M15 Export Smoke Check
+## 31. M15 Export Smoke Check
 
 Generate the fixed-point interface profile:
 
@@ -519,7 +1131,22 @@ The manifest must contain:
 
 M15 artifact layers.
 
-## 17. Deterministic Vector Check
+## 32. M15 Artifact Schemas
+
+| Artifact | Required schema |
+|---|---|
+| fixed-point interface profile | `frp.m15.fixed_point_interface_profile.v1.7.0` |
+| balanced ternary hardware encoding map | `frp.m15.balanced_ternary_hardware_encoding_map.v1.7.0` |
+| quantized reference shadow model | `frp.m15.quantized_reference_shadow_model.v1.7.0` |
+| cycle-exact reference trace | `frp.m15.cycle_exact_reference_trace.v1.7.0` |
+| RTL comparison vector package | `frp.m15.rtl_comparison_vector_package.v1.7.0` |
+| SystemVerilog testbench interface map | `frp.m15.systemverilog_testbench_interface_map.v1.7.0` |
+| synthesizable RTL reference core | `frp.m15.synthesizable_rtl_reference_core.v1.7.0` |
+| RTL assertion correlation harness | `frp.m15.rtl_assertion_correlation_harness.v1.7.0` |
+| reference RTL equivalence report | `frp.m15.reference_rtl_equivalence_report.v1.7.0` |
+| qualification closure manifest | `frp.m15.qualification_closure_manifest.v1.7.0` |
+
+## 33. Deterministic RTL Vector Check
 
 Create two output directories:
 
@@ -555,7 +1182,9 @@ Expected vector files:
 - `frp_m15_trig_lut_q30.vec`;
 - `frp_m15_sha256_manifest.json`.
 
-## 18. Scaling Smoke Check
+The independently generated vector directories must be byte-identical.
+
+## 34. Scaling Smoke Check
 
 Run 8 cells:
 
@@ -583,11 +1212,11 @@ Every scaling run must preserve:
 - `reserved_state_events = 0`;
 - `queue_overflow_events = 0`;
 - balanced ternary state-domain validity;
-- scheduler-count validity;
+- valid scheduler counts;
 - exact fixed-point topology sum;
 - exact fixed-point thermal sum.
 
-## 19. Installation Acceptance Criteria
+## 35. Installation Acceptance Criteria
 
 The current processor installation is ready when:
 
@@ -597,16 +1226,42 @@ The current processor installation is ready when:
 - Python compilation completes without error;
 - the default processor demo runs;
 - the structured output reports schema `frp.structured_output.v1.7.0`;
-- the preserved balanced ternary state domain is valid;
+- the Kuramoto-Sakaguchi resonant phase layer executes;
+- the phase-evolution path executes;
+- the Kuramoto order parameter and multiscale coherence path execute;
+- the phase-derived ternary target path executes;
+- the balanced ternary state domain remains valid;
 - `actual_direct_events = 0`;
 - the standard self-test reports `41/41 PASS`;
-- the scheduler-specific self-tests report `41/41 PASS`;
-- the benchmark matrix reports the five expected architecture rows;
+- all scheduler-specific self-tests report `41/41 PASS`;
+- the benchmark matrix reports the five expected rows;
 - the qualification closure manifest reports `PASS`.
 
 For complete deterministic vector reproduction, also require byte-identical equality between independently generated vector directories.
 
-## 20. Running Without Virtual-Environment Activation
+## 36. Saving Output
+
+Save the default structured demo:
+
+    python frp_prototype_v1_7_0.py --mode demo --output json > frp-v1.7.0-demo.json
+
+Save the full trace:
+
+    python frp_prototype_v1_7_0.py --mode demo --output json --include-trace > frp-v1.7.0-demo-trace.json
+
+Save the self-test result:
+
+    python frp_prototype_v1_7_0.py --mode self-test --output json > frp-v1.7.0-self-test.json
+
+Save the benchmark matrix:
+
+    python frp_prototype_v1_7_0.py --mode benchmark > frp-v1.7.0-benchmark-matrix.json
+
+Save the qualification closure manifest:
+
+    python frp_prototype_v1_7_0.py --export-qualification-closure-manifest > frp-v1.7.0-qualification-closure.json
+
+## 37. Running Without Virtual-Environment Activation
 
 Activation is optional.
 
@@ -626,7 +1281,7 @@ Use:
     .venv\Scripts\python.exe -m py_compile frp_prototype_v1_7_0.py
     .venv\Scripts\python.exe frp_prototype_v1_7_0.py --mode self-test --output json
 
-## 21. Updating an Existing Clone
+## 38. Updating an Existing Clone
 
 Enter the repository directory:
 
@@ -652,7 +1307,7 @@ Re-run the current self-test:
 
     python frp_prototype_v1_7_0.py --mode self-test --output json
 
-## 22. Troubleshooting
+## 39. Troubleshooting
 
 ### Python command not found
 
@@ -660,7 +1315,7 @@ Try:
 
     python3 --version
 
-Then use `python3` instead of `python` in the commands above.
+Then use `python3` instead of `python`.
 
 ### pip is not available as a standalone command
 
@@ -680,7 +1335,7 @@ Then verify:
 
 ### Virtual environment does not activate
 
-Use the virtual-environment interpreter directly as shown in Section 20.
+Use the virtual-environment interpreter directly as shown in Section 37.
 
 ### PowerShell blocks activation
 
@@ -723,11 +1378,67 @@ Then compare the local source revision and environment with:
 - `REPRODUCIBILITY.md`;
 - `CI.md`.
 
-## 23. Current Technical Chain
+## 40. Complete Current Technical Chain
 
-The repository preserves the processor development and qualification chain:
+The repository preserves the processor architecture and qualification chain:
 
-`balanced ternary computational kernel`
+`balanced ternary state and retained-result domain {-1, 0, 1}`
+
+↓
+
+`Kuramoto-Sakaguchi resonant phase coupling`
+
+↓
+
+`hierarchical fractal phase interaction`
+
+↓
+
+`phase evolution`
+
+↓
+
+`resonance selection`
+
+↓
+
+`Kuramoto order parameter R`
+
+↓
+
+`multiscale phase coherence`
+
+↓
+
+`delay dynamics`
+
+↓
+
+`local thermal-phase interaction`
+
+↓
+
+`nonlinear coherence compression`
+
+↓
+
+`dynamic stability C(t) - P(t)`
+
+↓
+
+`phase-derived ternary target`
+
+↓
+
+`distributed commit`
+
+↓
+
+`active neutral routing`
+
+↓
+
+`retained ternary state`
 
 ↓
 
@@ -811,9 +1522,17 @@ The repository preserves the processor development and qualification chain:
 
 ↓
 
+`reference equivalence`
+
+↓
+
 `qualification closure`
 
-## 24. Current File Alignment
+The resonant computational core remains the processor mechanism throughout this chain.
+
+The balanced ternary domain remains the state and retained-result domain throughout this chain.
+
+## 41. Current File Alignment
 
 This installation path is aligned with:
 
@@ -831,7 +1550,7 @@ This installation path is aligned with:
 
 Historical executable files and historical release records remain bound to their corresponding release layers.
 
-## 25. Current Status
+## 42. Current Status
 
 Processor:
 
@@ -839,9 +1558,13 @@ Processor:
 
 Processor class:
 
-`Balanced Ternary Resonant Coherence Processor`
+`Ternary Resonant Coherence Processor`
 
-State domain:
+Computational mechanism:
+
+`Kuramoto-Sakaguchi resonant phase dynamics with hierarchical fractal coupling, phase evolution, resonance selection, Kuramoto order parameter R, multiscale phase coherence, delay dynamics, coupled thermal-phase behavior, nonlinear coherence compression, phase-derived ternary targets, distributed commit, and mandatory active-neutral routing`
+
+State and retained-result domain:
 
 `{-1, 0, 1}`
 
@@ -865,7 +1588,7 @@ Current executable reference:
 
 `frp_prototype_v1_7_0.py`
 
-Current published release validation result:
+Current published validation result:
 
 `PASS`
 
