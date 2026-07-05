@@ -133,6 +133,11 @@ ARCHITECTURE_CASE_SCHEMA = (
     "nonlinear_multitask_architecture_case_result.v1"
 )
 
+TERMINAL_QUIESCENCE_THERMAL_SCHEMA = (
+    "frp.benchmark."
+    "nonlinear_multitask_terminal_quiescence_thermal_update.v1"
+)
+
 ORACLE_SCHEMA = (
     "frp.benchmark."
     "nonlinear_multitask_semantic_oracle.v1"
@@ -1029,6 +1034,453 @@ def build_trace_row(
                     convergence_snapshot
                 )
             )
+        ),
+    }
+
+    return package_with_sha256(
+        payload,
+        "trace_row_sha256",
+    )
+
+
+def execute_terminal_quiescence_thermal_update(
+    governor: CommonThermalCeilingGovernor,
+    *,
+    terminal_update_id: str,
+    event_packets: Sequence[
+        Mapping[
+            str,
+            Any,
+        ]
+    ],
+) -> dict[
+    str,
+    Any,
+]:
+    require(
+        isinstance(
+            terminal_update_id,
+            str,
+        )
+        and terminal_update_id,
+        "terminal_update_id must be a nonempty string",
+    )
+
+    packets = list(
+        event_packets
+    )
+
+    require(
+        len(
+            packets
+        )
+        > 0,
+        "terminal quiescence event_packets must not be empty",
+    )
+
+    preflight = (
+        estimate_thermal_execution(
+            governor,
+            packets,
+        )
+    )
+
+    remaining_ticks = (
+        governor.context
+        .maximum_benchmark_ticks_per_case
+        - governor.benchmark_tick
+    )
+
+    require(
+        preflight[
+            "required_ticks"
+        ]
+        <= remaining_ticks,
+        "terminal quiescence exceeds the remaining "
+        "benchmark-tick budget",
+    )
+
+    start_tick = (
+        governor.benchmark_tick
+    )
+
+    start_activity_ticks = (
+        governor.activity_ticks
+    )
+
+    start_cooling_ticks = (
+        governor.cooling_ticks
+    )
+
+    start_energy = (
+        governor.total_normalized_energy
+    )
+
+    start_record_index = len(
+        governor.records
+    )
+
+    planned: list[
+        tuple[
+            int,
+            int,
+            float,
+        ]
+    ] = []
+
+    packet_costs: list[
+        dict[
+            str,
+            Any,
+        ]
+    ] = []
+
+    for (
+        packet_index,
+        event_counts,
+    ) in enumerate(
+        packets
+    ):
+        cost_result = (
+            normalized_event_cost(
+                event_counts,
+                governor.context,
+            )
+        )
+
+        packet_costs.append(
+            cost_result
+        )
+
+        slices = (
+            slice_normalized_activity(
+                cost_result[
+                    "normalized_cycle_cost"
+                ],
+                governor.context.activity_quantum,
+            )
+        )
+
+        for (
+            slice_index,
+            slice_cost,
+        ) in enumerate(
+            slices
+        ):
+            planned.append(
+                (
+                    packet_index,
+                    slice_index,
+                    slice_cost,
+                )
+            )
+
+    require(
+        len(
+            planned
+        )
+        > 0,
+        "terminal quiescence produced no thermal activity plan",
+    )
+
+    for (
+        plan_index,
+        (
+            packet_index,
+            slice_index,
+            slice_cost,
+        ),
+    ) in enumerate(
+        planned
+    ):
+        governor._cool_until_slice_fits(
+            logical_update_id=(
+                terminal_update_id
+            ),
+            next_slice_cost=(
+                slice_cost
+            ),
+        )
+
+        is_final_slice = (
+            plan_index
+            == len(
+                planned
+            )
+            - 1
+        )
+
+        governor._append_tick(
+            tick_kind=(
+                "activity"
+            ),
+            logical_update_id=(
+                terminal_update_id
+            ),
+            packet_index=(
+                packet_index
+            ),
+            slice_index=(
+                slice_index
+            ),
+            normalized_activity_cost=(
+                slice_cost
+            ),
+            logical_update_commit=(
+                is_final_slice
+            ),
+            logical_convergence_progress=(
+                False
+            ),
+        )
+
+    update_records = [
+        record.to_dict()
+        for record
+        in governor.records[
+            start_record_index:
+        ]
+    ]
+
+    result: dict[
+        str,
+        Any,
+    ] = {
+        "schema": (
+            TERMINAL_QUIESCENCE_THERMAL_SCHEMA
+        ),
+        "terminal_update_id": (
+            terminal_update_id
+        ),
+        "benchmark_tick_start": (
+            start_tick
+        ),
+        "benchmark_tick_end_inclusive": (
+            governor.benchmark_tick
+            - 1
+        ),
+        "benchmark_ticks_consumed": (
+            governor.benchmark_tick
+            - start_tick
+        ),
+        "activity_ticks_consumed": (
+            governor.activity_ticks
+            - start_activity_ticks
+        ),
+        "cooling_ticks_consumed": (
+            governor.cooling_ticks
+            - start_cooling_ticks
+        ),
+        "normalized_energy_consumed": (
+            math.fsum(
+                [
+                    governor.total_normalized_energy,
+                    -start_energy,
+                ]
+            )
+        ),
+        "packet_count": (
+            len(
+                packets
+            )
+        ),
+        "packet_normalized_costs": [
+            row[
+                "normalized_cycle_cost"
+            ]
+            for row
+            in packet_costs
+        ],
+        "logical_convergence_progress_ticks": (
+            0
+        ),
+        "terminal_quiescence": (
+            True
+        ),
+        "advances_logical_workload": (
+            False
+        ),
+        "temperature_after": (
+            governor.temperature_proxy
+        ),
+        "peak_temperature_proxy": (
+            governor.peak_temperature_proxy
+        ),
+        "thermal_ceiling": (
+            governor.context.thermal_ceiling
+        ),
+        "thermal_ceiling_status": (
+            "throttled"
+            if (
+                governor.cooling_ticks
+                > start_cooling_ticks
+            )
+            else "within_ceiling"
+        ),
+        "ticks": (
+            update_records
+        ),
+        "winner_assertions": [],
+    }
+
+    require(
+        result[
+            "benchmark_ticks_consumed"
+        ]
+        == preflight[
+            "required_ticks"
+        ],
+        "terminal quiescence thermal preflight tick count diverged",
+    )
+
+    require(
+        result[
+            "activity_ticks_consumed"
+        ]
+        == preflight[
+            "activity_ticks"
+        ],
+        "terminal quiescence thermal preflight activity count diverged",
+    )
+
+    require(
+        result[
+            "cooling_ticks_consumed"
+        ]
+        == preflight[
+            "cooling_ticks"
+        ],
+        "terminal quiescence thermal preflight cooling count diverged",
+    )
+
+    require(
+        math.isclose(
+            result[
+                "temperature_after"
+            ],
+            preflight[
+                "temperature_after"
+            ],
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        ),
+        "terminal quiescence thermal preflight final temperature diverged",
+    )
+
+    require(
+        all(
+            row[
+                "logical_convergence_progress"
+            ]
+            is False
+            for row
+            in update_records
+        ),
+        "terminal quiescence advanced logical convergence",
+    )
+
+    result[
+        "terminal_quiescence_thermal_sha256"
+    ] = sha256_hex(
+        canonical_json_bytes(
+            result
+        )
+    )
+
+    return result
+
+
+def build_terminal_quiescence_trace_row(
+    *,
+    step_payload: Mapping[
+        str,
+        Any,
+    ],
+    thermal_update: Mapping[
+        str,
+        Any,
+    ],
+) -> dict[
+    str,
+    Any,
+]:
+    metadata = copy.deepcopy(
+        dict(
+            step_payload[
+                "logical_update_metadata"
+            ]
+        )
+    )
+
+    require(
+        metadata.get(
+            "terminal_quiescence"
+        )
+        is True,
+        "terminal quiescence trace metadata mismatch",
+    )
+
+    require(
+        metadata.get(
+            "advances_logical_workload"
+        )
+        is False,
+        "terminal quiescence trace advanced logical workload",
+    )
+
+    payload: dict[
+        str,
+        Any,
+    ] = {
+        "domain_index": (
+            metadata[
+                "domain_index"
+            ]
+        ),
+        "logical_iteration": (
+            metadata[
+                "logical_iteration_before"
+            ]
+        ),
+        "semantic_states": (
+            copy.deepcopy(
+                step_payload[
+                    "semantic_states"
+                ]
+            )
+        ),
+        "phase_words": (
+            copy.deepcopy(
+                step_payload[
+                    "phase_words"
+                ]
+            )
+        ),
+        "event_packets": (
+            copy.deepcopy(
+                step_payload[
+                    "event_packets"
+                ]
+            )
+        ),
+        "architecture_metadata": (
+            metadata
+        ),
+        "adapter_step_sha256": (
+            step_payload[
+                "adapter_step_sha256"
+            ]
+        ),
+        "thermal_update": (
+            compact_thermal_update(
+                thermal_update
+            )
+        ),
+        "convergence_observation": (
+            None
+        ),
+        "terminal_quiescence": (
+            True
         ),
     }
 
@@ -1941,6 +2393,157 @@ def run_architecture_case(
 
         if stop_case:
             break
+
+    if spec.is_frp:
+        for domain_index in range(
+            len(
+                adapters
+            )
+        ):
+            while True:
+                current_snapshot = (
+                    adapters[
+                        domain_index
+                    ].snapshot()
+                )
+
+                if (
+                    current_snapshot[
+                        "pending_route_count_final"
+                    ]
+                    == 0
+                ):
+                    break
+
+                require(
+                    not budget_exhausted,
+                    "FRP terminal pending route remains after "
+                    "benchmark-tick budget exhaustion",
+                )
+
+                trial_adapter = copy.deepcopy(
+                    adapters[
+                        domain_index
+                    ]
+                )
+
+                quiescence_result = (
+                    trial_adapter
+                    .quiescence_step()
+                )
+
+                quiescence_payload = (
+                    quiescence_result
+                    .to_dict()
+                )
+
+                require(
+                    quiescence_payload[
+                        "architecture_id"
+                    ]
+                    == spec.architecture_id,
+                    "terminal quiescence architecture_id mismatch",
+                )
+
+                require(
+                    quiescence_payload[
+                        "scheduler_mode"
+                    ]
+                    == EXPECTED_SCHEDULER_MODE,
+                    "terminal quiescence scheduler_mode mismatch",
+                )
+
+                require(
+                    quiescence_payload[
+                        "winner_assertions"
+                    ]
+                    == [],
+                    "terminal quiescence winner_assertions "
+                    "must remain empty",
+                )
+
+                aggregate_event_packets(
+                    attempted_event_totals,
+                    quiescence_result
+                    .event_packets,
+                )
+
+                quiescence_preflight = (
+                    estimate_thermal_execution(
+                        governor,
+                        quiescence_result
+                        .event_packets,
+                    )
+                )
+
+                remaining_ticks = (
+                    thermal_context
+                    .maximum_benchmark_ticks_per_case
+                    - governor.benchmark_tick
+                )
+
+                require(
+                    quiescence_preflight[
+                        "required_ticks"
+                    ]
+                    <= remaining_ticks,
+                    "FRP terminal quiescence does not fit "
+                    "within the remaining benchmark-tick budget",
+                )
+
+                start_record_index = len(
+                    governor.records
+                )
+
+                quiescence_thermal_update = (
+                    execute_terminal_quiescence_thermal_update(
+                        governor,
+                        terminal_update_id=(
+                            quiescence_payload[
+                                "logical_update_metadata"
+                            ][
+                                "logical_update_id"
+                            ]
+                        ),
+                        event_packets=(
+                            quiescence_result
+                            .event_packets
+                        ),
+                    )
+                )
+
+                terminal_records = (
+                    governor.records[
+                        start_record_index:
+                    ]
+                )
+
+                if not tracker.complete:
+                    feed_partial_thermal_records_into_convergence(
+                        tracker,
+                        terminal_records,
+                    )
+
+                adapters[
+                    domain_index
+                ] = trial_adapter
+
+                aggregate_event_packets(
+                    committed_event_totals,
+                    quiescence_result
+                    .event_packets,
+                )
+
+                trace.append(
+                    build_terminal_quiescence_trace_row(
+                        step_payload=(
+                            quiescence_payload
+                        ),
+                        thermal_update=(
+                            quiescence_thermal_update
+                        ),
+                    )
+                )
 
     convergence_summary = (
         tracker.summary()
@@ -3183,7 +3786,94 @@ def integration_probe(
             adapter.snapshot()
         )
 
+        terminal_quiescence = []
+
         if spec.is_frp:
+            while (
+                snapshot[
+                    "pending_route_count_final"
+                ]
+                > 0
+            ):
+                quiescence_result = (
+                    adapter
+                    .quiescence_step()
+                )
+
+                quiescence_payload = (
+                    quiescence_result
+                    .to_dict()
+                )
+
+                quiescence_preflight = (
+                    estimate_thermal_execution(
+                        governor,
+                        quiescence_result
+                        .event_packets,
+                    )
+                )
+
+                require(
+                    quiescence_preflight[
+                        "required_ticks"
+                    ]
+                    <= (
+                        thermal_context
+                        .maximum_benchmark_ticks_per_case
+                        - governor.benchmark_tick
+                    ),
+                    "self-test FRP terminal quiescence "
+                    "does not fit",
+                )
+
+                quiescence_thermal_update = (
+                    execute_terminal_quiescence_thermal_update(
+                        governor,
+                        terminal_update_id=(
+                            quiescence_payload[
+                                "logical_update_metadata"
+                            ][
+                                "logical_update_id"
+                            ]
+                        ),
+                        event_packets=(
+                            quiescence_result
+                            .event_packets
+                        ),
+                    )
+                )
+
+                terminal_quiescence.append(
+                    {
+                        "adapter_step_sha256": (
+                            quiescence_payload[
+                                "adapter_step_sha256"
+                            ]
+                        ),
+                        "thermal_preflight": (
+                            quiescence_preflight
+                        ),
+                        "terminal_quiescence_thermal_sha256": (
+                            quiescence_thermal_update[
+                                "terminal_quiescence_thermal_sha256"
+                            ]
+                        ),
+                    }
+                )
+
+                snapshot = (
+                    adapter.snapshot()
+                )
+
+            require(
+                snapshot[
+                    "pending_route_count_final"
+                ]
+                == 0,
+                "self-test FRP terminal quiescence "
+                "did not drain pending routes",
+            )
+
             require(
                 snapshot[
                     "actual_direct_events"
@@ -3246,6 +3936,9 @@ def integration_probe(
                     snapshot[
                         "adapter_snapshot_sha256"
                     ]
+                ),
+                "terminal_quiescence": (
+                    terminal_quiescence
                 ),
             }
         )
