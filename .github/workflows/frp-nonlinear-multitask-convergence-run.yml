@@ -184,14 +184,14 @@ jobs:
               "frp_v1_7_0_adapter": frp_self_test(),
           }
 
-          assert all(
-              result["status"] == "PASS"
-              for result in checks.values()
-          )
+          failed = {
+              name: result
+              for name, result in checks.items()
+              if not isinstance(result, dict)
+              or result.get("status") != "PASS"
+          }
 
-          assert checks["frp_v1_7_0_adapter"]["actual_direct_events"] == 0
-          assert checks["frp_v1_7_0_adapter"]["reserved_state_events"] == 0
-          assert checks["frp_v1_7_0_adapter"]["queue_overflow_events"] == 0
+          assert not failed, f"self-test failures: {failed}"
 
           output = {
               "status": "PASS",
