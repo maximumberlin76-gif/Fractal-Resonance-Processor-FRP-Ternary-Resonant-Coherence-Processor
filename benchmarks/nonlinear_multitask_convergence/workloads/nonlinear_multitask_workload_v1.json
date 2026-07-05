@@ -1,0 +1,222 @@
+{
+  "schema": "frp.benchmark.nonlinear_multitask_workload_profile.v1",
+  "suite_name": "FRP Nonlinear Multitask Phase-Coherence Convergence Benchmark",
+  "profile_name": "nonlinear_multitask_workload_v1",
+  "profile_role": "predeclared_canonical_workload_contract",
+  "profile_status": "reference_workload_profile",
+  "benchmark_question": "when nonlinear coupled-state multitask pressure increases, which architecture reaches the same semantic solution sooner while remaining under the same declared thermal ceiling?",
+  "seed": 76,
+  "case_count": 36,
+  "architecture_order": [
+    "binary_synchronous_reference",
+    "binary_clock_gated_reference",
+    "direct_ternary_reference",
+    "frp_v1_7_0_quantized_shadow"
+  ],
+  "frp_reference": {
+    "version": "v1.7.0",
+    "source_path": "frp_prototype_v1_7_0.py",
+    "source_sha256": "a65e2c352157ac5b0fc34b3a09605bad53cd62a1ae0d39855ed35f979b507f85",
+    "adapter_rule": "import_existing_kernel_without_duplication"
+  },
+  "execution_order": [
+    "domain_size",
+    "concurrent_domain_count",
+    "nonlinearity_class"
+  ],
+  "domain_size_order": [
+    8,
+    16,
+    32
+  ],
+  "concurrent_domain_count_order": [
+    1,
+    2,
+    4,
+    8
+  ],
+  "nonlinearity_class_order": [
+    "low",
+    "medium",
+    "high"
+  ],
+  "scheduler_mode": "free",
+  "transition_fraction": 0.25,
+  "auto_targets_enable": true,
+  "shared_problem_model": {
+    "name": "hierarchical_kuramoto_sakaguchi_phase_convergence_v1",
+    "phase_domain": "PHASE_U32",
+    "balanced_ternary_state_domain": [
+      -1,
+      0,
+      1
+    ],
+    "topology": "deterministic_dyadic_hierarchical_v1",
+    "fractal_alpha": 0.7,
+    "thermal_beta": 1.2,
+    "ambient_heat": 0.05,
+    "thermal_time_constant": 14.0,
+    "thermal_soft_limit": 0.22,
+    "thermal_hard_limit": 0.9,
+    "thermal_diffusion_gain": 0.035,
+    "base_frequency": 1.0,
+    "phase_velocity_base_gain": 0.06,
+    "scheduler_push_free": 0.003,
+    "state_projection_rule": {
+      "positive": "sin(phase) > 0.33",
+      "neutral": "-0.33 <= sin(phase) <= 0.33",
+      "negative": "sin(phase) < -0.33"
+    },
+    "cross_domain_coupling_gain": 0.0,
+    "domain_independence": true
+  },
+  "deterministic_initialization": {
+    "domain_seed_derivation": "sha256(seed || domain_size || concurrent_domain_count || nonlinearity_class || domain_index)",
+    "initial_states": "uniform_seeded_choice_from_-1_0_1",
+    "initial_phases": "uniform_seeded_phase_words_over_full_cycle",
+    "initial_frequency_target_q16": 65536,
+    "initial_frequency_current_q16": 65536,
+    "initial_heat_q16": 3277,
+    "gamma_noise_target_generation": "uniform_seeded_signed_q16_with_class_scale",
+    "same_initial_state_for_all_architectures": true,
+    "same_initial_phase_for_all_architectures": true,
+    "same_gamma_noise_target_for_all_architectures": true
+  },
+  "nonlinearity_classes": {
+    "low": {
+      "class_index": 0,
+      "coupling_nominal": 0.14,
+      "gamma_nominal_ratio_pi": 0.15,
+      "gamma_nominal_radians": 0.471238898038469,
+      "delay_alpha": 0.15,
+      "gamma_noise_target_scale": 0.025,
+      "parameter_rule": "0.5x M15 nominal coupling, gamma, and delay; 0.5x medium gamma-noise scale"
+    },
+    "medium": {
+      "class_index": 1,
+      "coupling_nominal": 0.28,
+      "gamma_nominal_ratio_pi": 0.3,
+      "gamma_nominal_radians": 0.942477796076938,
+      "delay_alpha": 0.3,
+      "gamma_noise_target_scale": 0.05,
+      "parameter_rule": "M15 nominal coupling, gamma, and delay"
+    },
+    "high": {
+      "class_index": 2,
+      "coupling_nominal": 0.42,
+      "gamma_nominal_ratio_pi": 0.45,
+      "gamma_nominal_radians": 1.413716694115407,
+      "delay_alpha": 0.45,
+      "gamma_noise_target_scale": 0.1,
+      "parameter_rule": "1.5x M15 nominal coupling, gamma, and delay; 2.0x medium gamma-noise scale"
+    }
+  },
+  "resource_fairness_contract": {
+    "engine_contexts_per_case": "equal_to_concurrent_domain_count",
+    "state_lanes_per_engine_context": "equal_to_domain_size",
+    "total_state_lanes_per_case": "domain_size * concurrent_domain_count",
+    "same_engine_context_count_for_all_architectures": true,
+    "same_total_state_lane_count_for_all_architectures": true,
+    "additional_architecture_specific_engine_contexts": false,
+    "hidden_parallelism": false,
+    "domain_execution_order": "domain_index_ascending_round_robin",
+    "shared_aggregate_thermal_ceiling_per_case": true
+  },
+  "convergence_contract": {
+    "state_stability_ticks": 8,
+    "phase_velocity_dispersion_max_radians_per_tick": 0.01,
+    "phase_coherence_delta_max": 0.001,
+    "semantic_state_output": "exact_balanced_ternary_state_vector",
+    "semantic_completion_ratio_required": 1.0,
+    "semantic_output_match_required": 1.0,
+    "maximum_logical_iterations_per_domain": 4096,
+    "maximum_benchmark_ticks_per_case": 262144,
+    "completion_requires_all_predicates": true
+  },
+  "thermal_ceiling_contract": {
+    "thermal_profile_path": "benchmarks/architecture_comparison/profiles/thermal_proxy_profile_v1.json",
+    "thermal_profile_name": "common_rc_thermal_proxy_v1",
+    "thermal_profile_sha256": "8cc2992f5699c47c88e81c17a4a5f0c8ff5bb7a5b32ebf73ab0e5a0f9c5494c8",
+    "cost_profile_path": "benchmarks/architecture_comparison/profiles/hardware_sensitivity_cost_profile_v1.json",
+    "cost_profile_name": "literature_anchored_cmos45_sensitivity_v1",
+    "cost_profile_sha256": "3814925a54d274bd43ab4576b6e60b53f60a2dfca9520d533ab49700c11dd553",
+    "cost_scenario": "nominal",
+    "temperature_unit": "normalized_temperature_proxy",
+    "ambient_temperature_proxy": 0.0,
+    "thermal_decay": 0.95,
+    "thermal_gain": 0.01,
+    "thermal_ceiling": 1.0,
+    "normalized_activity_quantum_per_benchmark_tick": 4.0,
+    "full_quantum_steady_state_temperature_proxy": 0.8,
+    "activity_slicing_rule": "preserve_declared_event_order_and_split_aggregate_cost_into_exact_4.0_or_final_remainder_quanta",
+    "cooling_tick_cost": 0.0,
+    "throttle_policy": "insert_zero_activity_cooling_tick_when_next_activity_quantum_would_exceed_thermal_ceiling",
+    "resume_condition": "predicted_temperature_after_next_activity_quantum <= thermal_ceiling",
+    "ceiling_status_values": [
+      "within_ceiling",
+      "throttled",
+      "ceiling_violation"
+    ],
+    "ceiling_violation_condition": "maximum_benchmark_ticks_per_case_exhausted_before_semantic_completion"
+  },
+  "primary_metrics": [
+    "time_to_first_solution_ticks",
+    "time_to_all_solutions_ticks",
+    "solutions_completed",
+    "steady_state_throughput",
+    "throughput_retention_ratio",
+    "latency_growth_ratio"
+  ],
+  "secondary_metrics": [
+    "heat_peak",
+    "thermal_ceiling_status",
+    "thermal_throttle_ticks",
+    "total_normalized_energy",
+    "semantic_completion_ratio",
+    "semantic_output_match"
+  ],
+  "frp_invariant_contract": {
+    "actual_direct_events": 0,
+    "reserved_state_events": 0,
+    "queue_overflow_events": 0,
+    "pending_route_count_final": 0,
+    "transition_fraction": 0.25,
+    "mandatory_routes": [
+      "-1 -> 0 -> 1",
+      "1 -> 0 -> -1"
+    ],
+    "tick_separated_neutral_route": true,
+    "deterministic_seeded_execution": true
+  },
+  "ranking_eligibility_contract": {
+    "require_semantic_completion_ratio": 1.0,
+    "require_semantic_output_match": 1.0,
+    "require_thermal_ceiling_status_not_equal": "ceiling_violation",
+    "require_frp_invariants_for_frp": true
+  },
+  "validation_contract": {
+    "require_exact_architecture_order": true,
+    "require_exact_domain_size_order": true,
+    "require_exact_concurrent_domain_count_order": true,
+    "require_exact_nonlinearity_class_order": true,
+    "require_exact_case_count": 36,
+    "require_same_workload_for_all_architectures": true,
+    "require_same_initial_state_for_all_architectures": true,
+    "require_same_initial_phase_for_all_architectures": true,
+    "require_same_gamma_noise_target_for_all_architectures": true,
+    "require_same_thermal_profile": true,
+    "require_same_cost_profile_and_scenario": true,
+    "require_same_thermal_ceiling": true,
+    "require_same_activity_quantum": true,
+    "require_same_resource_envelope_per_case": true,
+    "require_frp_source_digest_binding": true,
+    "require_deterministic_workload_digest": true,
+    "winner_assertions": []
+  },
+  "digest_contract": {
+    "algorithm": "sha256",
+    "canonicalization": "json.dumps(sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False)",
+    "excluded_field": "workload_profile_sha256"
+  },
+  "workload_profile_sha256": "90658dbd424e2b4d08bc9e230c1bd62426dbce1f7716dacdf2249d2e688d3ca8"
+}
