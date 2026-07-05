@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,6 +47,12 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 BENCHMARKS_DIR = Path(__file__).resolve().parents[2]
 ARCHITECTURE_COMPARISON_DIR = BENCHMARKS_DIR / "architecture_comparison"
 FRP_SOURCE_PATH = REPOSITORY_ROOT / "frp_prototype_v1_7_0.py"
+WORKLOAD_PROFILE_PATH = (
+    BENCHMARKS_DIR
+    / "nonlinear_multitask_convergence"
+    / "workloads"
+    / "nonlinear_multitask_workload_v1.json"
+)
 
 for import_path in (
     ADAPTER_DIR,
@@ -682,6 +689,8 @@ class FRPv170NonlinearMultitaskAdapter:
         )
 
         self.logical_updates = 0
+        self.quiescence_ticks = 0
+        self.quiescence_started = False
         self.event_totals = empty_event_counts()
         self.logical_state_changes = 0
         self.encoded_bit_toggles = 0
@@ -689,6 +698,10 @@ class FRPv170NonlinearMultitaskAdapter:
         self.pending_route_peak = 0
 
         self.step_trace_sha256: list[
+            str
+        ] = []
+
+        self.quiescence_trace_sha256: list[
             str
         ] = []
 
@@ -766,10 +779,19 @@ class FRPv170NonlinearMultitaskAdapter:
         )
 
         require(
+            not self.quiescence_started,
+            "logical workload updates cannot resume after "
+            "terminal quiescence has started",
+        )
+
+        require(
             self.processor.tick_count
-            == self.logical_updates,
-            "M15 tick counter diverged from "
-            "adapter logical update counter",
+            == (
+                self.logical_updates
+                + self.quiescence_ticks
+            ),
+            "M15 tick counter diverged from adapter "
+            "logical-update plus quiescence-tick counters",
         )
 
         states_before = list(
@@ -1069,6 +1091,396 @@ class FRPv170NonlinearMultitaskAdapter:
 
         return result
 
+    def quiescence_step(
+        self,
+    ) -> FRPv170StepResult:
+        """Advance only already-pending M15 neutral routes by one processor tick.
+
+        This operation is terminal-only. It disables automatic target creation,
+        submits no transition requests, does not advance the benchmark logical
+        workload, and still emits the normal architecture event packet so the
+        common cost and thermal layers can account for the physical completion
+        of an already-started tick-separated neutral route.
+        """
+
+        require(
+            self.processor.tick_count
+            == (
+                self.logical_updates
+                + self.quiescence_ticks
+            ),
+            "M15 tick counter diverged from adapter "
+            "logical-update plus quiescence-tick counters",
+        )
+
+        require(
+            len(
+                self.processor.pending_neutral_routes
+            )
+            > 0,
+            "terminal quiescence requires at least one "
+            "pending neutral route",
+        )
+
+        require(
+            len(
+                self.processor.transition_requests
+            )
+            == 0,
+            "terminal quiescence cannot begin with queued "
+            "transition requests",
+        )
+
+        self.quiescence_started = True
+
+        states_before = list(
+            self.processor.states
+        )
+
+        phase_words_before = list(
+            self.processor.phase_words
+        )
+
+        pending_before = len(
+            self.processor.pending_neutral_routes
+        )
+
+        route_event_start = len(
+            self.processor.route_events
+        )
+
+        neutral_routed_before = (
+            self.processor.neutral_routed_events
+        )
+
+        prevented_before = (
+            self.processor.prevented_direct_events
+        )
+
+        neutralized_before = (
+            self.processor.neutralized_conflicts
+        )
+
+        actual_direct_before = (
+            self.processor.actual_direct_events
+        )
+
+        tick_index = self.processor.tick_count
+
+        m15_row = self.processor.tick(
+            tick_index,
+            requests=[],
+            auto_targets_enable=False,
+            gamma_update_valid=False,
+            gamma_targets_q16=None,
+        )
+
+        states_after = list(
+            self.processor.states
+        )
+
+        phase_words_after = list(
+            self.processor.phase_words
+        )
+
+        new_route_events = (
+            self.processor.route_events[
+                route_event_start:
+            ]
+        )
+
+        (
+            event_packet,
+            logical_changes,
+            encoded_toggles,
+        ) = _build_cycle_events(
+            self.processor,
+            states_before=states_before,
+            states_after=states_after,
+            pending_before=pending_before,
+            new_route_events=new_route_events,
+            auto_targets_enable=False,
+        )
+
+        event_packets = (
+            event_packet,
+        )
+
+        event_totals = (
+            aggregate_event_packets(
+                event_packets
+            )
+        )
+
+        for field in EVENT_FIELDS:
+            self.event_totals[field] += (
+                event_totals[field]
+            )
+
+        self.logical_state_changes += (
+            logical_changes
+        )
+
+        self.encoded_bit_toggles += (
+            encoded_toggles
+        )
+
+        self.pending_route_peak = max(
+            self.pending_route_peak,
+            pending_before,
+            len(
+                self.processor.pending_neutral_routes
+            ),
+        )
+
+        self._assert_frp_invariants()
+
+        require(
+            self.processor.actual_direct_events
+            == actual_direct_before,
+            "terminal quiescence created a direct "
+            "opposite-polarity transition",
+        )
+
+        require(
+            self.processor.neutral_routed_events
+            == neutral_routed_before,
+            "terminal quiescence created a new neutral route",
+        )
+
+        require(
+            self.processor.prevented_direct_events
+            == prevented_before,
+            "terminal quiescence processed a new direct request",
+        )
+
+        require(
+            self.processor.neutralized_conflicts
+            == neutralized_before,
+            "terminal quiescence created a new conflict",
+        )
+
+        require(
+            not any(
+                row.get("route_status") == "pending"
+                for row in new_route_events
+            ),
+            "terminal quiescence enqueued a new pending route",
+        )
+
+        require(
+            len(
+                self.processor.pending_neutral_routes
+            )
+            < pending_before,
+            "terminal quiescence made no progress toward "
+            "an empty pending-route queue",
+        )
+
+        quiescence_update_id = (
+            f"{ARCHITECTURE_ID}:"
+            f"domain-{self.domain_index}:"
+            f"quiescence-{self.quiescence_ticks}"
+        )
+
+        metadata: dict[str, Any] = {
+            "logical_update_id": (
+                quiescence_update_id
+            ),
+            "step_kind": (
+                "terminal_quiescence"
+            ),
+            "terminal_quiescence": (
+                True
+            ),
+            "advances_logical_workload": (
+                False
+            ),
+            "new_logical_routes_allowed": (
+                False
+            ),
+            "domain_index": (
+                self.domain_index
+            ),
+            "domain_size": (
+                self.domain_size
+            ),
+            "domain_seed": (
+                self.domain_seed
+            ),
+            "nonlinearity_class": (
+                self.nonlinearity_class
+            ),
+            "logical_iteration_before": (
+                self.logical_updates
+            ),
+            "logical_iteration_after": (
+                self.logical_updates
+            ),
+            "quiescence_tick_before": (
+                self.quiescence_ticks
+            ),
+            "quiescence_tick_after": (
+                self.quiescence_ticks + 1
+            ),
+            "frp_reference": {
+                "version": VERSION,
+                "milestone": MILESTONE,
+                "source_file": (
+                    "frp_prototype_v1_7_0.py"
+                ),
+                "source_sha256": (
+                    FRP_SOURCE_SHA256
+                ),
+                "processor_class": (
+                    "QuantizedReferenceShadowProcessor"
+                ),
+                "execution_model": (
+                    "stateful fixed-point feedback"
+                ),
+            },
+            "m15_tick": (
+                tick_index
+            ),
+            "scheduler_mode": (
+                EXPECTED_SCHEDULER_MODE
+            ),
+            "scheduler_state_name": (
+                m15_row["scheduler_state_name"]
+            ),
+            "transition_fraction": (
+                self.processor.transition_fraction
+            ),
+            "request_lanes": (
+                self.processor.request_lanes
+            ),
+            "auto_targets_enable": (
+                False
+            ),
+            "gamma_update_valid": (
+                False
+            ),
+            "active_neutral_state": (
+                True
+            ),
+            "direct_opposite_polarity_transition": (
+                "forbidden"
+            ),
+            "mandatory_routes": [
+                "-1 -> 0 -> 1",
+                "1 -> 0 -> -1",
+            ],
+            "tick_separated_neutral_route": (
+                True
+            ),
+            "scheduler_7_1_enabled": (
+                False
+            ),
+            "scheduler_1_7_enabled": (
+                False
+            ),
+            "states_before": (
+                states_before
+            ),
+            "states_after": (
+                states_after
+            ),
+            "phase_words_before": (
+                phase_words_before
+            ),
+            "phase_words_after": (
+                phase_words_after
+            ),
+            "logical_state_changes": (
+                logical_changes
+            ),
+            "encoded_bit_toggles": (
+                encoded_toggles
+            ),
+            "pending_route_count_before": (
+                pending_before
+            ),
+            "pending_route_count_after": len(
+                self.processor.pending_neutral_routes
+            ),
+            "new_route_events": [
+                dict(row)
+                for row in new_route_events
+            ],
+            "prevented_direct_events_delta": (
+                self.processor.prevented_direct_events
+                - prevented_before
+            ),
+            "neutral_routed_events_delta": (
+                self.processor.neutral_routed_events
+                - neutral_routed_before
+            ),
+            "neutralized_conflicts_delta": (
+                self.processor.neutralized_conflicts
+                - neutralized_before
+            ),
+            "actual_direct_events": (
+                self.processor.actual_direct_events
+            ),
+            "reserved_state_events": (
+                self.processor.reserved_state_events
+            ),
+            "queue_overflow_events": (
+                self.processor.queue_overflow_events
+            ),
+            "event_packet_count": (
+                1
+            ),
+            "event_packet_phase_order": list(
+                EVENT_PACKET_PHASE_ORDER
+            ),
+            "event_totals": (
+                event_totals
+            ),
+            "m15_trace_row": copy.deepcopy(
+                dict(m15_row)
+            ),
+            "winner_assertions": [],
+        }
+
+        result = FRPv170StepResult(
+            architecture_id=(
+                ARCHITECTURE_ID
+            ),
+            architecture_name=(
+                ARCHITECTURE_NAME
+            ),
+            scheduler_mode=(
+                EXPECTED_SCHEDULER_MODE
+            ),
+            semantic_states=tuple(
+                states_after
+            ),
+            phase_words=tuple(
+                phase_words_after
+            ),
+            event_packets=(
+                event_packets
+            ),
+            logical_update_metadata=(
+                metadata
+            ),
+        )
+
+        result_payload = (
+            result.to_dict()
+        )
+
+        self.quiescence_ticks += 1
+
+        self.quiescence_trace_sha256.append(
+            result_payload[
+                "adapter_step_sha256"
+            ]
+        )
+
+        return result
+
     def snapshot(
         self,
     ) -> dict[str, Any]:
@@ -1101,6 +1513,15 @@ class FRPv170NonlinearMultitaskAdapter:
             ),
             "logical_updates": (
                 self.logical_updates
+            ),
+            "quiescence_ticks": (
+                self.quiescence_ticks
+            ),
+            "processor_ticks": (
+                self.processor.tick_count
+            ),
+            "quiescence_started": (
+                self.quiescence_started
             ),
             "semantic_states": list(
                 self.processor.states
@@ -1158,6 +1579,9 @@ class FRPv170NonlinearMultitaskAdapter:
             ),
             "step_trace_sha256": list(
                 self.step_trace_sha256
+            ),
+            "quiescence_trace_sha256": list(
+                self.quiescence_trace_sha256
             ),
             "frp_invariants_ok": (
                 self.processor.actual_direct_events
@@ -1267,6 +1691,18 @@ def build_frp_v1_7_0_contract(
         "tick_separated_neutral_route": (
             True
         ),
+        "terminal_quiescence": {
+            "enabled": True,
+            "terminal_only": True,
+            "auto_targets_enable": False,
+            "transition_requests": "empty",
+            "gamma_update_valid": False,
+            "advances_logical_workload": False,
+            "emits_accounted_event_packet": True,
+            "completion_condition": (
+                "pending_neutral_routes == 0"
+            ),
+        },
         "transition_fraction": (
             EXPECTED_TRANSITION_FRACTION
         ),
@@ -1599,8 +2035,36 @@ def _self_test_gamma_targets(
 
 
 def run_self_test(
-    profile: Mapping[str, Any],
+    profile: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if profile is None:
+        require(
+            WORKLOAD_PROFILE_PATH.is_file(),
+            "canonical nonlinear multitask workload profile not found",
+        )
+
+        try:
+            loaded_profile = json.loads(
+                WORKLOAD_PROFILE_PATH.read_text(
+                    encoding="utf-8"
+                )
+            )
+        except (
+            OSError,
+            json.JSONDecodeError,
+        ) as exc:
+            fail(
+                "unable to load canonical nonlinear multitask "
+                f"workload profile: {exc}"
+            )
+
+        require(
+            isinstance(loaded_profile, dict),
+            "canonical workload profile root must be an object",
+        )
+
+        profile = loaded_profile
+
     validate_problem_profile(
         profile
     )
@@ -1670,10 +2134,8 @@ def run_self_test(
         "opposite-polarity transition",
     )
 
-    forced.step(
-        gamma_targets_q16=(
-            zero_gamma
-        )
+    forced_quiescence = (
+        forced.quiescence_step()
     )
 
     require(
@@ -1681,6 +2143,65 @@ def run_self_test(
         == 0,
         "tick-separated route created a direct "
         "opposite-polarity transition",
+    )
+
+    require(
+        len(
+            forced.processor.pending_neutral_routes
+        )
+        == 0,
+        "terminal quiescence did not drain the "
+        "forced pending neutral route",
+    )
+
+    require(
+        forced.logical_updates
+        == 1,
+        "terminal quiescence advanced the logical workload",
+    )
+
+    require(
+        forced.quiescence_ticks
+        == 1,
+        "terminal quiescence tick count mismatch",
+    )
+
+    require(
+        forced.processor.tick_count
+        == 2,
+        "M15 processor tick count did not include quiescence",
+    )
+
+    require(
+        forced_quiescence.logical_update_metadata[
+            "step_kind"
+        ]
+        == "terminal_quiescence",
+        "terminal quiescence metadata kind mismatch",
+    )
+
+    require(
+        forced_quiescence.logical_update_metadata[
+            "advances_logical_workload"
+        ]
+        is False,
+        "terminal quiescence metadata advanced the workload",
+    )
+
+    require(
+        forced_quiescence.logical_update_metadata[
+            "auto_targets_enable"
+        ]
+        is False,
+        "terminal quiescence re-enabled automatic targets",
+    )
+
+    require(
+        forced_quiescence.logical_update_metadata[
+            "pending_route_count_after"
+        ]
+        == 0,
+        "terminal quiescence metadata retained a pending route",
     )
 
     first = (
@@ -1902,6 +2423,12 @@ def run_self_test(
         ),
         "forced_route_neutral_routed_events": (
             forced.processor.neutral_routed_events
+        ),
+        "forced_route_quiescence_ticks": (
+            forced.quiescence_ticks
+        ),
+        "forced_route_pending_final": len(
+            forced.processor.pending_neutral_routes
         ),
         "actual_direct_events": (
             snapshot_a[
