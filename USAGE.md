@@ -1,532 +1,684 @@
-# Usage — Fractal Resonance Processor (FRP)
+# Usage — Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor
 
-This document describes how to run the current Fractal Resonance Processor (FRP) prototype.
+This document defines the current command-line usage of the FRP v1.7.0 executable reference.
 
-Current structured-output version:
+Current version:
 
-    v0.9.4
+`FRP v1.7.0`
 
-Current prototype file:
+Current milestone:
 
-    frp_prototype_v0_9_4.py
+`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
 
-Previous reference prototype:
+Main executable reference file:
 
-    frp_prototype_v0_9_3_mobile.py
+`frp_prototype_v1_7_0.py`
 
-Current schema marker:
+Current structured-output schema:
 
-    frp.structured_output.v0.9.4
+`frp.structured_output.v1.7.0`
 
-## 1. Purpose
+Current primary qualification workflow:
 
-FRP v0.9.4 adds structured machine-readable output while preserving the existing text console workflow.
+`.github/workflows/frp-m15-implementation-mapping-qualification.yml`
 
-The prototype can be used for:
+Current published release validation status:
 
-- demonstration execution
-- standard self-test execution
-- benchmark execution
-- JSON self-test summary
-- JSON benchmark summary
-- JSON demo execution log
-- optional per-tick telemetry export
-- reproducibility checks
-- CI verification
-- future hardware-facing signal mapping
-- future FPGA/testbench comparison
+`PASS`
 
-The v0.9.4 usage layer does not change the FRP processor logic.
+## 1. Current Execution Boundary
 
-It adds structured output controls around the existing model.
+FRP v1.7.0 provides:
+
+- demonstration execution;
+- text output;
+- structured JSON output;
+- optional full trace output;
+- M15 self-test execution;
+- scheduler-specific self-test execution;
+- M15 benchmark-matrix generation;
+- fixed-point interface export;
+- balanced ternary hardware-encoding export;
+- quantized hardware shadow export;
+- cycle-exact reference-trace export;
+- deterministic RTL comparison-vector export;
+- SystemVerilog testbench interface export;
+- synthesizable RTL reference-core export;
+- RTL assertion correlation export;
+- reference RTL equivalence export;
+- qualification-closure export.
+
+The current executable preserves the balanced ternary computational kernel and exposes the M15 hardware-facing qualification layers through one command-line interface.
 
 ## 2. Installation
 
-Install dependencies from the repository root:
+Run commands from the repository root.
 
-    pip install -r requirements.txt
+Install declared dependencies:
 
-Current dependency:
+    python -m pip install --upgrade pip
+    python -m pip install -r requirements.txt
+
+Current declared dependency:
 
     numpy>=1.26.0
+
+Verify the executable reference before use:
+
+    python -m py_compile frp_prototype_v1_7_0.py
 
 ## 3. Basic Command Structure
 
 General command form:
 
-    python3 frp_prototype_v0_9_4.py --mode <mode> [options]
+    python frp_prototype_v1_7_0.py [options]
 
-Available modes:
+Primary execution modes:
 
 | Mode | Role |
 |---|---|
-| `demo` | runs a demonstration program |
-| `test` | runs the FRP self-test suite |
-| `bench` | runs the benchmark comparison |
+| `demo` | runs the current FRP structured reference execution |
+| `self-test` | runs the M15 self-test package |
+| `benchmark` | emits the current M15 benchmark matrix |
 
-Output options:
+General mode form:
 
-| Option | Role |
-|---|---|
-| `--output text` | human-readable console output |
-| `--output json` | structured machine-readable JSON output |
-| `--include-telemetry` | includes per-tick telemetry in JSON where applicable |
+    python frp_prototype_v1_7_0.py --mode <mode>
 
-Default output mode:
+Default mode:
 
-    --output text
+`demo`
 
 ## 4. Quick Start
 
-Run a demonstration:
+Run the default demo:
 
-    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1
+    python frp_prototype_v1_7_0.py
 
-Run the standard self-test:
+Run the demo as JSON:
 
-    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5
+    python frp_prototype_v1_7_0.py --mode demo --output json
 
-Run the heavier self-test:
+Run the demo with full trace data:
 
-    python3 frp_prototype_v0_9_4.py --mode test --steps 256 --seeds 10
+    python frp_prototype_v1_7_0.py --mode demo --output json --include-trace
 
-Run the benchmark:
+Run the default M15 self-test:
 
-    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5
+    python frp_prototype_v1_7_0.py --mode self-test --output json
 
-Run the standard self-test as JSON:
+Run the free-scheduler self-test:
 
-    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler free --output json
 
-Run the benchmark as JSON:
+Run the 7/1-scheduler self-test:
 
-    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler 7/1 --output json
 
-Run a demo with JSON telemetry:
+Run the 1/7-scheduler self-test:
 
-    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json --include-telemetry
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler 1/7 --output json
 
-## 5. CLI Options
+Generate the current M15 benchmark matrix:
 
-Current command-line options:
+    python frp_prototype_v1_7_0.py --mode benchmark
+
+## 5. Current CLI Options
 
 | Option | Values | Default | Role |
 |---|---|---|---|
-| `--mode` | `demo`, `test`, `bench` | `demo` | execution mode |
-| `--N` | integer | `32` | number of ternary cells for demo mode |
-| `--steps` | integer | `128` | number of execution ticks |
-| `--seeds` | integer | `5` | number of seeds for test and benchmark modes |
-| `--seed` | integer | `42` | seed for demo mode |
-| `--amp` | number | `0.30` | external drive amplitude |
-| `--cycle-mode` | `free`, `7/1`, `1/7` | `7/1` | scheduler mode |
-| `--gamma` | number | `0.30 pi` | Kuramoto-Sakaguchi phase shift |
-| `--logic-delay-ticks` | integer or null | `None` | logic delay override |
-| `--coupling-delay-ticks` | integer or null | `None` | coupling delay override |
-| `--saturation-beta` | number | `0.75` | nonlinear saturation parameter |
-| `--compression-gain` | number | `1.20` | nonlinear compression gain |
-| `--transition-fraction` | number | `0.25` | maximum transition fraction per tick |
-| `--telemetry-every` | integer | `1` | telemetry interval |
-| `--stop-on-fail` | flag | disabled | stop test on first failure |
-| `--output` | `text`, `json` | `text` | output format |
-| `--include-telemetry` | flag | disabled | include per-tick telemetry in JSON output |
+| `--mode` | `demo`, `self-test`, `benchmark` | `demo` | selects execution mode |
+| `--output` | `text`, `json` | `text` | selects output format where applicable |
+| `--include-trace` | flag | disabled | includes full demo trace data |
+| `--scheduler` | `free`, `7/1`, `1/7` | `7/1` | selects scheduler mode |
+| `--cells` | power-of-two integer, at least `2` | `16` | selects cell count |
+| `--steps` | integer | `64` | selects execution length |
+| `--seed` | integer | `76` | selects deterministic seed |
+| `--transition-fraction` | number | `0.25` | sets maximum transition fraction per tick |
+| `--gamma` | number | `0.30 × pi` | sets phase-shift parameter |
+| `--fractal-alpha` | number | `0.70` | sets hierarchical coupling exponent |
+| `--thermal-beta` | number | `1.20` | sets local thermal nonlinearity coefficient |
+| `--ambient-heat` | number | `0.05` | sets ambient heat baseline |
+| `--thermal-time-constant` | number | `14.0` | sets thermal relaxation time constant |
+| `--thermal-soft-limit` | number | `0.22` | sets thermal soft limit |
+| `--thermal-hard-limit` | number | `0.90` | sets thermal hard limit |
+| `--coupling-nominal` | number | `0.28` | sets nominal coupling strength |
+| `--delay-alpha` | number | `0.30` | sets delay-coupling parameter |
+| `--thermal-diffusion-gain` | number | `0.035` | sets thermal diffusion gain |
+| `--equivalence-tolerance` | number | `1e-12` | sets equivalence comparison tolerance |
+| `--vector-output-dir` | directory path | none | writes deterministic M15 vector files |
 
-Telemetry interval rule:
+## 6. Cell-Count Rule
 
-    telemetry_every must be 1
+The `--cells` value must be:
 
-Per-tick telemetry is mandatory in the internal model.
+- a power of two;
+- at least `2`.
 
-The `--include-telemetry` flag controls whether telemetry is printed in JSON output.
+Valid examples:
 
-## 6. Scheduler Modes
+    --cells 2
+    --cells 8
+    --cells 16
+    --cells 32
 
-FRP supports three scheduler modes.
+Invalid examples:
 
-| Mode | Behavior |
+    --cells 1
+    --cells 10
+    --cells 24
+
+Invalid cell counts are rejected by the command-line parser.
+
+## 7. Scheduler Modes
+
+FRP v1.7.0 supports three scheduler modes.
+
+| Scheduler | Role |
 |---|---|
-| `free` | commit every tick |
-| `7/1` | seven balance ticks and one commit tick |
-| `1/7` | one excite tick and seven neutralize ticks |
+| `free` | free commit behavior |
+| `7/1` | seven balance ticks followed by one commit tick |
+| `1/7` | one excite tick followed by seven neutralize ticks |
 
-### 6.1 Free Mode
+Free scheduler:
 
-Command:
+    python frp_prototype_v1_7_0.py --mode demo --scheduler free
 
-    python3 frp_prototype_v0_9_4.py --mode demo --cycle-mode free
+7/1 scheduler:
 
-Role:
+    python frp_prototype_v1_7_0.py --mode demo --scheduler 7/1
 
-    every tick allows commit behavior
+1/7 scheduler:
 
-### 6.2 7/1 Mode
+    python frp_prototype_v1_7_0.py --mode demo --scheduler 1/7
 
-Command:
+Validated 16-tick scheduler profiles:
 
-    python3 frp_prototype_v0_9_4.py --mode demo --cycle-mode 7/1
+| Scheduler | Expected counts |
+|---|---|
+| `free` | `free = 16` |
+| `7/1` | `balance = 14`, `commit = 2` |
+| `1/7` | `excite = 2`, `neutralize = 14` |
 
-Role:
+Validated default 64-tick 7/1 profile:
 
-    ticks 0 through 6 are balance ticks
-    tick 7 is a commit tick
+`balance = 56`
 
-The 7/1 scheduler separates preparation from commitment.
+`commit = 8`
 
-### 6.3 1/7 Mode
+## 8. Demo Mode
 
-Command:
+Default command:
 
-    python3 frp_prototype_v0_9_4.py --mode demo --cycle-mode 1/7
+    python frp_prototype_v1_7_0.py --mode demo
 
-Role:
+Default configuration:
 
-    tick 0 is an excite tick
-    ticks 1 through 7 are neutralize ticks
+| Parameter | Value |
+|---|---|
+| cells | `16` |
+| steps | `64` |
+| seed | `76` |
+| scheduler | `7/1` |
+| transition fraction | `0.25` |
 
-The 1/7 scheduler separates excitation from recovery and damping.
+The default text report includes:
 
-## 7. Demo Mode
+- FRP version;
+- M15 milestone;
+- execution kind;
+- balanced ternary state-domain status;
+- reserved-state event count;
+- actual direct-event count;
+- scheduler;
+- scheduler counts;
+- switch-load peak;
+- minimum `C_minus_P`;
+- fixed-point topology exactness;
+- fixed-point thermal exactness.
 
-Demo mode runs a small processor program using the register file and instruction layer.
+Expected default text markers include:
 
-Command:
+`FRP v1.7.0`
 
-    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1
+`kind: demo`
 
-The demo program executes:
+`balanced_ternary_state_domain: True`
 
-- `load`
-- `add`
-- `sub`
-- `neg`
-- `compare`
-- `consensus`
-- `halt`
+`reserved_state_events: 0`
 
-Text output includes:
+`actual_direct_events: 0`
 
-- program counter
-- operation
-- instruction status
-- match
-- C_minus_P minimum
-- heat peak
-- switch peak
-- actual direct events
-- prevented direct events
-- neutralized conflicts
-- final register report
+`fixed_point_topology_sum_exact: True`
 
-Demo JSON command:
+`fixed_point_thermal_sum_exact: True`
 
-    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json
+## 9. Demo JSON Output
 
-Demo JSON with telemetry:
+Run:
 
-    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json --include-telemetry
-
-Demo JSON top-level fields:
-
-- `schema`
-- `project`
-- `version`
-- `kind`
-- `parameters`
-- `log`
-- `final_report`
-
-Expected `kind`:
-
-    demo
+    python frp_prototype_v1_7_0.py --mode demo --output json
 
 Expected schema:
 
-    frp.structured_output.v0.9.4
+`frp.structured_output.v1.7.0`
 
-## 8. Self-Test Mode
+Expected version:
 
-Self-test mode runs FRP operations across vector sizes, seeds, scheduler modes, and ternary operations.
+`1.7.0`
 
-Standard self-test command:
+Expected milestone:
 
-    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5
+`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
 
-Expected result:
+Expected kind:
 
-    result=PASS
+`demo`
 
-Heavy self-test command:
+Default top-level fields:
 
-    python3 frp_prototype_v0_9_4.py --mode test --steps 256 --seeds 10
+- `cell_trace_digest`;
+- `configuration`;
+- `hardware_profile`;
+- `kernel`;
+- `kind`;
+- `milestone`;
+- `preload_digest`;
+- `schema`;
+- `summary`;
+- `trace_digest`;
+- `version`.
 
-Expected result:
+The default structured output contains digests for the reference preload, execution trace, and cell trace without embedding the complete trace arrays.
 
-    result=PASS
+## 10. Full Trace Output
 
-Self-test operations:
+Run:
 
-- `neg`
-- `add`
-- `sub`
-- `compare`
-- `consensus`
+    python frp_prototype_v1_7_0.py --mode demo --output json --include-trace
 
-Self-test scheduler modes:
+The full trace output adds:
 
-- `free`
-- `7/1`
-- `1/7`
+- `trace`;
+- `cell_trace`;
+- `route_events`.
 
-Self-test vector sizes:
+With the default configuration:
 
-- `8`
-- `16`
-- `32`
-- `64`
+- `trace` contains `64` tick rows;
+- `cell_trace` contains `1024` cell-tick rows;
+- `route_events` records neutral-routing activity.
 
-Self-test text output includes:
+Use full trace output for exact per-tick or per-cell inspection.
 
-- aggregate metrics
-- failure count
-- final result marker
+Use digest-only structured output when the full arrays are not required.
 
-Important text markers:
+## 11. Demo Summary Invariants
 
-    FRP SELF TEST v0.9.4
-    failures=0
-    result=PASS
+The default demo summary must preserve:
 
-## 9. Self-Test JSON Output
+- `balanced_ternary_state_domain = True`;
+- `reserved_state_events = 0`;
+- `actual_direct_events = 0`;
+- `queue_overflow_events = 0`;
+- `scheduler_counts_valid = True`;
+- `transition_fraction = 0.25`;
+- `fixed_point_topology_sum_exact = True`;
+- `fixed_point_thermal_sum_exact = True`.
 
-Command:
+The default validation boundary also requires:
 
-    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json
+- `switch_load_peak <= 0.25`;
+- `C_minus_P_min > 0.0`.
 
-Expected JSON fields:
+## 12. Balanced Ternary Routing
 
-- `schema`
-- `project`
-- `version`
-- `kind`
-- `parameters`
-- `metrics`
-- `failures`
-- `first_failure`
-- `result`
+Balanced ternary state domain:
 
-Expected values:
+`{-1, 0, 1}`
 
-    schema = frp.structured_output.v0.9.4
-    version = v0.9.4
-    kind = self_test
-    result = PASS
-    failures = 0
+Active neutral state:
 
-Expected invariant checks:
+`0`
 
-    metrics.actual_direct_events = 0
-    metrics.C_minus_P_min > 0
-    metrics.switch_load_peak <= transition_fraction
+Mandatory opposite-polarity routes:
 
-Self-test JSON with telemetry on first failure path:
+`-1 → 0 → 1`
 
-    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json --include-telemetry --stop-on-fail
+`1 → 0 → -1`
 
-The `--include-telemetry` flag adds telemetry to the first failure object when a failure is present.
+Tick-separated execution relation:
 
-## 10. Benchmark Mode
+`tick N: active polarity → 0`
 
-Benchmark mode compares FRP against baseline architectures.
+↓
 
-Command:
+`pending neutral route retained`
 
-    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5
+↓
 
-Benchmark architectures:
+`tick N+1 or later: 0 → target polarity`
 
-- `binary_style_forced_switch`
-- `direct_ternary_commit`
-- `distributed_neutral_ternary`
-- `frp_distributed_resonant`
+Required invariant:
 
-Text output includes:
+`actual_direct_events = 0`
 
-- architecture name
-- case count
-- match
-- C_minus_P minimum
-- heat peak
-- switch peak
-- actual direct events
-- prevented direct events
-- neutralized conflicts
+## 13. Self-Test Mode
 
-Important text markers:
+Run the default self-test as text:
 
-    FRP BENCHMARK v0.9.4
-    binary_style_forced_switch
-    direct_ternary_commit
-    distributed_neutral_ternary
-    frp_distributed_resonant
+    python frp_prototype_v1_7_0.py --mode self-test
 
-## 11. Benchmark JSON Output
+Expected text markers:
 
-Command:
+`FRP v1.7.0`
 
-    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json
+`kind: self_test`
 
-Expected JSON fields:
+`status: PASS`
 
-- `schema`
-- `project`
-- `version`
-- `kind`
-- `parameters`
-- `architectures`
-- `benchmark_supported_position`
+`check_count: 41`
 
-Expected values:
+Run the complete self-test package as JSON:
 
-    schema = frp.structured_output.v0.9.4
-    version = v0.9.4
-    kind = benchmark
+    python frp_prototype_v1_7_0.py --mode self-test --output json
 
-Each architecture entry contains:
+Expected schema:
 
-- `architecture`
-- `cases`
-- `match`
-- `C_minus_P_min`
-- `heat_peak`
-- `switch_load_peak`
-- `actual_direct_events_total`
-- `prevented_direct_events_total`
-- `neutralized_conflicts_total`
+`frp.structured_output.v1.7.0`
 
-Benchmark-supported technical position:
+Expected kind:
 
-    FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct -1 <-> 1 transitions in the tested operational domain.
+`self_test`
 
-## 12. Candidate Invariants
+Expected status:
 
-The current FRP candidate invariants are:
+`PASS`
 
-| Invariant | Required Result |
-|---|---|
-| target match | `match = 1.000` |
-| direct transition safety | `actual_direct_events = 0` |
-| stability | `C_minus_P_min > 0` |
-| transition load | `switch_load_peak <= transition_fraction` |
-| telemetry | `ticks_recorded = steps` |
-| scheduler | counts match selected cycle mode |
+Expected check count:
 
-In v0.9.4 these invariants can be inspected through both text output and JSON output.
+`41`
 
-## 13. Structured Output Validation Commands
+All values in:
 
-Validate self-test JSON manually:
+`checks`
 
-    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json
+must be:
 
-Validate benchmark JSON manually:
+`True`
 
-    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json
+## 14. Scheduler-Specific Self-Tests
 
-Validate demo JSON manually:
+Free scheduler:
 
-    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler free --output json
 
-Validate demo JSON with telemetry:
+7/1 scheduler:
 
-    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json --include-telemetry
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler 7/1 --output json
 
-## 14. Python JSON Inspection Examples
+1/7 scheduler:
 
-Self-test JSON can be inspected with Python:
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler 1/7 --output json
 
-    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json > frp_self_test_v0_9_4.json
+Every scheduler-specific self-test must report:
 
-    python3 -m json.tool frp_self_test_v0_9_4.json
+- version `1.7.0`;
+- M15 milestone;
+- status `PASS`;
+- check count `41`;
+- all checks `True`.
 
-Benchmark JSON can be inspected with Python:
+## 15. Benchmark Mode
 
-    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json > frp_benchmark_v0_9_4.json
+Run:
 
-    python3 -m json.tool frp_benchmark_v0_9_4.json
+    python frp_prototype_v1_7_0.py --mode benchmark
 
-## 15. Text Compatibility Commands
+Benchmark mode emits JSON.
 
-The previous console workflow remains available.
+Expected schema:
 
-Self-test text command:
+`frp.m3.benchmark_matrix.v1.7.0`
 
-    python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5
+Expected kind:
 
-Benchmark text command:
+`benchmark_matrix`
 
-    python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5
+Expected row count:
 
-Demo text command:
+`5`
 
-    python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1
+Expected architecture order:
 
-This allows existing text-based checks to continue while structured JSON validation is added.
+1. `frp_v1_6_0_m14_floating_semantic_reference`;
+2. `frp_v1_7_0_quantized_hardware_shadow`;
+3. `frp_v1_7_0_cycle_exact_vector_package`;
+4. `frp_v1_7_0_systemverilog_correlation_contract`;
+5. `frp_v1_7_0_qualification_closure`.
 
-## 16. Operational Domain
+Equivalent export command:
 
-The tested operational domain remains:
+    python frp_prototype_v1_7_0.py --export-benchmark-matrix
 
-    N >= 8
+## 16. M15 Export Commands
 
-The self-test uses:
+| Artifact | Command flag | Required schema |
+|---|---|---|
+| Fixed-Point Interface Profile | `--export-fixed-point-interface-profile` | `frp.m15.fixed_point_interface_profile.v1.7.0` |
+| Balanced Ternary Hardware Encoding Map | `--export-balanced-ternary-hardware-encoding-map` | `frp.m15.balanced_ternary_hardware_encoding_map.v1.7.0` |
+| Quantized Reference Shadow Model | `--export-quantized-reference-shadow-model` | `frp.m15.quantized_reference_shadow_model.v1.7.0` |
+| Cycle-Exact Reference Trace | `--export-cycle-exact-reference-trace` | `frp.m15.cycle_exact_reference_trace.v1.7.0` |
+| RTL Comparison Vector Package | `--export-rtl-comparison-vector-package` | `frp.m15.rtl_comparison_vector_package.v1.7.0` |
+| SystemVerilog Testbench Interface Map | `--export-systemverilog-testbench-interface-map` | `frp.m15.systemverilog_testbench_interface_map.v1.7.0` |
+| Synthesizable RTL Reference Core | `--export-synthesizable-rtl-reference-core` | `frp.m15.synthesizable_rtl_reference_core.v1.7.0` |
+| RTL Assertion Correlation Harness | `--export-rtl-assertion-correlation-harness` | `frp.m15.rtl_assertion_correlation_harness.v1.7.0` |
+| Reference RTL Equivalence Report | `--export-reference-rtl-equivalence-report` | `frp.m15.reference_rtl_equivalence_report.v1.7.0` |
+| Qualification Closure Manifest | `--export-qualification-closure-manifest` | `frp.m15.qualification_closure_manifest.v1.7.0` |
 
-    N = 8, 16, 32, 64
+Generate each artifact:
 
-The default transition cap is:
+    python frp_prototype_v1_7_0.py --export-fixed-point-interface-profile
+    python frp_prototype_v1_7_0.py --export-balanced-ternary-hardware-encoding-map
+    python frp_prototype_v1_7_0.py --export-quantized-reference-shadow-model
+    python frp_prototype_v1_7_0.py --export-cycle-exact-reference-trace
+    python frp_prototype_v1_7_0.py --export-rtl-comparison-vector-package
+    python frp_prototype_v1_7_0.py --export-systemverilog-testbench-interface-map
+    python frp_prototype_v1_7_0.py --export-synthesizable-rtl-reference-core
+    python frp_prototype_v1_7_0.py --export-rtl-assertion-correlation-harness
+    python frp_prototype_v1_7_0.py --export-reference-rtl-equivalence-report
+    python frp_prototype_v1_7_0.py --export-qualification-closure-manifest
 
-    transition_fraction = 0.25
+Export flags emit JSON.
 
-The default Kuramoto-Sakaguchi phase shift is:
+The qualification closure manifest must report:
 
-    gamma = 0.30 pi
+`status = PASS`
 
-The default telemetry rule is:
+## 17. Deterministic RTL Vector Files
 
-    telemetry_every = 1
+Create an output directory:
 
-## 17. Output Schema Reference
+    mkdir -p vectors_a
 
-For the detailed structured output schema, see:
+Generate the package and write vector files:
 
-    docs/output_schema.md
+    python frp_prototype_v1_7_0.py --export-rtl-comparison-vector-package --vector-output-dir vectors_a > vector-package-a.json
 
-That document defines:
+Expected vector files:
 
-- shared JSON envelope
-- parameters object
-- demo JSON output
-- self-test JSON output
-- benchmark JSON output
-- operation result object
-- summary object
-- diagnostic object
-- telemetry object
-- JSON validation markers
-- CI-oriented validation checks
+- `frp_m15_kernel_vectors.vec`;
+- `frp_m15_pending_routes.trace`;
+- `frp_m15_scheduler_free_vectors.vec`;
+- `frp_m15_scheduler_7_1_vectors.vec`;
+- `frp_m15_scheduler_1_7_vectors.vec`;
+- `frp_m15_full_correlation_vectors.vec`;
+- `frp_m15_cell_trace.vec`;
+- `frp_m15_reference_preload.json`;
+- `frp_m15_trig_lut_q30.vec`;
+- `frp_m15_sha256_manifest.json`.
 
-## 18. Current Status
+## 18. Deterministic Repeat Check
 
-FRP v0.9.4 adds the M2 structured output layer.
+Generate package A:
 
-Current usage layer supports:
+    mkdir -p vectors_a
+    python frp_prototype_v1_7_0.py --export-rtl-comparison-vector-package --vector-output-dir vectors_a > vector-package-a.json
 
-- text demo output
-- text self-test output
-- text benchmark output
-- JSON demo output
-- JSON self-test output
-- JSON benchmark output
-- optional telemetry export
-- machine-readable schema marker
-- reproducibility inspection
-- CI-oriented validation
-- future hardware-facing telemetry mapping
+Generate package B independently:
+
+    mkdir -p vectors_b
+    python frp_prototype_v1_7_0.py --export-rtl-comparison-vector-package --vector-output-dir vectors_b > vector-package-b.json
+
+Compare both vector directories:
+
+    diff -qr vectors_a vectors_b
+
+Required result:
+
+`no differences`
+
+This verifies deterministic byte-identical vector generation from the same source state and inputs.
+
+## 19. Scaling Execution
+
+Run 8 cells:
+
+    python frp_prototype_v1_7_0.py --cells 8 --steps 16 --mode demo --output json
+
+Run 16 cells:
+
+    python frp_prototype_v1_7_0.py --cells 16 --steps 16 --mode demo --output json
+
+Run 32 cells:
+
+    python frp_prototype_v1_7_0.py --cells 32 --steps 16 --mode demo --output json
+
+Expected structure:
+
+| Cells | Hierarchy depth | Request lanes | Packed state width |
+|---|---|---|---|
+| `8` | `3` | `2` | `16 bits` |
+| `16` | `4` | `4` | `32 bits` |
+| `32` | `5` | `8` | `64 bits` |
+
+Every scaling run must preserve:
+
+- `actual_direct_events = 0`;
+- `reserved_state_events = 0`;
+- `queue_overflow_events = 0`;
+- balanced ternary state-domain validity;
+- scheduler-count validity;
+- exact fixed-point topology sum;
+- exact fixed-point thermal sum.
+
+## 20. Saving Output
+
+Save the default demo JSON:
+
+    python frp_prototype_v1_7_0.py --mode demo --output json > frp-v1.7.0-demo.json
+
+Save the full demo trace:
+
+    python frp_prototype_v1_7_0.py --mode demo --output json --include-trace > frp-v1.7.0-demo-trace.json
+
+Save the self-test package:
+
+    python frp_prototype_v1_7_0.py --mode self-test --output json > frp-v1.7.0-self-test.json
+
+Save the benchmark matrix:
+
+    python frp_prototype_v1_7_0.py --mode benchmark > frp-v1.7.0-benchmark-matrix.json
+
+## 21. Minimal Current Validation Sequence
+
+Compile:
+
+    python -m py_compile frp_prototype_v1_7_0.py
+
+Run the default self-test:
+
+    python frp_prototype_v1_7_0.py --mode self-test --output json
+
+Run the three scheduler-specific self-tests:
+
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler free --output json
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler 7/1 --output json
+    python frp_prototype_v1_7_0.py --mode self-test --scheduler 1/7 --output json
+
+Generate the qualification closure manifest:
+
+    python frp_prototype_v1_7_0.py --export-qualification-closure-manifest
+
+Required current result:
+
+`PASS`
+
+## 22. Supporting Comparative Architecture Suite
+
+The separate comparative architecture suite is located at:
+
+`benchmarks/architecture_comparison/`
+
+It compares:
+
+1. `binary_synchronous_reference`;
+2. `binary_clock_gated_reference`;
+3. `direct_ternary_reference`;
+4. `frp_v1_7_0_quantized_shadow`.
+
+Run its end-to-end self-test from that directory:
+
+    python run_architecture_comparison.py --self-test --output text
+
+Canonical comparison output:
+
+`results/reference_comparison_seed_76.json`
+
+Detailed usage:
+
+`benchmarks/architecture_comparison/README.md`
+
+This suite is a supporting validation contour and does not replace the FRP v1.7.0 M15 execution path.
+
+## 23. Current Usage Status
+
+Current version:
+
+`FRP v1.7.0`
+
+Current milestone:
+
+`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+
+Current executable reference:
+
+`frp_prototype_v1_7_0.py`
+
+Current default scheduler:
+
+`7/1`
+
+Current default cells:
+
+`16`
+
+Current default steps:
+
+`64`
+
+Current default seed:
+
+`76`
+
+Current validated self-test result:
+
+`41/41 PASS`
+
+Current primary qualification workflow:
+
+`.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+
+Next planned architecture layer:
+
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
