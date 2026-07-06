@@ -8,7 +8,7 @@ This document defines the installation, first-run, validation, and deterministic
 
 FRP is a ternary resonant coherence processor.
 
-Its computational mechanism is not static enumeration or direct switching of the ternary symbols `-1`, `0`, and `1`.
+Its computational mechanism combines resonant phase dynamics, coherence evolution, stateful feedback, and balanced ternary state retention.
 
 The processor combines:
 
@@ -49,6 +49,10 @@ The processor combines:
 ↓
 
 `local thermal-phase interaction`
+
+↓
+
+`local correlated gamma drift`
 
 ↓
 
@@ -177,7 +181,7 @@ The resonant phase layer drives the dynamic computation.
 
 The ternary layer provides the state, target, transition, and retained-result domain.
 
-Neither layer alone is the complete FRP computational mechanism.
+Together these domains form the complete FRP computational mechanism.
 
 ## 2. What the Current Executable Runs
 
@@ -314,7 +318,7 @@ The phase then evolves as:
 
 `phase_i = (phase_i + phase_velocity_i) mod 2π`
 
-This resonant phase evolution separates FRP from a static ternary transition model.
+This resonant phase evolution forms the processor's evolving computational mechanism.
 
 ## 4. Phase Coherence and Kuramoto Order Parameter R
 
@@ -334,7 +338,7 @@ Current multiscale coherence includes:
 
 The phase field and coherence field are part of the computation.
 
-A final ternary vector alone is not a complete description of the FRP execution path.
+The complete FRP execution path includes the phase field, coherence field, transition history, and retained ternary vector.
 
 ## 5. Hierarchical Fractal Coupling
 
@@ -352,7 +356,7 @@ Current default fractal coupling exponent:
 
 `0.70`
 
-The coupling field is constructed from hierarchy-level interactions rather than one undifferentiated global connection weight.
+The coupling field is constructed from hierarchy-level interactions with level-dependent connection weights.
 
 The hierarchical path includes:
 
@@ -533,9 +537,9 @@ Current mapping:
 
 This mapping connects the resonant phase domain to the balanced ternary state domain.
 
-The ternary target is not applied as an unrestricted immediate state replacement.
+The ternary target enters bounded distributed transition processing.
 
-It remains subject to:
+The target is processed through:
 
 - transition-fraction control;
 - distributed commit;
@@ -581,7 +585,7 @@ Additional current invariants:
 
 ## 13. Distributed Commit
 
-The current processor does not force the complete ternary state vector to switch at once by default.
+The current processor applies bounded distributed transition capacity to the ternary state vector.
 
 Current default transition fraction:
 
@@ -709,7 +713,7 @@ Required result:
 
 `PASS`
 
-A successful compile gate returns without an error message.
+A successful compile gate completes with exit status `0`.
 
 ## 19. Inspect the Current Command Interface
 
@@ -785,9 +789,7 @@ Default 64-tick scheduler counts:
 
 ## 21. What the First Run Demonstrates
 
-The first run is not a static ternary printout.
-
-It executes the current coupled processor path:
+The first run executes the current coupled processor path:
 
 `phase and frequency state`
 
@@ -973,7 +975,7 @@ Validated default 64-tick 7/1 profile:
 
 `commit = 8`
 
-The scheduler is not isolated from the resonant phase layer.
+The scheduler contributes directly to the resonant phase layer.
 
 The current executable also applies scheduler-dependent phase push during phase evolution.
 
@@ -994,7 +996,7 @@ Valid examples:
 
 `32`
 
-Invalid cell counts are rejected by the current command interface.
+The current command interface validates this cell-count rule before execution.
 
 ## 28. Balanced Ternary Hardware Encoding
 
@@ -1026,9 +1028,7 @@ Required invariant:
 
 `reserved_state_events = 0`
 
-The hardware encoding represents the ternary state domain.
-
-It is not the complete FRP computational mechanism.
+The hardware encoding provides the hardware-facing representation of the ternary state domain within the complete FRP computational mechanism.
 
 The resonant phase-coherence core remains upstream of the ternary target, transition, and retained-state path.
 
@@ -1167,7 +1167,7 @@ Compare the generated vector directories:
 
 Required result:
 
-`no differences`
+`byte-identical equality`
 
 Expected vector files:
 
@@ -1223,7 +1223,7 @@ The current processor installation is ready when:
 - the repository has been cloned or unpacked completely;
 - `frp_prototype_v1_7_0.py` exists;
 - the declared dependency is installed;
-- Python compilation completes without error;
+- the compile gate completes with exit status `0`;
 - the default processor demo runs;
 - the structured output reports schema `frp.structured_output.v1.7.0`;
 - the Kuramoto-Sakaguchi resonant phase layer executes;
@@ -1238,6 +1238,28 @@ The current processor installation is ready when:
 - the qualification closure manifest reports `PASS`.
 
 For complete deterministic vector reproduction, also require byte-identical equality between independently generated vector directories.
+
+### Published GitHub Actions validation evidence
+
+The root `README.md` exposes 18 active validation badges for the published FRP workflow chain.
+
+The repository contains 19 GitHub Actions workflow files.
+
+The current release evidence recorded in `TEST_REPORT_v1_7_0.md` and `RELEASE_NOTES_v1_7_0.md` includes:
+
+- validated release commit `5fd9a4f`;
+- `FRP Structured Output #113 — PASS`;
+- `FRP M15 Implementation Mapping and Qualification Closure #1 — PASS`;
+- `FRP Self Test #154 — PASS`;
+- `FRP Benchmark Smoke Test #152 — PASS`.
+
+The current published M15 result is:
+
+`PASS`
+
+The current validated M15 self-test result is:
+
+`41/41 PASS`
 
 ## 36. Saving Output
 
@@ -1261,9 +1283,9 @@ Save the qualification closure manifest:
 
     python frp_prototype_v1_7_0.py --export-qualification-closure-manifest > frp-v1.7.0-qualification-closure.json
 
-## 37. Running Without Virtual-Environment Activation
+## 37. Running Through the Virtual-Environment Interpreter
 
-Activation is optional.
+Direct interpreter invocation provides the complete virtual-environment execution path.
 
 ### Linux and macOS
 
@@ -1309,21 +1331,21 @@ Re-run the current self-test:
 
 ## 39. Troubleshooting
 
-### Python command not found
+### Python command resolution
 
-Try:
+Check the available interpreter command:
 
     python3 --version
 
-Then use `python3` instead of `python`.
+Use `python3` for the remaining commands when that interpreter is available.
 
-### pip is not available as a standalone command
+### pip command resolution
 
 Use:
 
     python -m pip install -r requirements.txt
 
-### NumPy import fails
+### NumPy import verification
 
 Run:
 
@@ -1333,7 +1355,7 @@ Then verify:
 
     python -c "import numpy; print(numpy.__version__)"
 
-### Virtual environment does not activate
+### Virtual-environment interpreter path
 
 Use the virtual-environment interpreter directly as shown in Section 37.
 
@@ -1343,9 +1365,9 @@ Use:
 
     .venv\Scripts\python.exe frp_prototype_v1_7_0.py --mode self-test --output json
 
-Activation is not required when the interpreter is invoked directly.
+Direct interpreter invocation uses the virtual environment immediately.
 
-### `--cells` is rejected
+### `--cells` validation
 
 The current executable requires:
 
@@ -1362,7 +1384,7 @@ Valid examples:
 
 `32`
 
-### Self-test does not report PASS
+### Self-test result diagnosis
 
 Record:
 
@@ -1415,6 +1437,10 @@ The repository preserves the processor architecture and qualification chain:
 ↓
 
 `local thermal-phase interaction`
+
+↓
+
+`local correlated gamma drift`
 
 ↓
 
