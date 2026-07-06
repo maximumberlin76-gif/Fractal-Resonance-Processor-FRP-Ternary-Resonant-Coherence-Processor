@@ -8,7 +8,7 @@ This document defines the complete reproducibility path for the current Fractal 
 
 FRP is a ternary resonant coherence processor.
 
-Its computation is not reducible to static switching between the symbols `-1`, `0`, and `1`.
+FRP computes through resonant phase dynamics, coherence evolution, stateful feedback, and balanced ternary state retention.
 
 The complete current computational path combines:
 
@@ -178,7 +178,7 @@ Current validated M15 self-test result:
 
 ## 1. Reproducibility Target
 
-The reproducibility target is not only the final ternary state vector.
+The reproducibility target is the complete dynamic computational path together with the final retained ternary state vector.
 
 A complete reproduction must preserve the dynamic computational path that produces and retains that state.
 
@@ -286,14 +286,16 @@ The primary reproducibility chain is:
 
 `qualification closure`
 
-A reproduction is incomplete if it verifies only:
+A complete reproduction verifies the connected set of:
 
 - the final `{-1, 0, 1}` vector;
 - the two-bit ternary encoding;
-- one M15 artifact;
-- one self-test marker.
+- the resonant phase-coherence execution path;
+- the retained ternary state path;
+- all required M15 artifacts;
+- the complete self-test matrix.
 
-The resonant phase-coherence path and the retained ternary state path must remain connected.
+The resonant phase-coherence path and the retained ternary state path remain connected throughout the reproduction sequence.
 
 ## 2. Two Inseparable Reproducibility Domains
 
@@ -348,7 +350,7 @@ Use:
 
 `frp_prototype_v1_7_0.py`
 
-Do not substitute an earlier executable file when reproducing the current FRP v1.7.0 M15 layer.
+Current FRP v1.7.0 M15 reproduction uses `frp_prototype_v1_7_0.py`.
 
 Historical executable references remain preserved for their corresponding historical architecture layers.
 
@@ -415,9 +417,7 @@ Preserve:
 - execution date;
 - exact commands used.
 
-A dirty working tree is not automatically invalid.
-
-It must, however, be explicitly recorded because uncommitted source differences can alter deterministic output.
+Record the working-tree state exactly, including every uncommitted source difference, because those differences can alter deterministic output.
 
 ## 6. Required Current Files
 
@@ -444,9 +444,9 @@ Current primary qualification workflow:
 
 - `.github/workflows/frp-m15-implementation-mapping-qualification.yml`.
 
-Historical files remain historical release evidence.
+Historical files preserve release-specific evidence.
 
-They are not substituted for the current v1.7.0 reproduction path.
+The current v1.7.0 reproduction path uses the current v1.7.0 executable, architecture, validation, and workflow files.
 
 ## 7. Install and Compile
 
@@ -463,7 +463,7 @@ Required result:
 
 `PASS`
 
-A successful compile gate returns without an error message.
+A successful compile gate completes with exit status `0`.
 
 ## 8. Current Default Configuration
 
@@ -676,7 +676,7 @@ Therefore, across successive ticks, the temporal relation is:
 
 This distinction must be preserved.
 
-A reproduction must not replace this stateful cross-tick relation with immediate same-step symbolic assignment.
+The reproduction preserves this stateful cross-tick relation exactly.
 
 ## 13. Kuramoto-Sakaguchi Resonant Phase Interaction
 
@@ -698,7 +698,7 @@ The current default nominal phase lag is:
 
 The current hierarchical path evaluates the same interaction through dyadic shell aggregation.
 
-The dense and hierarchical paths remain separate reference representations for correlation and equivalence work.
+The dense and hierarchical paths provide two reference representations for correlation and equivalence work.
 
 ## 14. Hierarchical Fractal Coupling
 
@@ -756,7 +756,7 @@ must reproduce:
 - phase-field behavior;
 - multiscale coherence behavior.
 
-A final state match alone is not sufficient for a topology change.
+Topology reproduction covers deterministic topology, exact fixed-point closure, reference correlation, phase-field behavior, multiscale coherence behavior, and the final state.
 
 ## 16. Phase Velocity
 
@@ -795,9 +795,7 @@ The executable calculates this through:
 
 The same phase-order calculation is used for hierarchical coherence domains.
 
-A reproduction must not treat `R` as an optional decorative metric.
-
-The phase-order path is part of the processor operational state.
+The phase-order path is part of the processor operational state, and reproduction preserves `R` as a required computational metric.
 
 ## 18. Multiscale Phase-Coherence Reproduction
 
@@ -821,7 +819,7 @@ Current telemetry includes:
 
 A change affecting the phase field should inspect all affected scales.
 
-Global phase order alone is not sufficient when local or hierarchical dynamics change.
+Changes affecting local or hierarchical dynamics are evaluated across every affected coherence scale together with global phase order.
 
 ## 19. Delay Dynamics
 
@@ -1018,7 +1016,7 @@ Effective coherence:
 
 This nonlinear relation is part of current v1.7.0 execution.
 
-A reproduction must not substitute raw phase coherence directly for effective coherence.
+The reproduction uses the current effective-coherence relation exactly: raw phase coherence multiplied by coherence compression.
 
 ## 25. Dynamic Stability
 
@@ -1096,7 +1094,7 @@ The derived target remains subject to:
 - pending routes;
 - active neutral routing.
 
-The target is not applied as unrestricted immediate replacement.
+The target enters distributed commit and route processing under transition-capacity and active-neutral execution rules.
 
 ## 27. Balanced Ternary State Domain
 
@@ -1126,13 +1124,9 @@ Reserved-state requirement:
 
 ## 28. Mandatory Active-Neutral Routing
 
-Direct opposite-polarity execution is prohibited.
+Opposite-polarity execution follows mandatory active-neutral routes.
 
-Prohibited direct execution:
-
-`-1 ↔ 1`
-
-Validated routes:
+Validated routing relation:
 
 `-1 → 0 → 1`
 
@@ -1156,7 +1150,7 @@ Required invariant:
 
 The transition history must preserve the route.
 
-A final state vector is not sufficient evidence.
+Route evidence includes transition history and route counters together with the final state vector.
 
 ## 29. Pending Neutral Routes
 
@@ -1166,7 +1160,7 @@ Pending neutral routes preserve:
 - target polarity;
 - earliest ready tick.
 
-A route is applied only when:
+A route is applied when all of the following conditions hold:
 
 - its ready tick has been reached;
 - transition capacity remains;
@@ -1324,17 +1318,13 @@ The full trace exposes:
 
 ## 34. Digest Reproduction
 
-Without:
-
-`--include-trace`
-
-the current structured output preserves:
+Standard structured execution omits the `--include-trace` flag and preserves:
 
 - preload digest;
 - trace digest;
 - cell-trace digest.
 
-Use digest-only execution for:
+Use digest execution for:
 
 - compact deterministic identity;
 - routine CI validation;
@@ -1442,7 +1432,7 @@ FRP v1.7.0 defines ten M15 artifact layers:
 
 The current M15 chain maps the complete processor behavior into deterministic hardware-facing representation.
 
-It does not replace the resonant phase-coherence computational core.
+The resonant phase-coherence computational core remains the source computational mechanism for the M15 mapping chain.
 
 ## 39. Generate the M15 Qualification Directory
 
@@ -1551,9 +1541,7 @@ Required exactness markers:
 
 `fixed_point_thermal_sum_exact = True`
 
-The fixed-point mapping includes the resonant phase domain.
-
-It is not limited to ternary state encoding.
+The fixed-point mapping covers the resonant phase domain together with the balanced ternary state domain.
 
 ## 43. Balanced Ternary Hardware Encoding
 
@@ -1591,9 +1579,7 @@ Required invariant:
 
 `reserved_state_events = 0`
 
-The encoding represents the ternary state domain.
-
-It is not the whole processor computation.
+The encoding represents the balanced ternary state domain inside the complete resonant processor computation.
 
 ## 44. Quantized Hardware Shadow Reproduction
 
@@ -1686,11 +1672,11 @@ Compare:
 
 Required result:
 
-`no differences`
+`byte-identical equality`
 
 Every corresponding generated file must be byte-identical.
 
-Semantic similarity is not sufficient.
+Acceptance requires byte-identical equality.
 
 ## 48. Vector SHA-256 Integrity
 
@@ -1864,7 +1850,7 @@ Expected architecture order:
 
 This matrix represents the M15 implementation-mapping chain.
 
-It is separate from the Comparative Architecture Benchmark Suite.
+The Comparative Architecture Benchmark Suite provides its own supporting comparison contour.
 
 ## 56. Scaling Reproduction
 
@@ -2063,7 +2049,7 @@ Compare:
 
 Required result:
 
-`no differences`
+`byte-identical equality`
 
 ## 61. Published FRP v1.7.0 Validation Evidence
 
@@ -2096,7 +2082,7 @@ Published M15 self-test result:
 
 These values are release-specific validation evidence.
 
-Later documentation or maintenance commits must not be presented as the original validated release commit.
+The validated release commit remains recorded exactly as `5fd9a4f`, while later documentation and maintenance commits retain their own commit identities.
 
 ## 62. Historical Release Preservation
 
@@ -2120,15 +2106,15 @@ Examples:
 - `frp_prototype_v1_6_0.py`;
 - `frp_prototype_v1_7_0.py`.
 
-Historical workflows must not be silently redirected to the current executable.
+Historical workflows retain their release-specific executable bindings.
 
-Historical schemas must not be silently rewritten as current schemas.
+Historical schemas retain their release-specific schema identities.
 
 Historical test reports remain release-specific records.
 
 ## 63. Supporting Comparative Architecture Reproduction
 
-The Comparative Architecture Benchmark Suite is a separate supporting validation contour.
+The Comparative Architecture Benchmark Suite adds a supporting validation contour.
 
 Directory:
 
@@ -2141,9 +2127,7 @@ Compared architecture references:
 3. `direct_ternary_reference`;
 4. `frp_v1_7_0_quantized_shadow`.
 
-The FRP reference remains a resonant phase-coherence architecture.
-
-It must not be interpreted as a static ternary switch model.
+The FRP reference remains a resonant phase-coherence architecture with balanced ternary state retention.
 
 ## 64. Comparative Architecture Self-Test
 
@@ -2155,7 +2139,7 @@ Run:
 
     python run_architecture_comparison.py --self-test --output text
 
-The comparison suite is separate from the primary M15 qualification path.
+The comparison suite runs alongside the primary M15 qualification path as a supporting validation contour.
 
 ## 65. Canonical Comparative Architecture Run
 
@@ -2191,19 +2175,9 @@ Required winner assertions:
 
 `[]`
 
-The comparison result remains data.
+The comparison result remains machine-readable data.
 
-The validation workflow must not assert:
-
-`FRP energy < binary energy`
-
-`FRP temperature < binary temperature`
-
-`FRP latency < binary latency`
-
-Reproducibility verifies comparison integrity.
-
-It does not manufacture a winner.
+Reproducibility verifies deterministic comparison integrity under the recorded qualification policy.
 
 ## 67. Supporting Hardware-Sensitivity Reproduction
 
@@ -2313,7 +2287,7 @@ Check:
 - generator changes;
 - manifest digests.
 
-Do not relax thresholds merely to hide a regression.
+Preserve the recorded thresholds during regression diagnosis.
 
 ## 69. Reproducibility Record Template
 
@@ -2420,9 +2394,7 @@ When the current architecture layer changes, review:
 - `docs/core_principles.md`;
 - `docs/resonance_computation.md`.
 
-A file describing what FRP computes must not collapse the processor into static ternary switching.
-
-The complete computational subject must remain visible where relevant:
+Files describing FRP computation preserve the complete computational subject where relevant:
 
 `Kuramoto-Sakaguchi resonant phase dynamics`
 
