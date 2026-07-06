@@ -8,7 +8,7 @@ This document defines how to run, inspect, validate, export, and reproduce the c
 
 FRP is a ternary resonant coherence processor.
 
-Its computational mechanism is not static switching between the symbols `-1`, `0`, and `1`.
+Its computational mechanism combines resonant phase dynamics, coherence evolution, stateful feedback, and balanced ternary state retention.
 
 The complete current processor path combines:
 
@@ -142,13 +142,7 @@ The word `prototype` identifies the current executable reference form.
 
 The processor itself is defined by the complete resonant computational mechanism and the balanced ternary state-retention mechanism.
 
-The processor is not reducible to:
-
-- a three-symbol register;
-- a static ternary truth table;
-- direct ternary state replacement;
-- a two-bit hardware encoding table;
-- binary-style switching with three labels.
+The processor identity is defined by the complete connected path from resonant phase dynamics to retained balanced ternary state.
 
 The current executable reference contains:
 
@@ -172,9 +166,9 @@ The current executable reference contains:
 - retained ternary state;
 - deterministic M15 hardware-facing mapping.
 
-## 2. Two Inseparable Computational Domains
+## 2. Two Connected Computational Domains
 
-The FRP computational core contains two inseparable domains.
+The FRP computational core contains two connected domains.
 
 ### 2.1 Resonant dynamic domain
 
@@ -208,7 +202,7 @@ The resonant dynamic domain drives the evolving computational process.
 
 The balanced ternary domain provides the state, target, transition, and retained-result layer.
 
-Neither domain alone is the complete FRP computational mechanism.
+Together these domains form the complete FRP computational mechanism.
 
 ## 3. Complete Computational Chain
 
@@ -361,7 +355,7 @@ Current default fractal coupling exponent:
 
 `fractal_alpha = 0.70`
 
-The resonant phase layer separates FRP from a purely logical ternary transition model.
+The resonant phase layer provides the processor's evolving computational dynamics.
 
 ## 5. Phase Evolution
 
@@ -411,7 +405,7 @@ The resulting value represents collective phase alignment.
 
 The current processor also evaluates the same phase-order relation across hierarchical domains.
 
-The phase-order path is not optional presentation telemetry.
+The phase-order path contributes directly to operational processor-state evaluation.
 
 It is part of the operational processor state.
 
@@ -437,7 +431,7 @@ Current multiscale outputs include:
 - global phase coherence;
 - coherence dispersion across clusters.
 
-The current processor therefore does not reduce coherence to one final scalar alone.
+The current processor preserves the global coherence scalar together with multiscale coherence metrics across the hierarchy.
 
 ## 8. Hierarchical Fractal Coupling
 
@@ -583,7 +577,7 @@ The current resonant coupling therefore depends on:
 
 `thermal factor of cell j`
 
-The thermal field is not independent from the phase computation.
+The thermal field feeds directly into the phase computation.
 
 ## 12. Local Gamma Drift
 
@@ -701,7 +695,7 @@ to:
 
 The target is then processed through the distributed transition mechanism.
 
-The target is not applied as unrestricted immediate state replacement.
+The target enters distributed transition processing under transition-capacity and active-neutral execution rules.
 
 ## 16. Balanced Ternary State Domain
 
@@ -740,13 +734,7 @@ Required reserved-state marker:
 
 ## 17. Mandatory Active-Neutral Routing
 
-Direct opposite-polarity execution is prohibited.
-
-Prohibited direct execution:
-
-`-1 ↔ 1`
-
-Validated routes:
+Opposite-polarity execution follows the mandatory active-neutral routes:
 
 `-1 → 0 → 1`
 
@@ -768,9 +756,9 @@ Required invariant:
 
 `actual_direct_events = 0`
 
-The final state vector alone is not sufficient evidence of correct processor behavior.
+Correct processor behavior is evidenced by the transition path together with the final state vector.
 
-The transition path must preserve the active neutral route.
+The transition path preserves the active neutral route.
 
 ## 18. Distributed Commit
 
@@ -813,7 +801,7 @@ Compile the current executable:
 
     python -m py_compile frp_prototype_v1_7_0.py
 
-A successful compile gate returns without an error message.
+A successful compile gate returns exit status `0`.
 
 Detailed installation instructions:
 
@@ -908,7 +896,7 @@ Generate the current M15 benchmark matrix:
 | `--equivalence-tolerance` | number | `1e-12` | sets floating equivalence tolerance |
 | `--vector-output-dir` | directory path | none | writes deterministic M15 vector files |
 
-M15 export flags are documented separately below.
+M15 export flags appear in dedicated sections below.
 
 ## 23. Current Default Configuration
 
@@ -993,9 +981,7 @@ Expected leading text markers:
 
 ## 26. What Demo Mode Actually Computes
 
-Demo mode should not be interpreted as static ternary state playback.
-
-It exercises the current coupled path:
+Demo mode executes the complete coupled processor path:
 
 `current phase field`
 
@@ -1232,27 +1218,23 @@ The full trace exposes the processor evolution needed for detailed inspection of
 - coherence;
 - stability.
 
-## 33. Digest-Only Versus Full Trace Output
+## 33. Digest Output and Full Trace Output
 
-Without:
-
-`--include-trace`
-
-the structured output retains:
+Default structured output retains:
 
 - preload digest;
 - trace digest;
 - cell-trace digest.
 
-This provides compact deterministic identity without embedding the full arrays.
+This provides compact deterministic identity through the recorded digests.
 
-With:
+Full trace output uses:
 
 `--include-trace`
 
-the complete arrays are included.
+and includes the complete arrays.
 
-Use digest-only output for:
+Use digest output for:
 
 - compact CI inspection;
 - deterministic identity checks;
@@ -1443,7 +1425,7 @@ Current default:
 
 The command expects a numeric value in radians.
 
-The shell performs no symbolic `pi` evaluation.
+Provide gamma as a concrete numeric radian value.
 
 A concrete numeric example is:
 
@@ -1657,7 +1639,7 @@ Run:
 
 Benchmark mode emits JSON.
 
-The `--output` choice does not convert benchmark mode into the compact text report.
+The benchmark path emits machine-readable JSON across the CLI output selector.
 
 Expected schema:
 
@@ -1683,7 +1665,7 @@ Expected architecture order:
 
 The benchmark matrix represents the current M15 implementation-mapping chain.
 
-It is not the separate Comparative Architecture Benchmark Suite.
+The Comparative Architecture Benchmark Suite provides a dedicated supporting execution path under `benchmarks/architecture_comparison/`.
 
 ## 54. Benchmark-Matrix Export Flag
 
@@ -1799,9 +1781,7 @@ All M15 export flags emit JSON.
 
 Benchmark mode also emits JSON.
 
-This remains true without:
-
-`--output json`
+This behavior applies with the default CLI output selection.
 
 Examples:
 
@@ -1862,9 +1842,7 @@ Reserved integer code:
 
 `2`
 
-The encoding is the hardware representation of the ternary state domain.
-
-It is not the complete FRP computational mechanism.
+The encoding provides the hardware-facing representation of the balanced ternary state domain within the complete FRP computational mechanism.
 
 ## 60. Quantized Reference Shadow Model
 
@@ -1950,7 +1928,7 @@ Compare the generated directories:
 
 Required result:
 
-`no differences`
+`byte-identical directory equality`
 
 The generated vector directories must be byte-identical.
 
@@ -2208,7 +2186,7 @@ Detailed reproducibility requirements:
 
 ## 76. Supporting Comparative Architecture Suite
 
-The separate Comparative Architecture Benchmark Suite is located at:
+The Comparative Architecture Benchmark Suite is located at:
 
 `benchmarks/architecture_comparison/`
 
@@ -2221,7 +2199,7 @@ It compares:
 
 The FRP architecture in this suite remains a resonant phase-coherence architecture.
 
-It must not be interpreted as merely a static ternary switch model.
+The comparison adapter carries the resonant phase-coherence architecture into the shared deterministic workload and cost-model interface.
 
 ## 77. Comparative Architecture Self-Test
 
@@ -2235,7 +2213,7 @@ Run:
 
 The comparison suite is a supporting validation contour.
 
-It does not replace the main FRP v1.7.0 M15 execution path.
+The comparison suite provides a supporting validation contour alongside the main FRP v1.7.0 M15 execution path.
 
 ## 78. Canonical Comparative Architecture Run
 
@@ -2275,9 +2253,9 @@ Run the hardware-sensitivity comparison self-test:
 
     python run_hardware_sensitivity_comparison.py --hardware-sensitivity-profile profiles/hardware_sensitivity_cost_profile_v1.json --self-test --output json
 
-These commands remain separate from the primary processor execution path.
+These commands serve the supporting hardware-sensitivity validation path.
 
-## 80. Current Usage Boundaries
+## 80. Current Usage Paths
 
 Use:
 
@@ -2307,9 +2285,9 @@ Use:
 
 `benchmarks/architecture_comparison/`
 
-for the separate Comparative Architecture Benchmark Suite.
+for the Comparative Architecture Benchmark Suite.
 
-Do not merge these different execution purposes into one result claim.
+Report each execution purpose under its own result scope.
 
 ## 81. Current Technical Chain
 
