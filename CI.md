@@ -4,11 +4,71 @@
 
 This document defines the Continuous Integration validation structure of the Fractal Resonance Processor (FRP) repository.
 
-FRP is a ternary resonant coherence processor.
+Current version:
 
-The CI subject is not limited to static validation of the symbols `-1`, `0`, and `1`.
+`FRP v1.7.0`
 
-The complete computational subject preserved across the current validation chain is:
+Current milestone:
+
+`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+
+Main executable reference file:
+
+`frp_prototype_v1_7_0.py`
+
+Current primary milestone workflow:
+
+`.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+
+Current validation status:
+
+`PASS`
+
+Current validated M15 self-test result:
+
+`41/41 PASS`
+
+Current test report:
+
+`TEST_REPORT_v1_7_0.md`
+
+Current validation index:
+
+`FRP_VALIDATION_INDEX_v1_7_0.md`
+
+Current release notes:
+
+`RELEASE_NOTES_v1_7_0.md`
+
+Next planned architecture layer:
+
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
+
+## 1. Purpose
+
+The FRP Continuous Integration layer preserves validation traceability across the complete published processor architecture progression.
+
+The CI structure validates:
+
+- the resonant phase-coherence computational core;
+- the balanced ternary state and retained-result domain;
+- structured machine-readable execution;
+- release-specific architecture milestones;
+- deterministic M15 implementation mapping;
+- stateful quantized hardware-shadow execution;
+- cycle-exact integer reference traces;
+- deterministic RTL comparison vectors;
+- SystemVerilog interface mapping;
+- synthesizable RTL reference-core mapping;
+- RTL assertion correlation;
+- floating-to-quantized reference correlation;
+- exact quantized deterministic replay;
+- qualification closure;
+- comparative architecture benchmark integrity;
+- hardware-sensitivity profile qualification;
+- hardware-sensitivity comparison qualification.
+
+The current validated processor chain is:
 
 `balanced ternary state and retained-result domain {-1, 0, 1}`
 
@@ -42,7 +102,7 @@ The complete computational subject preserved across the current validation chain
 
 ↓
 
-`multiscale phase-coherence evaluation`
+`multiscale phase coherence`
 
 ↓
 
@@ -82,7 +142,11 @@ The complete computational subject preserved across the current validation chain
 
 ↓
 
-`deterministic fixed-point implementation mapping`
+`structured machine-readable validation`
+
+↓
+
+`fixed-point implementation mapping`
 
 ↓
 
@@ -110,138 +174,19 @@ The complete computational subject preserved across the current validation chain
 
 ↓
 
-`reference equivalence`
+`floating-to-quantized reference correlation`
+
+↓
+
+`exact quantized deterministic replay`
 
 ↓
 
 `qualification closure`
 
-The balanced ternary state and retained-result domain is:
+## 2. Processor Computational Subject Under CI
 
-`{-1, 0, 1}`
-
-The active neutral state is:
-
-`0`
-
-Validated opposite-polarity routes are:
-
-`-1 → 0 → 1`
-
-`1 → 0 → -1`
-
-Validated kernel invariant:
-
-`actual_direct_events = 0`
-
-Current version:
-
-`FRP v1.7.0`
-
-Current milestone:
-
-`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
-
-Main executable reference file:
-
-`frp_prototype_v1_7_0.py`
-
-Current primary milestone workflow:
-
-`.github/workflows/frp-m15-implementation-mapping-qualification.yml`
-
-Current release validation status:
-
-`PASS`
-
-Current validated M15 self-test result:
-
-`41/41 PASS`
-
-Current release validation record:
-
-`TEST_REPORT_v1_7_0.md`
-
-Current validation index:
-
-`FRP_VALIDATION_INDEX_v1_7_0.md`
-
-Current release notes:
-
-`RELEASE_NOTES_v1_7_0.md`
-
-## 1. Purpose
-
-The FRP Continuous Integration layer preserves validation traceability across the complete published processor architecture progression.
-
-The repository CI structure contains:
-
-- foundational executable validation;
-- foundational resonant benchmark smoke validation;
-- structured machine-readable output validation;
-- release-specific architecture milestone validation;
-- current M15 implementation-mapping qualification;
-- deterministic fixed-point qualification;
-- balanced ternary hardware-interface validation;
-- quantized resonant-state execution validation;
-- cycle-exact reference validation;
-- RTL comparison-vector qualification;
-- reference equivalence validation;
-- comparative architecture benchmark qualification;
-- hardware-sensitivity profile qualification;
-- hardware-sensitivity comparison qualification.
-
-The current release-validation boundary is:
-
-`FRP v1.7.0 executable reference`
-
-↓
-
-`complete resonant phase-coherence computational core`
-
-↓
-
-`balanced ternary state-retention mechanism`
-
-↓
-
-`M15 fixed-point implementation mapping`
-
-↓
-
-`quantized hardware shadow`
-
-↓
-
-`cycle-exact integer reference`
-
-↓
-
-`deterministic RTL comparison domain`
-
-↓
-
-`SystemVerilog interface contract`
-
-↓
-
-`RTL assertion correlation`
-
-↓
-
-`reference equivalence`
-
-↓
-
-`qualification closure`
-
-Historical workflows remain bound to the release-specific executable files they were created to validate.
-
-They are not silently redirected to the current executable reference.
-
-## 2. CI Validation Subject
-
-The current processor has two inseparable computational domains.
+The current FRP architecture contains two connected computational domains.
 
 ### 2.1 Resonant dynamic domain
 
@@ -257,18 +202,18 @@ The resonant dynamic domain contains:
 - scheduler-dependent phase contribution;
 - delayed frequency response;
 - distributed thermal state;
-- thermal coupling degradation;
+- thermal coupling-factor evolution;
 - local correlated gamma drift;
 - phase evolution;
 - global Kuramoto order parameter `R`;
-- pair-domain coherence;
-- cluster coherence;
-- supercluster coherence;
+- pair-domain phase coherence;
+- cluster phase coherence;
+- supercluster phase coherence;
 - global phase coherence;
 - nonlinear coherence compression;
 - dynamic stability evaluation.
 
-### 2.2 Balanced ternary state and retention domain
+### 2.2 Balanced ternary state and retained-result domain
 
 The balanced ternary domain contains:
 
@@ -278,6 +223,7 @@ The balanced ternary domain contains:
 - transition requests;
 - distributed commit;
 - transition-fraction limits;
+- request lanes;
 - pending neutral routes;
 - mandatory tick separation;
 - scheduler-controlled execution;
@@ -285,27 +231,13 @@ The balanced ternary domain contains:
 
 The resonant dynamic domain drives the evolving computation.
 
-The ternary domain provides the state, target, transition, and retained-result layer.
+The balanced ternary domain provides the state, target, transition, and retained-result layer.
 
-The CI chain must preserve both.
+### 2.3 Current tick execution chain
 
-## 3. Complete Computational Core Under Validation
+The current executable preserves the following operational sequence:
 
-The complete current computational path is:
-
-`current phase field`
-
-↓
-
-`current frequency state`
-
-↓
-
-`current ternary state`
-
-↓
-
-`scheduler state`
+`scheduler-state selection`
 
 ↓
 
@@ -317,7 +249,7 @@ The complete current computational path is:
 
 ↓
 
-`phase-derived ternary target extraction`
+`phase-derived ternary target processing`
 
 ↓
 
@@ -329,7 +261,7 @@ The complete current computational path is:
 
 ↓
 
-`delayed frequency response`
+`stateful delayed frequency response`
 
 ↓
 
@@ -385,34 +317,37 @@ The complete current computational path is:
 
 ↓
 
-`structured trace capture`
+`structured telemetry and trace capture`
+
+Across successive ticks:
+
+`evolved phase field`
 
 ↓
 
-`next processor tick`
+`next phase-derived ternary target`
 
-The current CI does not reduce this path to a final ternary vector.
+↓
 
-The M15 qualification chain checks different boundaries of this computation through:
+`distributed transition`
 
-- executable self-tests;
-- structured-output invariants;
-- fixed-point contracts;
-- phase-domain mapping;
-- gamma-domain mapping;
-- quantized shadow execution;
-- cycle-exact traces;
-- deterministic vector packages;
-- floating-to-quantized correlation;
-- exact quantized replay.
+↓
 
-## 4. Kuramoto-Sakaguchi Core Validation Subject
+`active neutral routing`
 
-The current resonant phase interaction uses:
+↓
+
+`retained coherent ternary state`
+
+## 3. Core Dynamic Relations Preserved by the CI Chain
+
+### 3.1 Kuramoto-Sakaguchi phase interaction
+
+The current phase interaction uses:
 
 `sin(phase_j - phase_i - gamma_effective_i)`
 
-The interaction is combined with:
+The interaction combines:
 
 - hierarchical coupling weights;
 - local thermal coupling factors;
@@ -431,25 +366,9 @@ Current default fractal coupling exponent:
 
 `fractal_alpha = 0.70`
 
-The current M15 qualification chain preserves this domain through:
+### 3.2 Phase evolution
 
-- phase fixed-point representation;
-- gamma fixed-point representation;
-- deterministic trigonometric lookup;
-- quantized phase execution;
-- cycle-exact phase traces;
-- deterministic gamma-noise stimulus;
-- phase error bounds in reference equivalence.
-
-The current CI does not contain one isolated assertion named:
-
-`Kuramoto-Sakaguchi PASS`
-
-Instead, the resonant core is validated through the complete set of phase, gamma, topology, trace, self-test, and equivalence contracts.
-
-## 5. Phase Evolution Validation Subject
-
-The current floating reference phase velocity is composed from:
+The current floating reference phase velocity combines:
 
 `0.060 × current frequency`
 
@@ -465,109 +384,32 @@ The phase update is:
 
 `phase_i = (phase_i + phase_velocity_i) mod 2π`
 
-The CI chain preserves:
-
-- deterministic current-frequency state;
-- deterministic scheduler sequence;
-- deterministic coupling topology;
-- phase wrapping;
-- phase fixed-point representation;
-- cycle-exact trace behavior;
-- floating-to-quantized phase correlation.
-
-Current maximum floating-to-quantized phase error:
-
-`0.02`
-
-## 6. Kuramoto Order Parameter R and Coherence Validation Subject
+### 3.3 Kuramoto order parameter R
 
 The current global phase order is:
 
 `R = sqrt(mean(cos(phase))² + mean(sin(phase))²)`
 
-The current architecture also evaluates phase coherence across:
+The same phase-order relation supports hierarchical coherence evaluation.
 
-- pair domains;
-- cluster domains;
-- supercluster domains;
-- the global phase field.
+### 3.4 Multiscale phase coherence
 
-The M15 CI path validates coherence through:
+Current coherence domains include:
 
-- deterministic executable behavior;
-- self-test package coverage;
-- quantized shadow execution;
-- cycle-exact traces;
-- floating-to-quantized coherence correlation;
-- `C(t)` correlation;
-- `C(t) - P(t)` sign correlation.
+- pair domain;
+- cluster domain;
+- supercluster domain;
+- global domain.
 
-Current maximum floating-to-quantized coherence error:
+### 3.5 Stateful delay dynamics
 
-`0.01`
-
-Current maximum floating-to-quantized `C` error:
-
-`0.01`
-
-The phase-order and coherence path is part of the processor computation.
-
-It is not only presentation telemetry.
-
-## 7. Hierarchical Fractal Coupling Validation Subject
-
-The current architecture uses a dyadic hierarchical ultrametric topology.
-
-The cell count must be:
-
-- a power of two;
-- at least `2`.
-
-Current default cell count:
-
-`16`
-
-Current default hierarchy depth:
-
-`4`
-
-Current validated scaling profiles:
-
-| Cells | Hierarchy depth | Request lanes | Packed state width |
-|---|---:|---:|---:|
-| `8` | `3` | `2` | `16 bits` |
-| `16` | `4` | `4` | `32 bits` |
-| `32` | `5` | `8` | `64 bits` |
-
-The CI chain validates:
-
-- topology generation at 8 cells;
-- topology generation at 16 cells;
-- topology generation at 32 cells;
-- scaling execution at 8 cells;
-- scaling execution at 16 cells;
-- scaling execution at 32 cells;
-- exact fixed-point topology normalization.
-
-Required marker:
-
-`fixed_point_topology_sum_exact = True`
-
-## 8. Delay-Dynamics Validation Subject
-
-Each current processor cell maintains:
-
-- base frequency;
-- target frequency;
-- current frequency.
-
-Current delayed frequency relation:
-
-`frequency_next = frequency_current + delay_alpha × (frequency_target - frequency_current)`
-
-Current default:
+Current default delay coefficient:
 
 `delay_alpha = 0.30`
+
+The delayed response is:
+
+`frequency_next = frequency_current + delay_alpha × (frequency_target - frequency_current)`
 
 Frequency lag contributes to:
 
@@ -576,111 +418,48 @@ Frequency lag contributes to:
 - operational coherence;
 - dynamic stability.
 
-The M15 equivalence layer includes a frequency correlation boundary.
+### 3.6 Local thermal-phase interaction
 
-Current maximum floating-to-quantized frequency error:
+Each cell tracks:
 
-`0.0001`
-
-## 9. Thermal-Phase Validation Subject
-
-The current architecture maintains a distributed local thermal field.
-
-The thermal path includes:
-
-- local generated power;
-- switching contribution;
-- frequency-lag contribution;
+- generated power;
 - thermal dissipation;
-- hierarchical thermal diffusion;
+- thermal diffusion;
 - local heat;
-- local thermal overload.
+- thermal overload.
 
-The thermal field feeds back into:
+The thermal field feeds into:
 
-- effective coupling;
-- effective gamma;
+- effective resonant coupling;
+- local gamma drift;
 - nonlinear coherence compression.
 
-The current CI validates this domain through:
-
-- exact fixed-point thermal normalization;
-- quantized shadow execution;
-- cycle-exact trace generation;
-- floating-to-quantized heat correlation;
-- `P(t)` correlation;
-- `C(t) - P(t)` correlation.
-
-Required exactness marker:
-
-`fixed_point_thermal_sum_exact = True`
-
-Current maximum floating-to-quantized heat error:
-
-`0.001`
-
-Current maximum floating-to-quantized `P` error:
-
-`0.001`
-
-## 10. Local Gamma-Drift Validation Subject
+### 3.7 Local correlated gamma drift
 
 The current processor tracks:
 
 - nominal gamma;
-- gamma-noise targets;
+- deterministic gamma-noise targets;
 - correlated gamma-noise state;
 - local thermal overload;
 - effective local gamma;
 - gamma drift.
 
-The M15 deterministic interface externalizes gamma-noise targets.
+The M15 verification path maps this domain through:
 
-Current cycle-exact traces contain gamma-noise target vectors for all cells.
+- `GAMMA_S32`;
+- `gamma_noise_update_valid`;
+- `gamma_noise_target_q`;
+- deterministic cycle-exact gamma stimulus;
+- floating-to-quantized gamma correlation.
 
-Current default configuration requires:
+### 3.8 Nonlinear coherence compression and dynamic stability
 
-`16 gamma-noise target values per trace row`
-
-The SystemVerilog verification stimulus interface includes:
-
-`gamma_noise_target_q`
-
-The M15 architecture contract also requires:
-
-`GAMMA_NOISE_TARGETS_Q`
-
-The current maximum floating-to-quantized gamma error is:
-
-`0.000001`
-
-## 11. Nonlinear Coherence Compression Validation Subject
-
-The current processor applies nonlinear compression to raw phase coherence.
-
-The computational relation is:
+The current processor applies:
 
 `effective coherence = raw phase coherence × coherence compression`
 
-The compression factor responds to:
-
-- mean thermal overload;
-- stability-margin pressure.
-
-The CI path preserves this behavior through:
-
-- deterministic executable execution;
-- quantized shadow behavior;
-- coherence correlation;
-- `C(t)` correlation;
-- `C(t) - P(t)` sign correlation;
-- exact quantized replay.
-
-The CI must not validate a replacement path that bypasses the current nonlinear coherence stage while presenting it as equivalent processor behavior.
-
-## 12. Dynamic Stability Validation Subject
-
-The current processor tracks:
+The dynamic stability layer tracks:
 
 `C(t)`
 
@@ -692,32 +471,21 @@ Current destabilizing load:
 
 `P(t) = heat + switch_load`
 
-Required current condition:
+Required validated condition:
 
 `C_minus_P_min > 0.0`
 
-The M15 CI validates:
+## 4. Balanced Ternary State and Retained-Result Validation
 
-- positive minimum stability margin;
-- floating-to-quantized `C(t)` correlation;
-- floating-to-quantized `P(t)` correlation;
-- floating-to-quantized `C(t) - P(t)` correlation;
-- exact `C(t) - P(t)` sign match;
-- exact boundary-order match.
+Balanced ternary state domain:
 
-Current maximum floating-to-quantized error:
+`{-1, 0, 1}`
 
-| Field | Maximum error |
-|---|---:|
-| `C` | `0.01` |
-| `P` | `0.001` |
-| `C_minus_P` | `0.01` |
+Active neutral state:
 
-## 13. Phase-Derived Ternary Target Validation Subject
+`0`
 
-The current executable maps the evolving phase field into balanced ternary targets.
-
-Current mapping:
+Current phase-derived ternary target mapping:
 
 `sin(phase) > 0.33 → 1`
 
@@ -725,75 +493,13 @@ Current mapping:
 
 `otherwise → 0`
 
-This connects:
-
-`resonant phase field`
-
-to:
-
-`balanced ternary target domain`
-
-The target remains subject to:
-
-- transition-fraction limits;
-- distributed commit;
-- scheduler timing;
-- pending routes;
-- active neutral routing.
-
-The current CI preserves this path through:
-
-- deterministic state sequences;
-- semantic state-sequence correlation;
-- exact quantized state replay;
-- route-sequence correlation;
-- cycle-exact traces.
-
-## 14. Balanced Ternary State Domain
-
-The processor state and retained-result domain is:
-
-`{-1, 0, 1}`
-
-The valid states are:
-
-`-1`
-
-`0`
-
-`1`
-
-The active neutral state is:
-
-`0`
-
-Required current state-domain condition:
-
-`balanced_ternary_state_domain = True`
-
-Required reserved-state condition:
-
-`reserved_state_events = 0`
-
-The balanced ternary domain is the state and retained-result layer.
-
-It is not the complete FRP computational mechanism.
-
-## 15. Mandatory Active-Neutral Routing
-
-Direct opposite-polarity execution is prohibited.
-
-Prohibited direct execution:
-
-`-1 ↔ 1`
-
-Validated routes:
+Mandatory opposite-polarity routes:
 
 `-1 → 0 → 1`
 
 `1 → 0 → -1`
 
-Tick-separated execution relation:
+Execution relation:
 
 `tick N: active polarity → 0`
 
@@ -805,117 +511,100 @@ Tick-separated execution relation:
 
 `tick N+1 or later: 0 → target polarity`
 
-Required invariant:
+Core validated invariants:
+
+`balanced_ternary_state_domain = True`
 
 `actual_direct_events = 0`
 
-The CI validates both route directions.
-
-Current exact self-test checks include:
-
-`route_minus_to_plus_pass`
-
-and:
-
-`route_plus_to_minus_pass`
-
-The final state alone is not sufficient.
-
-The route history is part of the validated execution semantics.
-
-## 16. Pending Neutral-Route Validation
-
-Pending neutral routes preserve:
-
-- cell identity;
-- target polarity;
-- route ordering;
-- earliest valid execution tick.
-
-The current CI validates:
-
-- both opposite-polarity routes;
-- pending-route replay;
-- queue-exhaustion detection;
-- request-lane order;
-- zero queue-overflow events.
-
-Required condition:
+`reserved_state_events = 0`
 
 `queue_overflow_events = 0`
 
-Exact current self-test checks include:
+Preserved scheduler modes:
 
-- `exact_shadow_pending_route_match`;
-- `queue_exhaustion_detection_pass`;
-- `request_lane_order_pass`;
-- `shadow_queue_overflow_events_zero`.
-
-## 17. Distributed Commit Validation
+- `free`;
+- `7/1`;
+- `1/7`.
 
 Current default transition fraction:
 
 `0.25`
 
-Current maximum-change relation:
+Current default 16-cell request-lane count:
 
-`max_changes = max(1, round(cells × transition_fraction))`
+`4`
 
-Default 16-cell configuration:
-
-`request_lanes = 4`
-
-Required current boundary:
+Current validated relation:
 
 `switch_load_peak <= transition_fraction`
 
-Default required boundary:
+## 5. Root README Active Validation Badge Chain
 
-`switch_load_peak <= 0.25`
+The root `README.md` exposes 18 active GitHub Actions validation badges.
 
-The CI validates:
+Current badge-visible passing chain:
 
-`shadow_switch_load_within_transition_fraction`
+| Validation workflow | Status |
+|---|---|
+| `FRP M15 Implementation Mapping and Qualification Closure` | `passing` |
+| `FRP Hardware Sensitivity Profile Qualification` | `passing` |
+| `FRP Hardware Sensitivity Comparison` | `passing` |
+| `FRP M14 Physical Implementation Correlation and Production Qualification` | `passing` |
+| `FRP M13 Production Scaling and Implementation Stabilization` | `passing` |
+| `FRP M12 External Implementation Feedback and Production Iteration` | `passing` |
+| `FRP M11 Production Integration and External Handoff` | `passing` |
+| `FRP M10 Silicon Production and Tapeout Readiness` | `passing` |
+| `FRP M9 Silicon and Heterogeneous Architecture` | `passing` |
+| `FRP M8 Production Release Package` | `passing` |
+| `FRP M7 FPGA Synthesis and Timing Scaffold` | `passing` |
+| `FRP M6 Formal Verification and Equivalence Scaffold` | `passing` |
+| `FRP M5 RTL Interface and Assertion Harness` | `passing` |
+| `FRP M4 HDL Trace and Testbench` | `passing` |
+| `FRP M3 Benchmark and Signal Map` | `passing` |
+| `FRP Self Test` | `passing` |
+| `FRP Benchmark Smoke Test` | `passing` |
+| `FRP Structured Output` | `passing` |
 
-Distributed commit remains the bounded connection between phase-derived targets and retained ternary state.
+The repository contains 19 workflow files in total.
 
-## 18. CI Layering Rule
+The Comparative Architecture Benchmark workflow completes the 19-file workflow inventory.
 
-The repository contains three distinct CI roles.
+## 6. CI Validation Roles
 
-### 18.1 Foundational validation
+The repository CI structure contains three connected validation roles.
 
-These workflows preserve the original executable, resonant benchmark, and structured-output validation layers:
+### 6.1 Foundational validation
+
+These workflows preserve the foundational executable, resonant benchmark, and structured-output layers:
 
 - `FRP Self Test`;
 - `FRP Benchmark Smoke Test`;
 - `FRP Structured Output`.
 
-They remain attached to their historical executable references.
+Each workflow retains its release-specific executable binding.
 
-### 18.2 Architecture milestone validation
+### 6.2 Architecture milestone validation
 
 These workflows preserve the architecture progression from M3 through the current M15 layer.
 
-Each milestone workflow validates its own release-specific executable reference and architecture package.
+Each milestone workflow validates its release-specific executable reference and architecture package.
 
-### 18.3 Supporting comparative validation
+### 6.3 Supporting comparative validation
 
-These workflows validate:
+These workflows extend the validation surface through:
 
-- comparative architecture execution;
-- hardware-sensitivity profiles;
-- hardware-sensitivity comparisons.
+- comparative architecture benchmark qualification;
+- hardware-sensitivity profile qualification;
+- hardware-sensitivity comparison qualification.
 
-They are supporting validation contours.
+The primary architecture progression remains represented by the M3-M15 milestone chain.
 
-They do not define or replace the primary FRP architecture progression.
+## 7. Workflow Inventory
 
-## 19. Workflow Inventory
+The repository contains 19 GitHub Actions workflow files.
 
-The repository contains 19 GitHub Actions workflows.
-
-### Foundational workflows
+### 7.1 Foundational workflows
 
 | Workflow file | Workflow name | Validation role |
 |---|---|---|
@@ -923,7 +612,7 @@ The repository contains 19 GitHub Actions workflows.
 | `.github/workflows/frp-benchmark-smoke.yml` | `FRP Benchmark Smoke Test` | foundational resonant benchmark smoke validation |
 | `.github/workflows/frp-structured-output.yml` | `FRP Structured Output` | M2 structured-output validation |
 
-### Architecture milestone workflows
+### 7.2 Architecture milestone workflows
 
 | Workflow file | Workflow name |
 |---|---|
@@ -941,7 +630,7 @@ The repository contains 19 GitHub Actions workflows.
 | `.github/workflows/frp-m14-physical-implementation-qualification.yml` | `FRP M14 Physical Implementation Correlation and Production Qualification` |
 | `.github/workflows/frp-m15-implementation-mapping-qualification.yml` | `FRP M15 Implementation Mapping and Qualification Closure` |
 
-### Supporting comparative workflows
+### 7.3 Supporting comparative workflows
 
 | Workflow file | Workflow name |
 |---|---|
@@ -949,7 +638,7 @@ The repository contains 19 GitHub Actions workflows.
 | `.github/workflows/frp-hardware-sensitivity-comparison.yml` | `FRP Hardware Sensitivity Comparison` |
 | `.github/workflows/frp-hardware-sensitivity-profile.yml` | `FRP Hardware Sensitivity Profile Qualification` |
 
-## 20. Current M15 Qualification Workflow
+## 8. Current M15 Qualification Workflow
 
 Current primary release workflow:
 
@@ -979,74 +668,82 @@ Permissions:
 
 `contents: read`
 
-The workflow is triggered by changes to:
+The workflow responds to:
+
+- `push`;
+- `pull_request`;
+- `workflow_dispatch`.
+
+Path-scoped source inputs:
 
 - `frp_prototype_v1_7_0.py`;
 - `docs/m15_implementation_mapping_domain_interface_qualification_closure.md`;
 - `rtl/m15/**`;
 - `.github/workflows/frp-m15-implementation-mapping-qualification.yml`.
 
-Supported triggers:
+## 9. M15 Workflow Step Sequence
 
-- `push`;
-- `pull_request`;
-- `workflow_dispatch`.
+The current M15 workflow executes nine named stages:
 
-## 21. M15 Workflow Step Sequence
+1. `Checkout repository`;
+2. `Set up Python`;
+3. `Compile FRP v1.7.0 reference file`;
+4. `Generate M15 qualification outputs`;
+5. `Compare deterministic vector packages`;
+6. `Validate M15 schemas, kernel invariants, fixed-point contract, and equivalence`;
+7. `Validate deterministic vector package integrity`;
+8. `Validate M15 architecture document contract`;
+9. `Upload M15 qualification artifacts`.
 
-The current M15 workflow executes these major stages:
+The execution chain is:
 
-1. checkout repository;
-2. set up Python 3.12;
-3. compile the FRP v1.7.0 reference file;
-4. generate M15 qualification outputs;
-5. compare independent deterministic vector packages;
-6. validate M15 schemas, processor invariants, fixed-point contracts, and equivalence;
-7. validate deterministic vector-package integrity;
-8. validate the M15 architecture-document contract;
-9. upload the M15 qualification artifact directory.
-
-This sequence establishes the current CI relation:
-
-`source`
+`source checkout`
 
 ↓
 
-`compile`
+`Python 3.12 environment`
 
 ↓
 
-`execute`
+`compile gate`
 
 ↓
 
-`generate`
+`structured execution and self-test generation`
 
 ↓
 
-`repeat`
+`ten M15 artifact exports`
 
 ↓
 
-`compare`
+`benchmark matrix and scaling outputs`
 
 ↓
 
-`validate`
+`independent deterministic vector generation`
 
 ↓
 
-`correlate`
+`byte-identical vector comparison`
 
 ↓
 
-`close`
+`schema and invariant validation`
 
 ↓
 
-`archive`
+`vector SHA-256 integrity validation`
 
-## 22. M15 Compile Gate
+↓
+
+`architecture-document contract validation`
+
+↓
+
+`qualification artifact upload`
+
+## 10. M15 Compile Gate
 
 The first executable gate is:
 
@@ -1056,9 +753,7 @@ Required result:
 
 `PASS`
 
-This verifies Python syntax before generation of the M15 qualification package.
-
-## 23. M15 Structured Output Generation
+## 11. M15 Structured Output Generation
 
 The workflow generates:
 
@@ -1080,30 +775,25 @@ Expected milestone:
 
 `M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
 
-The structured-output validation requires:
+The workflow validates:
 
 - `cells = 16`;
 - `hierarchy_depth = 4`;
 - `request_lanes = 4`;
 - `ticks_recorded = 64`;
 - scheduler `7/1`;
-- scheduler count `balance = 56`;
-- scheduler count `commit = 8`;
-- valid scheduler counts;
-- balanced ternary state-domain validity;
-- zero reserved-state events;
-- zero actual direct events;
-- zero queue-overflow events;
+- scheduler counts `balance = 56` and `commit = 8`;
+- `scheduler_counts_valid = True`;
+- `balanced_ternary_state_domain = True`;
+- `reserved_state_events = 0`;
+- `actual_direct_events = 0`;
+- `queue_overflow_events = 0`;
 - `switch_load_peak <= 0.25`;
 - `C_minus_P_min > 0.0`;
-- exact fixed-point topology sum;
-- exact fixed-point thermal sum.
+- `fixed_point_topology_sum_exact = True`;
+- `fixed_point_thermal_sum_exact = True`.
 
-These summary assertions are not the complete processor validation by themselves.
-
-They are the structured-output boundary of the larger M15 qualification chain.
-
-## 24. M15 Self-Test Matrix
+## 12. M15 Self-Test Matrix
 
 The current workflow runs four self-test variants.
 
@@ -1125,17 +815,17 @@ Free scheduler:
 
 Required result for every self-test:
 
-- schema equals `frp.structured_output.v1.7.0`;
-- version equals `1.7.0`;
-- status equals `PASS`;
-- check count equals `41`;
-- all 41 checks equal `True`.
+- schema `frp.structured_output.v1.7.0`;
+- version `1.7.0`;
+- status `PASS`;
+- check count `41`;
+- all 41 checks `True`.
 
 Current validated result:
 
 `41/41 PASS`
 
-## 25. Exact Current 41-Check Coverage
+## 13. Exact Current 41-Check Coverage
 
 The current self-test package contains exactly these 41 checks:
 
@@ -1181,102 +871,29 @@ The current self-test package contains exactly these 41 checks:
 40. `trig_lut_pass`;
 41. `vector_determinism_pass`.
 
-The 41 checks cover:
+The check set covers:
 
 - scheduler behavior;
-- both mandatory opposite-polarity routes;
-- queue behavior;
+- both opposite-polarity active-neutral routes;
+- pending-route behavior;
 - request-lane ordering;
 - balanced ternary encoding;
 - fixed-point boundaries;
 - topology scaling;
 - execution scaling;
 - semantic sequence preservation;
-- stability-sign preservation;
+- dynamic stability-sign preservation;
 - quantized shadow invariants;
 - exact replay;
 - deterministic vector generation;
-- all ten M15 schemas;
+- all ten M15 export schemas;
 - qualification closure.
 
-## 26. Resonant-Core Coverage Across the M15 CI Stack
+## 14. M15 Artifact Package
 
-The resonant computational core is distributed across several CI layers.
+The workflow generates ten primary M15 artifact layers.
 
-### Kuramoto-Sakaguchi phase path
-
-Covered through:
-
-- phase fixed-point profile;
-- gamma fixed-point profile;
-- deterministic trigonometric lookup;
-- quantized shadow execution;
-- phase correlation;
-- exact trace replay.
-
-### Hierarchical fractal coupling
-
-Covered through:
-
-- topology tests at 8 cells;
-- topology tests at 16 cells;
-- topology tests at 32 cells;
-- exact fixed-point topology sum;
-- scaling execution.
-
-### Phase coherence
-
-Covered through:
-
-- deterministic executable behavior;
-- floating-to-quantized coherence error bounds;
-- `C(t)` correlation;
-- stability-sign preservation.
-
-### Delay dynamics
-
-Covered through:
-
-- frequency-state correlation;
-- deterministic quantized execution;
-- cycle-exact replay.
-
-### Thermal-phase interaction
-
-Covered through:
-
-- exact fixed-point thermal sum;
-- heat correlation;
-- `P(t)` correlation;
-- `C(t) - P(t)` correlation.
-
-### Local gamma drift
-
-Covered through:
-
-- deterministic gamma-noise targets;
-- gamma fixed-point representation;
-- gamma correlation;
-- SystemVerilog stimulus mapping.
-
-### Ternary state retention
-
-Covered through:
-
-- state-sequence correlation;
-- exact shadow state match;
-- route-sequence correlation;
-- exact pending-route replay;
-- zero direct events;
-- zero reserved-state events.
-
-The complete processor is therefore validated across connected boundaries rather than by one static final-state assertion.
-
-## 27. M15 Artifact Package
-
-The current workflow generates ten primary M15 artifact layers.
-
-### 27.1 Fixed-point interface profile
+### 14.1 Fixed-point interface profile
 
 Command:
 
@@ -1290,7 +907,7 @@ Output:
 
 `artifacts/m15/fixed-point-interface-profile.json`
 
-### 27.2 Balanced ternary hardware encoding map
+### 14.2 Balanced ternary hardware encoding map
 
 Command:
 
@@ -1304,7 +921,7 @@ Output:
 
 `artifacts/m15/balanced-ternary-hardware-encoding-map.json`
 
-### 27.3 Quantized reference shadow model
+### 14.3 Quantized reference shadow model
 
 Command:
 
@@ -1318,7 +935,7 @@ Output:
 
 `artifacts/m15/quantized-reference-shadow-model.json`
 
-### 27.4 Cycle-exact reference trace
+### 14.4 Cycle-exact reference trace
 
 Command:
 
@@ -1332,7 +949,7 @@ Output:
 
 `artifacts/m15/cycle-exact-reference-trace.json`
 
-### 27.5 RTL comparison vector package
+### 14.5 RTL comparison vector package
 
 Command:
 
@@ -1346,7 +963,7 @@ Output:
 
 `artifacts/m15/rtl-comparison-vector-package.json`
 
-### 27.6 SystemVerilog testbench interface map
+### 14.6 SystemVerilog testbench interface map
 
 Command:
 
@@ -1360,7 +977,7 @@ Output:
 
 `artifacts/m15/systemverilog-testbench-interface-map.json`
 
-### 27.7 Synthesizable RTL reference core
+### 14.7 Synthesizable RTL reference core
 
 Command:
 
@@ -1374,7 +991,7 @@ Output:
 
 `artifacts/m15/synthesizable-rtl-reference-core.json`
 
-### 27.8 RTL assertion correlation harness
+### 14.8 RTL assertion correlation harness
 
 Command:
 
@@ -1388,7 +1005,7 @@ Output:
 
 `artifacts/m15/rtl-assertion-correlation-harness.json`
 
-### 27.9 Reference RTL equivalence report
+### 14.9 Reference RTL equivalence report
 
 Command:
 
@@ -1402,7 +1019,7 @@ Output:
 
 `artifacts/m15/reference-rtl-equivalence-report.json`
 
-### 27.10 Qualification closure manifest
+### 14.10 Qualification closure manifest
 
 Command:
 
@@ -1416,9 +1033,29 @@ Output:
 
 `artifacts/m15/qualification-closure-manifest.json`
 
-## 28. Additional M15 Qualification Outputs
+## 15. Stable M15 Schema Set
 
-The current workflow also generates:
+| Artifact | Required schema |
+|---|---|
+| fixed-point interface profile | `frp.m15.fixed_point_interface_profile.v1.7.0` |
+| balanced ternary hardware encoding map | `frp.m15.balanced_ternary_hardware_encoding_map.v1.7.0` |
+| quantized reference shadow model | `frp.m15.quantized_reference_shadow_model.v1.7.0` |
+| cycle-exact reference trace | `frp.m15.cycle_exact_reference_trace.v1.7.0` |
+| RTL comparison vector package | `frp.m15.rtl_comparison_vector_package.v1.7.0` |
+| SystemVerilog testbench interface map | `frp.m15.systemverilog_testbench_interface_map.v1.7.0` |
+| synthesizable RTL reference core | `frp.m15.synthesizable_rtl_reference_core.v1.7.0` |
+| RTL assertion correlation harness | `frp.m15.rtl_assertion_correlation_harness.v1.7.0` |
+| reference RTL equivalence report | `frp.m15.reference_rtl_equivalence_report.v1.7.0` |
+| qualification closure manifest | `frp.m15.qualification_closure_manifest.v1.7.0` |
+
+Every artifact carries:
+
+- version `1.7.0`;
+- milestone `M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`.
+
+## 16. Additional M15 Qualification Outputs
+
+The workflow also generates:
 
 - benchmark matrix;
 - 8-cell scaling output;
@@ -1427,31 +1064,24 @@ The current workflow also generates:
 - deterministic vector package A;
 - deterministic vector package B.
 
-Benchmark matrix command:
-
-    python frp_prototype_v1_7_0.py --export-benchmark-matrix
-
-Output:
+Benchmark output:
 
 `artifacts/m15/benchmark-matrix.json`
 
-Scaling commands:
-
-    python frp_prototype_v1_7_0.py --cells 8 --steps 16 --mode demo --output json
-
-    python frp_prototype_v1_7_0.py --cells 16 --steps 16 --mode demo --output json
-
-    python frp_prototype_v1_7_0.py --cells 32 --steps 16 --mode demo --output json
-
-Outputs:
+Scaling outputs:
 
 - `artifacts/m15/scaling-8.json`;
 - `artifacts/m15/scaling-16.json`;
 - `artifacts/m15/scaling-32.json`.
 
-## 29. M15 Fixed-Point Contract
+Vector directories:
 
-The current workflow validates the following hardware-facing numeric representations.
+- `artifacts/m15/vectors_a`;
+- `artifacts/m15/vectors_b`.
+
+## 17. M15 Fixed-Point Contract
+
+The workflow validates the following hardware-facing numeric representations.
 
 General dynamic scalar:
 
@@ -1475,16 +1105,24 @@ Trigonometric table entries:
 
 Required exactness markers:
 
-- `fixed_point_topology_sum_exact = True`;
-- `fixed_point_thermal_sum_exact = True`.
+`fixed_point_topology_sum_exact = True`
 
-The fixed-point contract maps the resonant computational domain.
+`fixed_point_thermal_sum_exact = True`
 
-It is not limited to ternary state encoding.
+The fixed-point mapping covers:
 
-## 30. Balanced Ternary Hardware Encoding
+- phase;
+- frequency;
+- gamma;
+- coherence;
+- hierarchy weights;
+- thermal weights;
+- dynamic stability values;
+- ternary transition execution.
 
-The current workflow validates the canonical two-bit balanced ternary hardware encoding.
+## 18. M15 Balanced Ternary Hardware Encoding
+
+Canonical two-bit encoding:
 
 `-1 → 2'b11`
 
@@ -1496,7 +1134,7 @@ Reserved encoding:
 
 `2'b10`
 
-Integer encoding map:
+Canonical integer encoding:
 
 `-1 → 3`
 
@@ -1508,20 +1146,17 @@ Reserved integer code:
 
 `2`
 
-The request interface validates:
+Validated request interface:
 
-- `request_lanes = 4`;
-- `cell_id_width = 4`.
+`request_lanes = 4`
 
-Required invariant:
+`cell_id_width = 4`
+
+Validated reserved-state condition:
 
 `reserved_state_events = 0`
 
-The encoding represents the processor state domain.
-
-It does not replace the resonant phase-coherence computational mechanism.
-
-## 31. Quantized Shadow Validation
+## 19. Quantized Shadow Validation
 
 The quantized reference shadow model preserves stateful processor domains including:
 
@@ -1536,58 +1171,62 @@ The quantized reference shadow model preserves stateful processor domains includ
 - dynamic stability;
 - event counters.
 
-The current workflow requires:
+The workflow validates:
 
 - `actual_direct_events = 0`;
 - `reserved_state_events = 0`;
 - `queue_overflow_events = 0`;
-- balanced ternary state-domain validity;
-- valid scheduler counts;
+- `balanced_ternary_state_domain = True`;
+- `scheduler_counts_valid = True`;
 - `ticks_recorded = 64`;
 - `switch_load_peak <= 0.25`;
 - `C_minus_P_min > 0.0`;
-- exact fixed-point topology sum;
-- exact fixed-point thermal sum.
+- `fixed_point_topology_sum_exact = True`;
+- `fixed_point_thermal_sum_exact = True`.
 
-The quantized shadow is the stateful hardware-facing continuation of the processor semantics.
+## 20. Cycle-Exact Trace Validation
 
-## 32. Cycle-Exact Trace Validation
-
-The current workflow validates:
+The workflow validates:
 
 - exactly `64` trace rows;
-- zero actual direct events;
-- zero reserved-state events;
-- per-tick gamma-noise target vectors for all `16` cells.
+- `actual_direct_events = 0` in the trace summary;
+- `16` gamma-noise target values in every trace row;
+- `reserved_state_events = 0` in every trace row;
+- `actual_direct_events = 0` in every trace row.
 
-The cycle-exact trace is the deterministic integer reference path between:
+The cycle-exact trace carries fields including:
 
-`stateful quantized processor execution`
+- scheduler mode and scheduler state;
+- request-lane input vectors;
+- packed ternary states;
+- gamma-noise update validity;
+- gamma-noise target vectors;
+- switch load;
+- global heat;
+- global phase coherence;
+- `C_q16`;
+- `P_q16`;
+- `C_minus_P_q16`;
+- active-neutral route counters;
+- pending-route count;
+- direct-event counters;
+- reserved-state counters;
+- queue-overflow counters.
 
-and:
+## 21. Deterministic RTL Vector Qualification
 
-`RTL-facing comparison vectors`
-
-The trace preserves more than ternary state.
-
-It also carries the execution fields required for deterministic correlation.
-
-## 33. Deterministic RTL Vector Qualification
-
-The M15 workflow generates two independent RTL comparison-vector directories:
+The workflow generates two independent vector directories:
 
 - `artifacts/m15/vectors_a`;
 - `artifacts/m15/vectors_b`.
 
-Both packages are generated from the same deterministic reference configuration.
-
-The workflow compares them with:
+The comparison command is:
 
     diff -qr artifacts/m15/vectors_a artifacts/m15/vectors_b
 
-Required result:
+Required qualification result:
 
-`no differences`
+`byte-identical equality`
 
 The vector package contains exactly ten files:
 
@@ -1602,24 +1241,24 @@ The vector package contains exactly ten files:
 - `frp_m15_trig_lut_q30.vec`;
 - `frp_m15_sha256_manifest.json`.
 
-## 34. Deterministic Vector Integrity
+The exported package also provides a 64-character deterministic package digest.
 
-The SHA-256 manifest validates the nine non-manifest vector files.
+## 22. Deterministic Vector Integrity
 
-The workflow requires:
+The workflow validates each generated vector directory independently.
 
-- every expected file to exist;
-- every recorded digest to match the generated file;
-- package structure to match the current contract;
-- independent package A and package B to be byte-identical.
+Required package conditions:
 
-Semantic similarity is not sufficient.
+- exactly ten files;
+- presence of `frp_m15_sha256_manifest.json`;
+- exact SHA-256 equality for every manifest-bound vector file;
+- byte-identical equality between corresponding files in package A and package B.
 
-The current requirement is deterministic identity.
+The SHA-256 manifest binds the generated vector package to exact content.
 
-## 35. SystemVerilog Interface Contract
+## 23. SystemVerilog Interface Contract
 
-The current workflow validates these M15 interface parameters:
+The workflow validates these M15 interface parameters:
 
 | Parameter | Value |
 |---|---:|
@@ -1635,45 +1274,96 @@ The verification stimulus interface includes:
 
 `gamma_noise_target_q`
 
-This field preserves deterministic gamma-noise target injection in the RTL-facing verification path.
+This input carries deterministic gamma-noise targets into the RTL-facing verification path.
 
-## 36. Synthesizable RTL Reference-Core Contract
+## 24. Synthesizable RTL Reference-Core Contract
 
-The current workflow validates:
+The current export defines exactly 26 tick-execution stages:
 
-- `26` exact tick-execution stages;
+1. `resolve scheduler state`;
+2. `clear current-tick switch-change counters`;
+3. `clear current-tick per-cell switch activity`;
+4. `process ready pending neutral routes`;
+5. `process external request lanes in ascending order`;
+6. `process phase-derived targets when enabled`;
+7. `calculate switch load`;
+8. `update frequency targets`;
+9. `update lagged frequencies`;
+10. `calculate local generated power`;
+11. `calculate local thermal dissipation`;
+12. `calculate hierarchical thermal diffusion`;
+13. `update local heat`;
+14. `calculate local thermal overload`;
+15. `update gamma-noise correlation states`;
+16. `update local gamma-effective values`;
+17. `update thermal node factors`;
+18. `calculate hierarchical phase-coupling field`;
+19. `update phase velocities`;
+20. `update wrapped phase words`;
+21. `calculate multiscale phase coherence`;
+22. `calculate C(t)`;
+23. `calculate P(t)`;
+24. `calculate C_minus_P`;
+25. `detect first stability crossing`;
+26. `capture post-tick outputs`.
+
+Validated kernel requirements:
+
+- balanced ternary states `{-1, 0, 1}`;
+- reserved state code `2'b10`;
 - `actual_direct_events = 0`;
-- tick-separated neutral routing;
+- tick-separated neutral routing `True`;
 - scheduler modes `free`, `7/1`, and `1/7`.
 
-The M15 RTL reference-core contract is downstream of the full resonant computational reference.
+The planned RTL file map contains:
 
-It does not redefine FRP as static ternary switching.
+- `rtl/m15/frp_m15_types_pkg.sv`;
+- `rtl/m15/frp_m15_fixed_point_pkg.sv`;
+- `rtl/m15/frp_m15_trig_lut_pkg.sv`;
+- `rtl/m15/frp_m15_scheduler.sv`;
+- `rtl/m15/frp_m15_transition_core.sv`;
+- `rtl/m15/frp_m15_neutral_route_queue.sv`;
+- `rtl/m15/frp_m15_delay_dynamics.sv`;
+- `rtl/m15/frp_m15_thermal_field.sv`;
+- `rtl/m15/frp_m15_gamma_drift.sv`;
+- `rtl/m15/frp_m15_hierarchical_coupling.sv`;
+- `rtl/m15/frp_m15_multiscale_coherence.sv`;
+- `rtl/m15/frp_m15_stability_telemetry.sv`;
+- `rtl/m15/frp_m15_top.sv`.
 
-## 37. RTL Assertion Correlation Contract
+## 25. RTL Assertion Correlation Contract
 
-The current M15 RTL assertion correlation harness validates:
+The current M15 assertion harness contains exactly 13 assertions:
 
-- assertion count `13`;
-- exact integer comparison behavior.
+1. `valid balanced ternary encoding`;
+2. `reserved-state exclusion`;
+3. `direct polarity transition exclusion`;
+4. `active neutral route insertion`;
+5. `target application after ready tick`;
+6. `actual_direct_events = 0`;
+7. `transition-limit enforcement`;
+8. `scheduler sequence`;
+9. `scheduler count consistency`;
+10. `phase topology fixed-point normalization`;
+11. `thermal topology fixed-point normalization`;
+12. `deterministic trace tick count`;
+13. `exact cycle-output match`.
 
 Exact comparison rule:
 
 `actual integer field == expected integer field`
 
-The assertion layer connects:
+Scheduler modes:
 
-`deterministic reference vectors`
+- `free`;
+- `7/1`;
+- `1/7`.
 
-to:
+## 26. Reference RTL Equivalence Validation
 
-`RTL-facing execution fields`
+The current M15 workflow validates two correlation levels.
 
-## 38. Reference Equivalence Validation
-
-The current M15 workflow validates two distinct boundaries.
-
-### 38.1 Floating semantic reference to quantized shadow
+### 26.1 Floating semantic reference to quantized shadow
 
 Required exact sequence matches:
 
@@ -1696,34 +1386,40 @@ Required maximum error bounds:
 | `P` | `0.001` |
 | `C_minus_P` | `0.01` |
 
-This boundary directly preserves the resonant phase, delay, thermal, gamma, coherence, state, route, and stability domains.
+These bounds preserve correlation across:
 
-### 38.2 Quantized shadow deterministic replay
+- phase;
+- frequency;
+- thermal state;
+- gamma;
+- coherence;
+- dynamic stability;
+- scheduler sequence;
+- ternary state sequence;
+- active-neutral route sequence.
+
+### 26.2 Exact quantized shadow deterministic replay
 
 Required exact replay matches:
 
-- state match `1.0`;
-- scheduler match `1.0`;
-- pending-route match `1.0`;
-- counter match `1.0`;
-- trace match `1.0`;
-- cell-trace match `1.0`.
+- `shadow_replay_state_match = 1.0`;
+- `shadow_replay_scheduler_match = 1.0`;
+- `shadow_replay_pending_route_match = 1.0`;
+- `shadow_replay_counter_match = 1.0`;
+- `shadow_replay_trace_match = 1.0`;
+- `shadow_replay_cell_trace_match = 1.0`.
 
-This boundary requires exact deterministic replay.
-
-## 39. Qualification Closure
+## 27. Qualification Closure
 
 The qualification closure manifest requires:
 
 - status `PASS`;
-- all closure checks equal `True`;
+- all closure checks `True`;
 - exactly ten M15 artifact layers.
 
-The qualification closure manifest defines the current M15 release-validation endpoint.
+The closure chain is:
 
-The closure endpoint is:
-
-`floating resonant semantic reference`
+`M14 floating semantic reference`
 
 ↓
 
@@ -1731,7 +1427,7 @@ The closure endpoint is:
 
 ↓
 
-`stateful quantized shadow`
+`stateful quantized hardware shadow`
 
 ↓
 
@@ -1743,19 +1439,23 @@ The closure endpoint is:
 
 ↓
 
-`interface correlation`
+`SystemVerilog interface mapping`
 
 ↓
 
-`equivalence`
+`RTL assertion correlation`
 
 ↓
 
-`PASS`
+`reference equivalence`
 
-## 40. M15 Scaling Checks
+↓
 
-The current M15 workflow validates execution at:
+`qualification closure PASS`
+
+## 28. M15 Scaling Checks
+
+The current workflow validates execution at:
 
 - `8` cells;
 - `16` cells;
@@ -1769,17 +1469,17 @@ Expected scaling structure:
 | `16` | `4` | `4` | `32 bits` |
 | `32` | `5` | `8` | `64 bits` |
 
-Every scaling output must preserve:
+Every scaling output preserves:
 
 - `actual_direct_events = 0`;
 - `reserved_state_events = 0`;
 - `queue_overflow_events = 0`;
-- balanced ternary state-domain validity;
-- valid scheduler counts;
-- exact fixed-point topology sum;
-- exact fixed-point thermal sum.
+- `balanced_ternary_state_domain = True`;
+- `scheduler_counts_valid = True`;
+- `fixed_point_topology_sum_exact = True`;
+- `fixed_point_thermal_sum_exact = True`.
 
-Scaling also changes:
+Scaling also extends:
 
 - hierarchy depth;
 - shell structure;
@@ -1787,11 +1487,11 @@ Scaling also changes:
 - thermal topology;
 - multiscale coherence domains;
 - request-lane count;
-- packed state width.
+- packed ternary state width.
 
-## 41. M15 Benchmark Matrix Validation
+## 29. M15 Benchmark Matrix Validation
 
-The current workflow generates:
+The M15 workflow generates:
 
 `artifacts/m15/benchmark-matrix.json`
 
@@ -1811,11 +1511,9 @@ Expected architecture order:
 4. `frp_v1_7_0_systemverilog_correlation_contract`;
 5. `frp_v1_7_0_qualification_closure`.
 
-This matrix represents the current implementation-mapping and qualification chain.
+The benchmark matrix records the current M15 implementation-mapping and qualification progression.
 
-It is separate from the Comparative Architecture Benchmark Suite.
-
-## 42. M15 Architecture Document Contract
+## 30. M15 Architecture Document Contract
 
 The current workflow validates:
 
@@ -1829,7 +1527,7 @@ Required architecture markers include:
 - `synthesizable RTL reference core`;
 - `exact quantized shadow ↔ RTL equivalence`;
 - `actual_direct_events = 0`;
-- both mandatory neutral routes;
+- both active-neutral routes;
 - scheduler modes `free`, `7/1`, and `1/7`;
 - `S32Q16`;
 - `S32Q30`;
@@ -1842,21 +1540,19 @@ Required architecture markers include:
 - `qualification_closure_manifest`;
 - planned M16 architecture boundary.
 
-The workflow also validates the primary vector-row field order.
-
-Required ordering:
+The workflow also validates primary vector-row field ordering:
 
 `GAMMA_UPDATE_VALID`
 
-before:
+before
 
 `GAMMA_NOISE_TARGETS_Q`
 
-before:
+before
 
 `STATES_PACKED`
 
-## 43. M15 Artifact Upload
+## 31. M15 Artifact Upload
 
 The workflow uploads:
 
@@ -1866,11 +1562,15 @@ Artifact name:
 
 `frp-v1.7.0-m15-qualification-artifacts`
 
-Missing artifact output is treated as an error.
+Upload action:
 
-The uploaded package preserves the current qualification evidence generated by the workflow run.
+`actions/upload-artifact@v4`
 
-## 44. Foundational FRP Self-Test Workflow
+Artifact-directory requirement:
+
+`if-no-files-found: error`
+
+## 32. Foundational FRP Self-Test Workflow
 
 Workflow:
 
@@ -1883,6 +1583,10 @@ Workflow name:
 Job name:
 
 `Run FRP v0.9.3 self-test`
+
+Execution environment:
+
+`ubuntu-latest`
 
 Python version:
 
@@ -1900,11 +1604,9 @@ Required output marker:
 
 `result=PASS`
 
-This is a foundational historical validation workflow.
+This workflow preserves the foundational v0.9.3 executable self-test layer.
 
-It is not the current M15 release qualification workflow.
-
-## 45. Foundational Resonant Benchmark Smoke Workflow
+## 33. Foundational Resonant Benchmark Smoke Workflow
 
 Workflow:
 
@@ -1913,6 +1615,14 @@ Workflow:
 Workflow name:
 
 `FRP Benchmark Smoke Test`
+
+Job name:
+
+`Run FRP benchmark smoke test`
+
+Execution environment:
+
+`ubuntu-latest`
 
 Python version:
 
@@ -1933,17 +1643,15 @@ Required architecture markers:
 - `direct_ternary_commit`;
 - `binary_style_forced_switch`.
 
-This historical workflow is important because it preserves the distinction between:
+The workflow preserves the foundational resonant benchmark comparison layer.
 
-`FRP resonant phase layer + distributed active-neutral ternary routing`
+The architecture marker:
 
-and:
+`frp_distributed_resonant`
 
-`distributed neutral ternary routing without the resonant phase layer`
+preserves the connection between resonant phase computation and distributed active-neutral ternary routing.
 
-The two architectures are not the same.
-
-## 46. Structured Output Workflow
+## 34. Structured Output Workflow
 
 Workflow:
 
@@ -1956,6 +1664,10 @@ Workflow name:
 Job name:
 
 `Validate FRP v0.9.4 structured output`
+
+Execution environment:
+
+`ubuntu-latest`
 
 Python version:
 
@@ -1981,10 +1693,10 @@ The workflow validates:
 - schema identity;
 - repository identity;
 - version identity;
-- self-test PASS state;
-- zero failures;
-- zero actual direct events;
-- positive stability margin;
+- self-test `PASS` state;
+- `failures = 0`;
+- `actual_direct_events = 0`;
+- `C_minus_P_min > 0.0`;
 - benchmark architecture labels;
 - telemetry structure.
 
@@ -1998,11 +1710,9 @@ Historical telemetry fields include:
 - `P`;
 - `C_minus_P`.
 
-This historical structured-output workflow therefore already preserves visible evidence that FRP execution includes a phase-coherence layer and Kuramoto order parameter `R`.
+This workflow preserves the M2 structured-output and phase-coherence telemetry layer.
 
-It is not rewritten as the M15 workflow.
-
-## 47. Architecture Milestone Workflow Chain
+## 35. Architecture Milestone Workflow Chain
 
 The release-specific architecture workflow chain is:
 
@@ -2022,15 +1732,15 @@ The release-specific architecture workflow chain is:
 | M14 | `frp_prototype_v1_6_0.py` | `frp-m14-physical-implementation-qualification.yml` |
 | M15 | `frp_prototype_v1_7_0.py` | `frp-m15-implementation-mapping-qualification.yml` |
 
-Each workflow preserves its own release-specific validation boundary.
+Each workflow preserves its release-specific validation boundary.
 
-The current architecture endpoint is:
+Current architecture endpoint:
 
 `M15 / FRP v1.7.0`
 
-## 48. Architecture Progression Preserved by CI
+## 36. Complete Architecture Progression Preserved by CI
 
-The published workflow progression is:
+The milestone workflow chain preserves:
 
 `structured machine-readable validation`
 
@@ -2056,7 +1766,7 @@ The published workflow progression is:
 
 ↓
 
-`stable production interface freeze`
+`production release and stable interface freeze`
 
 ↓
 
@@ -2118,9 +1828,9 @@ The published workflow progression is:
 
 `qualification closure`
 
-The computational core remains upstream and semantically continuous throughout this progression.
+The resonant phase-coherence computational core remains continuous through this architecture progression.
 
-## 49. Comparative Architecture Benchmark Workflow
+## 37. Comparative Architecture Benchmark Workflow
 
 Workflow:
 
@@ -2153,11 +1863,7 @@ The suite compares:
 3. `direct_ternary_reference`;
 4. `frp_v1_7_0_quantized_shadow`.
 
-The workflow validates the separate benchmark package under:
-
-`benchmarks/architecture_comparison/`
-
-Validation layers include:
+The workflow validates:
 
 - Python compilation;
 - deterministic workload validation;
@@ -2170,55 +1876,17 @@ Validation layers include:
 - machine-readable result validation;
 - artifact handling.
 
-The FRP reference must remain represented as a resonant phase-coherence architecture.
-
-It must not be reduced to static ternary switching.
-
-## 50. Comparative Benchmark Integrity Boundary
-
-The comparative workflow preserves:
-
-`one deterministic semantic workload`
-
-↓
-
-`architecture-specific execution`
-
-↓
-
-`raw architecture event counters`
-
-↓
-
-`one common normalized cost model`
-
-↓
-
-`one common thermal proxy model`
-
-↓
-
-`machine-readable comparison matrix`
-
-The qualification policy is:
+Current qualification policy:
 
 `integrity_only_no_winner_assertions`
 
-Required winner assertions:
+Current winner assertions:
 
 `[]`
 
-The workflow does not require:
+The Comparative Architecture Benchmark workflow provides the architecture-level comparison validation contour.
 
-`FRP energy < binary energy`
-
-`FRP temperature < binary temperature`
-
-`FRP latency < binary latency`
-
-The result remains data.
-
-## 51. Hardware-Sensitivity Profile Workflow
+## 38. Hardware-Sensitivity Profile Workflow
 
 Workflow:
 
@@ -2255,9 +1923,9 @@ The workflow validates:
 - validator self-tests;
 - deterministic byte-identical repeat validation.
 
-The profile layer remains separate from the primary M15 architecture workflow.
+The profile workflow provides hardware-informed coefficient and scenario qualification.
 
-## 52. Hardware-Sensitivity Comparison Workflow
+## 39. Hardware-Sensitivity Comparison Workflow
 
 Workflow:
 
@@ -2267,11 +1935,23 @@ Workflow name:
 
 `FRP Hardware Sensitivity Comparison`
 
+Job name:
+
+`Hardware Sensitivity Comparison Qualification`
+
+Execution environment:
+
+`ubuntu-latest`
+
+Python version:
+
+`3.12`
+
 The workflow validates the hardware-informed sensitivity comparison layer under:
 
 `benchmarks/architecture_comparison/`
 
-Its role is to preserve:
+Its validation surface includes:
 
 - hardware-sensitivity runner self-tests;
 - deterministic comparison generation;
@@ -2281,11 +1961,9 @@ Its role is to preserve:
 - profile binding;
 - result reproducibility.
 
-This workflow remains a supporting validation contour.
+The hardware-sensitivity comparison workflow extends the supporting comparative validation surface.
 
-It does not redefine the FRP architecture progression.
-
-## 53. Dependency Handling
+## 40. Dependency Handling
 
 The foundational workflows:
 
@@ -2296,22 +1974,17 @@ The foundational workflows:
 install dependencies with:
 
     python -m pip install --upgrade pip
-
     pip install -r requirements.txt
-
-The current M15 workflow:
-
-- sets up Python `3.12`;
-- compiles the current executable;
-- executes the current reference and M15 artifact-generation path directly.
-
-Dependency behavior is therefore workflow-specific.
 
 Current declared external dependency:
 
 `numpy>=1.26.0`
 
-## 54. Minimal Current M15 Validation Commands
+The current M15 workflow uses Python `3.12` and executes the current reference and M15 artifact-generation path directly.
+
+Workflow-specific dependency handling remains preserved in each workflow file.
+
+## 41. Minimal Current M15 Validation Commands
 
 Compile:
 
@@ -2337,30 +2010,29 @@ Qualification closure:
 
     python frp_prototype_v1_7_0.py --export-qualification-closure-manifest
 
-Current primary milestone workflow:
-
-`.github/workflows/frp-m15-implementation-mapping-qualification.yml`
-
 Required current results:
 
 `Python compilation PASS`
 
-`all self-tests 41/41 PASS`
+`all self-test profiles 41/41 PASS`
 
 `qualification closure PASS`
 
-## 55. Full Local CI-Reproduction Sequence
+Current primary milestone workflow:
 
-Create the M15 artifact directories:
+`.github/workflows/frp-m15-implementation-mapping-qualification.yml`
 
-    mkdir -p artifacts/m15/vectors_a
-    mkdir -p artifacts/m15/vectors_b
+## 42. Full Local M15 CI Reproduction Sequence
 
-Generate structured execution:
+Create qualification directories:
+
+    mkdir -p artifacts/m15/vectors_a artifacts/m15/vectors_b
+
+Generate structured output:
 
     python frp_prototype_v1_7_0.py --mode demo --output json > artifacts/m15/structured-output.json
 
-Generate all four self-test outputs:
+Generate the four self-test outputs:
 
     python frp_prototype_v1_7_0.py --mode self-test --output json > artifacts/m15/self-test.json
 
@@ -2392,7 +2064,7 @@ Generate the ten M15 exports:
 
     python frp_prototype_v1_7_0.py --export-qualification-closure-manifest > artifacts/m15/qualification-closure-manifest.json
 
-Generate the benchmark matrix:
+Generate benchmark matrix:
 
     python frp_prototype_v1_7_0.py --export-benchmark-matrix > artifacts/m15/benchmark-matrix.json
 
@@ -2410,15 +2082,15 @@ Generate independent vector packages:
 
     python frp_prototype_v1_7_0.py --export-rtl-comparison-vector-package --vector-output-dir artifacts/m15/vectors_b > artifacts/m15/vector-package-b.json
 
-Compare:
+Compare vector directories:
 
     diff -qr artifacts/m15/vectors_a artifacts/m15/vectors_b
 
-Required result:
+Required qualification result:
 
-`no differences`
+`byte-identical equality`
 
-## 56. Current Release Validation Evidence
+## 43. Current Release Validation Evidence
 
 Current validated release layer:
 
@@ -2434,10 +2106,10 @@ Release-record validated commit:
 
 Validated workflow stack recorded in `TEST_REPORT_v1_7_0.md`:
 
-- `FRP Structured Output #113`;
-- `FRP M15 Implementation Mapping and Qualification Closure #1`;
-- `FRP Self Test #154`;
-- `FRP Benchmark Smoke Test #152`.
+- `FRP Structured Output #113 — PASS`;
+- `FRP M15 Implementation Mapping and Qualification Closure #1 — PASS`;
+- `FRP Self Test #154 — PASS`;
+- `FRP Benchmark Smoke Test #152 — PASS`.
 
 Recorded validation result:
 
@@ -2453,13 +2125,11 @@ Primary release-validation records:
 - `FRP_VALIDATION_INDEX_v1_7_0.md`;
 - `RELEASE_NOTES_v1_7_0.md`.
 
-The validated commit and workflow-run numbers belong to the published v1.7.0 validation record.
+The release-record commit and workflow-run identifiers preserve the published v1.7.0 validation evidence.
 
-They are release-specific evidence and are not used as a statement about later documentation-only commits.
+## 44. CI Traceability Rule
 
-## 57. CI Traceability Rule
-
-Every release-specific architecture layer must preserve traceability between:
+Every release-specific architecture layer preserves traceability between:
 
 `processor computational mechanism`
 
@@ -2469,7 +2139,11 @@ Every release-specific architecture layer must preserve traceability between:
 
 ↓
 
-`workflow`
+`GitHub Actions workflow`
+
+↓
+
+`Run Job execution`
 
 ↓
 
@@ -2481,19 +2155,7 @@ Every release-specific architecture layer must preserve traceability between:
 
 ↓
 
-`phase and coherence correlation`
-
-↓
-
-`ternary state and route invariants`
-
-↓
-
-`fixed-point contracts`
-
-↓
-
-`deterministic replay`
+`phase, frequency, gamma, thermal, coherence, state, route, and stability correlation`
 
 ↓
 
@@ -2507,112 +2169,51 @@ Every release-specific architecture layer must preserve traceability between:
 
 `release notes`
 
-Historical workflows must remain bound to their historical release-specific executable files.
+Historical workflows retain their release-specific executable bindings.
 
-The current release workflow must remain bound to:
+The current M15 workflow retains the current executable, architecture document, RTL mapping path, and qualification package bindings.
 
-- the current executable reference;
-- the current architecture document;
-- the current M15 artifact contract.
+Supporting comparative workflows retain their benchmark and hardware-sensitivity package bindings.
 
-Supporting comparative workflows must remain separate from the primary architecture milestone chain.
-
-## 58. Computational-Core Documentation Rule
-
-When a CI-facing document explains what FRP validates, it must preserve the complete computational subject.
-
-Required semantic chain:
-
-`Kuramoto-Sakaguchi resonant phase coupling`
-
-↓
-
-`hierarchical fractal phase interaction`
-
-↓
-
-`phase evolution`
-
-↓
-
-`Kuramoto order parameter R`
-
-↓
-
-`multiscale phase coherence`
-
-↓
-
-`delay dynamics`
-
-↓
-
-`thermal-phase feedback`
-
-↓
-
-`local gamma drift`
-
-↓
-
-`nonlinear coherence compression`
-
-↓
-
-`dynamic stability`
-
-↓
-
-`phase-derived ternary target`
-
-↓
-
-`distributed commit`
-
-↓
-
-`active neutral routing`
-
-↓
-
-`retained state`
-
-A CI description that begins and ends with `{-1, 0, 1}` and transition routing is incomplete.
-
-The ternary state domain is essential.
-
-The resonant phase-coherence mechanism is also essential.
-
-## 59. Repository Alignment Rule
+## 45. Repository Alignment Rule
 
 When the current architecture layer changes, review:
 
 - `README.md`;
+- `ROADMAP.md`;
+- `MILESTONES.md`;
+- `PROJECT_STRUCTURE.md`;
+- `CHANGELOG.md`;
 - `INSTALL.md`;
 - `USAGE.md`;
 - `REPRODUCIBILITY.md`;
 - `CI.md`;
-- `PROJECT_STRUCTURE.md`;
-- `ROADMAP.md`;
-- `MILESTONES.md`;
-- `CHANGELOG.md`;
+- `CONTRIBUTING.md`;
 - current executable reference;
 - current test report;
 - current validation index;
 - current release notes;
 - current architecture document;
 - current milestone workflow;
-- `docs/README.md`;
-- `docs/core_principles.md`;
-- `docs/resonance_computation.md`.
+- `docs/README.md`.
 
-Historical release-specific workflows must not be silently redirected to a newer executable.
+The alignment review checks:
 
-A new architecture layer should preserve the existing release-validation history and add its own explicit validation boundary.
+- current version;
+- current milestone;
+- current executable filename;
+- current workflow path;
+- active root README validation badges;
+- current schemas;
+- complete resonant computational core;
+- balanced ternary state and retained-result domain;
+- current GitHub Actions Run Job state;
+- current test report;
+- current validation index;
+- current release notes;
+- release-specific architecture traceability.
 
-Supporting comparative workflows must remain secondary to the FRP architecture progression.
-
-## 60. Current CI Technical Chain
+## 46. Current CI Technical Chain
 
 The complete current CI chain is:
 
@@ -2644,7 +2245,7 @@ The complete current CI chain is:
 
 ↓
 
-`thermal coupling degradation`
+`thermal coupling-factor evolution`
 
 ↓
 
@@ -2657,6 +2258,10 @@ The complete current CI chain is:
 ↓
 
 `phase evolution`
+
+↓
+
+`resonance selection`
 
 ↓
 
@@ -2748,13 +2353,9 @@ The complete current CI chain is:
 
 ↓
 
-`artifact preservation`
+`GitHub Actions artifact preservation`
 
-The resonant phase-coherence mechanism remains the processor core throughout this chain.
-
-The balanced ternary domain remains the state and retained-result domain throughout this chain.
-
-## 61. Current Status
+## 47. Current Status
 
 Processor:
 
@@ -2766,7 +2367,7 @@ Processor class:
 
 Computational mechanism:
 
-`Kuramoto-Sakaguchi resonant phase dynamics with asymmetric phase lag, hierarchical fractal coupling, phase evolution, Kuramoto order parameter R, multiscale phase coherence, stateful delay dynamics, local thermal-phase interaction, local correlated gamma drift, nonlinear coherence compression, dynamic stability evaluation, phase-derived ternary targets, distributed commit, mandatory active-neutral routing, and retained coherent ternary state`
+`Kuramoto-Sakaguchi resonant phase dynamics with asymmetric phase lag, hierarchical fractal coupling, phase evolution, resonance selection, Kuramoto order parameter R, multiscale phase coherence, stateful delay dynamics, local thermal-phase interaction, local correlated gamma drift, nonlinear coherence compression, dynamic stability evaluation, phase-derived ternary targets, distributed commit, mandatory active-neutral routing, and retained coherent ternary state`
 
 State and retained-result domain:
 
@@ -2792,11 +2393,23 @@ Current executable reference:
 
 `frp_prototype_v1_7_0.py`
 
+Current structured-output schema:
+
+`frp.structured_output.v1.7.0`
+
 Current primary milestone workflow:
 
 `.github/workflows/frp-m15-implementation-mapping-qualification.yml`
 
-Current published release validation result:
+Current root README validation badges:
+
+`18 passing`
+
+Current repository workflow files:
+
+`19`
+
+Current validation result:
 
 `PASS`
 
@@ -2806,7 +2419,7 @@ Current validated M15 self-test result:
 
 Current CI role:
 
-`preserve the complete FRP computational and validation chain from Kuramoto-Sakaguchi resonant phase evolution, multiscale phase coherence, delay and thermal-phase dynamics, nonlinear coherence compression, phase-derived balanced ternary state formation, distributed active-neutral routing, and retained state through deterministic M15 fixed-point mapping, cycle-exact execution, RTL correlation, reference equivalence, and qualification closure`
+`preserve the complete FRP validation chain from Kuramoto-Sakaguchi resonant phase computation, hierarchical fractal phase interaction, multiscale phase coherence, delay and thermal-phase dynamics, nonlinear coherence compression, phase-derived balanced ternary state formation, distributed active-neutral routing, and retained coherent state through deterministic M15 fixed-point implementation mapping, cycle-exact execution, RTL correlation, reference equivalence, qualification closure, and supporting comparative validation contours`
 
 Next planned architecture layer:
 
