@@ -1,601 +1,1696 @@
 # Implementation Layers — Fractal Resonance Processor (FRP)
 
-This document defines the implementation-layer structure of the Fractal Resonance Processor (FRP) project.
+**Ternary Resonant Coherence Processor — Structured Output Prototype**
 
-Current candidate version:
+This document defines the current implementation-layer structure of the Fractal Resonance Processor (FRP).
 
-    v0.9.3-mobile
+FRP is a ternary resonant coherence processor.
 
-Current public repository package:
+Its implementation stack connects resonant phase dynamics, balanced ternary state retention, deterministic structured execution, fixed-point implementation mapping, cycle-exact reference traces, RTL comparison vectors, SystemVerilog interface mapping, reference-core mapping, equivalence, and qualification closure.
 
-    software validation layer, documentation layer, reproducibility layer, benchmark layer, and CI verification layer
+Current version:
 
-Main prototype file:
+`FRP v1.7.0`
 
-    ../frp_prototype_v0_9_3_mobile.py
+Current milestone:
+
+`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+
+Current executable reference:
+
+`../frp_prototype_v1_7_0.py`
+
+Current structured-output schema:
+
+`frp.structured_output.v1.7.0`
+
+Current M15 benchmark-matrix schema:
+
+`frp.m3.benchmark_matrix.v1.7.0`
+
+Current architecture document:
+
+`./m15_implementation_mapping_domain_interface_qualification_closure.md`
 
 Current test report:
 
-    ../TEST_REPORT_v0_9_3.md
+`../TEST_REPORT_v1_7_0.md`
 
-Related hardware pathway document:
+Current validation index:
 
-    hardware_pathway.md
+`../FRP_VALIDATION_INDEX_v1_7_0.md`
+
+Current release notes:
+
+`../RELEASE_NOTES_v1_7_0.md`
+
+Current primary qualification workflow:
+
+`../.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+
+Current published validation result:
+
+`PASS`
+
+Current validated M15 self-test result:
+
+`41/41 PASS`
 
 ## 1. Purpose
 
-The purpose of this document is to define the layered implementation structure of FRP.
+The implementation-layer structure defines how the FRP computational subject is preserved from executable semantics through hardware-facing deterministic qualification.
 
-The FRP project is organized as a staged architecture:
+The current chain is:
 
-    conceptual architecture
-    → software execution layer
-    → simulation validation layer
-    → verification layer
-    → benchmark layer
-    → CI layer
-    → documentation layer
-    → hardware-facing specification layer
-    → FPGA mapping layer
-    → ASIC mapping layer
-    → chip-oriented implementation research layer
-    → physical validation layer
-    → funding and partner layer
+`computational identity`
 
-Each layer has a specific function.
+↓
 
-Each layer must preserve the confirmed behavior of the previous layer.
+`floating semantic execution`
 
-The current public repository establishes the software execution and validation foundation.
+↓
+
+`kernel invariants`
+
+↓
+
+`structured telemetry`
+
+↓
+
+`verification and self-test`
+
+↓
+
+`benchmark evidence`
+
+↓
+
+`Continuous Integration qualification`
+
+↓
+
+`documentation and reproducibility`
+
+↓
+
+`release and archival traceability`
+
+↓
+
+`M3-M14 implementation progression`
+
+↓
+
+`M15 fixed-point interface and ternary encoding`
+
+↓
+
+`stateful quantized hardware shadow`
+
+↓
+
+`cycle-exact integer golden trace`
+
+↓
+
+`deterministic RTL comparison vectors`
+
+↓
+
+`SystemVerilog interface mapping`
+
+↓
+
+`synthesizable RTL reference-core mapping`
+
+↓
+
+`RTL assertion correlation`
+
+↓
+
+`reference equivalence`
+
+↓
+
+`qualification closure`
+
+Each layer inherits the validated behavior and contracts of the layers that feed it.
 
 ## 2. Layered Development Principle
 
-FRP development follows a layered engineering principle.
+FRP development follows a traceable implementation progression.
 
-The software layer defines executable behavior.
+Every layer has four responsibilities:
 
-The simulation validation layer confirms behavior through reproducible runs.
+- preserve the computational subject;
+- expose its interfaces and state domains;
+- produce deterministic evidence;
+- connect its result to the next implementation layer.
 
-The verification layer defines candidate invariants and measurable conditions.
+The inheritance rule is:
 
-The benchmark layer compares execution modes.
+`source semantics`
 
-The CI layer confirms automated repeatability.
+↓
 
-The documentation layer records architecture, scope, commands, interpretation, and release readiness.
+`measurable state`
 
-The hardware-facing layer translates the validated software behavior into implementation-oriented terms.
+↓
 
-The FPGA and ASIC layers evaluate concrete implementation routes.
+`deterministic representation`
 
-The physical validation layer defines how future implementations can be measured, compared, and validated.
+↓
 
-## 3. Layer 0 — Conceptual Architecture Layer
+`verification contract`
 
-Purpose:
+↓
 
-    define the core FRP architecture
+`qualification evidence`
 
-This layer contains the conceptual foundation of FRP.
+A layer transition is complete when the source behavior, interface mapping, deterministic output, and validation result remain traceable through the transition.
 
-Core concepts:
-
-- balanced ternary states
-- neutral transition routing
-- distributed commit behavior
-- resonant phase dynamics
-- operational coherence
-- destabilizing load
-- C_minus_P stability margin
-- scheduler phases
-- per-tick telemetry
-- software-to-hardware development trajectory
-
-Primary role:
-
-    establish the architectural meaning of FRP before implementation details
-
-Current repository references:
-
-- README.md
-- docs/core_principles.md
-- docs/resonance_computation.md
-- docs/architecture.md
-- ROADMAP.md
-
-## 4. Layer 1 — Software Execution Layer
+## 3. Layer 0 — Computational Identity Layer
 
 Purpose:
 
-    provide executable FRP behavior
+`define the complete FRP computational subject`
 
-Current software execution file:
+The current computational chain is:
 
-    ../frp_prototype_v0_9_3_mobile.py
+`balanced ternary state and retained-result domain {-1, 0, 1}`
 
-This layer implements the active FRP software model.
+↓
 
-Implemented components:
+`cell phase and frequency state`
 
-- balanced ternary state functions
-- ternary arithmetic operations
-- neutral transition routing
-- distributed commit logic
-- Kuramoto-Sakaguchi resonant phase layer
-- nonlinear cubic saturation
-- nonlinear compression
-- delay buffers
-- scheduler modes
-- per-tick telemetry
-- register file
-- processor instruction layer
-- demonstration mode
-- self-test mode
-- benchmark mode
-- command-line interface
+↓
 
-Current status:
+`Kuramoto-Sakaguchi resonant phase coupling`
 
-    complete for v0.9.3-mobile candidate
+↓
+
+`asymmetric Sakaguchi phase lag gamma`
+
+↓
+
+`dyadic hierarchical fractal coupling`
+
+↓
+
+`phase velocity and phase evolution`
+
+↓
+
+`resonance selection`
+
+↓
+
+`Kuramoto order parameter R`
+
+↓
+
+`multiscale phase coherence`
+
+↓
+
+`stateful delay dynamics`
+
+↓
+
+`distributed local thermal field`
+
+↓
+
+`local correlated gamma drift`
+
+↓
+
+`nonlinear coherence compression`
+
+↓
+
+`dynamic stability C(t) - P(t)`
+
+↓
+
+`phase-derived ternary target`
+
+↓
+
+`distributed ternary commit`
+
+↓
+
+`mandatory tick-separated routing through active neutral state 0`
+
+↓
+
+`retained coherent ternary state`
+
+The resonant dynamic domain drives the evolving computation.
+
+The balanced ternary domain provides the state, target, transition, and retained-result layer.
+
+Primary current references:
+
+- `../README.md`;
+- `./core_principles.md`;
+- `./resonance_computation.md`;
+- `./architecture.md`.
+
+## 4. Layer 1 — Floating Semantic Reference Layer
+
+Purpose:
+
+`provide executable current FRP semantics`
+
+Current executable reference:
+
+`../frp_prototype_v1_7_0.py`
+
+Current floating processor representation:
+
+`FractalResonanceProcessor`
+
+This layer implements:
+
+- balanced ternary state functions;
+- active neutral routing;
+- distributed commit;
+- scheduler modes;
+- Kuramoto-Sakaguchi phase coupling;
+- hierarchical fractal coupling;
+- phase evolution;
+- Kuramoto order parameter `R`;
+- multiscale phase coherence;
+- stateful delay dynamics;
+- distributed local thermal dynamics;
+- local correlated gamma drift;
+- nonlinear coherence compression;
+- dynamic stability `C(t) - P(t)`;
+- phase-derived ternary targets;
+- structured telemetry.
 
 Engineering role:
 
-    executable reference model for later implementation-layer work
+`semantic source for current implementation mapping and correlation`
 
-## 5. Layer 2 — Simulation Validation Layer
+## 5. Layer 2 — Kernel Invariant Layer
 
 Purpose:
 
-    validate FRP behavior through reproducible software execution
+`preserve the current processor execution contract`
 
-This layer confirms that the software model executes and produces documented results.
+Current state domain:
 
-Validation mechanisms:
+`{-1, 0, 1}`
 
-- standard self-test
-- heavy self-test
-- benchmark execution
-- reproducibility commands
-- test report
-- command-line profiles
-- output inspection
+Active neutral state:
 
-Current test report:
+`0`
 
-    ../TEST_REPORT_v0_9_3.md
+Mandatory opposite-polarity routes:
 
-Current reproducibility guide:
+`-1 → 0 → 1`
 
-    ../REPRODUCIBILITY.md
+`1 → 0 → -1`
 
-Current usage guide:
+Tick-separated route relation:
 
-    ../USAGE.md
+`tick N: active polarity → 0`
 
-Current status:
+↓
 
-    complete for v0.9.3-mobile candidate
+`pending neutral route retained`
+
+↓
+
+`tick N+1 or later: 0 → target polarity`
+
+Current validated invariants:
+
+`balanced_ternary_state_domain = True`
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+`scheduler_counts_valid = True`
+
+`switch_load_peak <= transition_fraction`
+
+`C_minus_P_min > 0.0`
+
+`fixed_point_topology_sum_exact = True`
+
+`fixed_point_thermal_sum_exact = True`
 
 Engineering role:
 
-    establish reproducible software validation before hardware-facing translation
+`define the behavior inherited by every downstream implementation layer`
 
-## 6. Layer 3 — Candidate Invariant Layer
+## 6. Layer 3 — Structured Output and Telemetry Layer
 
 Purpose:
 
-    define the required behavioral invariants of the current candidate
+`expose deterministic processor state and execution evidence`
 
-Current candidate invariants:
+Current structured-output schema:
 
-| Invariant | Required Result |
+`frp.structured_output.v1.7.0`
+
+Compact structured execution records:
+
+- configuration;
+- kernel contract;
+- hardware profile;
+- execution summary;
+- preload digest;
+- trace digest;
+- cell-trace digest.
+
+Full trace mode adds:
+
+- `trace`;
+- `cell_trace`;
+- `route_events`.
+
+Current default full-trace sizes:
+
+`trace = 64 processor-tick rows`
+
+`cell_trace = 1024 cell-tick rows`
+
+Telemetry covers:
+
+- scheduler state;
+- ternary state;
+- phase;
+- frequency;
+- frequency lag;
+- switching load;
+- generated power;
+- thermal state;
+- gamma state;
+- coupling field;
+- raw phase coherence;
+- effective coherence;
+- multiscale coherence;
+- `C(t)`;
+- `P(t)`;
+- `C(t) - P(t)`;
+- route counters;
+- pending-route state.
+
+Engineering role:
+
+`make the resonant and ternary execution path measurable and reproducible`
+
+## 7. Layer 4 — Verification and Self-Test Layer
+
+Purpose:
+
+`qualify executable behavior through deterministic checks`
+
+Current self-test command:
+
+    python frp_prototype_v1_7_0.py --mode self-test --output json
+
+Current validated check count:
+
+`41`
+
+Current result:
+
+`41/41 PASS`
+
+Validated scheduler profiles:
+
+- `default`;
+- `free`;
+- `7/1`;
+- `1/7`.
+
+Current validation coverage includes:
+
+- active-neutral routing;
+- request-lane order;
+- scheduler counts;
+- 8-cell, 16-cell, and 32-cell scaling;
+- balanced ternary encoding;
+- fixed-point boundaries;
+- exact topology closure;
+- exact thermal closure;
+- trigonometric lookup behavior;
+- quantized-shadow invariants;
+- deterministic vector generation;
+- floating semantic correlation;
+- exact quantized replay;
+- qualification closure.
+
+Primary current references:
+
+- `../TEST_REPORT_v1_7_0.md`;
+- `../FRP_VALIDATION_INDEX_v1_7_0.md`;
+- `../verification/README.md`.
+
+## 8. Layer 5 — Benchmark Evidence Layer
+
+Purpose:
+
+`record architecture behavior under reproducible benchmark contracts`
+
+The repository preserves two benchmark contours.
+
+### 8.1 Current M15 benchmark matrix
+
+Current command:
+
+    python frp_prototype_v1_7_0.py --mode benchmark
+
+Equivalent export:
+
+    python frp_prototype_v1_7_0.py --export-benchmark-matrix
+
+Current matrix rows:
+
+1. `frp_v1_6_0_m14_floating_semantic_reference`;
+2. `frp_v1_7_0_quantized_hardware_shadow`;
+3. `frp_v1_7_0_cycle_exact_vector_package`;
+4. `frp_v1_7_0_systemverilog_correlation_contract`;
+5. `frp_v1_7_0_qualification_closure`.
+
+Current benchmark-matrix schema:
+
+`frp.m3.benchmark_matrix.v1.7.0`
+
+### 8.2 Historical transition benchmark
+
+Historical source:
+
+`../TEST_REPORT_v0_9_3.md`
+
+Historical architecture set:
+
+- `frp_distributed_resonant`;
+- `direct_ternary_commit`;
+- `distributed_neutral_ternary`;
+- `binary_style_forced_switch`.
+
+Recorded thermal result:
+
+`binary_style_forced_switch heat_peak = 0.051000`
+
+`distributed_neutral_ternary heat_peak = 0.003250`
+
+Exact ratio:
+
+`0.051000 / 0.003250 = 15.6923076923`
+
+Historical benchmark result:
+
+`distributed_neutral_ternary recorded a 15.69× lower heat_peak than binary_style_forced_switch`
+
+Equivalent relative reduction:
+
+`93.63% lower heat_peak`
+
+The same historical run records:
+
+`distributed_neutral_ternary actual_direct_events = 0`
+
+`binary_style_forced_switch actual_direct_events = 2052`
+
+`distributed_neutral_ternary switch_load_peak = 0.25`
+
+`binary_style_forced_switch switch_load_peak = 1.0`
+
+Engineering role:
+
+`preserve current implementation-mapping evidence and historical transition evidence as separate release-specific measurement contours`
+
+## 9. Layer 6 — Continuous Integration Qualification Layer
+
+Purpose:
+
+`qualify repository execution through automated deterministic workflows`
+
+Current repository workflow count:
+
+`19`
+
+Current root README active passing badge count:
+
+`18`
+
+Current primary M15 workflow:
+
+`../.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+
+Workflow name:
+
+`FRP M15 Implementation Mapping and Qualification Closure`
+
+Execution environment:
+
+`ubuntu-latest`
+
+Python version:
+
+`3.12`
+
+Timeout:
+
+`30 minutes`
+
+Current M15 workflow stages:
+
+1. checkout repository;
+2. set up Python;
+3. compile the FRP v1.7.0 reference file;
+4. generate M15 qualification outputs;
+5. compare deterministic vector packages;
+6. validate M15 schemas, kernel invariants, fixed-point contract, and equivalence;
+7. validate deterministic vector-package integrity;
+8. validate the M15 architecture document contract;
+9. upload M15 qualification artifacts.
+
+Engineering role:
+
+`bind source state, generated artifacts, deterministic comparison, and published validation status`
+
+## 10. Layer 7 — Documentation and Reproducibility Layer
+
+Purpose:
+
+`preserve architecture meaning, execution instructions, evidence interpretation, and deterministic reproduction`
+
+Current core documentation includes:
+
+- `../README.md`;
+- `../INSTALL.md`;
+- `../USAGE.md`;
+- `../REPRODUCIBILITY.md`;
+- `../CI.md`;
+- `../PROJECT_STRUCTURE.md`;
+- `../CONTRIBUTING.md`;
+- `./README.md`;
+- `./core_principles.md`;
+- `./resonance_computation.md`;
+- `./architecture.md`;
+- `./benchmark_interpretation.md`;
+- `./limitations.md`;
+- `./implementation_layers.md`.
+
+Current reproducibility state records:
+
+- source revision;
+- working-tree state;
+- Python version;
+- dependency versions;
+- seed;
+- scheduler;
+- cell count;
+- step count;
+- processor parameters;
+- generated artifacts;
+- independent deterministic repeat.
+
+Engineering role:
+
+`keep executable semantics, evidence, commands, and architecture interpretation synchronized`
+
+## 11. Layer 8 — Release and Archival Traceability Layer
+
+Purpose:
+
+`bind validated architecture state to release evidence and citation metadata`
+
+Current release-facing files:
+
+- `../CHANGELOG.md`;
+- `../RELEASE_NOTES_v1_7_0.md`;
+- `../TEST_REPORT_v1_7_0.md`;
+- `../FRP_VALIDATION_INDEX_v1_7_0.md`;
+- `../CITATION.cff`;
+- `../LICENSE`;
+- `../NOTICE`;
+- `../SECURITY.md`;
+- `../CONTRIBUTING.md`;
+- `../CODE_OF_CONDUCT.md`.
+
+Current validated release commit:
+
+`5fd9a4f`
+
+Recorded workflow stack:
+
+- `FRP Structured Output #113 — PASS`;
+- `FRP M15 Implementation Mapping and Qualification Closure #1 — PASS`;
+- `FRP Self Test #154 — PASS`;
+- `FRP Benchmark Smoke Test #152 — PASS`.
+
+Engineering role:
+
+`preserve version identity, validation evidence, release traceability, and external referenceability`
+
+## 12. Layer 9 — M3 Benchmark and Hardware Signal Mapping Layer
+
+Purpose:
+
+`map structured execution into benchmark exports and hardware-facing signal fields`
+
+Milestone:
+
+`FRP v0.9.5 — M3 Benchmark and Signal Map`
+
+Current workflow:
+
+`../.github/workflows/frp-m3-benchmark-signal-map.yml`
+
+This layer established the progression from structured processor execution toward:
+
+- benchmark export;
+- hardware-facing signal mapping;
+- machine-readable architecture fields;
+- later HDL and RTL correlation layers.
+
+Engineering role:
+
+`form the first validated bridge from executable processor behavior into implementation-facing exported structure`
+
+## 13. Layer 10 — M4-M7 HDL, RTL, Formal, and FPGA Scaffold Layers
+
+Purpose:
+
+`progress the exported processor contract through verification and programmable-logic preparation`
+
+Milestone progression:
+
+| Version | Milestone | Workflow |
+|---|---|---|
+| `v0.9.6` | `M4 — HDL Trace Export and Testbench Scaffold` | `frp-m4-hdl-trace.yml` |
+| `v0.9.7` | `M5 — RTL Interface Contract and Assertion Harness` | `frp-m5-rtl-assertion-harness.yml` |
+| `v0.9.8` | `M6 — Formal Verification Hooks and Equivalence Scaffold` | `frp-m6-formal-verification.yml` |
+| `v0.9.9` | `M7 — FPGA Synthesis Package and Timing Constraint Scaffold` | `frp-m7-fpga-synthesis.yml` |
+
+This progression adds:
+
+- HDL trace structure;
+- testbench preparation;
+- RTL interface contracts;
+- assertion mapping;
+- formal verification hooks;
+- equivalence scaffolds;
+- FPGA synthesis structure;
+- timing constraint structure.
+
+Engineering role:
+
+`carry the processor contract into deterministic HDL, RTL, formal, and FPGA-facing verification structures`
+
+## 14. Layer 11 — M8-M10 Production, Silicon, and Tapeout Architecture Layers
+
+Purpose:
+
+`extend the implementation path through stable release interfaces and silicon-oriented architecture`
+
+Milestone progression:
+
+| Version | Milestone | Workflow |
+|---|---|---|
+| `v1.0.0` | `M8 — Production Release Package and Stable Interface Freeze` | `frp-m8-production-release.yml` |
+| `v1.1.0` | `M9 — Silicon and Heterogeneous Implementation Architecture` | `frp-m9-silicon-architecture.yml` |
+| `v1.2.0` | `M10 — Silicon Production and Tapeout Readiness Package` | `frp-m10-silicon-production-tapeout.yml` |
+
+This progression records:
+
+- stable interface freeze;
+- silicon interface model;
+- heterogeneous implementation map;
+- compute fabric mapping;
+- memory and register interface mapping;
+- clock and reset domain mapping;
+- signal pipeline architecture;
+- accelerator integration profile;
+- FPGA-to-silicon migration path;
+- production readiness manifests;
+- tapeout readiness structures.
+
+Engineering role:
+
+`extend the validated processor architecture into production and silicon-oriented implementation planning`
+
+## 15. Layer 12 — M11-M14 Handoff, Iteration, Scaling, and Physical Correlation Layers
+
+Purpose:
+
+`carry the implementation path through handoff, feedback, scaling, and physical-domain correlation`
+
+Milestone progression:
+
+| Version | Milestone | Workflow |
+|---|---|---|
+| `v1.3.0` | `M11 — Production Integration and External Implementation Handoff` | `frp-m11-production-integration-handoff.yml` |
+| `v1.4.0` | `M12 — External Implementation Feedback and Production Iteration Loop` | `frp-m12-feedback-iteration.yml` |
+| `v1.5.0` | `M13 — Production Scaling and Implementation Stabilization Package` | `frp-m13-production-scaling-stabilization.yml` |
+| `v1.6.0` | `M14 — Physical Implementation Correlation and Production Qualification Package` | `frp-m14-physical-implementation-qualification.yml` |
+
+This progression records:
+
+- production integration manifests;
+- external implementation handoff packages;
+- feedback intake manifests;
+- production iteration plans;
+- thermal saturation models;
+- delay dynamics models;
+- nonlinear coherence compression models;
+- thermal gamma-drift models;
+- thermal stability boundary sweeps;
+- recovery dynamics maps;
+- production scaling stability envelopes;
+- hierarchical ultrametric topology models;
+- shell-normalized fractal coupling;
+- multiscale phase-coherence maps;
+- cluster-local thermal fields;
+- cross-cluster propagation maps;
+- localized hotspot-containment harnesses;
+- dense-hierarchical equivalence maps;
+- physical-domain correlation packages.
+
+Engineering role:
+
+`establish the validated semantic and correlation base inherited by M15`
+
+## 16. Layer 13 — M15 Fixed-Point Interface Profile Layer
+
+Purpose:
+
+`define deterministic finite-word representations for the current processor domains`
+
+Artifact layer:
+
+`fixed_point_interface_profile`
+
+Current numeric representations:
+
+| Domain | Representation |
 |---|---|
-| target match | match = 1.000 |
-| direct transition safety | actual_direct_events = 0 |
-| stability | C_minus_P_min > 0 |
-| transition load | switch_load_peak <= transition_fraction |
-| telemetry | ticks_recorded = steps |
-| scheduler | counts match selected cycle mode |
+| general dynamic scalar | `S32Q16` |
+| normalized coefficient | `S32Q30` |
+| phase | `PHASE_U32` |
+| Sakaguchi gamma | `GAMMA_S32` |
 
-These invariants define the minimum candidate behavior for v0.9.3-mobile.
+Current deterministic trigonometric profile:
 
-Engineering role:
+`4096-entry full-cycle lookup table`
 
-    provide stable behavioral requirements for later software and hardware-facing layers
+Current exactness markers:
 
-Current repository references:
+`fixed_point_topology_sum_exact = True`
 
-- README.md
-- TEST_REPORT_v0_9_3.md
-- RELEASE_CHECKLIST_v0_9_3.md
-- verification/coherence_metrics.md
-- docs/output_schema.md
+`fixed_point_thermal_sum_exact = True`
 
-## 7. Layer 4 — Verification Layer
+Export command:
 
-Purpose:
-
-    define how FRP behavior is measured and evaluated
-
-Current verification files:
-
-- ../verification/README.md
-- ../verification/coherence_metrics.md
-
-Verification topics:
-
-- C
-- P
-- C_minus_P
-- heat
-- thermal_scale
-- switch_load
-- transition_debt
-- direct transition events
-- prevented direct transitions
-- neutralized conflicts
-- logical match
-- direct conflict fraction
-- scheduler counts
-- telemetry completeness
+    python frp_prototype_v1_7_0.py --export-fixed-point-interface-profile
 
 Engineering role:
 
-    translate execution behavior into measurable project metrics
+`define the numeric contract inherited by quantized execution and RTL-facing comparison`
 
-Current status:
-
-    complete for v0.9.3-mobile candidate
-
-## 8. Layer 5 — Benchmark Layer
+## 17. Layer 14 — M15 Balanced Ternary Hardware Encoding Layer
 
 Purpose:
 
-    compare FRP execution against defined benchmark modes
+`map the balanced ternary state domain into deterministic two-bit representation`
 
-Current benchmark command:
+Artifact layer:
 
-    python3 frp_prototype_v0_9_3_mobile.py --mode bench --steps 128 --seeds 5
+`balanced_ternary_hardware_encoding_map`
 
-Current benchmark architectures:
+Current encoding:
 
-- binary_style_forced_switch
-- direct_ternary_commit
-- distributed_neutral_ternary
-- frp_distributed_resonant
+`-1 → 2'b11`
 
-Current benchmark interpretation files:
+`0 → 2'b00`
 
-- ../TEST_REPORT_v0_9_3.md
-- benchmark_interpretation.md
+`+1 → 2'b01`
+
+Reserved encoding:
+
+`2'b10`
+
+Canonical integer mapping:
+
+`-1 → 3`
+
+`0 → 0`
+
+`+1 → 1`
+
+Reserved integer code:
+
+`2`
+
+Current invariant:
+
+`reserved_state_events = 0`
+
+Export command:
+
+    python frp_prototype_v1_7_0.py --export-balanced-ternary-hardware-encoding-map
 
 Engineering role:
 
-    establish comparative behavior under reproducible benchmark conditions
+`represent the ternary state and retained-result domain inside deterministic hardware-facing interfaces`
 
-Current status:
-
-    complete for v0.9.3-mobile candidate
-
-## 9. Layer 6 — CI Verification Layer
+## 18. Layer 15 — M15 Quantized Hardware Shadow Layer
 
 Purpose:
 
-    confirm automated execution on general-purpose computing infrastructure
+`execute the current FRP semantics through stateful finite-word arithmetic`
 
-Current CI workflows:
+Artifact layer:
 
-| Workflow | File |
+`quantized_reference_shadow_model`
+
+Current quantized processor representation:
+
+`QuantizedReferenceShadowProcessor`
+
+This layer preserves:
+
+- balanced ternary state execution;
+- active-neutral routing;
+- pending neutral routes;
+- scheduler behavior;
+- transition-fraction limits;
+- hierarchical coupling;
+- delay dynamics;
+- local thermal dynamics;
+- gamma dynamics;
+- phase evolution;
+- multiscale coherence;
+- global `C(t) - P(t)` telemetry.
+
+Export command:
+
+    python frp_prototype_v1_7_0.py --export-quantized-reference-shadow-model
+
+Engineering role:
+
+`provide the deterministic finite-word execution source for cycle-exact comparison`
+
+## 19. Layer 16 — M15 Cycle-Exact Reference Trace Layer
+
+Purpose:
+
+`record the integer golden execution path tick by tick`
+
+Artifact layer:
+
+`cycle_exact_reference_trace`
+
+Current default trace length:
+
+`64 ticks`
+
+The trace preserves deterministic correlation fields for:
+
+- scheduler state;
+- ternary state;
+- pending routes;
+- phase;
+- frequency;
+- thermal state;
+- gamma state;
+- coherence;
+- dynamic stability.
+
+Export command:
+
+    python frp_prototype_v1_7_0.py --export-cycle-exact-reference-trace
+
+Engineering role:
+
+`bridge stateful quantized execution and deterministic RTL comparison`
+
+## 20. Layer 17 — M15 RTL Comparison Vector Layer
+
+Purpose:
+
+`package deterministic reference behavior for RTL-facing replay and correlation`
+
+Artifact layer:
+
+`rtl_comparison_vector_package`
+
+Current vector-package file count:
+
+`10`
+
+Current files:
+
+- `frp_m15_kernel_vectors.vec`;
+- `frp_m15_pending_routes.trace`;
+- `frp_m15_scheduler_free_vectors.vec`;
+- `frp_m15_scheduler_7_1_vectors.vec`;
+- `frp_m15_scheduler_1_7_vectors.vec`;
+- `frp_m15_full_correlation_vectors.vec`;
+- `frp_m15_cell_trace.vec`;
+- `frp_m15_reference_preload.json`;
+- `frp_m15_trig_lut_q30.vec`;
+- `frp_m15_sha256_manifest.json`.
+
+Current deterministic qualification generates two independent vector directories and requires byte-identical equality.
+
+Export command:
+
+    python frp_prototype_v1_7_0.py --export-rtl-comparison-vector-package
+
+Engineering role:
+
+`provide exact replay inputs, expected outputs, and integrity evidence`
+
+## 21. Layer 18 — M15 SystemVerilog Interface Layer
+
+Purpose:
+
+`map the current processor domains into deterministic testbench interfaces`
+
+Artifact layer:
+
+`systemverilog_testbench_interface_map`
+
+Current default interface parameters include:
+
+| Parameter | Value |
+|---|---:|
+| `NUM_CELLS` | `16` |
+| `HIERARCHY_DEPTH` | `4` |
+| `REQUEST_LANES` | `4` |
+| `CELL_ID_WIDTH` | `4` |
+| `STATE_VECTOR_WIDTH` | `32` |
+| `SCALAR_WIDTH` | `32` |
+| `PHASE_WIDTH` | `32` |
+
+The interface layer carries:
+
+- request-lane mapping;
+- scheduler mapping;
+- state-vector mapping;
+- phase and scalar mapping;
+- preload mapping;
+- deterministic gamma-noise stimulus;
+- expected trace correlation fields.
+
+Export command:
+
+    python frp_prototype_v1_7_0.py --export-systemverilog-testbench-interface-map
+
+Engineering role:
+
+`define deterministic verification connectivity between M15 reference artifacts and SystemVerilog replay`
+
+## 22. Layer 19 — M15 Synthesizable RTL Reference-Core Layer
+
+Purpose:
+
+`map the current processor semantics into synthesizable reference-core structure`
+
+Artifact layer:
+
+`synthesizable_rtl_reference_core`
+
+The current mapping covers:
+
+- balanced ternary state execution;
+- active-neutral transition core;
+- pending neutral-route queue;
+- scheduler;
+- request lanes;
+- transition limits;
+- fixed-point phase behavior;
+- hierarchical coupling datapath;
+- thermal-field datapath;
+- multiscale phase-coherence datapath;
+- dynamic-stability output mapping.
+
+Export command:
+
+    python frp_prototype_v1_7_0.py --export-synthesizable-rtl-reference-core
+
+Engineering role:
+
+`provide the current deterministic RTL realization map inherited by M16`
+
+## 23. Layer 20 — M15 RTL Assertion Correlation Layer
+
+Purpose:
+
+`bind processor invariants and cycle-exact reference fields to RTL-facing checks`
+
+Artifact layer:
+
+`rtl_assertion_correlation_harness`
+
+Current assertion-correlation harness count:
+
+`13`
+
+Current exact integer comparison rule:
+
+`actual integer field == expected integer field`
+
+The harness covers:
+
+- direct-event invariant;
+- scheduler behavior;
+- state correlation;
+- route correlation;
+- reference trace correlation.
+
+Export command:
+
+    python frp_prototype_v1_7_0.py --export-rtl-assertion-correlation-harness
+
+Engineering role:
+
+`turn current kernel and trace contracts into explicit RTL-facing qualification conditions`
+
+## 24. Layer 21 — M15 Reference Equivalence Layer
+
+Purpose:
+
+`qualify semantic correlation and exact deterministic replay`
+
+Artifact layer:
+
+`reference_rtl_equivalence_report`
+
+The current equivalence architecture has two levels.
+
+### 24.1 Floating semantic reference to quantized shadow
+
+Required exact sequence matches:
+
+- state sequence match `1.0`;
+- scheduler sequence match `1.0`;
+- neutral-route sequence match `1.0`;
+- `C_minus_P` sign match `1.0`;
+- boundary-order match `1.0`.
+
+Required maximum error bounds:
+
+| Field | Maximum error |
+|---|---:|
+| phase | `0.02` |
+| frequency | `0.0001` |
+| heat | `0.001` |
+| gamma | `0.000001` |
+| coherence | `0.01` |
+| `C` | `0.01` |
+| `P` | `0.001` |
+| `C_minus_P` | `0.01` |
+
+### 24.2 Quantized shadow deterministic replay
+
+Required exact replay matches:
+
+- state match `1.0`;
+- scheduler match `1.0`;
+- pending-route match `1.0`;
+- counter match `1.0`;
+- trace match `1.0`;
+- cell-trace match `1.0`.
+
+Export command:
+
+    python frp_prototype_v1_7_0.py --export-reference-rtl-equivalence-report
+
+Engineering role:
+
+`connect floating semantics, quantized execution, and deterministic RTL-facing replay through explicit correlation boundaries`
+
+## 25. Layer 22 — M15 Qualification Closure Layer
+
+Purpose:
+
+`bind the complete M15 implementation stack into one final qualification result`
+
+Artifact layer:
+
+`qualification_closure_manifest`
+
+Current artifact-layer count:
+
+`10`
+
+Current qualification result:
+
+`PASS`
+
+Export command:
+
+    python frp_prototype_v1_7_0.py --export-qualification-closure-manifest
+
+The closure chain is:
+
+`fixed-point interface`
+
+↓
+
+`balanced ternary encoding`
+
+↓
+
+`quantized hardware shadow`
+
+↓
+
+`cycle-exact trace`
+
+↓
+
+`RTL comparison vectors`
+
+↓
+
+`SystemVerilog interface map`
+
+↓
+
+`synthesizable RTL reference-core map`
+
+↓
+
+`RTL assertion correlation`
+
+↓
+
+`reference equivalence`
+
+↓
+
+`qualification closure`
+
+Engineering role:
+
+`establish one deterministic qualified implementation-mapping package for FRP v1.7.0`
+
+## 26. Layer 23 — Comparative Architecture and Hardware-Sensitivity Layer
+
+Purpose:
+
+`compare architecture-specific execution through shared workload and profile contracts`
+
+Current directory:
+
+`../benchmarks/architecture_comparison/`
+
+Current architecture set:
+
+1. `binary_synchronous_reference`;
+2. `binary_clock_gated_reference`;
+3. `direct_ternary_reference`;
+4. `frp_v1_7_0_quantized_shadow`.
+
+Current comparison chain:
+
+`one deterministic semantic workload`
+
+↓
+
+`architecture-specific execution`
+
+↓
+
+`raw architecture event counters`
+
+↓
+
+`one common normalized cost model`
+
+↓
+
+`one common thermal proxy model`
+
+↓
+
+`machine-readable comparison matrix`
+
+Current hardware-sensitivity scenarios:
+
+- `lower_bound`;
+- `nominal`;
+- `upper_bound`.
+
+Current ranking state:
+
+`ranking_stable = true`
+
+`ranking_sensitive = false`
+
+Current qualification policy:
+
+`integrity_only_no_winner_assertions`
+
+Current winner assertions:
+
+`[]`
+
+The current M15 quantized-shadow row exposes its declared implementation-mapping activity concentration in fixed-point arithmetic and trigonometric lookup activity.
+
+Engineering role:
+
+`provide deterministic architecture-comparison and coefficient-sensitivity evidence around the validated M15 reference architecture`
+
+## 27. Layer 24 — Hardware Pathway and Physical Validation Support Layer
+
+Purpose:
+
+`preserve implementation-study and external technical handoff documents around the validated architecture`
+
+Repository support documents include:
+
+- `./hardware_pathway.md`;
+- `./fpga_mapping_study.md`;
+- `./asic_mapping_study.md`;
+- `./physical_validation_plan.md`;
+- `../funding_brief.md`.
+
+These documents cover:
+
+- hardware pathway planning;
+- FPGA mapping study;
+- ASIC mapping study;
+- physical validation planning;
+- partner and funding-facing technical presentation.
+
+Their implementation role is to inherit the current validated FRP architecture, evidence, terminology, and release identity when each document is synchronized.
+
+## 28. Layer Inheritance Rule
+
+Every downstream layer inherits the validated contracts of its source layers.
+
+The current inheritance chain is:
+
+`computational identity`
+
+↓
+
+`floating semantic reference`
+
+↓
+
+`kernel invariants`
+
+↓
+
+`structured telemetry`
+
+↓
+
+`verification and self-test`
+
+↓
+
+`benchmark evidence`
+
+↓
+
+`Continuous Integration qualification`
+
+↓
+
+`documentation and release traceability`
+
+↓
+
+`M3-M14 implementation progression`
+
+↓
+
+`M15 fixed-point profile`
+
+↓
+
+`balanced ternary hardware encoding`
+
+↓
+
+`quantized hardware shadow`
+
+↓
+
+`cycle-exact reference trace`
+
+↓
+
+`RTL comparison vectors`
+
+↓
+
+`SystemVerilog interface mapping`
+
+↓
+
+`synthesizable RTL reference-core mapping`
+
+↓
+
+`RTL assertion correlation`
+
+↓
+
+`reference equivalence`
+
+↓
+
+`qualification closure`
+
+Inheritance means:
+
+- the semantic reference carries the computational identity;
+- the invariant layer defines required processor behavior;
+- telemetry exposes measurable state;
+- self-tests qualify the executable contract;
+- benchmark layers record release-specific evidence;
+- workflows bind deterministic execution to repository validation;
+- M3-M14 preserve the implementation progression;
+- the M15 numeric layer maps current state domains;
+- the quantized shadow executes the finite-word contract;
+- the cycle-exact trace records the golden execution path;
+- the vector layer packages deterministic replay data;
+- the interface layer maps verification connectivity;
+- the RTL reference-core layer maps synthesizable execution structure;
+- the assertion layer maps invariants to checks;
+- the equivalence layer qualifies correlation and replay;
+- the closure layer binds the complete package.
+
+## 29. Historical and Current Benchmark Layer Separation
+
+The repository preserves two distinct measurement contours.
+
+Historical transition contour:
+
+`v0.9.3 transition benchmark`
+
+Primary measured subject:
+
+`route activity, switching load, historical heat_peak, and dynamic stability`
+
+Direct archived thermal result:
+
+`distributed_neutral_ternary = 15.69× lower heat_peak than binary_style_forced_switch`
+
+Current M15 comparative contour:
+
+`FRP v1.7.0 quantized hardware-shadow comparison`
+
+Primary measured subject:
+
+`raw event volume, normalized activity cost, common thermal proxy, and hardware-sensitivity response`
+
+The two contours retain their release-specific architecture identifiers, metrics, and interpretation domains.
+
+## 30. Current M15 Artifact and Schema Registry
+
+Current artifact layers:
+
+1. `fixed_point_interface_profile`;
+2. `balanced_ternary_hardware_encoding_map`;
+3. `quantized_reference_shadow_model`;
+4. `cycle_exact_reference_trace`;
+5. `rtl_comparison_vector_package`;
+6. `systemverilog_testbench_interface_map`;
+7. `synthesizable_rtl_reference_core`;
+8. `rtl_assertion_correlation_harness`;
+9. `reference_rtl_equivalence_report`;
+10. `qualification_closure_manifest`.
+
+Current M15 schemas:
+
+`frp.m15.fixed_point_interface_profile.v1.7.0`
+
+`frp.m15.balanced_ternary_hardware_encoding_map.v1.7.0`
+
+`frp.m15.quantized_reference_shadow_model.v1.7.0`
+
+`frp.m15.cycle_exact_reference_trace.v1.7.0`
+
+`frp.m15.rtl_comparison_vector_package.v1.7.0`
+
+`frp.m15.systemverilog_testbench_interface_map.v1.7.0`
+
+`frp.m15.synthesizable_rtl_reference_core.v1.7.0`
+
+`frp.m15.rtl_assertion_correlation_harness.v1.7.0`
+
+`frp.m15.reference_rtl_equivalence_report.v1.7.0`
+
+`frp.m15.qualification_closure_manifest.v1.7.0`
+
+Engineering role:
+
+`keep each implementation layer identifiable through a stable schema contract`
+
+## 31. Current Workflow Inventory
+
+The repository contains 19 GitHub Actions workflow files:
+
+1. `.github/workflows/frp-architecture-comparison.yml`;
+2. `.github/workflows/frp-benchmark-smoke.yml`;
+3. `.github/workflows/frp-hardware-sensitivity-comparison.yml`;
+4. `.github/workflows/frp-hardware-sensitivity-profile.yml`;
+5. `.github/workflows/frp-m10-silicon-production-tapeout.yml`;
+6. `.github/workflows/frp-m11-production-integration-handoff.yml`;
+7. `.github/workflows/frp-m12-feedback-iteration.yml`;
+8. `.github/workflows/frp-m13-production-scaling-stabilization.yml`;
+9. `.github/workflows/frp-m14-physical-implementation-qualification.yml`;
+10. `.github/workflows/frp-m15-implementation-mapping-qualification.yml`;
+11. `.github/workflows/frp-m3-benchmark-signal-map.yml`;
+12. `.github/workflows/frp-m4-hdl-trace.yml`;
+13. `.github/workflows/frp-m5-rtl-assertion-harness.yml`;
+14. `.github/workflows/frp-m6-formal-verification.yml`;
+15. `.github/workflows/frp-m7-fpga-synthesis.yml`;
+16. `.github/workflows/frp-m8-production-release.yml`;
+17. `.github/workflows/frp-m9-silicon-architecture.yml`;
+18. `.github/workflows/frp-self-test.yml`;
+19. `.github/workflows/frp-structured-output.yml`.
+
+The root `README.md` exposes 18 active passing validation badges.
+
+The Comparative Architecture Benchmark workflow completes the 19-file workflow inventory.
+
+## 32. Current Layer Status
+
+| Layer | Current state |
 |---|---|
-| FRP Self Test | ../.github/workflows/frp-self-test.yml |
-| FRP Benchmark Smoke Test | ../.github/workflows/frp-benchmark-smoke.yml |
+| computational identity | established |
+| floating semantic reference | current in `frp_prototype_v1_7_0.py` |
+| kernel invariants | validated |
+| structured output and telemetry | validated |
+| verification and self-test | `41/41 PASS` |
+| benchmark evidence | current and historical contours preserved |
+| Continuous Integration qualification | passing workflow chain |
+| documentation and reproducibility | active synchronized layer |
+| release and archival traceability | current v1.7.0 evidence recorded |
+| M3 benchmark and signal mapping | published progression layer |
+| M4-M7 HDL, RTL, formal, and FPGA scaffolds | published progression layers |
+| M8-M10 production, silicon, and tapeout architecture | published progression layers |
+| M11-M14 handoff, iteration, scaling, and physical correlation | published progression layers |
+| M15 fixed-point interface | validated |
+| M15 ternary hardware encoding | validated |
+| M15 quantized hardware shadow | validated |
+| M15 cycle-exact reference trace | validated |
+| M15 RTL comparison vectors | validated |
+| M15 SystemVerilog interface map | validated |
+| M15 synthesizable RTL reference-core map | validated |
+| M15 RTL assertion correlation | validated |
+| M15 reference equivalence | validated |
+| M15 qualification closure | `PASS` |
+| comparative architecture and hardware sensitivity | qualified deterministic support layer |
+| hardware pathway and physical-validation support documents | repository support layer |
 
-Current CI coverage:
+## 33. Current Validation Chain
 
-- dependency installation
-- standard self-test execution
-- result=PASS verification
-- benchmark command execution
-- benchmark architecture label verification
+Current published release layer:
 
-Engineering role:
+`FRP v1.7.0 — M15 Implementation Mapping, Domain Interface, and Qualification Closure Package`
 
-    provide automated repeatability and repository-level execution evidence
+Current validated release commit:
 
-Current status:
+`5fd9a4f`
 
-    passing for v0.9.3-mobile candidate
+Current validated workflow stack:
 
-## 10. Layer 7 — Documentation Layer
+- `FRP Structured Output #113 — PASS`;
+- `FRP M15 Implementation Mapping and Qualification Closure #1 — PASS`;
+- `FRP Self Test #154 — PASS`;
+- `FRP Benchmark Smoke Test #152 — PASS`.
 
-Purpose:
+Current self-test result:
 
-    preserve public project structure, execution instructions, interpretation, and release readiness
+`41/41 PASS`
 
-Current documentation layer includes:
+Current qualification closure result:
 
-- README.md
-- INSTALL.md
-- USAGE.md
-- REPRODUCIBILITY.md
-- CI.md
-- PROJECT_STRUCTURE.md
-- ROADMAP.md
-- RELEASE_NOTES_v0_9_3.md
-- RELEASE_CHECKLIST_v0_9_3.md
-- docs/README.md
-- docs/core_principles.md
-- docs/resonance_computation.md
-- docs/architecture.md
-- docs/benchmark_interpretation.md
-- docs/limitations.md
-- docs/output_schema.md
-- docs/hardware_pathway.md
-- docs/implementation_layers.md
+`PASS`
 
-Engineering role:
+Current M15 scale qualification:
 
-    make the project reviewable, reproducible, maintainable, and ready for archival packaging
+`8 cells`
 
-Current status:
+`16 cells`
 
-    active and expanding
+`32 cells`
 
-## 11. Layer 8 — Release and Archival Layer
+Current deterministic vector qualification:
 
-Purpose:
+`two independently generated packages → byte-identical equality`
 
-    prepare the public candidate for release tagging, citation, and archival preservation
+Current vector integrity record:
 
-Current release and metadata files:
+`frp_m15_sha256_manifest.json`
 
-- CHANGELOG.md
-- RELEASE_NOTES_v0_9_3.md
-- RELEASE_CHECKLIST_v0_9_3.md
-- CITATION.cff
-- LICENSE
-- NOTICE
-- SECURITY.md
-- CONTRIBUTING.md
-- CODE_OF_CONDUCT.md
+## 34. Current File Alignment
 
-Current archival path:
+This document is aligned with:
 
-    GitHub release tag
-    → Zenodo archival release
-    → DOI assignment
-    → CITATION.cff update
-    → README DOI badge update
+- `../README.md`;
+- `../frp_prototype_v1_7_0.py`;
+- `../TEST_REPORT_v1_7_0.md`;
+- `../FRP_VALIDATION_INDEX_v1_7_0.md`;
+- `../RELEASE_NOTES_v1_7_0.md`;
+- `../CI.md`;
+- `../REPRODUCIBILITY.md`;
+- `../USAGE.md`;
+- `../INSTALL.md`;
+- `../CONTRIBUTING.md`;
+- `./README.md`;
+- `./core_principles.md`;
+- `./resonance_computation.md`;
+- `./architecture.md`;
+- `./benchmark_interpretation.md`;
+- `./limitations.md`;
+- `./m15_implementation_mapping_domain_interface_qualification_closure.md`;
+- `../.github/workflows/frp-m15-implementation-mapping-qualification.yml`.
 
-Engineering role:
+Historical thermal evidence remains aligned with:
 
-    make the candidate referenceable, citable, and externally reviewable
+- `../TEST_REPORT_v0_9_3.md`;
+- `../frp_prototype_v0_9_3_mobile.py`.
 
-## 12. Layer 9 — Hardware-Facing Specification Layer
+## 35. Next Architecture Layer
 
-Purpose:
+FRP v1.7.0 establishes the reference base for:
 
-    translate validated software behavior into hardware-facing architectural terms
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
 
-Related document:
+The M16 inheritance path begins from:
 
-    hardware_pathway.md
+`validated M15 processor semantics`
 
-Hardware-facing specification topics:
+↓
 
-- ternary state representation
-- neutral transition routing
-- distributed commit scheduling
-- scheduler phase mapping
-- phase layer approximation
-- nonlinear saturation mapping
-- compression mapping
-- delay buffer mapping
-- telemetry mapping
-- coherence and load metric translation
-- benchmark-to-implementation mapping
-- validation signal planning
+`validated fixed-point interface profile`
 
-Engineering role:
+↓
 
-    convert the software reference model into an implementation-oriented specification
+`validated balanced ternary hardware encoding`
 
-Expected output:
+↓
 
-    hardware-facing specification package
+`validated quantized hardware shadow`
 
-## 13. Layer 10 — FPGA Mapping Layer
+↓
 
-Purpose:
+`validated cycle-exact reference trace`
 
-    evaluate programmable hardware implementation routes
+↓
 
-Candidate FPGA mapping topics:
+`validated RTL comparison vectors`
 
-- ternary state encoding on FPGA fabric
-- neutral routing controller
-- distributed commit controller
-- scheduler implementation
-- register file mapping
-- delay buffer mapping
-- phase approximation strategy
-- nonlinear block approximation
-- telemetry counters
-- benchmark test harness
-- comparison against Python reference behavior
+↓
 
-Expected output:
+`validated SystemVerilog interface mapping`
 
-    FPGA mapping study document and implementation planning notes
+↓
 
-Engineering role:
+`validated synthesizable RTL reference-core map`
 
-    explore programmable hardware feasibility and implementation strategy
+↓
 
-## 14. Layer 11 — ASIC Mapping Layer
+`validated assertion correlation`
 
-Purpose:
+↓
 
-    evaluate chip-oriented implementation routes
+`validated equivalence report`
 
-Candidate ASIC mapping topics:
+↓
 
-- ternary logic cell representation
-- neutral routing cell
-- local transition controller
-- distributed commit timing network
-- phase approximation block
-- nonlinear response block
-- delay buffer cells
-- coherence tracking block
-- transition load monitor
-- telemetry and test interface
-- validation metric list
+`validated qualification closure`
 
-Expected output:
+## 36. Current Status
 
-    ASIC mapping study document and chip-oriented implementation research plan
+Processor:
 
-Engineering role:
+`Fractal Resonance Processor (FRP)`
 
-    define chip-oriented abstraction layers for future implementation research
+Processor class:
 
-## 15. Layer 12 — Physical Validation Layer
+`Ternary Resonant Coherence Processor`
 
-Purpose:
+Computational mechanism:
 
-    define how future physical implementations can be tested and compared with the software reference model
+`Kuramoto-Sakaguchi resonant phase dynamics with asymmetric phase lag, hierarchical fractal coupling, phase evolution, resonance selection, Kuramoto order parameter R, multiscale phase coherence, stateful delay dynamics, local thermal-phase interaction, local correlated gamma drift, nonlinear coherence compression, dynamic stability evaluation, phase-derived ternary targets, distributed commit, mandatory active-neutral routing, and retained coherent ternary state`
 
-Candidate physical validation categories:
+State and retained-result domain:
 
-- logical correctness
-- target matching
-- direct transition safety
-- neutral routing behavior
-- distributed commit behavior
-- scheduler behavior
-- transition activity
-- coherence behavior
-- load behavior
-- timing behavior
-- energy behavior
-- thermal behavior
-- benchmark repeatability
-- telemetry consistency
+`{-1, 0, 1}`
 
-Expected output:
+Active neutral state:
 
-    physical validation protocol
+`0`
 
-Engineering role:
+Current executable form:
 
-    provide the measurement and comparison structure for future physical implementation stages
+`Ternary Resonant Coherence Processor — Structured Output Prototype`
 
-## 16. Layer 13 — Funding and Partner Layer
+Current version:
 
-Purpose:
+`FRP v1.7.0`
 
-    prepare FRP for engineering partnership, grant review, investor-facing technical review, and laboratory collaboration
+Current milestone:
 
-Current financing-facing assets:
+`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
 
-- executable software model
-- documented candidate invariants
-- reproducibility commands
-- benchmark output
-- automated CI workflows
-- documentation package
-- release checklist
-- roadmap
-- hardware pathway
-- implementation layers
-- licensing metadata
-- citation metadata
+Current executable reference:
 
-Funding-facing technical message:
+`../frp_prototype_v1_7_0.py`
 
-    FRP has a public software validation layer and a defined pathway toward hardware-facing specification, FPGA/ASIC mapping, chip-oriented implementation research, and physical validation planning.
+Current published validation result:
 
-Expected output:
+`PASS`
 
-    funding brief and partner package
+Current validated M15 self-test result:
 
-## 17. Layer Inheritance Rule
+`41/41 PASS`
 
-Each implementation layer must inherit the confirmed behavior of the previous layer.
+Current qualification closure result:
 
-Inheritance chain:
+`PASS`
 
-    conceptual architecture
-    → software execution
-    → simulation validation
-    → candidate invariants
-    → verification metrics
-    → benchmark interpretation
-    → CI verification
-    → documentation
-    → release packaging
-    → hardware-facing specification
-    → FPGA mapping
-    → ASIC mapping
-    → physical validation
-    → funding and partner package
+Historical archived ternary-to-binary thermal result:
 
-Layer inheritance means:
+`distributed_neutral_ternary recorded a 15.69× lower heat_peak than binary_style_forced_switch under the historical v0.9.3 transition benchmark model`
 
-- the software layer must implement the conceptual architecture
-- the validation layer must test the software layer
-- the invariant layer must preserve candidate behavior
-- the verification layer must define measurable conditions
-- the benchmark layer must compare reproducible execution modes
-- the CI layer must automate repeatable checks
-- the documentation layer must preserve project meaning and usage
-- the release layer must make the candidate citable and reviewable
-- the hardware-facing layer must translate validated behavior into implementation terms
-- the FPGA and ASIC layers must reference the software behavior
-- the physical validation layer must compare future measurements against the reference behavior
-- the funding layer must present the confirmed assets and next engineering stages
+Next planned architecture layer:
 
-## 18. Current Layer Status
-
-Current completed layers for v0.9.3-mobile:
-
-| Layer | Status |
-|---|---|
-| conceptual architecture layer | active |
-| software execution layer | complete |
-| simulation validation layer | complete |
-| candidate invariant layer | complete |
-| verification layer | complete |
-| benchmark layer | complete |
-| CI verification layer | complete |
-| documentation layer | active |
-| release and archival layer | active |
-| hardware-facing specification layer | initiated |
-| FPGA mapping layer | planned |
-| ASIC mapping layer | planned |
-| physical validation layer | planned |
-| funding and partner layer | planned |
-
-## 19. Recommended Next Documents
-
-Recommended next documents:
-
-1. docs/fpga_mapping_study.md
-2. docs/asic_mapping_study.md
-3. docs/physical_validation_plan.md
-4. funding_brief.md
-
-Recommended next synchronization files:
-
-1. docs/README.md
-2. PROJECT_STRUCTURE.md
-3. RELEASE_CHECKLIST_v0_9_3.md
-4. RELEASE_NOTES_v0_9_3.md
-5. ROADMAP.md
-
-## 20. Current Status
-
-FRP v0.9.3-mobile establishes the public software validation layer and the initial hardware-facing documentation path.
-
-The implementation-layer structure is now defined from executable software behavior through hardware-facing specification, FPGA/ASIC mapping studies, physical validation planning, and funding or partner preparation.
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
