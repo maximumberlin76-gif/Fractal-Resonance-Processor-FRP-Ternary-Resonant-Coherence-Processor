@@ -526,6 +526,28 @@ Within this historical benchmark model and workload, `distributed_neutral_ternar
 
 The measured thermal-proxy advantage is produced by the distributed neutral-transition architecture, combining the balanced ternary state domain with active-neutral routing.
 
+The relevant architecture combines:
+
+`active neutral state 0`
+
+↓
+
+`mandatory active-neutral transition route`
+
+↓
+
+`tick-separated neutral routing`
+
+↓
+
+`distributed transition load`
+
+The original thermal result is preserved.
+
+The M15 hardware-informed sensitivity result characterizes the declared activity cost of the complete quantized FRP execution stack.
+
+The two benchmark contours answer different technical questions and remain reported separately.
+
 ## Hardware-Facing Numeric Profile
 
 FRP v1.7.0 defines four primary hardware-facing numeric representations:
