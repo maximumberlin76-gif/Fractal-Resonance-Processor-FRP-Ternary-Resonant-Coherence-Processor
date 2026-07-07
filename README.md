@@ -6871,44 +6871,300 @@ Together these benchmark layers preserve the historical development of FRP and e
 
 ## 18. Benchmark-Supported Technical Position
 
-The current benchmark supports the following technical position:
+FRP is a Ternary Resonant Coherence Processor in which evolving computation is driven by resonant phase-coherence dynamics, while the balanced ternary domain `{-1, 0, 1}` provides the state, target, transition, and retained-result layer.
 
-`FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct -1 ↔ 1 transitions in the tested operational domain.`
+The computational path is:
 
-Current benchmark interpretation:
+`cell phase and frequency state`
 
-- FRP distributed resonant mode preserves `match = 1.000`
-- FRP distributed resonant mode preserves `actual_direct_events = 0`
-- FRP distributed resonant mode preserves `C_minus_P_min > 0`
-- FRP distributed resonant mode preserves distributed transition load under the configured transition fraction
-- FRP includes the Kuramoto-Sakaguchi resonant phase layer
-- FRP includes nonlinear saturation
-- FRP includes compression dynamics
-- FRP includes delay dynamics
-- FRP includes resonant phase evolution
-- FRP emits structured benchmark JSON in v0.9.4
+↓
+
+`Kuramoto-Sakaguchi resonant phase coupling`
+
+↓
+
+`asymmetric Sakaguchi phase lag gamma`
+
+↓
+
+`hierarchical fractal coupling`
+
+↓
+
+`phase velocity and phase evolution`
+
+↓
+
+`resonance selection`
+
+↓
+
+`Kuramoto order parameter R`
+
+↓
+
+`multiscale phase coherence`
+
+↓
+
+`stateful delay dynamics`
+
+↓
+
+`local thermal-phase interaction`
+
+↓
+
+`local correlated gamma drift`
+
+↓
+
+`nonlinear coherence compression`
+
+↓
+
+`dynamic stability C(t) - P(t)`
+
+↓
+
+`phase-derived ternary target`
+
+↓
+
+`distributed ternary commit`
+
+↓
+
+`mandatory tick-separated routing through active neutral state 0`
+
+↓
+
+`retained coherent ternary state`
+
+### Measured Thermal-Transition Advantage
+
+The historical v0.9.3 transition benchmark records:
+
+`binary_style_forced_switch heat_peak = 0.051000`
+
+`distributed_neutral_ternary heat_peak = 0.003250`
+
+Exact ratio:
+
+`15.6923076923`
+
+Measured result:
+
+`distributed_neutral_ternary recorded a 15.69× lower heat_peak than binary_style_forced_switch`
+
+Equivalent reduction:
+
+`93.63% lower heat_peak`
+
+The measured thermal-transition advantage is associated with:
+
+`active neutral state 0`
+
+↓
+
+`mandatory active-neutral transition route`
+
+↓
+
+`tick-separated neutral routing`
+
+↓
+
+`distributed transition load`
+
+This result defines the validated historical thermal-transition contour.
+
+### Current M15 Deterministic Execution Evidence
+
+The current default validated FRP v1.7.0 execution uses:
+
+`cells = 16`
+
+`steps = 64`
+
+`seed = 76`
+
+`scheduler = 7/1`
+
+`request_lanes = 4`
+
+`transition_fraction = 0.25`
+
+`hierarchy_depth = 4`
+
+Validated execution results:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+`switch_load_peak = 0.25`
+
+`C_minus_P_min = 0.6142730712890625`
+
+`C_minus_P_final = 0.88287353515625`
+
+`fixed_point_topology_sum_exact = True`
+
+`fixed_point_thermal_sum_exact = True`
+
+The current canonical Comparative Architecture Benchmark workload records for `frp_v1_7_0_quantized_shadow`:
+
+`semantic_completion_ratio = 1.0`
+
+`semantic_output_match = 1.0`
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+`pending_route_count_final = 0`
+
+`fixed_point_topology_sum_exact = True`
+
+`fixed_point_thermal_sum_exact = True`
+
+Canonical final phase coherence:
+
+`global_phase_coherence_final = 0.9999997103586793`
+
+Canonical minimum dynamic stability:
+
+`C_minus_P_min = 0.856201171875`
+
+Canonical final dynamic stability:
+
+`C_minus_P_final = 1.2415313720703125`
+
+These values define the current deterministic execution and canonical comparative-workload evidence contours.
+
+### Current M15 Full-Stack Activity-Cost Contour
+
+The current FRP v1.7.0 quantized shadow evaluates the complete resonant phase-coherence execution stack, including:
+
+- fixed-point arithmetic;
+- trigonometric lookups;
+- hierarchical coupling;
+- phase evolution;
+- active-neutral routing;
+- queue activity;
+- distributed thermal processing;
+- multiscale coherence processing;
+- retained-state execution.
+
+The dominant declared activity-cost concentration is associated with:
+
+`fixed-point arithmetic volume`
+
+and:
+
+`trigonometric lookup volume`
+
+The M15 comparative and hardware-informed sensitivity layers expose the implementation cost of the complete processor execution profile.
+
+The historical v0.9.3 thermal-transition contour and the current M15 full-stack activity-cost contour measure different technical properties and remain reported separately.
+
+### CI-Verified Qualification Evidence
+
+Validation environment:
+
+`GitHub Actions hardware-backed CI execution`
+
+Current FRP v1.7.0 execution:
+
+`PASS`
+
+M15 self-test:
+
+`41 / 41 PASS`
+
+M15 qualification closure:
+
+`PASS`
+
+Validated M15 workflow stack:
+
+- `FRP Structured Output #113 — PASS`;
+- `FRP M15 Implementation Mapping and Qualification Closure #1 — PASS`;
+- `FRP Self Test #154 — PASS`;
+- `FRP Benchmark Smoke Test #152 — PASS`.
+
+Deterministic vector regeneration:
+
+`10 / 10 files byte-identical`
+
+Validated complete deterministic package digest:
+
+`703dd4b56f4b34289a2c5bc5521ad4ddc3113bdec8c38238c3244c69cb4d58df`
+
+Semantic correlation:
+
+`state_sequence_match = 1.000`
+
+`scheduler_sequence_match = 1.000`
+
+`neutral_route_sequence_match = 1.000`
+
+`C_minus_P_sign_match = 1.000`
+
+`boundary_order_match = 1.000`
+
+Semantic correlation result:
+
+`5 / 5 required matches = 1.0`
+
+Exact deterministic replay:
+
+`shadow_replay_state_match = 1.000`
+
+`shadow_replay_scheduler_match = 1.000`
+
+`shadow_replay_pending_route_match = 1.000`
+
+`shadow_replay_counter_match = 1.000`
+
+`shadow_replay_trace_match = 1.000`
+
+`shadow_replay_cell_trace_match = 1.000`
+
+Exact deterministic replay result:
+
+`6 / 6 replay matches = 1.0`
+
+Comparative Architecture Benchmark:
+
+`PASS`
+
+Hardware Sensitivity Profile Qualification:
+
+`PASS`
+
+Hardware Sensitivity Comparison:
+
+`PASS`
+
+### Current Technical Position
+
+The cumulative benchmark and CI evidence supports the following technical position:
+
+- FRP performs evolving computation through resonant phase-coherence dynamics and retains the resulting state through the balanced ternary domain `{-1, 0, 1}`;
+- the distributed active-neutral ternary transition architecture records a measured `15.69×` lower `heat_peak` than binary-style forced switching within the validated historical transition benchmark model and workload;
+- the current M15 execution preserves zero actual direct events, zero reserved-state events, zero queue-overflow events, positive dynamic stability, phase-coherence evidence, exact fixed-point topology closure, and exact fixed-point thermal closure;
+- the M15 implementation-mapping chain converts the processor semantics into a deterministic fixed-point hardware shadow, cycle-exact trace, RTL comparison vectors, SystemVerilog correlation contract, exact deterministic replay, and qualification closure;
+- the current full-stack activity-cost contour identifies fixed-point arithmetic and trigonometric lookup activity as the dominant implementation targets for the next architecture layer.
 
 For detailed benchmark interpretation, see:
 
 `docs/benchmark_interpretation.md`
-
-## 19. General-Purpose Hardware Execution
-
-The FRP software layer has been executed and verified on general-purpose computing infrastructure.
-
-Validated through:
-
-- local Python execution path
-- reproducibility commands
-- benchmark execution
-- JSON structured output execution
-- telemetry export execution
-- GitHub Actions workflow execution
-- CI status verification
-
-Engineering role:
-
-`establish an executable software reference model for hardware-facing specification and implementation-layer work`
 
 ## 20. Hardware-Facing Development Path
 
