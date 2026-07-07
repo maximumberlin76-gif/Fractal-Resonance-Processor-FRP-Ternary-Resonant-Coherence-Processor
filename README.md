@@ -522,29 +522,9 @@ The binary-style forced-switch path recorded:
 
 `heat_peak = 0.051000`
 
-The measured thermal-proxy distinction therefore belongs to the distributed neutral-transition architecture rather than to ternary encoding alone.
+Within this historical benchmark model and workload, `distributed_neutral_ternary` recorded a `15.69×` lower `heat_peak` than `binary_style_forced_switch`, equivalent to `93.63%` lower `heat_peak`.
 
-The relevant architecture combines:
-
-`active neutral state 0`
-
-↓
-
-`prohibited direct polarity reversal`
-
-↓
-
-`tick-separated neutral routing`
-
-↓
-
-`distributed transition load`
-
-The original thermal result is preserved.
-
-It is not replaced or invalidated by the M15 hardware-informed sensitivity result.
-
-The two benchmark contours answer different technical questions and must not be merged into one ranking claim.
+The measured thermal-proxy advantage is produced by the distributed neutral-transition architecture, combining the balanced ternary state domain with active-neutral routing.
 
 ## Hardware-Facing Numeric Profile
 
