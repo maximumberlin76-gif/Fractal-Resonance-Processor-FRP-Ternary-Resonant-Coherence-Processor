@@ -1,360 +1,1424 @@
-# Model Layer
+# Model Layer — Fractal Resonance Processor (FRP)
 
-This directory contains mathematical and dynamic interaction models used within the Fractal Resonance Processor (FRP) project.
+**Ternary Resonant Coherence Processor — Structured Output Prototype**
 
-Current candidate version:
+This directory defines the model registry of the Fractal Resonance Processor (FRP) and connects the retained background model record to the current validated processor architecture.
 
-    v0.9.3-mobile
+FRP is a ternary resonant coherence processor.
 
-Main prototype file:
+Current version:
 
-    ../frp_prototype_v0_9_3_mobile.py
+`FRP v1.7.0`
+
+Current milestone:
+
+`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+
+Current executable reference:
+
+`../frp_prototype_v1_7_0.py`
+
+Current structured-output schema:
+
+`frp.structured_output.v1.7.0`
+
+Current M15 benchmark-matrix schema:
+
+`frp.m3.benchmark_matrix.v1.7.0`
+
+Current architecture document:
+
+`../docs/m15_implementation_mapping_domain_interface_qualification_closure.md`
 
 Current test report:
 
-    ../TEST_REPORT_v0_9_3.md
+`../TEST_REPORT_v1_7_0.md`
 
-FRP is currently implemented as a Python simulation prototype of a ternary resonant coherence processor.
+Current validation index:
 
-It is not a hardware implementation.
+`../FRP_VALIDATION_INDEX_v1_7_0.md`
 
-## Model Scope
+Current release notes:
 
-The model layer describes the conceptual and mathematical components used by the current FRP simulation prototype.
+`../RELEASE_NOTES_v1_7_0.md`
 
-The current model scope includes:
+Current primary qualification workflow:
 
-- balanced ternary state model
-- neutral transition model
-- forbidden direct -1 ↔ 1 transition rule
-- distributed commit model
-- Kuramoto-Sakaguchi phase interaction model
-- nonlinear saturation model
-- compression model
-- independent delay-buffer model
-- operational coherence model
-- C_minus_P stability model
-- scheduler model
-- benchmark baseline models
+`../.github/workflows/frp-m15-implementation-mapping-qualification.yml`
 
-## Current Active Model
+Current published validation result:
 
-The active model is implemented in:
+`PASS`
 
-    ../frp_prototype_v0_9_3_mobile.py
+Current validated M15 self-test result:
 
-The active candidate is:
+`41/41 PASS`
 
-    v0.9.3-mobile
+## 1. Directory Role
 
-Older model files may still use the previous project name:
+The `models/` directory serves two connected purposes:
 
-    FPR
+1. define the current FRP model registry;
+2. preserve preliminary model background with explicit release and architecture context.
 
-The current project name is:
+The current model source is:
 
-    FRP — Fractal Resonance Processor
+`../frp_prototype_v1_7_0.py`
 
-Legacy model files should be reviewed before deletion or replacement.
+The current implementation-mapping source is:
 
-## 1. Balanced Ternary State Model
+`../docs/m15_implementation_mapping_domain_interface_qualification_closure.md`
 
-FRP uses balanced ternary states:
+The retained preliminary background file is:
 
-| State | Meaning |
+`kuramoto_frp_background_model.md`
+
+## 2. Directory Contents
+
+| File | Role |
 |---|---|
-| -1 | negative / inhibitory / counter-phase / suppressive potential |
-| 0 | neutral balancing / damping / transition state |
-| 1 | positive / excitatory / phase-supporting / constructive potential |
+| `README.md` | current FRP model registry |
+| `kuramoto_frp_background_model.md` | preliminary Kuramoto-type resonance-phase background record |
 
-The neutral state 0 is active.
+The active processor models are implemented in the current executable reference and exposed through structured telemetry, M15 artifact exports, validation records, and qualification workflows.
 
-It is used for:
+## 3. Current Model Registry
 
-- transition buffering
-- conflict neutralization
-- damping
-- refractory behavior
-- switching-load control
+The current FRP model stack contains:
 
-## 2. Forbidden Direct Transition Model
+1. balanced ternary state and retained-result model;
+2. active-neutral transition-route model;
+3. distributed commit model;
+4. scheduler model;
+5. cell phase and frequency-state model;
+6. Kuramoto-Sakaguchi resonant interaction model;
+7. asymmetric local gamma model;
+8. dyadic hierarchical fractal topology model;
+9. dense and hierarchical coupling representations;
+10. phase velocity and phase-evolution model;
+11. Kuramoto order-parameter model;
+12. multiscale phase-coherence model;
+13. stateful delay model;
+14. distributed local thermal model;
+15. thermal coupling-feedback model;
+16. correlated gamma-drift model;
+17. nonlinear coherence-compression model;
+18. operational coherence model;
+19. destabilizing-load model;
+20. dynamic-stability model;
+21. phase-derived ternary-target model;
+22. structured telemetry model;
+23. fixed-point interface model;
+24. balanced ternary hardware-encoding model;
+25. stateful quantized hardware-shadow model;
+26. cycle-exact integer golden-trace model;
+27. deterministic RTL comparison-vector model;
+28. SystemVerilog interface model;
+29. synthesizable RTL reference-core mapping model;
+30. assertion-correlation model;
+31. reference-equivalence model;
+32. qualification-closure model.
 
-The FRP operational model forbids direct transition between -1 and 1.
+## 4. Complete Computational Model Chain
 
-Forbidden transition:
+The current model chain is:
 
-    -1 ↔ 1
+`balanced ternary state and retained-result domain {-1, 0, 1}`
 
-Allowed transition paths:
+↓
 
-    -1 → 0 → 1
-     1 → 0 → -1
+`cell phase and frequency state`
 
-The current prototype tracks:
+↓
 
-- actual_direct_events
-- prevented_direct_events
-- neutralized_conflicts
+`Kuramoto-Sakaguchi resonant phase coupling`
 
-The required candidate condition is:
+↓
 
-    actual_direct_events = 0
+`asymmetric Sakaguchi phase lag gamma`
 
-## 3. Kuramoto-Sakaguchi Phase Model
+↓
 
-The current FRP prototype uses Kuramoto-Sakaguchi type phase dynamics.
+`dyadic hierarchical fractal coupling`
 
-The phase layer models coupled oscillator behavior with phase lag.
+↓
 
-Default phase lag:
+`phase velocity and phase evolution`
 
-    gamma = 0.30π
+↓
 
-The phase lag represents asymmetric coupling, delay, dissipation, or nonlinear phase shift inside the simulation model.
+`resonance selection`
 
-The phase layer does not replace ternary logic.
+↓
 
-It provides a resonant phase-evolution layer around balanced ternary transition control.
+`Kuramoto order parameter R`
 
-## 4. Nonlinear Transition Model
+↓
 
-Before state transition, the prototype applies nonlinear shaping.
+`multiscale phase coherence`
 
-The nonlinear transition model includes:
+↓
 
-- cubic saturation
-- compression
+`stateful delay dynamics`
 
-Cubic saturation:
+↓
 
-    x / (1 + beta * abs(x)^3)
+`distributed local thermal field`
 
-Compression:
+↓
 
-    tanh(gain * x)
+`local correlated gamma drift`
 
-Default parameters:
+↓
+
+`nonlinear coherence compression`
+
+↓
+
+`dynamic stability C(t) - P(t)`
+
+↓
+
+`phase-derived ternary target`
+
+↓
+
+`distributed ternary commit`
+
+↓
+
+`mandatory tick-separated routing through active neutral state 0`
+
+↓
+
+`retained coherent ternary state`
+
+The resonant dynamic domain drives the evolving computation.
+
+The balanced ternary domain provides the state, target, transition, and retained-result layer.
+
+## 5. Floating Semantic Reference Model
+
+Current processor representation:
+
+`FractalResonanceProcessor`
+
+This model implements the current processor semantics in floating numeric form.
+
+It contains:
+
+- ternary state execution;
+- active-neutral routing;
+- scheduler behavior;
+- hierarchical resonant coupling;
+- delay dynamics;
+- distributed local thermal dynamics;
+- local gamma dynamics;
+- phase evolution;
+- multiscale coherence;
+- operational coherence;
+- destabilizing load;
+- dynamic stability;
+- structured telemetry.
+
+Engineering role:
+
+`semantic source for current implementation mapping and correlation`
+
+## 6. Balanced Ternary State Model
+
+Current state and retained-result domain:
+
+`{-1, 0, 1}`
+
+| State | Computational role |
+|---|---|
+| `-1` | negative target polarity and retained negative state |
+| `0` | active neutral balancing, damping, transition, and stabilization state |
+| `1` | positive target polarity and retained positive state |
+
+Current state-domain marker:
+
+`balanced_ternary_state_domain = True`
+
+Current reserved-state invariant:
+
+`reserved_state_events = 0`
+
+## 7. Active-Neutral Transition Model
+
+Opposite-polarity execution follows the mandatory routes:
+
+`-1 → 0 → 1`
+
+`1 → 0 → -1`
+
+Tick-separated relation:
+
+`tick N: active polarity → 0`
+
+↓
+
+`pending neutral route retained`
+
+↓
+
+`tick N+1 or later: 0 → target polarity`
+
+Current route invariant:
+
+`actual_direct_events = 0`
+
+Current queue invariant:
+
+`queue_overflow_events = 0`
+
+The pending-route model retains:
+
+- cell index;
+- target polarity;
+- earliest ready tick.
+
+## 8. Distributed Commit Model
+
+Current default transition fraction:
+
+`0.25`
+
+Current maximum-change relation:
+
+`max_changes = max(1, round(cells × transition_fraction))`
+
+Current validated request-lane profiles:
+
+| Cells | Request lanes |
+|---|---:|
+| `8` | `2` |
+| `16` | `4` |
+| `32` | `8` |
+
+Current validated relation:
+
+`switch_load_peak <= transition_fraction`
+
+The distributed commit model bounds state changes per tick and couples transition activity into thermal and stability dynamics.
+
+## 9. Scheduler Model
+
+Current scheduler modes:
+
+- `free`;
+- `7/1`;
+- `1/7`.
+
+Current scheduler phase push:
+
+| Scheduler state | Phase push |
+|---|---:|
+| `commit` | `0.010` |
+| `excite` | `0.006` |
+| all other scheduler states | `0.003` |
+
+Current validated 16-tick profiles:
+
+| Scheduler | Counts |
+|---|---|
+| `free` | `free = 16` |
+| `7/1` | `balance = 14`, `commit = 2` |
+| `1/7` | `excite = 2`, `neutralize = 14` |
+
+Current validated default 64-tick `7/1` profile:
+
+`balance = 56`
+
+`commit = 8`
+
+## 10. Cell Phase and Frequency-State Model
+
+Each current processor cell maintains:
+
+- phase;
+- base frequency;
+- target frequency;
+- current frequency;
+- local ternary state;
+- local switching activity;
+- local thermal state;
+- local gamma state.
+
+The cell state evolves through the connected resonant, delay, thermal, coherence, and ternary execution layers.
+
+## 11. Kuramoto-Sakaguchi Resonant Interaction Model
+
+Current floating interaction:
+
+`sin(phase_j - phase_i - gamma_effective_i)`
+
+Current default nominal phase lag:
+
+`gamma = 0.30 × pi`
+
+Current source constant:
+
+`DEFAULT_GAMMA = 0.30 × pi`
+
+Current default nominal coupling strength:
+
+`coupling_nominal = 0.28`
+
+The pair interaction combines:
+
+- hierarchical coupling weight;
+- thermal factor of cell `i`;
+- thermal factor of cell `j`;
+- effective local gamma;
+- nominal coupling strength.
+
+## 12. Asymmetric Local Gamma Model
+
+The current processor tracks:
+
+- nominal gamma;
+- deterministic gamma-noise targets;
+- correlated gamma-noise state;
+- local thermal overload;
+- effective local gamma;
+- gamma drift.
+
+Gamma-noise targets refresh every:
+
+`8 ticks`
+
+Current target range:
+
+`[-1.0, 1.0]`
+
+Current correlated update:
+
+`gamma_noise_state += 0.15 × (gamma_noise_target - gamma_noise_state)`
+
+Current effective local gamma:
+
+`gamma_effective = gamma_nominal + 0.08 × thermal_overload × gamma_noise_state`
+
+## 13. Dyadic Hierarchical Fractal Topology Model
+
+The current architecture uses a dyadic hierarchical ultrametric topology.
+
+Current default cell count:
+
+`16`
+
+Current default hierarchy depth:
+
+`4`
+
+Hierarchy depth:
+
+`cells.bit_length() - 1`
+
+Hierarchical distance between distinct cells:
+
+`(i XOR j).bit_length()`
+
+Shell population:
+
+`2^(distance - 1)`
+
+Current default fractal exponent:
+
+`fractal_alpha = 0.70`
+
+Current exactness marker:
+
+`fixed_point_topology_sum_exact = True`
+
+## 14. Dense and Hierarchical Coupling Models
+
+The current executable preserves two coupling representations:
+
+- dense pair-interaction reference path;
+- hierarchical accelerated coupling path.
+
+Both representations preserve the same interaction subject:
+
+`hierarchical weight`
+
+×
+
+`thermal pair factor`
+
+×
+
+`Kuramoto-Sakaguchi phase interaction`
+
+×
+
+`nominal coupling strength`
+
+These representations support semantic correlation, topology verification, and implementation mapping.
+
+## 15. Phase Velocity and Phase-Evolution Model
+
+Current floating phase velocity:
+
+`phase_velocity_i = 0.060 × frequency_i + scheduler_push + coupling_field_i`
+
+Current phase update:
+
+`phase_i = (phase_i + phase_velocity_i) mod 2π`
+
+The phase field carries the combined effect of:
+
+- delayed oscillator frequency;
+- scheduler state;
+- hierarchical resonant coupling;
+- thermal node factors;
+- effective local gamma.
+
+## 16. Kuramoto Order-Parameter Model
+
+Current global phase order:
+
+`R = sqrt(mean(cos(phase))² + mean(sin(phase))²)`
+
+The executable evaluates the same phase-order relation across hierarchical groups.
+
+`R` is therefore the base phase-order metric for global and multiscale coherence evaluation.
+
+## 17. Multiscale Phase-Coherence Model
+
+The current hierarchy evaluates:
+
+- pair-domain coherence;
+- cluster coherence;
+- supercluster coherence;
+- global phase coherence.
+
+Current outputs include:
+
+- pair-domain coherence mean and minimum;
+- cluster coherence mean and minimum;
+- supercluster coherence mean and minimum;
+- global phase coherence;
+- coherence dispersion across clusters.
+
+The model carries local, intermediate, and global phase-order evidence through one processor state.
+
+## 18. Stateful Delay Model
+
+Current frequency-target relation:
+
+`frequency_target = base_frequency + 0.06 × abs(state) + 0.12 × switch_activity`
+
+Current delayed response:
+
+`frequency_next = frequency_current + delay_alpha × (frequency_target - frequency_current)`
+
+Current default delay coefficient:
+
+`delay_alpha = 0.30`
+
+The remaining frequency lag contributes to:
+
+- phase velocity;
+- generated power;
+- operational coherence;
+- dynamic stability.
+
+## 19. Distributed Local Thermal Model
+
+Each cell tracks:
+
+- generated power;
+- thermal dissipation;
+- hierarchical thermal diffusion;
+- local heat;
+- local thermal overload.
+
+Current generated-power relation:
+
+`generated_power_i = 0.0018 + 0.052 × switch_activity_i + 0.018 × frequency_lag_i`
+
+Current thermal dissipation relation:
+
+`thermal_dissipation_i = (previous_heat_i - ambient_heat) / thermal_time_constant`
+
+Current default thermal parameters:
 
 | Parameter | Value |
 |---|---:|
-| saturation_beta | 0.75 |
-| compression_gain | 1.20 |
+| ambient heat | `0.05` |
+| thermal time constant | `14.0` |
+| thermal soft limit | `0.22` |
+| thermal hard limit | `0.90` |
+| thermal diffusion gain | `0.035` |
+| thermal topology exponent | `1.20` |
 
-The purpose of this model is to limit excessive transition amplitude while preserving dynamic response.
+Current exactness marker:
 
-## 5. Delay-Buffer Model
+`fixed_point_thermal_sum_exact = True`
 
-The current prototype uses independent delay buffers for:
+## 20. Thermal Coupling-Feedback Model
 
-- logic delay
-- coupling delay
+Current local thermal overload:
 
-Delay buffers advance once per internal tick.
+`max(0, local_heat - thermal_soft_limit)`
 
-This is required because the phase integration uses RK2 and evaluates the phase derivative more than once per tick.
+Current local thermal node factor:
 
-Delay buffers must not advance inside each derivative evaluation.
+`exp(-0.5 × thermal_coupling_gain × overload)`
 
-## 6. Distributed Commit Model
+Current thermal coupling gain:
 
-The distributed commit model limits how many nodes may change state during one tick.
+`2.50`
 
-Default parameter:
+The feedback chain is:
 
-    transition_fraction = 0.25
+`local thermal overload`
 
-This means that no more than 25 percent of the ternary state vector may change during one tick under default settings.
+↓
 
-The purpose of distributed commit is to reduce abrupt global switching and maintain operational stability.
+`thermal node factor`
 
-## 7. Operational Coherence Model
+↓
 
-In target execution mode, FRP evaluates coherence using operational metrics rather than only global phase order.
+`effective resonant coupling`
 
-The current model uses:
+↓
 
-- logical match
-- transition debt
-- direct conflict fraction
-- hot node fraction
-- refractory fraction
+`phase evolution`
 
-Conceptual form:
+↓
 
-    C = 1.0
-    C -= 0.50 * direct_conflict_fraction
-    C -= 0.20 * transition_debt
-    C -= 0.10 * hot_fraction
-    C -= 0.10 * refractory_fraction
-    C = clamp(C, 0.0, 1.0)
+`coherence`
 
-This makes coherence target-sensitive.
+↓
 
-A distributed ternary target may be operationally correct even if the global Kuramoto order parameter R is not maximal.
+`dynamic stability`
 
-## 8. Stability Model
+## 21. Nonlinear Coherence-Compression Model
 
-The core stability condition is:
+Current stability soft margin:
 
-    C(t) > P(t)
+`0.25`
 
-where:
+Current margin pressure:
 
-| Symbol | Meaning |
+`margin_pressure = max(0, stability_soft_margin - previous_C_minus_P)`
+
+Current compression relation:
+
+`coherence_compression = exp(-(3.0 × thermal_overload_mean² + 1.5 × margin_pressure²))`
+
+Current effective coherence:
+
+`effective_coherence = raw_phase_coherence × coherence_compression`
+
+This model couples thermal pressure and stability-margin pressure back into effective phase coherence.
+
+## 22. Operational Coherence Model
+
+Current operational coherence:
+
+`C = 0.82 + 0.34 × effective_coherence + 0.16 × cluster_coherence_mean + 0.08 × neutral_fraction - 0.10 × mean_frequency_lag`
+
+Current component map:
+
+| Component | Coefficient |
+|---|---:|
+| base coherence term | `0.82` |
+| effective coherence | `0.34` |
+| cluster coherence mean | `0.16` |
+| neutral-state fraction | `0.08` |
+| mean frequency lag | `-0.10` |
+
+The current coherence model connects resonant phase order, hierarchical coherence, active-neutral participation, and delayed frequency response.
+
+## 23. Destabilizing-Load Model
+
+Current relation:
+
+`P = heat + switch_load`
+
+Current switching load:
+
+`switch_load = switched_nodes / total_nodes`
+
+The load model combines:
+
+- global mean thermal state;
+- current-tick state-transition activity.
+
+## 24. Dynamic-Stability Model
+
+Current relation:
+
+`C_minus_P = C - P`
+
+Current validated condition:
+
+`C_minus_P_min > 0.0`
+
+The current M15 correlation layer also validates:
+
+`C_minus_P_sign_match = 1.0`
+
+`boundary_order_match = 1.0`
+
+The stability model therefore exists in both floating semantic and deterministic fixed-point execution domains.
+
+## 25. Phase-Derived Ternary-Target Model
+
+Current mapping:
+
+`sin(phase) > 0.33 → 1`
+
+`sin(phase) < -0.33 → -1`
+
+`otherwise → 0`
+
+The cross-tick model is:
+
+`evolved phase field`
+
+↓
+
+`phase-derived ternary target`
+
+↓
+
+`distributed commit`
+
+↓
+
+`active-neutral routing`
+
+↓
+
+`retained ternary state`
+
+↓
+
+`subsequent resonant evolution`
+
+## 26. Structured Telemetry Model
+
+Compact current execution records:
+
+- configuration;
+- kernel contract;
+- hardware profile;
+- execution summary;
+- preload digest;
+- trace digest;
+- cell-trace digest.
+
+Full trace mode adds:
+
+- `trace`;
+- `cell_trace`;
+- `route_events`.
+
+Current default sizes:
+
+`trace = 64 processor-tick rows`
+
+`cell_trace = 1024 cell-tick rows`
+
+## 27. Fixed-Point Interface Model
+
+Current M15 numeric representations:
+
+| Domain | Representation |
 |---|---|
-| C(t) | operational coherence |
-| P(t) | destabilizing load |
-| C_minus_P | C(t) - P(t) |
+| general dynamic scalar | `S32Q16` |
+| normalized coefficient | `S32Q30` |
+| phase | `PHASE_U32` |
+| Sakaguchi gamma | `GAMMA_S32` |
 
-In the current prototype:
+Current deterministic trigonometric profile:
 
-    P(t) = heat + switch_load
+`4096-entry full-cycle lookup table`
 
-The required candidate condition is:
+Current exactness markers:
 
-    C_minus_P_min > 0
+`fixed_point_topology_sum_exact = True`
 
-This is a simulation-level operational stability criterion.
+`fixed_point_thermal_sum_exact = True`
 
-It is not a universal physical law.
+## 28. Balanced Ternary Hardware-Encoding Model
 
-## 9. Heat and Switching Load Model
+Current two-bit encoding:
 
-The current prototype tracks simulated heat and switching load.
+`-1 → 2'b11`
 
-Switching load:
+`0 → 2'b00`
 
-    switch_load = switched_nodes / total_nodes
+`+1 → 2'b01`
 
-Heat increases with:
+Reserved encoding:
 
-- switching activity
-- active non-zero states
-- conflict pressure
+`2'b10`
 
-Heat decreases through:
+Canonical integer encoding:
 
-- neutral state cooling
-- passive cooling
+`-1 → 3`
 
-Important boundary:
+`0 → 0`
 
-    heat is not physical temperature
+`+1 → 1`
 
-The heat metric is a simulation variable.
+Reserved integer code:
 
-It is not measured electrical heat or measured chip temperature.
+`2`
 
-## 10. Scheduler Model
+Current reserved-state invariant:
 
-FRP supports three scheduler modes:
+`reserved_state_events = 0`
 
-| Mode | Behavior |
-|---|---|
-| free | every tick is commit |
-| 7/1 | ticks 0..6 are balance, tick 7 is commit |
-| 1/7 | tick 0 is excite, ticks 1..7 are neutralize |
+## 29. Quantized Hardware-Shadow Model
 
-Scheduler counts are validated by internal tick count.
+Current processor representation:
 
-The scheduler is part of the operational stability model.
+`QuantizedReferenceShadowProcessor`
 
-## 11. Baseline Models
+The quantized model preserves:
 
-The current prototype includes baseline models for comparison.
+- balanced ternary state execution;
+- active-neutral routing;
+- pending neutral routes;
+- scheduler behavior;
+- transition-fraction control;
+- hierarchical coupling;
+- stateful delay dynamics;
+- distributed local thermal dynamics;
+- local gamma dynamics;
+- phase evolution;
+- multiscale coherence;
+- global dynamic stability telemetry.
 
-| Baseline | Purpose |
-|---|---|
-| direct_ternary_commit | direct ternary state commit without neutral routing |
-| distributed_neutral_ternary | distributed neutral transition without resonant phase layer |
-| binary_style_forced_switch | rail-style forced switching comparison |
+Engineering role:
 
-These baselines are simulation comparison models.
+`stateful finite-word reference for deterministic implementation correlation`
 
-They are not hardware implementations.
+## 30. Cycle-Exact Integer Golden-Trace Model
 
-## 12. Current Benchmark Model Result
+Artifact layer:
 
-Current benchmark summary:
+`cycle_exact_reference_trace`
+
+Current default trace length:
+
+`64 ticks`
+
+The trace preserves deterministic correlation fields for:
+
+- scheduler state;
+- packed ternary state;
+- pending routes;
+- phase;
+- frequency;
+- thermal state;
+- gamma state;
+- coherence;
+- dynamic stability.
+
+## 31. Deterministic RTL Comparison-Vector Model
+
+Artifact layer:
+
+`rtl_comparison_vector_package`
+
+Current vector-package file count:
+
+`10`
+
+Current files:
+
+- `frp_m15_kernel_vectors.vec`;
+- `frp_m15_pending_routes.trace`;
+- `frp_m15_scheduler_free_vectors.vec`;
+- `frp_m15_scheduler_7_1_vectors.vec`;
+- `frp_m15_scheduler_1_7_vectors.vec`;
+- `frp_m15_full_correlation_vectors.vec`;
+- `frp_m15_cell_trace.vec`;
+- `frp_m15_reference_preload.json`;
+- `frp_m15_trig_lut_q30.vec`;
+- `frp_m15_sha256_manifest.json`.
+
+Current deterministic qualification generates two independent packages and requires byte-identical equality.
+
+## 32. SystemVerilog Interface and RTL Reference-Core Models
+
+Current default interface parameters include:
+
+| Parameter | Value |
+|---|---:|
+| `NUM_CELLS` | `16` |
+| `HIERARCHY_DEPTH` | `4` |
+| `REQUEST_LANES` | `4` |
+| `CELL_ID_WIDTH` | `4` |
+| `STATE_VECTOR_WIDTH` | `32` |
+| `SCALAR_WIDTH` | `32` |
+| `PHASE_WIDTH` | `32` |
+
+The current RTL reference-core mapping covers:
+
+- balanced ternary state execution;
+- scheduler behavior;
+- active-neutral routing;
+- pending neutral routes;
+- transition limits;
+- fixed-point phase behavior;
+- hierarchical coupling;
+- thermal field behavior;
+- multiscale phase coherence;
+- deterministic reference comparison.
+
+## 33. Assertion-Correlation Model
+
+Artifact layer:
+
+`rtl_assertion_correlation_harness`
+
+Current assertion-correlation harness count:
+
+`13`
+
+Current exact integer comparison rule:
+
+`actual integer field == expected integer field`
+
+The assertion model binds current kernel invariants and cycle-exact reference fields to RTL-facing checks.
+
+## 34. Reference-Equivalence Model
+
+The current equivalence model has two correlation boundaries.
+
+### 34.1 Floating semantic reference to quantized shadow
+
+Required exact sequence matches:
+
+- state sequence match `1.0`;
+- scheduler sequence match `1.0`;
+- neutral-route sequence match `1.0`;
+- `C_minus_P` sign match `1.0`;
+- boundary-order match `1.0`.
+
+Current maximum error bounds:
+
+| Field | Maximum error |
+|---|---:|
+| phase | `0.02` |
+| frequency | `0.0001` |
+| heat | `0.001` |
+| gamma | `0.000001` |
+| coherence | `0.01` |
+| `C` | `0.01` |
+| `P` | `0.001` |
+| `C_minus_P` | `0.01` |
+
+### 34.2 Quantized shadow deterministic replay
+
+Required exact replay matches:
+
+- state match `1.0`;
+- scheduler match `1.0`;
+- pending-route match `1.0`;
+- counter match `1.0`;
+- trace match `1.0`;
+- cell-trace match `1.0`.
+
+## 35. Qualification-Closure Model
+
+FRP v1.7.0 defines ten current M15 artifact layers:
+
+1. `fixed_point_interface_profile`;
+2. `balanced_ternary_hardware_encoding_map`;
+3. `quantized_reference_shadow_model`;
+4. `cycle_exact_reference_trace`;
+5. `rtl_comparison_vector_package`;
+6. `systemverilog_testbench_interface_map`;
+7. `synthesizable_rtl_reference_core`;
+8. `rtl_assertion_correlation_harness`;
+9. `reference_rtl_equivalence_report`;
+10. `qualification_closure_manifest`.
+
+Current qualification result:
+
+`PASS`
+
+The closure chain is:
+
+`fixed-point interface`
+
+↓
+
+`balanced ternary encoding`
+
+↓
+
+`quantized hardware shadow`
+
+↓
+
+`cycle-exact trace`
+
+↓
+
+`RTL comparison vectors`
+
+↓
+
+`SystemVerilog interface map`
+
+↓
+
+`synthesizable RTL reference-core map`
+
+↓
+
+`RTL assertion correlation`
+
+↓
+
+`reference equivalence`
+
+↓
+
+`qualification closure`
+
+## 36. Current Scaling Model
+
+Current validated M15 scaling profiles:
+
+| Cells | Hierarchy depth | Request lanes | Packed state width |
+|---|---:|---:|---:|
+| `8` | `3` | `2` | `16 bits` |
+| `16` | `4` | `4` | `32 bits` |
+| `32` | `5` | `8` | `64 bits` |
+
+Each profile preserves:
+
+`balanced_ternary_state_domain = True`
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+`scheduler_counts_valid = True`
+
+`fixed_point_topology_sum_exact = True`
+
+`fixed_point_thermal_sum_exact = True`
+
+## 37. Current Verification Model
+
+Current self-test result:
+
+`41/41 PASS`
+
+The current check registry covers:
+
+- route qualification;
+- scheduler qualification;
+- request-lane order;
+- balanced ternary encoding;
+- fixed-point boundaries;
+- exact topology closure;
+- exact thermal closure;
+- trigonometric lookup behavior;
+- quantized-shadow invariants;
+- semantic correlation;
+- exact deterministic replay;
+- vector determinism;
+- 8-cell, 16-cell, and 32-cell scaling;
+- qualification closure.
+
+## 38. Current Five-Row M15 Benchmark Model
+
+Current benchmark rows:
+
+1. `frp_v1_6_0_m14_floating_semantic_reference`;
+2. `frp_v1_7_0_quantized_hardware_shadow`;
+3. `frp_v1_7_0_cycle_exact_vector_package`;
+4. `frp_v1_7_0_systemverilog_correlation_contract`;
+5. `frp_v1_7_0_qualification_closure`.
+
+Current schema:
+
+`frp.m3.benchmark_matrix.v1.7.0`
+
+This matrix records the implementation progression from floating semantics through qualification closure.
+
+## 39. Comparative Architecture Model Layer
+
+Current comparative directory:
+
+`../benchmarks/architecture_comparison/`
+
+Current architecture set:
+
+1. `binary_synchronous_reference`;
+2. `binary_clock_gated_reference`;
+3. `direct_ternary_reference`;
+4. `frp_v1_7_0_quantized_shadow`.
+
+Current comparison chain:
+
+`one deterministic semantic workload`
+
+↓
+
+`architecture-specific execution`
+
+↓
+
+`raw architecture event counters`
+
+↓
+
+`one common normalized cost model`
+
+↓
+
+`one common thermal proxy model`
+
+↓
+
+`machine-readable comparison matrix`
+
+Current qualification policy:
+
+`integrity_only_no_winner_assertions`
+
+Current winner assertions:
+
+`[]`
+
+## 40. Hardware-Sensitivity Model Layer
+
+Current sensitivity profile:
+
+`literature_anchored_cmos45_sensitivity_v1`
+
+Current normalization:
+
+`32-bit integer addition = 1.0`
+
+Reference energy:
+
+`0.1 pJ`
+
+Technology context:
+
+`45 nm CMOS`
+
+Current scenario order:
+
+1. `lower_bound`;
+2. `nominal`;
+3. `upper_bound`.
+
+Current ranking state:
+
+`ranking_stable = true`
+
+`ranking_sensitive = false`
+
+This layer applies one shared coefficient vector to every architecture inside each scenario.
+
+## 41. Preliminary Kuramoto Background Model
+
+File:
+
+`kuramoto_frp_background_model.md`
+
+This file preserves the preliminary nonlinear oscillator model that influenced the resonance-phase direction of the FRP project.
+
+Its primary subjects are:
+
+- oscillator phase interaction;
+- external resonant driving;
+- global phase-order development;
+- convergence behavior.
+
+Its early simplified relation is:
+
+`dφ_i/dt = ω_i + (K/N) × Σ sin(φ_j - φ_i) + F_ext × sin(ω_ext × t - φ_i) + η`
+
+Its historical global order parameter is:
+
+`R = |(1/N) × Σ exp(i × φ_j)|`
+
+The file remains a preliminary resonance-phase background record.
+
+The current FRP model extends that background through asymmetric Sakaguchi phase lag, balanced ternary state retention, hierarchical fractal coupling, delay, distributed thermal dynamics, gamma drift, multiscale coherence, dynamic stability, fixed-point mapping, and qualification closure.
+
+## 42. Historical v0.9.3 Transition Model Contour
+
+Historical evidence source:
+
+`../TEST_REPORT_v0_9_3.md`
+
+Historical architecture set:
+
+- `frp_distributed_resonant`;
+- `direct_ternary_commit`;
+- `distributed_neutral_ternary`;
+- `binary_style_forced_switch`.
+
+Recorded result:
 
 | Architecture | Match | C-P_min | Heat Peak | Switch Peak | Actual Direct | Prevented Direct | Neutralized |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| binary_style_forced_switch | 1.000 | -0.551000 | 0.051000 | 1.000000 | 2052 | 0 | 0 |
-| direct_ternary_commit | 1.000 | -0.551000 | 0.051000 | 1.000000 | 2052 | 0 | 0 |
-| distributed_neutral_ternary | 1.000 | 0.174750 | 0.003250 | 0.250000 | 0 | 0 | 2052 |
-| frp_distributed_resonant | 1.000 | 0.144750 | 0.107000 | 0.250000 | 0 | 3820 | 2392 |
+| `binary_style_forced_switch` | `1.000` | `-0.551000` | `0.051000` | `1.000000` | `2052` | `0` | `0` |
+| `direct_ternary_commit` | `1.000` | `-0.551000` | `0.051000` | `1.000000` | `2052` | `0` | `0` |
+| `distributed_neutral_ternary` | `1.000` | `0.174750` | `0.003250` | `0.250000` | `0` | `0` | `2052` |
+| `frp_distributed_resonant` | `1.000` | `0.144750` | `0.107000` | `0.250000` | `0` | `3820` | `2392` |
 
-## 13. Supported Model Claim
+## 43. Archived Ternary-to-Binary Thermal Model Result
 
-The current model supports the following claim:
+The historical transition benchmark records:
 
-    FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct -1 ↔ 1 transitions in the tested operational domain.
+`binary_style_forced_switch heat_peak = 0.051000`
 
-The current model does not support the following claim:
+`distributed_neutral_ternary heat_peak = 0.003250`
 
-    FRP is always colder than distributed neutral ternary switching.
+Exact ratio:
 
-The distributed neutral baseline is colder in the current simulation because it does not include the resonant phase layer.
+`0.051000 / 0.003250 = 15.6923076923`
 
-## 14. Operational Domain
+Under the historical v0.9.3 transition benchmark model and workload:
 
-The tested operational domain is:
+`distributed_neutral_ternary recorded a 15.69× lower heat_peak than binary_style_forced_switch`
 
-    N >= 8
+Equivalent relative reduction:
 
-Smaller values such as N = 2 or N = 3 may be used only as micro-tests of ternary logic.
+`93.63% lower heat_peak`
 
-They are not representative operational workloads.
+The same archived result records:
 
-## 15. Legacy Model Files
+`distributed_neutral_ternary actual_direct_events = 0`
 
-This directory may contain older model files created before the current FRP v0.9.3-mobile candidate.
+`binary_style_forced_switch actual_direct_events = 2052`
 
-Older files may describe:
+`distributed_neutral_ternary switch_load_peak = 0.25`
 
-- Kuramoto-type synchronization
-- coherence accumulation
-- resonance interaction logic
-- dissipative stability balancing
-- dynamic convergence behavior
+`binary_style_forced_switch switch_load_peak = 1.0`
 
-These concepts may remain useful as background, but they must be aligned with the current prototype before being treated as active model documentation.
+The archived benchmark preserves direct evidence for the distributed-neutral ternary transition model inside that release-specific workload and metric domain.
 
-Recommended handling:
+## 44. Historical and Current Model Contours
 
-| Legacy Condition | Action |
+The model layer preserves four distinct contours.
+
+### Preliminary Kuramoto contour
+
+Measured subject:
+
+`oscillator phase interaction, external resonant driving, phase order, and convergence`
+
+Primary file:
+
+`kuramoto_frp_background_model.md`
+
+### Historical v0.9.3 transition contour
+
+Measured subject:
+
+`route activity, switching load, historical heat_peak, and historical dynamic stability`
+
+Primary evidence:
+
+`../TEST_REPORT_v0_9_3.md`
+
+### Current FRP v1.7.0 semantic model contour
+
+Measured subject:
+
+`resonant phase dynamics, hierarchical coherence, delay, distributed thermal state, gamma drift, ternary routing, and C(t) - P(t)`
+
+Primary executable:
+
+`../frp_prototype_v1_7_0.py`
+
+### Current M15 implementation-mapping contour
+
+Measured subject:
+
+`fixed-point mapping, quantized execution, cycle-exact traces, RTL vectors, interface mapping, equivalence, and qualification closure`
+
+Primary architecture document:
+
+`../docs/m15_implementation_mapping_domain_interface_qualification_closure.md`
+
+Each contour retains its release-specific model identity, metric definitions, and evidence records.
+
+## 45. Model Evidence Registry
+
+| Model subject | Primary evidence source |
 |---|---|
-| still technically useful | update terminology and mark as legacy/background |
-| partially outdated | rewrite or move to legacy |
-| conflicting with v0.9.3-mobile | replace or remove |
-| old Kuramoto-only model | keep only as preliminary background |
+| current processor semantics | `frp_prototype_v1_7_0.py` |
+| current fixed-point domains | `fixed_point_interface_profile` |
+| current ternary encoding | `balanced_ternary_hardware_encoding_map` |
+| current quantized execution | `quantized_reference_shadow_model` |
+| current cycle-exact state | `cycle_exact_reference_trace` |
+| current deterministic replay package | `rtl_comparison_vector_package` |
+| current interface mapping | `systemverilog_testbench_interface_map` |
+| current RTL mapping | `synthesizable_rtl_reference_core` |
+| current assertion correlation | `rtl_assertion_correlation_harness` |
+| current semantic and replay correlation | `reference_rtl_equivalence_report` |
+| current final qualification | `qualification_closure_manifest` |
+| preliminary resonance-phase background | `kuramoto_frp_background_model.md` |
+| historical transition benchmark | `TEST_REPORT_v0_9_3.md` |
 
-## 16. Simulation Boundary
+## 46. Current GitHub Actions Validation Context
 
-The model layer describes simulation models.
+Current repository workflow count:
 
-It does not establish:
+`19`
 
-- hardware thermal efficiency
-- physical electrical switching energy reduction
-- fabrication-level performance
-- hardware timing behavior
-- measured physical heat
-- measured physical power consumption
-- universal superiority over all transition models
+Current root README active passing badge count:
 
-All model claims are limited to the tested Python simulation domain.
+`18`
 
-## Current Status
+Current primary M15 workflow:
 
-The model layer should remain aligned with:
+`../.github/workflows/frp-m15-implementation-mapping-qualification.yml`
 
-- ../frp_prototype_v0_9_3_mobile.py
-- ../TEST_REPORT_v0_9_3.md
-- ../README.md
-- ../docs/architecture.md
-- ../docs/benchmark_interpretation.md
-- ../docs/limitations.md
-- ../verification/README.md
-- ../verification/coherence_metrics.md
-- ../simulations/README.md
+Current environment:
+
+`ubuntu-latest`
+
+Current Python version:
+
+`3.12`
+
+Current M15 workflow stages:
+
+1. checkout repository;
+2. set up Python;
+3. compile the FRP v1.7.0 reference file;
+4. generate M15 qualification outputs;
+5. compare deterministic vector packages;
+6. validate M15 schemas, kernel invariants, fixed-point contract, and equivalence;
+7. validate deterministic vector-package integrity;
+8. validate the M15 architecture document contract;
+9. upload M15 qualification artifacts.
+
+## 47. Current Release Validation Evidence
+
+Current validated release layer:
+
+`FRP v1.7.0 — M15 Implementation Mapping, Domain Interface, and Qualification Closure Package`
+
+Current validation environment:
+
+`GitHub Actions hardware-backed CI execution`
+
+Validated release commit:
+
+`5fd9a4f`
+
+Recorded workflow stack:
+
+- `FRP Structured Output #113 — PASS`;
+- `FRP M15 Implementation Mapping and Qualification Closure #1 — PASS`;
+- `FRP Self Test #154 — PASS`;
+- `FRP Benchmark Smoke Test #152 — PASS`.
+
+Current overall published result:
+
+`PASS`
+
+## 48. Current File Alignment
+
+This model layer is aligned with:
+
+- `../README.md`;
+- `../frp_prototype_v1_7_0.py`;
+- `../TEST_REPORT_v1_7_0.md`;
+- `../FRP_VALIDATION_INDEX_v1_7_0.md`;
+- `../RELEASE_NOTES_v1_7_0.md`;
+- `../CI.md`;
+- `../REPRODUCIBILITY.md`;
+- `../USAGE.md`;
+- `../INSTALL.md`;
+- `../CONTRIBUTING.md`;
+- `../docs/README.md`;
+- `../docs/core_principles.md`;
+- `../docs/resonance_computation.md`;
+- `../docs/architecture.md`;
+- `../docs/implementation_layers.md`;
+- `../docs/benchmark_interpretation.md`;
+- `../docs/limitations.md`;
+- `../verification/README.md`;
+- `../verification/coherence_metrics.md`;
+- `../simulations/README.md`;
+- `../examples/README.md`;
+- `../examples/resonance_convergence_example.md`;
+- `../docs/m15_implementation_mapping_domain_interface_qualification_closure.md`;
+- `../.github/workflows/frp-m15-implementation-mapping-qualification.yml`.
+
+Historical transition evidence remains aligned with:
+
+- `../TEST_REPORT_v0_9_3.md`;
+- `../frp_prototype_v0_9_3_mobile.py`.
+
+Preliminary resonance-phase background remains preserved in:
+
+- `./kuramoto_frp_background_model.md`.
+
+## 49. Current Status
+
+Processor:
+
+`Fractal Resonance Processor (FRP)`
+
+Processor class:
+
+`Ternary Resonant Coherence Processor`
+
+Current model chain:
+
+`balanced ternary state → active-neutral routing → Kuramoto-Sakaguchi resonant phase dynamics → hierarchical fractal coupling → phase evolution → Kuramoto order parameter R → multiscale phase coherence → stateful delay dynamics → distributed local thermal dynamics → correlated gamma drift → nonlinear coherence compression → C(t) → P(t) → C(t) - P(t) → phase-derived ternary targets → distributed commit → retained coherent ternary state → fixed-point mapping → quantized hardware shadow → cycle-exact trace → RTL comparison vectors → SystemVerilog mapping → RTL reference-core mapping → equivalence → qualification closure`
+
+Current executable form:
+
+`Ternary Resonant Coherence Processor — Structured Output Prototype`
+
+Current version:
+
+`FRP v1.7.0`
+
+Current milestone:
+
+`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+
+Current executable reference:
+
+`../frp_prototype_v1_7_0.py`
+
+Current self-test result:
+
+`41/41 PASS`
+
+Current qualification closure result:
+
+`PASS`
+
+Current published validation result:
+
+`PASS`
+
+Historical archived ternary-to-binary thermal result:
+
+`distributed_neutral_ternary recorded a 15.69× lower heat_peak than binary_style_forced_switch under the historical v0.9.3 transition benchmark model`
+
+Next planned architecture layer:
+
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
