@@ -6504,33 +6504,370 @@ Expected JSON metric conditions:
 
 ## 17. Benchmark Summary
 
-Benchmark command:
+The FRP benchmark record is cumulative.
+
+Each benchmark layer preserves the technical evidence of its release stage and adds the next validated measurement contour.
+
+### FRP v0.9.3 Transition Benchmark
+
+Benchmark matrix:
+
+| Parameter | Value |
+|---|---|
+| N | `8, 16, 32, 64` |
+| seeds | `0..4` |
+| cycle modes | `free`, `7/1`, `1/7` |
+| operations | `neg`, `add`, `sub`, `compare`, `consensus` |
+| steps | `128` |
+
+Compared architectures:
+
+- `frp_distributed_resonant`;
+- `direct_ternary_commit`;
+- `distributed_neutral_ternary`;
+- `binary_style_forced_switch`.
+
+Recorded result:
+
+| Architecture | Match | C-P_min | Heat Peak | Switch Peak | Actual Direct | Prevented Direct | Neutralized |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `binary_style_forced_switch` | `1.000` | `-0.551000` | `0.051000` | `1.000000` | `2052` | `0` | `0` |
+| `direct_ternary_commit` | `1.000` | `-0.551000` | `0.051000` | `1.000000` | `2052` | `0` | `0` |
+| `distributed_neutral_ternary` | `1.000` | `0.174750` | `0.003250` | `0.250000` | `0` | `0` | `2052` |
+| `frp_distributed_resonant` | `1.000` | `0.144750` | `0.107000` | `0.250000` | `0` | `3820` | `2392` |
+
+Within this historical benchmark model and workload:
+
+`binary_style_forced_switch heat_peak = 0.051000`
+
+`distributed_neutral_ternary heat_peak = 0.003250`
+
+Exact ratio:
+
+`15.6923076923`
+
+Measured result:
+
+`distributed_neutral_ternary recorded a 15.69× lower heat_peak than binary_style_forced_switch`
+
+Equivalent reduction:
+
+`93.63% lower heat_peak`
+
+The measured thermal-transition advantage is associated with:
+
+`active neutral state 0`
+
+↓
+
+`mandatory active-neutral transition route`
+
+↓
+
+`tick-separated neutral routing`
+
+↓
+
+`distributed transition load`
+
+### FRP v0.9.4 Text and Structured JSON Benchmark
+
+Historical text benchmark command:
 
 `python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5`
 
-JSON benchmark command:
+Historical structured JSON benchmark command:
 
 `python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json`
 
-Benchmark architectures:
+Benchmark architecture labels:
 
-- `frp_distributed_resonant`
-- `direct_ternary_commit`
-- `distributed_neutral_ternary`
-- `binary_style_forced_switch`
+- `binary_style_forced_switch`;
+- `direct_ternary_commit`;
+- `distributed_neutral_ternary`;
+- `frp_distributed_resonant`.
 
-Expected benchmark architecture labels:
+Structured output schema:
 
-| Architecture |
-|---|
-| `binary_style_forced_switch` |
-| `direct_ternary_commit` |
-| `distributed_neutral_ternary` |
-| `frp_distributed_resonant` |
+`frp.structured_output.v0.9.4`
 
-The benchmark compares FRP distributed resonant behavior against baseline transition architectures.
+Structured benchmark kind:
 
-In v0.9.4, benchmark output is available in both console and structured JSON form.
+`benchmark`
+
+### M3 Benchmark Matrix History — FRP v0.9.5 through FRP v1.3.0
+
+Validated benchmark-matrix schemas:
+
+- `frp.m3.benchmark_matrix.v0.9.5`;
+- `frp.m3.benchmark_matrix.v0.9.6`;
+- `frp.m3.benchmark_matrix.v0.9.7`;
+- `frp.m3.benchmark_matrix.v0.9.8`;
+- `frp.m3.benchmark_matrix.v0.9.9`;
+- `frp.m3.benchmark_matrix.v1.0.0`;
+- `frp.m3.benchmark_matrix.v1.1.0`;
+- `frp.m3.benchmark_matrix.v1.2.0`;
+- `frp.m3.benchmark_matrix.v1.3.0`.
+
+Validated architecture rows across this benchmark-matrix sequence:
+
+1. `binary_style_forced_switch`;
+2. `direct_ternary_commit`;
+3. `distributed_neutral_ternary`;
+4. `frp_distributed_resonant`.
+
+This benchmark sequence preserves the transition from baseline switching architectures into the FRP distributed resonant execution path.
+
+### FRP v1.4.0 Benchmark Matrix
+
+Schema:
+
+`frp.m3.benchmark_matrix.v1.4.0`
+
+Validated architecture rows:
+
+1. `binary_style_forced_switch`;
+2. `direct_ternary_commit`;
+3. `frp_distributed_resonant`;
+4. `frp_aggressive_feedback_stress_harness`.
+
+This matrix extends the benchmark history into the M12 external implementation feedback and transition-pressure layer.
+
+### FRP v1.5.0 Benchmark Matrix
+
+Schema:
+
+`frp.m3.benchmark_matrix.v1.5.0`
+
+Validated architecture rows:
+
+1. `binary_style_forced_switch`;
+2. `frp_v1_4_0_transition_pressure_layer`;
+3. `frp_v1_5_0_bounded_thermal_survival`;
+4. `frp_v1_5_0_thermal_stability_boundary_sweep`.
+
+This matrix extends the benchmark history into thermal-delay stabilization, bounded thermal survival, and stability-boundary qualification.
+
+### FRP v1.6.0 Benchmark Matrix
+
+Schema:
+
+`frp.m3.benchmark_matrix.v1.6.0`
+
+Validated architecture rows:
+
+1. `all_to_all_uniform_reference`;
+2. `frp_v1_5_0_thermal_delay_stabilization`;
+3. `frp_v1_6_0_dense_hierarchical_reference`;
+4. `frp_v1_6_0_hierarchical_accelerated_path`;
+5. `frp_v1_6_0_localized_hotspot_containment`.
+
+This matrix extends the benchmark history into hierarchical topology, accelerated interaction evaluation, distributed thermal fields, and localized hotspot containment.
+
+### Current FRP v1.7.0 M15 Benchmark Matrix
+
+Current command:
+
+`python frp_prototype_v1_7_0.py --mode benchmark`
+
+Equivalent export:
+
+`python frp_prototype_v1_7_0.py --export-benchmark-matrix`
+
+Schema:
+
+`frp.m3.benchmark_matrix.v1.7.0`
+
+Validated architecture rows:
+
+1. `frp_v1_6_0_m14_floating_semantic_reference`;
+2. `frp_v1_7_0_quantized_hardware_shadow`;
+3. `frp_v1_7_0_cycle_exact_vector_package`;
+4. `frp_v1_7_0_systemverilog_correlation_contract`;
+5. `frp_v1_7_0_qualification_closure`.
+
+The current M15 benchmark matrix records the implementation-mapping progression:
+
+`M14 floating semantic reference`
+
+↓
+
+`M15 quantized hardware shadow`
+
+↓
+
+`cycle-exact integer golden trace`
+
+↓
+
+`deterministic RTL comparison vectors`
+
+↓
+
+`SystemVerilog correlation contract`
+
+↓
+
+`qualification closure`
+
+Validation result:
+
+`PASS`
+
+### Comparative Architecture Benchmark Suite
+
+Benchmark directory:
+
+`benchmarks/architecture_comparison/`
+
+Schema:
+
+`frp.benchmark.architecture_comparison.v1`
+
+Current architecture set:
+
+1. `binary_synchronous_reference`;
+2. `binary_clock_gated_reference`;
+3. `direct_ternary_reference`;
+4. `frp_v1_7_0_quantized_shadow`.
+
+Canonical result:
+
+`benchmarks/architecture_comparison/results/reference_comparison_seed_76.json`
+
+Canonical unit-event profile:
+
+`unit_event_cost_v1`
+
+Canonical package digest:
+
+`5a4be61ce7fd6bc680bbd8bc28bfe7cc9d2ad35adddf642cecff111fbd503d6a`
+
+Integrity status:
+
+`PASS`
+
+Qualification status:
+
+`PASS`
+
+The suite applies one deterministic semantic workload to four independently executed architecture references and records their architecture-specific event activity through one common event taxonomy.
+
+The FRP v1.7.0 quantized shadow row records the complete resonant phase-coherence execution profile, including:
+
+- fixed-point arithmetic;
+- trigonometric lookups;
+- hierarchical coupling;
+- distributed thermal processing;
+- multiscale coherence processing;
+- active-neutral routing;
+- retained-state execution.
+
+### Hardware-Informed Sensitivity Qualification
+
+Schema:
+
+`frp.benchmark.hardware_sensitivity_comparison.v1`
+
+Canonical result:
+
+`benchmarks/architecture_comparison/results/reference_comparison_seed_76_hardware_sensitivity_v1.json`
+
+Hardware-sensitivity profile:
+
+`literature_anchored_cmos45_sensitivity_v1`
+
+Validated scenarios:
+
+1. `lower_bound`;
+2. `nominal`;
+3. `upper_bound`.
+
+All four architectures use the same global coefficient vector within each scenario.
+
+Profile qualification status:
+
+`PASS`
+
+Comparison qualification status:
+
+`PASS`
+
+Validated ranking stability:
+
+`ranking_stable = true`
+
+`ranking_sensitive = false`
+
+Ranking across all three scenarios:
+
+`binary_clock_gated_reference`
+
+↓
+
+`direct_ternary_reference`
+
+↓
+
+`binary_synchronous_reference`
+
+↓
+
+`frp_v1_7_0_quantized_shadow`
+
+The M15 FRP row evaluates the declared activity cost of the complete quantized resonant phase-coherence execution stack.
+
+The dominant declared cost concentration is associated with:
+
+`fixed-point arithmetic volume`
+
+and:
+
+`trigonometric lookup volume`
+
+Canonical hardware-sensitivity package digest:
+
+`a44cf392d946e3b5c21dffbaa1d726d31da326a007e2908914f6477215261ea0`
+
+### Benchmark Evidence Continuity
+
+The benchmark history preserves distinct technical measurement contours:
+
+`v0.9.3 transition heat_peak behavior`
+
+↓
+
+`v0.9.4 text and structured JSON benchmark execution`
+
+↓
+
+`v0.9.5–v1.3.0 M3 architecture benchmark matrices`
+
+↓
+
+`v1.4.0 transition-pressure and feedback-stress benchmark matrix`
+
+↓
+
+`v1.5.0 thermal-survival and stability-boundary benchmark matrix`
+
+↓
+
+`v1.6.0 hierarchical scaling, acceleration, and hotspot-containment benchmark matrix`
+
+↓
+
+`v1.7.0 M15 implementation-mapping benchmark matrix`
+
+↓
+
+`current Comparative Architecture Benchmark Suite`
+
+↓
+
+`current hardware-informed sensitivity qualification`
+
+Together these benchmark layers preserve the historical development of FRP and expose the current processor through separate transition, thermal, architectural, implementation-mapping, activity-cost, and sensitivity measurement contours.
 
 ## 18. Benchmark-Supported Technical Position
 
