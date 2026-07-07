@@ -452,7 +452,7 @@ The hardware-informed sensitivity layer applies the same global coefficient scen
 2. `nominal`;
 3. `upper_bound`.
 
-No architecture-specific coefficient vectors are used.
+All architectures use the same global coefficient vectors.
 
 The canonical result records:
 
@@ -478,6 +478,8 @@ The ranking remains identical across all three scenarios:
 
 The current M15 quantized shadow produces the highest declared normalized activity cost in all three hardware-informed sensitivity scenarios.
 
+The M15 sensitivity result measures the declared event cost of the complete quantized FRP execution stack, including phase evolution, hierarchical coupling, fixed-point arithmetic, lookup-table activity, queue activity, thermal-field computation, and coherence computation.
+
 The dominant declared cost concentration is associated with:
 
 `fixed-point arithmetic volume`
@@ -486,7 +488,7 @@ and:
 
 `trigonometric lookup volume`
 
-This result is retained without coefficient adjustment and without winner assertions.
+The result characterizes the full-model activity cost of the resonant phase-coherence execution stack under the shared hardware-informed coefficient scenarios.
 
 Canonical hardware sensitivity package digest:
 
