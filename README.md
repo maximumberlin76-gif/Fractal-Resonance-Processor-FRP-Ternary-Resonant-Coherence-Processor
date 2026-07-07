@@ -6054,33 +6054,41 @@ Recommended Python version:
 
 ## 6. Quick Start
 
-Run a demonstration:
+Run the default processor execution:
 
-`python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1`
+`python frp_prototype_v1_7_0.py`
 
-Run the standard self-test:
+Run the explicit demo mode:
 
-`python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5`
+`python frp_prototype_v1_7_0.py --mode demo`
 
-Run the heavier self-test:
+Run the demo as structured JSON:
 
-`python3 frp_prototype_v0_9_4.py --mode test --steps 256 --seeds 10`
+`python frp_prototype_v1_7_0.py --mode demo --output json`
 
-Run the benchmark:
+Run the demo with full trace data:
 
-`python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5`
+`python frp_prototype_v1_7_0.py --mode demo --output json --include-trace`
 
-Run the standard self-test as JSON:
+Run the current M15 self-test:
 
-`python3 frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json`
+`python frp_prototype_v1_7_0.py --mode self-test --output json`
 
-Run the benchmark as JSON:
+Run the free-scheduler self-test:
 
-`python3 frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json`
+`python frp_prototype_v1_7_0.py --mode self-test --scheduler free --output json`
 
-Run a demo with JSON telemetry:
+Run the 7/1-scheduler self-test:
 
-`python3 frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json --include-telemetry`
+`python frp_prototype_v1_7_0.py --mode self-test --scheduler 7/1 --output json`
+
+Run the 1/7-scheduler self-test:
+
+`python frp_prototype_v1_7_0.py --mode self-test --scheduler 1/7 --output json`
+
+Generate the current M15 benchmark matrix:
+
+`python frp_prototype_v1_7_0.py --mode benchmark`
 
 For detailed usage instructions, see:
 
