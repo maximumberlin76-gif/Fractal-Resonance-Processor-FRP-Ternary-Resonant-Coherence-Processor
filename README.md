@@ -412,7 +412,7 @@ Canonical package digest:
 
 The unit-event baseline measures declared architecture event volume under a common unit-cost model.
 
-It is not a physical silicon energy measurement.
+Its measurement domain is normalized architecture event volume under the common unit-cost model.
 
 The canonical baseline is preserved unchanged.
 
