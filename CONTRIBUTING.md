@@ -1,20 +1,20 @@
-# Contributing — Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor
+# Contributing — Fractal Resonance Processor (FRP)
 
 **Ternary Resonant Coherence Processor — Structured Output Prototype**
 
-Thank you for your interest in contributing to the Fractal Resonance Processor (FRP).
+Thank you for contributing to the Fractal Resonance Processor (FRP).
 
 FRP is a ternary resonant coherence processor.
 
-It does not treat computation as literal bit toggling or static enumeration of ternary symbols.
+Its computational mechanism combines resonant phase dynamics, coherence evolution, stateful feedback, and balanced ternary state retention.
 
-Its computational identity combines:
+The complete current processor path is:
 
-`balanced ternary target domain {-1, 0, 1}`
+`balanced ternary state and retained-result domain {-1, 0, 1}`
 
 ↓
 
-`phase encoding and oscillator state`
+`cell phase and frequency state`
 
 ↓
 
@@ -22,7 +22,7 @@ Its computational identity combines:
 
 ↓
 
-`asymmetric phase lag gamma`
+`asymmetric Sakaguchi phase lag gamma`
 
 ↓
 
@@ -30,15 +30,11 @@ Its computational identity combines:
 
 ↓
 
-`resonance selection`
-
-↓
-
 `phase evolution`
 
 ↓
 
-`phase-coherence accumulation`
+`resonance selection`
 
 ↓
 
@@ -46,11 +42,19 @@ Its computational identity combines:
 
 ↓
 
-`multiscale coherence evaluation`
+`multiscale phase coherence`
 
 ↓
 
-`delay dynamics`
+`stateful delay dynamics`
+
+↓
+
+`local thermal-phase interaction`
+
+↓
+
+`local correlated gamma drift`
 
 ↓
 
@@ -58,7 +62,11 @@ Its computational identity combines:
 
 ↓
 
-`target-oriented resonant transition`
+`dynamic stability C(t) - P(t)`
+
+↓
+
+`phase-derived ternary target`
 
 ↓
 
@@ -70,23 +78,17 @@ Its computational identity combines:
 
 ↓
 
-`stable coherent state retention`
+`retained coherent ternary state`
 
-The balanced ternary states:
+The balanced ternary state and retained-result domain is:
 
 `{-1, 0, 1}`
 
-define the processor state and retained-result domain.
-
-The resonant phase layer defines the dynamic computational transition mechanism.
-
-The neutral state:
+The active neutral state is:
 
 `0`
 
-is an active balancing, damping, transition, and stabilization state.
-
-Validated opposite-polarity routes:
+Validated opposite-polarity routes are:
 
 `-1 → 0 → 1`
 
@@ -104,13 +106,13 @@ Validated execution relation:
 
 `tick N+1 or later: 0 → target polarity`
 
-Validated kernel invariant:
+Validated kernel invariants:
 
 `actual_direct_events = 0`
 
-The current executable reference is:
+`reserved_state_events = 0`
 
-`frp_prototype_v1_7_0.py`
+`queue_overflow_events = 0`
 
 Current version:
 
@@ -120,6 +122,34 @@ Current milestone:
 
 `M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
 
+Current executable reference:
+
+`frp_prototype_v1_7_0.py`
+
+Current structured-output schema:
+
+`frp.structured_output.v1.7.0`
+
+Current architecture document:
+
+`docs/m15_implementation_mapping_domain_interface_qualification_closure.md`
+
+Current test report:
+
+`TEST_REPORT_v1_7_0.md`
+
+Current validation index:
+
+`FRP_VALIDATION_INDEX_v1_7_0.md`
+
+Current release notes:
+
+`RELEASE_NOTES_v1_7_0.md`
+
+Current primary qualification workflow:
+
+`.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+
 Current published validation status:
 
 `PASS`
@@ -128,9 +158,57 @@ Current validated M15 self-test result:
 
 `41/41 PASS`
 
-## 1. Before Contributing
+Next planned architecture layer:
 
-Before proposing changes, read the current files relevant to the intended change.
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
+
+## 1. Contribution Principle
+
+Every contribution should preserve or intentionally advance the published FRP architecture.
+
+The contribution path is:
+
+`identify the affected architecture layer`
+
+↓
+
+`read the current control files`
+
+↓
+
+`make one coherent technical change`
+
+↓
+
+`run the relevant validation set`
+
+↓
+
+`regenerate affected deterministic artifacts`
+
+↓
+
+`check architecture and documentation alignment`
+
+↓
+
+`submit traceable evidence`
+
+The current repository state is defined by the connected set of:
+
+- executable reference;
+- GitHub Actions workflows;
+- structured outputs;
+- test reports;
+- validation indices;
+- release notes;
+- architecture documents;
+- generated artifacts;
+- current root README validation badge chain.
+
+## 2. Read the Current Control Files
+
+Before changing a current FRP layer, read the files connected to that layer.
 
 Primary current files:
 
@@ -156,13 +234,18 @@ For comparative architecture work, also read:
 
 - `benchmarks/architecture_comparison/README.md`;
 - `benchmarks/architecture_comparison/calibration/hardware_cost_calibration_v1.md`;
-- `benchmarks/architecture_comparison/calibration/coefficient_provenance_map_v1.md`.
+- `benchmarks/architecture_comparison/calibration/coefficient_provenance_map_v1.md`;
+- `benchmarks/architecture_comparison/profiles/hardware_sensitivity_cost_profile_v1.json`.
 
-Historical architecture files remain preserved because they define earlier validated layers.
+Historical architecture files retain their release-specific architecture identity.
 
-Do not treat an older release file as the current architecture merely because it remains in the repository.
+Current-layer contributions use current-layer files.
 
-## 2. Processor Identity
+Historical corrections use the corresponding historical files.
+
+Planned M16 material remains identified as the next architecture layer until its implementation package is published.
+
+## 3. Processor Identity
 
 Use the processor name consistently:
 
@@ -188,50 +271,132 @@ Current executable reference:
 
 `frp_prototype_v1_7_0.py`
 
-The executable prototype is the current reference form of the processor.
+The processor identity includes the complete resonant phase-coherence mechanism and the balanced ternary state-retention mechanism.
 
-The processor identity is not reducible to:
+The balanced ternary domain provides:
 
-- three static symbols;
-- a ternary register;
-- a ternary encoding table;
-- a direct state-switching mechanism.
+- state;
+- target;
+- transition;
+- retained result.
 
-The complete computational identity includes the resonant phase-dynamics layer.
+The resonant dynamic domain provides:
 
-## 3. Computational Core
+- phase evolution;
+- frequency evolution;
+- resonant coupling;
+- coherence development;
+- coupled feedback;
+- dynamic state formation.
 
-A contribution must preserve the distinction between:
+Together these domains define the current FRP computation.
 
-`state domain`
+## 4. Two Connected Computational Domains
 
-and:
+The FRP computational core contains two connected domains.
 
-`computational dynamics`
+### 4.1 Resonant dynamic domain
 
-The balanced ternary state domain is:
+The resonant dynamic domain contains:
 
-`{-1, 0, 1}`
+- cell phase;
+- base frequency;
+- target frequency;
+- current frequency;
+- Kuramoto-Sakaguchi phase interaction;
+- asymmetric phase lag gamma;
+- hierarchical fractal coupling;
+- scheduler-dependent phase contribution;
+- delayed frequency response;
+- distributed thermal state;
+- thermal coupling-factor evolution;
+- local correlated gamma drift;
+- phase evolution;
+- global Kuramoto order parameter `R`;
+- pair-domain phase coherence;
+- cluster phase coherence;
+- supercluster phase coherence;
+- global phase coherence;
+- nonlinear coherence compression;
+- dynamic stability evaluation.
 
-The computational process is dynamic.
+### 4.2 Balanced ternary state and retained-result domain
 
-The current processor evolves coupled phase states and derives ternary targets from the resulting phase field.
+The balanced ternary domain contains:
 
-The computational chain is:
+- states `{-1, 0, 1}`;
+- active neutral state `0`;
+- phase-derived ternary targets;
+- transition requests;
+- distributed commit;
+- transition-fraction limits;
+- request lanes;
+- pending neutral routes;
+- mandatory tick separation;
+- scheduler-controlled execution;
+- retained ternary state.
 
-`cell phases and frequencies`
+The resonant dynamic domain drives the evolving computation.
+
+The balanced ternary domain provides the state, target, transition, and retained-result layer.
+
+## 5. Current Tick Execution Chain
+
+The current executable preserves the following operational sequence:
+
+`scheduler-state selection`
 
 ↓
 
-`hierarchical coupling field`
+`pending neutral-route processing`
 
 ↓
 
-`Kuramoto-Sakaguchi interaction`
+`transition-request processing`
 
 ↓
 
-`asymmetric phase offset`
+`phase-derived ternary target processing`
+
+↓
+
+`distributed transition-limit enforcement`
+
+↓
+
+`frequency-target formation`
+
+↓
+
+`stateful delayed frequency response`
+
+↓
+
+`local generated power`
+
+↓
+
+`distributed thermal update`
+
+↓
+
+`local thermal overload`
+
+↓
+
+`correlated gamma-noise update`
+
+↓
+
+`local effective Sakaguchi phase lag`
+
+↓
+
+`thermal coupling-factor update`
+
+↓
+
+`hierarchical Kuramoto-Sakaguchi coupling field`
 
 ↓
 
@@ -243,23 +408,35 @@ The computational chain is:
 
 ↓
 
-`phase-coherence measurement`
+`Kuramoto order parameter R`
 
 ↓
 
-`multiscale coherence evaluation`
+`multiscale phase coherence`
 
 ↓
 
-`stability and pressure evaluation`
+`nonlinear coherence compression`
 
 ↓
 
-`target-state extraction`
+`C(t), P(t), and C(t) - P(t)`
 
 ↓
 
-`distributed commit`
+`structured telemetry and trace capture`
+
+Across successive ticks:
+
+`evolved phase field`
+
+↓
+
+`next phase-derived ternary target`
+
+↓
+
+`distributed transition`
 
 ↓
 
@@ -267,46 +444,72 @@ The computational chain is:
 
 ↓
 
-`retained ternary state`
+`retained coherent ternary state`
 
-FRP therefore does not compute by merely flipping a ternary state from one symbol to another.
+Changes affecting execution order require explicit architecture review and complete regression validation.
 
-The ternary state is the target and retained state domain around which the resonant phase dynamics evolve.
+## 6. Kuramoto-Sakaguchi Resonant Phase Layer
 
-## 4. Kuramoto-Sakaguchi Resonant Phase Layer
+The current phase interaction uses:
 
-The processor uses a Kuramoto-Sakaguchi type coupled-oscillator phase layer.
+`sin(phase_j - phase_i - gamma_effective_i)`
 
-The current coupling relation contains the phase interaction term:
-
-`sin(phase_j - phase_i - gamma_i)`
-
-The interaction is combined with:
+The interaction combines:
 
 - hierarchical coupling weights;
-- thermal pair factors;
+- local thermal coupling factors;
 - nominal coupling strength;
-- local phase state;
 - local effective gamma.
 
-The current dense coupling path is constructed from weighted pair interactions.
+Current default nominal phase lag:
 
-The current hierarchical coupling path evaluates the same phase-interaction structure through hierarchical shell aggregation.
+`gamma = 0.30 × pi`
 
-A contribution affecting the phase field must preserve the distinction between:
+Current source constant:
 
-- phase state;
-- oscillator frequency;
-- effective coupling;
-- phase lag;
-- scheduler contribution;
-- resulting phase velocity.
+`DEFAULT_GAMMA = 0.30 × pi`
 
-## 5. Current Phase Evolution
+Current default nominal coupling strength:
 
-For each cell, the current phase velocity is composed from:
+`coupling_nominal = 0.28`
 
-`frequency contribution`
+Current default fractal coupling exponent:
+
+`fractal_alpha = 0.70`
+
+A contribution affecting the phase field should preserve explicit traceability across:
+
+`phase state`
+
+↓
+
+`frequency state`
+
+↓
+
+`effective coupling`
+
+↓
+
+`phase lag`
+
+↓
+
+`scheduler contribution`
+
+↓
+
+`phase velocity`
+
+↓
+
+`phase evolution`
+
+## 7. Phase Evolution
+
+The current floating reference phase velocity combines:
+
+`0.060 × current frequency`
 
 +
 
@@ -316,40 +519,44 @@ For each cell, the current phase velocity is composed from:
 
 `coupling field`
 
-The current executable reference uses:
+The current relation is:
 
 `phase_velocity_i = 0.060 × frequency_i + scheduler_push + coupling_field_i`
 
-The phase state then evolves as:
+The phase update is:
 
 `phase_i = (phase_i + phase_velocity_i) mod 2π`
 
-This phase evolution occurs before the current target-oriented ternary commit layer evaluates the state transition path.
+Contributions affecting phase evolution should preserve:
 
-A contribution must not replace this dynamic phase-evolution path with a static direct ternary assignment while still describing the result as equivalent FRP behavior.
+- deterministic update order;
+- scheduler contribution;
+- frequency contribution;
+- coupling contribution;
+- phase wrapping;
+- downstream target extraction;
+- downstream coherence evaluation.
 
-## 6. Phase Lag Gamma
+## 8. Phase Lag Gamma
 
-Current default phase lag:
-
-`gamma = 0.30π`
-
-Current source constant:
-
-`DEFAULT_GAMMA = 0.30 × pi`
-
-The phase lag is part of the asymmetric Kuramoto-Sakaguchi coupling structure.
-
-The current architecture also tracks:
+The current architecture tracks:
 
 - nominal gamma;
-- effective local gamma;
+- deterministic gamma-noise targets;
 - correlated gamma-noise state;
-- gamma-noise target;
-- thermal contribution to gamma drift;
-- gamma-drift peak.
+- local thermal overload;
+- effective local gamma;
+- gamma drift.
 
-Changes affecting gamma must preserve traceability between:
+The M15 verification path maps this domain through:
+
+- `GAMMA_S32`;
+- `gamma_noise_update_valid`;
+- `gamma_noise_target_q`;
+- deterministic cycle-exact gamma stimulus;
+- floating-to-quantized gamma correlation.
+
+A gamma contribution should preserve traceability across:
 
 `nominal gamma`
 
@@ -381,43 +588,19 @@ Changes affecting gamma must preserve traceability between:
 
 `RTL-facing comparison artifacts`
 
-## 7. Phase-Coherence Measurement
+## 9. Kuramoto Order Parameter R
 
-The current processor calculates phase coherence from the oscillator phase field.
-
-The current global phase-order relation is:
+The current global phase order is:
 
 `R = sqrt(mean(cos(phase))² + mean(sin(phase))²)`
 
-The executable reference implements this through:
+The executable reference evaluates this through:
 
 `phase_order(phases)`
 
-The resulting value is the Kuramoto phase-order parameter.
+The same phase-order relation supports hierarchical coherence evaluation.
 
-The phase-order parameter is not a decorative telemetry field.
-
-It is part of the processor's operational dynamic state.
-
-The current telemetry and validation layers track phase coherence at multiple scales.
-
-## 8. Kuramoto Order Parameter R
-
-The Kuramoto order parameter:
-
-`R`
-
-measures collective phase alignment.
-
-The current architecture uses phase-order evaluation for:
-
-- global phase coherence;
-- pair-domain coherence;
-- cluster coherence;
-- supercluster coherence;
-- multiscale phase-coherence analysis.
-
-A contribution affecting:
+Contributions affecting:
 
 - phase generation;
 - coupling;
@@ -426,190 +609,13 @@ A contribution affecting:
 - hierarchy;
 - scheduler interaction;
 
-must check the resulting coherence behavior.
+should inspect resulting phase-order behavior.
 
-Do not describe a final ternary vector alone as a complete FRP computational result.
+The operational processor result includes the phase path, coherence path, transition path, and retained ternary state.
 
-The phase path and coherence path are part of the computation.
+## 10. Multiscale Phase Coherence
 
-## 9. Hierarchical Fractal Coupling
-
-The current executable reference inherits the M14 hierarchical ultrametric coupling architecture.
-
-Current hierarchy requirements include:
-
-- power-of-two cell count;
-- dyadic hierarchy depth;
-- hierarchical distance;
-- shell population;
-- level-dependent coupling weights;
-- exact normalized fixed-point weight closure.
-
-Current default:
-
-`cells = 16`
-
-Current default hierarchy depth:
-
-`4`
-
-The current hierarchical distance relation is derived from the binary index relation between cells.
-
-The current shell population is:
-
-`2^(distance - 1)`
-
-The current coupling weights are normalized across hierarchy levels.
-
-A contribution affecting topology must preserve:
-
-- hierarchy depth;
-- shell structure;
-- coupling normalization;
-- deterministic cell grouping;
-- dense-to-hierarchical equivalence contracts where applicable.
-
-## 10. Fractal Coupling Weight Map
-
-Current default fractal coupling exponent:
-
-`fractal_alpha = 0.70`
-
-The current coupling architecture assigns distance-dependent hierarchical weights.
-
-The weight structure depends on:
-
-- hierarchical distance;
-- shell population;
-- fractal exponent;
-- global normalization.
-
-The current fixed-point implementation closes the aggregate topology weight exactly.
-
-Required invariant:
-
-`fixed_point_topology_sum_exact = True`
-
-Changes affecting coupling weights must preserve or explicitly version:
-
-- floating reference behavior;
-- quantized weight behavior;
-- aggregate normalization;
-- cycle-exact reference behavior.
-
-## 11. Resonance Selection
-
-FRP treats resonance as selective support of dynamically compatible modes.
-
-Resonance is not used merely as a synonym for amplification.
-
-Compatible phase structures support:
-
-- coherence accumulation;
-- convergence toward the target state;
-- coherent state retention.
-
-Incompatible or conflicting structures are routed toward:
-
-- neutralization;
-- damping;
-- suppression.
-
-The preserved resonance computation layer includes:
-
-- Kuramoto-Sakaguchi phase coupling;
-- phase lag gamma;
-- phase evolution;
-- nonlinear response;
-- compression dynamics;
-- delay dynamics;
-- distributed commit.
-
-The current executable reference extends this through:
-
-- hierarchical phase coupling;
-- multiscale coherence;
-- local thermal fields;
-- effective coupling modulation;
-- nonlinear coherence compression.
-
-## 12. Target-Oriented Resonant Computation
-
-The processor combines a target-state layer with a resonant phase-evolution layer.
-
-The target layer does not eliminate the resonant dynamics.
-
-The resonant dynamics do not eliminate the ternary state domain.
-
-The relationship is:
-
-`balanced ternary target`
-
-↓
-
-`dynamic phase evolution`
-
-↓
-
-`resonance selection`
-
-↓
-
-`coherence development`
-
-↓
-
-`target-state extraction`
-
-↓
-
-`distributed state transition`
-
-↓
-
-`stable retained result`
-
-The historical executable chain includes target generation from ternary operations.
-
-The current v1.7.0 executable reference also derives target states from the evolving phase field.
-
-Current target-state mapping:
-
-`sin(phase) > 0.33 → 1`
-
-`sin(phase) < -0.33 → -1`
-
-`otherwise → 0`
-
-This mapping connects the phase-dynamics domain to the balanced ternary state domain.
-
-Changes to this boundary are computational-core changes.
-
-## 13. Stable Mode Retention
-
-A coherent FRP computational result is not only a final vector.
-
-The retained state must be reached through the valid dynamic path.
-
-The complete result therefore includes:
-
-- target correspondence;
-- phase evolution;
-- coherence behavior;
-- transition debt;
-- direct-conflict behavior;
-- thermal state;
-- switching load;
-- stability margin;
-- neutral-routing integrity.
-
-The processor's computation chain ends in stable state retention rather than immediate untracked symbolic replacement.
-
-## 14. Multiscale Phase Coherence
-
-The current architecture evaluates coherence across multiple hierarchical scales.
-
-Current layers include:
+Current coherence domains include:
 
 - pair domain;
 - cluster domain;
@@ -627,88 +633,287 @@ Current outputs include:
 - global phase coherence;
 - coherence dispersion across clusters.
 
-Changes affecting phase topology must be reviewed against all affected coherence scales.
+Changes affecting phase topology should inspect every affected coherence scale.
 
-A global average alone is not sufficient when a change alters local or cluster dynamics.
+A contribution should connect local effects, cluster effects, supercluster effects, and global effects where the architecture change spans those domains.
 
-## 15. Delay Dynamics
+## 11. Hierarchical Fractal Coupling
 
-The current architecture includes dynamic frequency lag.
+The current architecture uses a dyadic hierarchical ultrametric topology.
 
-Current default:
+Current default cell count:
+
+`16`
+
+Current default hierarchy depth:
+
+`4`
+
+The cell count requirement is:
+
+- a power of two;
+- at least `2`.
+
+Hierarchy depth:
+
+`cells.bit_length() - 1`
+
+Hierarchical distance between two distinct cells:
+
+`(i XOR j).bit_length()`
+
+Shell population:
+
+`2^(distance - 1)`
+
+Current default fractal exponent:
+
+`0.70`
+
+Contributions affecting topology should preserve:
+
+- hierarchy depth;
+- shell structure;
+- coupling normalization;
+- deterministic cell grouping;
+- dense-reference correlation;
+- hierarchical-reference correlation;
+- multiscale coherence behavior.
+
+## 12. Fixed-Point Topology Closure
+
+The current M15 fixed-point mapping preserves exact normalized topology closure.
+
+Required marker:
+
+`fixed_point_topology_sum_exact = True`
+
+Changes affecting:
+
+- hierarchy weights;
+- shell populations;
+- fractal exponent mapping;
+- fixed-point normalization;
+- rounding;
+- accumulation order;
+
+should preserve this exactness marker or advance it through an explicit versioned architecture transition.
+
+## 13. Resonance Selection
+
+FRP uses resonance as selective support of dynamically compatible phase structures.
+
+Compatible structures support:
+
+- coherence accumulation;
+- target-oriented transition;
+- coherent state retention.
+
+Conflicting structures produce:
+
+- neutralization;
+- damping;
+- suppression.
+
+The current resonance computation includes:
+
+- Kuramoto-Sakaguchi phase coupling;
+- phase lag gamma;
+- phase evolution;
+- multiscale coherence;
+- delay dynamics;
+- thermal-phase interaction;
+- nonlinear coherence compression;
+- distributed commit.
+
+Contributions affecting resonance should preserve the connected dynamic path from phase interaction through retained state.
+
+## 14. Phase-Derived Ternary Target
+
+The current executable maps the evolving phase field into ternary targets.
+
+Current mapping:
+
+`sin(phase) > 0.33 → 1`
+
+`sin(phase) < -0.33 → -1`
+
+`otherwise → 0`
+
+This relation connects:
+
+`resonant phase field`
+
+↓
+
+`balanced ternary target domain`
+
+The target then enters:
+
+- transition-fraction control;
+- distributed commit;
+- pending-route handling;
+- active neutral routing;
+- retained state.
+
+Changes to this boundary are computational-core changes and require full resonant, state, route, and M15 regression validation.
+
+## 15. Retained Coherent State
+
+The current processor result is represented by the complete connected execution path.
+
+Relevant evidence includes:
+
+- target correspondence;
+- phase evolution;
+- Kuramoto order parameter `R`;
+- multiscale coherence;
+- delay state;
+- thermal state;
+- gamma drift;
+- switching load;
+- stability margin;
+- active neutral routing;
+- final retained ternary vector.
+
+A contribution should preserve traceability from the dynamic process to the retained state.
+
+## 16. Delay Dynamics
+
+Current default delay coefficient:
 
 `delay_alpha = 0.30`
 
-Each cell maintains:
+Each cell preserves:
 
 - base frequency;
 - frequency target;
 - current frequency.
 
-The current frequency target includes contributions from:
+The delayed response is:
 
-- cell state;
-- switching activity.
+`frequency_next = frequency_current + delay_alpha × (frequency_target - frequency_current)`
 
-The current frequency state approaches its target through the delay relation.
+Frequency lag contributes to:
 
-The resulting frequency lag contributes to:
+- phase velocity;
+- generated power;
+- operational coherence;
+- dynamic stability.
 
-- local thermal behavior;
-- coherence evaluation;
-- stability evaluation.
-
-A contribution affecting delay dynamics must preserve:
+Contributions affecting delay should preserve:
 
 - deterministic update order;
-- frequency target behavior;
-- current frequency behavior;
+- frequency-target behavior;
+- current-frequency behavior;
 - frequency-lag telemetry;
-- downstream thermal and coherence interactions.
+- downstream thermal response;
+- downstream coherence response.
 
-## 16. Nonlinear Dynamics
+## 17. Local Thermal-Phase Interaction
 
-The published FRP architecture chain includes nonlinear response.
+Each cell tracks:
 
-The preserved foundational resonance layer includes:
+- generated power;
+- thermal dissipation;
+- thermal diffusion;
+- local heat;
+- thermal overload.
 
-- nonlinear saturation;
-- compression dynamics.
+The thermal field feeds into:
 
-The current v1.7.0 reference architecture includes nonlinear coherence compression driven by:
+- effective resonant coupling;
+- local gamma drift;
+- nonlinear coherence compression.
 
-- thermal overload;
+The current feedback chain is:
+
+`frequency lag and switching activity`
+
+↓
+
+`generated power`
+
+↓
+
+`local thermal field`
+
+↓
+
+`thermal overload`
+
+↓
+
+`effective coupling and gamma drift`
+
+↓
+
+`phase evolution`
+
+↓
+
+`coherence`
+
+↓
+
+`stability`
+
+Contributions affecting one stage should inspect the connected downstream stages.
+
+## 18. Fixed-Point Thermal Closure
+
+Required current thermal exactness marker:
+
+`fixed_point_thermal_sum_exact = True`
+
+Changes affecting:
+
+- thermal weights;
+- thermal diffusion topology;
+- fixed-point thermal arithmetic;
+- rounding;
+- accumulation order;
+
+should preserve this exactness marker or advance it through an explicit versioned architecture transition.
+
+## 19. Nonlinear Coherence Compression
+
+The current processor applies:
+
+`effective coherence = raw phase coherence × coherence compression`
+
+The compression factor responds to:
+
+- mean thermal overload;
 - stability-margin pressure.
 
-The current coherence-compression relation is applied to raw phase coherence.
+Current internal gains include:
 
-Current relation:
+`thermal_compression_gain = 3.0`
 
-`effective_coherence = raw_phase_coherence × coherence_compression`
+`margin_compression_gain = 1.5`
 
-The current compression factor decreases under increasing thermal overload and margin pressure.
+Current stability soft margin:
 
-A contribution must not remove nonlinear behavior while describing the result as an equivalent resonant computational path.
+`0.25`
 
-## 17. Dynamic Coherence and Stability
+Contributions affecting coherence compression should preserve the current nonlinear relationship or introduce an explicit versioned architecture transition with complete validation evidence.
+
+## 20. Dynamic Stability
 
 The current processor tracks:
 
-`C`
+`C(t)`
 
-`P`
+`P(t)`
 
-`C_minus_P`
+`C(t) - P(t)`
 
-The stability relation is:
+Current destabilizing load:
 
-`C_minus_P = C - P`
+`P(t) = heat + switch_load`
 
-The current destabilizing load is:
-
-`P = heat + switch_load`
-
-Required current validation condition:
+Required validated condition:
 
 `C_minus_P_min > 0.0`
 
@@ -719,97 +924,17 @@ The current coherence state includes contributions from:
 - neutral-state fraction;
 - frequency-lag penalty.
 
-Changes affecting any of these layers must revalidate the stability path.
+A stability-related contribution should validate every upstream input that affects the changed stability result.
 
-Do not modify a stability threshold merely to make a failing change pass.
+Threshold changes require explicit technical rationale, versioned architecture placement, and regression evidence.
 
-## 18. Computational Core Chain
+## 21. Balanced Ternary State Domain
 
-The complete computational-core chain to preserve is:
-
-`balanced ternary target domain {-1, 0, 1}`
-
-↓
-
-`cell phase state`
-
-↓
-
-`cell frequency state`
-
-↓
-
-`hierarchical fractal coupling`
-
-↓
-
-`Kuramoto-Sakaguchi interaction`
-
-↓
-
-`phase lag gamma`
-
-↓
-
-`local effective coupling`
-
-↓
-
-`phase velocity`
-
-↓
-
-`phase evolution`
-
-↓
-
-`Kuramoto order parameter R`
-
-↓
-
-`multiscale phase coherence`
-
-↓
-
-`delay dynamics`
-
-↓
-
-`thermal interaction`
-
-↓
-
-`nonlinear coherence compression`
-
-↓
-
-`dynamic stability C - P`
-
-↓
-
-`phase-derived ternary target`
-
-↓
-
-`distributed commit`
-
-↓
-
-`active neutral transition routing`
-
-↓
-
-`retained coherent ternary state`
-
-This chain is the computational identity that must not be collapsed into a static ternary-switch description.
-
-## 19. Balanced Ternary State Domain
-
-The processor state domain is:
+The processor state and retained-result domain is:
 
 `{-1, 0, 1}`
 
-Validated states:
+Valid states:
 
 `-1`
 
@@ -817,13 +942,11 @@ Validated states:
 
 `1`
 
-The neutral state:
+The active neutral state is:
 
 `0`
 
-is active.
-
-It is used for:
+The neutral state supports:
 
 - balancing;
 - damping;
@@ -832,29 +955,23 @@ It is used for:
 - conflict neutralization;
 - switching-load control.
 
-Required state-domain condition:
+Required state-domain marker:
 
 `balanced_ternary_state_domain = True`
 
-Reserved-state condition:
+Required reserved-state marker:
 
 `reserved_state_events = 0`
 
-## 20. Mandatory Neutral Routing
+## 22. Mandatory Active-Neutral Routing
 
-Direct opposite-polarity execution is prohibited.
-
-Prohibited execution:
-
-`-1 ↔ 1`
-
-Validated routes:
+Opposite-polarity execution follows the mandatory routes:
 
 `-1 → 0 → 1`
 
 `1 → 0 → -1`
 
-Required execution relation:
+Tick-separated execution relation:
 
 `tick N: active polarity → 0`
 
@@ -870,28 +987,31 @@ Required invariant:
 
 `actual_direct_events = 0`
 
-A final state vector alone is insufficient evidence of correct execution.
+Route-sensitive contributions should preserve:
 
-The complete transition path must preserve:
-
-- active neutral routing;
+- active neutral insertion;
 - pending target retention;
 - tick separation;
-- zero actual direct events.
+- deterministic route ordering;
+- exact direct-event count.
 
-## 21. Pending Neutral Route Integrity
+## 23. Pending Neutral Route Integrity
 
-Pending neutral routes are processor execution state.
+Pending neutral routes preserve:
 
-Changes affecting route creation, retention, consumption, or ordering must preserve:
+- cell index;
+- target polarity;
+- earliest ready tick.
 
-- deterministic pending-route behavior;
-- valid cell targeting;
-- tick-separated application;
-- bounded route handling;
-- zero queue-overflow events.
+A route is applied when:
 
-Required invariant:
+- its ready tick has been reached;
+- transition capacity remains;
+- the current state is neutral.
+
+Required current conditions:
+
+`actual_direct_events = 0`
 
 `queue_overflow_events = 0`
 
@@ -903,35 +1023,39 @@ Route changes require validation of:
 - scheduler sequence;
 - cycle-exact trace.
 
-## 22. Distributed Commit
-
-The processor does not force the complete state vector to switch simultaneously by default.
+## 24. Distributed Commit
 
 Current default transition fraction:
 
 `0.25`
 
-Required condition:
+Maximum state changes per tick:
+
+`max(1, round(cells × transition_fraction))`
+
+Default 16-cell result:
+
+`request_lanes = 4`
+
+Required validated relation:
 
 `switch_load_peak <= transition_fraction`
 
-Default required condition:
+Default validated boundary:
 
 `switch_load_peak <= 0.25`
 
-The distributed commit layer is part of the relation between resonant phase evolution and retained ternary state.
-
-Changes to commit behavior must be reviewed against:
+Commit-related contributions should inspect:
 
 - phase-derived target generation;
 - scheduler state;
-- transition limit;
+- transition capacity;
 - pending routes;
 - switching load;
 - thermal behavior;
-- stability.
+- dynamic stability.
 
-## 23. Scheduler Layer
+## 25. Scheduler Layer
 
 Current scheduler modes:
 
@@ -957,11 +1081,13 @@ Required relation:
 
 `sum(scheduler_counts) = ticks_recorded`
 
-The scheduler also contributes to the current phase-velocity path.
+Required marker:
 
-Scheduler changes are therefore not only state-machine changes.
+`scheduler_counts_valid = True`
 
-They may also affect:
+The scheduler also contributes to phase velocity.
+
+Scheduler changes may affect:
 
 - phase evolution;
 - coherence;
@@ -969,87 +1095,27 @@ They may also affect:
 - target commit;
 - stability.
 
-## 24. Local Thermal Field
-
-The current architecture tracks distributed thermal state.
-
-Each cell maintains thermal behavior influenced by:
-
-- base power;
-- switching activity;
-- frequency lag;
-- dissipation;
-- thermal diffusion.
-
-The current architecture includes:
-
-- local heat;
-- local generated power;
-- thermal dissipation;
-- thermal overload;
-- cluster-local thermal metrics.
-
-Changes affecting thermal behavior must preserve the relation between:
-
-`frequency lag`
-
-↓
-
-`generated power`
-
-↓
-
-`local thermal field`
-
-↓
-
-`effective coupling`
-
-↓
-
-`gamma drift`
-
-↓
-
-`phase evolution`
-
-↓
-
-`coherence`
-
-↓
-
-`stability`
-
-## 25. Coupled Thermal-Phase Dynamics
-
-The current processor architecture couples thermal and phase behavior.
-
-Thermal state affects:
-
-- local coupling factors;
-- local gamma drift;
-- coherence compression.
-
-Phase and frequency dynamics affect:
-
-- coherence;
-- frequency lag;
-- thermal generation.
-
-This feedback structure must not be reduced to independent unrelated metrics.
-
-A contribution modifying one layer must inspect its coupled downstream effects.
-
 ## 26. Current M15 Position
 
 FRP v1.7.0 establishes:
 
 `M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
 
-The M15 bridge is:
+The current M15 bridge is:
 
 `M14 floating semantic reference`
+
+↓
+
+`hardware-facing numeric types`
+
+↓
+
+`balanced ternary hardware encoding`
+
+↓
+
+`deterministic fixed-point arithmetic`
 
 ↓
 
@@ -1065,7 +1131,15 @@ The M15 bridge is:
 
 ↓
 
+`verification preload and deterministic stimulus`
+
+↓
+
 `SystemVerilog interface mapping`
+
+↓
+
+`synthesizable RTL reference-core mapping`
 
 ↓
 
@@ -1073,15 +1147,23 @@ The M15 bridge is:
 
 ↓
 
+`floating semantic reference correlation`
+
+↓
+
+`exact quantized deterministic replay`
+
+↓
+
 `qualification closure`
 
-M15 maps the complete processor behavior into deterministic hardware-facing representation.
+M15 maps and qualifies the complete processor semantics.
 
-It does not replace the resonant phase computational core.
+The resonant phase-coherence architecture remains the computational source for this mapping chain.
 
-## 27. M15 Artifact Layers
+## 27. Current M15 Artifact Layers
 
-Current M15 artifact layers:
+FRP v1.7.0 defines ten M15 artifact layers:
 
 1. `fixed_point_interface_profile`;
 2. `balanced_ternary_hardware_encoding_map`;
@@ -1093,8 +1175,6 @@ Current M15 artifact layers:
 8. `rtl_assertion_correlation_harness`;
 9. `reference_rtl_equivalence_report`;
 10. `qualification_closure_manifest`.
-
-A contribution affecting one artifact layer must be checked against dependent layers.
 
 Current dependency direction:
 
@@ -1132,33 +1212,33 @@ Current dependency direction:
 
 `qualification closure`
 
-## 28. Fixed-Point Phase Representation
+A contribution affecting one layer should validate each dependent downstream layer.
 
-The current M15 layer maps the phase-dynamics domain into fixed-point hardware-facing representations.
+## 28. Current Hardware-Facing Numeric Profile
 
 Current representations:
 
 | Domain | Representation |
 |---|---|
-| general scalar | `S32Q16` |
+| general dynamic scalar | `S32Q16` |
 | normalized coefficient | `S32Q30` |
 | phase | `PHASE_U32` |
-| gamma | `GAMMA_S32` |
+| Sakaguchi gamma | `GAMMA_S32` |
 
-Current trigonometric lookup-table entries:
+Current deterministic trigonometric profile:
 
-`4096`
+`4096-entry full-cycle lookup table`
 
-The fixed-point path includes:
+The fixed-point path covers:
 
-- phase representation;
-- gamma representation;
-- trigonometric lookup;
-- phase-order calculation;
-- hierarchical coupling weights;
-- nonlinear coherence compression.
-
-Changes to quantized phase behavior must be checked against the floating semantic reference.
+- phase;
+- frequency;
+- gamma;
+- coherence;
+- hierarchy weights;
+- thermal weights;
+- dynamic stability values;
+- ternary transition execution.
 
 ## 29. Balanced Ternary Hardware Encoding
 
@@ -1190,32 +1270,9 @@ Required invariant:
 
 `reserved_state_events = 0`
 
-Hardware encoding is a representation of the processor state domain.
+The hardware-facing encoding represents the balanced ternary state domain inside the complete FRP computational mechanism.
 
-It is not the whole computational mechanism.
-
-Do not describe the encoding table as though it were the FRP computation itself.
-
-## 30. Fixed-Point Exactness
-
-Required current exactness markers:
-
-`fixed_point_topology_sum_exact = True`
-
-`fixed_point_thermal_sum_exact = True`
-
-Changes affecting:
-
-- hierarchy weights;
-- thermal weights;
-- fixed-point arithmetic;
-- rounding;
-- saturation;
-- lookup tables;
-
-must preserve or explicitly version these contracts.
-
-## 31. Current Stable Schemas
+## 30. Current Stable Schemas
 
 Current structured-output schema:
 
@@ -1240,15 +1297,17 @@ Current M15 schemas:
 
 A schema change is an interface change.
 
-Do not silently alter:
+Schema contributions should explicitly identify:
 
 - schema identifier;
-- required field name;
-- field type;
-- ordering contract;
-- semantic meaning.
+- required field names;
+- field types;
+- ordering contracts;
+- semantic meaning;
+- migration impact;
+- validation updates.
 
-## 32. Contribution Areas
+## 31. Contribution Areas
 
 Contributions may address:
 
@@ -1281,7 +1340,7 @@ Contributions may address:
 - benchmark integrity;
 - hardware-sensitivity qualification;
 - deterministic reproducibility;
-- continuous integration;
+- Continuous Integration;
 - documentation;
 - release traceability;
 - installation and usage;
@@ -1300,9 +1359,9 @@ A contribution should improve one or more of:
 - documentation accuracy;
 - maintainability.
 
-## 33. Contribution Placement
+## 32. Contribution Placement
 
-Place a change in the architecture layer where it belongs.
+Place each contribution in the architecture layer where it belongs.
 
 Current executable correction:
 
@@ -1322,23 +1381,25 @@ Comparative benchmark correction:
 
 Historical release correction:
 
-the relevant historical release-specific file.
+`the corresponding historical release-specific file`
 
-Do not silently move historical behavior into the current layer.
+Current M15 behavior belongs to the current M15 layer.
 
-Do not silently describe a current M15 behavior as a future M16 behavior.
+Planned M16 behavior belongs to the M16 planning and implementation path.
 
-## 34. Current Validation Stack
+Historical behavior retains its historical file and release identity.
 
-The repository contains 19 GitHub Actions workflows.
+## 33. Current Validation Stack
 
-### Foundational validation
+The repository contains 19 GitHub Actions workflow files.
+
+### 33.1 Foundational validation
 
 - `FRP Self Test`;
 - `FRP Benchmark Smoke Test`;
 - `FRP Structured Output`.
 
-### Architecture progression
+### 33.2 Architecture progression
 
 - `FRP M3 Benchmark and Signal Map`;
 - `FRP M4 HDL Trace and Testbench`;
@@ -1354,7 +1415,7 @@ The repository contains 19 GitHub Actions workflows.
 - `FRP M14 Physical Implementation Correlation and Production Qualification`;
 - `FRP M15 Implementation Mapping and Qualification Closure`.
 
-### Supporting comparative validation
+### 33.3 Supporting comparative validation
 
 - `FRP Comparative Architecture Benchmark`;
 - `FRP Hardware Sensitivity Profile Qualification`;
@@ -1364,7 +1425,36 @@ Current primary architecture workflow:
 
 `.github/workflows/frp-m15-implementation-mapping-qualification.yml`
 
-Do not disable an unrelated validation layer merely to make a change pass.
+Each contribution should preserve every validation layer affected by the change.
+
+## 34. Root README Active Validation Badge Chain
+
+The root `README.md` exposes 18 active validation badges.
+
+Current badge-visible passing chain:
+
+| Validation workflow | Status |
+|---|---|
+| `FRP M15 Implementation Mapping and Qualification Closure` | `passing` |
+| `FRP Hardware Sensitivity Profile Qualification` | `passing` |
+| `FRP Hardware Sensitivity Comparison` | `passing` |
+| `FRP M14 Physical Implementation Correlation and Production Qualification` | `passing` |
+| `FRP M13 Production Scaling and Implementation Stabilization` | `passing` |
+| `FRP M12 External Implementation Feedback and Production Iteration` | `passing` |
+| `FRP M11 Production Integration and External Handoff` | `passing` |
+| `FRP M10 Silicon Production and Tapeout Readiness` | `passing` |
+| `FRP M9 Silicon and Heterogeneous Architecture` | `passing` |
+| `FRP M8 Production Release Package` | `passing` |
+| `FRP M7 FPGA Synthesis and Timing Scaffold` | `passing` |
+| `FRP M6 Formal Verification and Equivalence Scaffold` | `passing` |
+| `FRP M5 RTL Interface and Assertion Harness` | `passing` |
+| `FRP M4 HDL Trace and Testbench` | `passing` |
+| `FRP M3 Benchmark and Signal Map` | `passing` |
+| `FRP Self Test` | `passing` |
+| `FRP Benchmark Smoke Test` | `passing` |
+| `FRP Structured Output` | `passing` |
+
+The Comparative Architecture Benchmark workflow completes the 19-file workflow inventory.
 
 ## 35. Minimum Validation for Current Executable Changes
 
@@ -1392,7 +1482,7 @@ Run the 1/7 scheduler:
 
     python frp_prototype_v1_7_0.py --mode self-test --scheduler 1/7 --output json
 
-Every scheduler-specific self-test must report:
+Every scheduler-specific self-test should report:
 
 - version `1.7.0`;
 - status `PASS`;
@@ -1405,7 +1495,7 @@ Run:
 
     python frp_prototype_v1_7_0.py --mode demo --output json
 
-The current default execution must preserve:
+The current default execution should preserve:
 
 - schema `frp.structured_output.v1.7.0`;
 - version `1.7.0`;
@@ -1417,17 +1507,17 @@ The current default execution must preserve:
 - scheduler `7/1`;
 - `balance = 56`;
 - `commit = 8`;
-- valid scheduler counts;
-- balanced ternary state-domain validity;
+- `scheduler_counts_valid = True`;
+- `balanced_ternary_state_domain = True`;
 - `reserved_state_events = 0`;
 - `actual_direct_events = 0`;
 - `queue_overflow_events = 0`;
 - `switch_load_peak <= 0.25`;
 - `C_minus_P_min > 0.0`;
-- exact fixed-point topology sum;
-- exact fixed-point thermal sum.
+- `fixed_point_topology_sum_exact = True`;
+- `fixed_point_thermal_sum_exact = True`.
 
-Changes affecting phase dynamics must additionally inspect:
+Changes affecting phase dynamics should additionally inspect:
 
 - raw phase coherence;
 - effective coherence;
@@ -1437,9 +1527,9 @@ Changes affecting phase dynamics must additionally inspect:
 - effective coupling;
 - thermal behavior.
 
-## 37. Phase-Dynamics Change Checklist
+## 37. Resonant-Dynamics Change Checklist
 
-For a change affecting the resonant phase layer, verify:
+For a change affecting the resonant dynamic domain, verify:
 
 - the Kuramoto-Sakaguchi interaction remains intentional;
 - phase lag gamma remains correctly applied;
@@ -1478,15 +1568,17 @@ Generate:
 
     python frp_prototype_v1_7_0.py --export-qualification-closure-manifest
 
-Qualification closure must report:
+Qualification closure should report:
 
 `PASS`
 
-All closure checks must remain:
+Every closure check should remain:
 
 `True`
 
-The manifest must preserve exactly ten M15 artifact layers.
+Artifact layer count:
+
+`10`
 
 ## 39. Deterministic Vector Requirements
 
@@ -1503,7 +1595,7 @@ Changes affecting:
 - interface mapping;
 - RTL comparison behavior;
 
-must regenerate and compare deterministic vector packages.
+should regenerate and compare deterministic vector packages.
 
 Generate package A:
 
@@ -1523,7 +1615,7 @@ Compare:
 
 Required result:
 
-`no differences`
+`byte-identical equality`
 
 Expected vector files:
 
@@ -1538,15 +1630,31 @@ Expected vector files:
 - `frp_m15_trig_lut_q30.vec`;
 - `frp_m15_sha256_manifest.json`.
 
-Deterministic equality means byte-identical output.
+Deterministic vector qualification uses byte-identical output.
 
-Semantic similarity is insufficient.
+## 40. Vector SHA-256 Integrity
 
-## 40. Reference Equivalence Requirements
+Each generated vector directory contains:
+
+`frp_m15_sha256_manifest.json`
+
+The manifest binds the generated vector package to exact content.
+
+A complete integrity check should:
+
+1. load the manifest;
+2. locate every named vector file;
+3. calculate its SHA-256 digest;
+4. compare it with the recorded digest;
+5. require exact equality.
+
+The two independently generated vector directories should also be byte-identical.
+
+## 41. Reference Equivalence Requirements
 
 The current reference-equivalence layer distinguishes two boundaries.
 
-### Floating semantic reference to quantized shadow
+### 41.1 Floating semantic reference to quantized shadow
 
 Required exact sequence matches:
 
@@ -1569,7 +1677,7 @@ Required maximum error bounds:
 | `P` | `0.001` |
 | `C_minus_P` | `0.01` |
 
-### Quantized shadow deterministic replay
+### 41.2 Quantized shadow deterministic replay
 
 Required exact replay matches:
 
@@ -1580,11 +1688,11 @@ Required exact replay matches:
 - trace match `1.0`;
 - cell-trace match `1.0`.
 
-Do not weaken equivalence thresholds merely to make a regression pass.
+Equivalence threshold changes require explicit architecture rationale, version placement, and regression evidence.
 
-## 41. Scaling Requirements
+## 42. Scaling Requirements
 
-Changes affecting topology, cell count, request lanes, state packing, hierarchy, or phase coupling must test:
+Changes affecting topology, cell count, request lanes, state packing, hierarchy, or phase coupling should test:
 
 `8 cells`
 
@@ -1600,21 +1708,21 @@ Run:
 
     python frp_prototype_v1_7_0.py --cells 32 --steps 16 --mode demo --output json
 
-Every scaling result must preserve:
+Every scaling result should preserve:
 
-- balanced ternary state-domain validity;
+- `balanced_ternary_state_domain = True`;
 - `actual_direct_events = 0`;
 - `reserved_state_events = 0`;
 - `queue_overflow_events = 0`;
-- valid scheduler counts;
-- exact fixed-point topology sum;
-- exact fixed-point thermal sum.
+- `scheduler_counts_valid = True`;
+- `fixed_point_topology_sum_exact = True`;
+- `fixed_point_thermal_sum_exact = True`.
 
 Phase and hierarchy changes should also inspect multiscale coherence across the tested sizes.
 
-## 42. Comparative Architecture Benchmark Boundary
+## 43. Comparative Architecture Benchmark Role
 
-The Comparative Architecture Benchmark Suite is a separate supporting validation contour.
+The Comparative Architecture Benchmark Suite provides a supporting validation contour.
 
 Directory:
 
@@ -1651,19 +1759,17 @@ The comparison chain is:
 
 `machine-readable comparison matrix`
 
-The FRP reference in this suite must preserve the fact that FRP contains the resonant phase layer.
+The FRP reference preserves the resonant phase-coherence architecture inside this comparison path.
 
-Do not compare FRP as though it were merely another static ternary switch model.
+## 44. Comparative Benchmark Integrity Rules
 
-## 43. Comparative Benchmark Fairness Rules
-
-### Identical semantic workload
+### 44.1 Identical semantic workload
 
 Every architecture receives the same ordered semantic command list.
 
-The workload digest must remain identical across architecture runs.
+The workload digest remains identical across architecture runs.
 
-### Architecture-neutral targets
+### 44.2 Architecture-neutral targets
 
 The common workload uses:
 
@@ -1673,27 +1779,25 @@ and:
 
 `POSITIVE_TARGET`
 
-The common workload does not directly command the FRP neutral state.
+The FRP active neutral state remains an internal processor mechanism.
 
-The neutral state remains an internal FRP mechanism.
-
-### Independent execution
+### 44.3 Independent execution
 
 Each architecture executes the same semantic command sequence independently.
 
-### Common normalized cost model
+### 44.4 Common normalized cost model
 
 Architecture implementations emit raw events.
 
-They do not assign their own cost coefficients.
+The common cost model assigns the normalized coefficients.
 
-### Common thermal proxy model
+### 44.5 Common thermal proxy model
 
 Every architecture uses the same thermal proxy equations and parameters.
 
-### Explicit FRP overhead
+### 44.6 Explicit FRP overhead
 
-FRP-specific:
+FRP-specific event accounting includes:
 
 - phase operations;
 - hierarchy operations;
@@ -1701,29 +1805,23 @@ FRP-specific:
 - lookup-table operations;
 - queue operations;
 - thermal-field operations;
-- coherence operations;
+- coherence operations.
 
-must remain represented.
+### 44.7 Machine-readable result policy
 
-Do not count only favorable FRP mechanisms while omitting resonant-computation overhead.
+Current qualification policy:
 
-### No winner assertions
+`integrity_only_no_winner_assertions`
 
-The qualification workflow must not assert:
+Current winner assertions:
 
-`FRP energy < binary energy`
+`[]`
 
-`FRP temperature < binary temperature`
+The qualification workflow validates comparison integrity.
 
-`FRP latency < binary latency`
+The machine-readable result remains the comparison evidence.
 
-The workflow validates comparison integrity.
-
-The result remains data.
-
-Do not tune the benchmark to force FRP to win.
-
-## 44. Original Resonant Benchmark Identity
+## 45. Original Resonant Benchmark Identity
 
 The original FRP benchmark distinguished:
 
@@ -1736,17 +1834,17 @@ The published technical position records:
 
 `FRP adds a Kuramoto-Sakaguchi resonant phase layer on top of safe distributed neutral ternary transition logic while preserving zero actual direct -1 ↔ 1 transitions in the tested operational domain.`
 
-This distinction is essential.
+The `frp_distributed_resonant` architecture combines:
 
-The FRP architecture is not equivalent to:
+- resonant phase computation;
+- distributed neutral ternary transition logic;
+- coherent state retention.
 
-`distributed_neutral_ternary`
+The `distributed_neutral_ternary` architecture represents the distributed neutral transition reference.
 
-because FRP additionally contains the resonant phase computational layer.
+These architecture labels retain distinct computational identities.
 
-Do not collapse these two architectures into one description.
-
-## 45. Comparative Benchmark Validation
+## 46. Comparative Benchmark Validation
 
 From:
 
@@ -1774,9 +1872,9 @@ Architecture self-tests:
 
     python frp_v1_7_0_adapter.py --self-test --output text
 
-The comparison runner must remain deterministic.
+The comparison runner should regenerate deterministically from the same source state and declared inputs.
 
-## 46. Hardware-Sensitivity Rules
+## 47. Hardware-Sensitivity Rules
 
 The hardware-sensitivity layer uses the same global coefficient scenarios for all compared architectures.
 
@@ -1786,9 +1884,7 @@ Current scenarios:
 2. `nominal`;
 3. `upper_bound`.
 
-Do not add architecture-specific coefficient vectors merely to improve one architecture's ranking.
-
-Changes require:
+Coefficient changes require:
 
 - calibration rationale;
 - provenance;
@@ -1802,7 +1898,9 @@ Relevant files:
 - `benchmarks/architecture_comparison/calibration/coefficient_provenance_map_v1.md`;
 - `benchmarks/architecture_comparison/profiles/hardware_sensitivity_cost_profile_v1.json`.
 
-## 47. Hardware-Sensitivity Validation
+The same global scenario set applies to every compared architecture.
+
+## 48. Hardware-Sensitivity Validation
 
 From:
 
@@ -1820,11 +1918,11 @@ Run the sensitivity comparison self-test:
 
     python run_hardware_sensitivity_comparison.py --hardware-sensitivity-profile profiles/hardware_sensitivity_cost_profile_v1.json --self-test --output json
 
-Changes affecting hardware-sensitivity results must preserve deterministic regeneration.
+Changes affecting hardware-sensitivity results should preserve deterministic regeneration and profile provenance.
 
-## 48. Claim Discipline
+## 49. Evidence Discipline
 
-Technical statements must be traceable to appropriate evidence.
+Technical statements should map to the evidence type that supports them.
 
 Evidence may include:
 
@@ -1838,25 +1936,28 @@ Evidence may include:
 - release record;
 - architecture document.
 
-Distinguish clearly between:
+Use the following evidence mapping:
 
-- processor computational identity;
-- balanced ternary state domain;
-- resonant phase dynamics;
-- executable reference behavior;
-- generated implementation-mapping artifacts;
-- benchmark results;
-- workflow validation;
-- historical release evidence.
+| Statement type | Primary evidence |
+|---|---|
+| processor computational identity | executable reference plus architecture documentation |
+| balanced ternary state domain | executable kernel plus structured output |
+| resonant phase dynamics | executable phase path plus telemetry and architecture documentation |
+| generated implementation mapping | M15 export artifact |
+| deterministic replay | vector package and equivalence report |
+| benchmark observation | machine-readable comparison result |
+| workflow qualification | GitHub Actions run and validation contract |
+| release evidence | test report, validation index, and release notes |
 
-Do not rewrite:
+A ternary encoding map describes the hardware-facing state representation.
 
-- a ternary encoding map into the whole processor computation;
-- a benchmark result into a universal processor claim;
-- an architecture document into a measurement claim;
-- a generated mapping layer into a different implementation layer.
+A benchmark result describes the recorded comparison under its declared workload, cost model, thermal proxy, and profile.
 
-## 49. Current Release Evidence
+An architecture document describes the architecture layer it names.
+
+A generated M15 artifact describes the implementation-mapping layer identified by its schema.
+
+## 50. Current Release Evidence
 
 Current published release layer:
 
@@ -1885,11 +1986,11 @@ Published M15 self-test result:
 
 `41/41 PASS`
 
-These values are release-specific evidence.
+These values remain release-specific evidence.
 
-Later documentation or maintenance commits must not be presented as the original validated release commit.
+Later documentation and maintenance commits retain their own commit identities.
 
-## 50. Historical Architecture Preservation
+## 51. Historical Architecture Preservation
 
 Historical executable references remain part of the published architecture chain.
 
@@ -1911,17 +2012,21 @@ The chain includes:
 - `frp_prototype_v1_6_0.py`;
 - `frp_prototype_v1_7_0.py`.
 
-Historical files must retain their version identity.
+Historical files retain:
 
-Do not silently redirect a historical workflow to the current executable.
+- release-specific version identity;
+- release-specific executable binding;
+- release-specific workflow binding;
+- release-specific schema identity;
+- release-specific test-report identity.
 
-Do not rewrite an old test report as a current-state report.
+Current files describe the current layer.
 
-Do not replace a historical schema identifier with a current schema identifier.
+Historical files describe their published historical layers.
 
-## 51. Documentation Requirements
+## 52. Documentation Requirements
 
-When behavior changes, update the files that define or reproduce that behavior.
+When behavior changes, update the files that define, validate, or reproduce that behavior.
 
 Relevant files may include:
 
@@ -1943,19 +2048,17 @@ Relevant files may include:
 - current architecture document;
 - current workflow.
 
-Documentation must preserve the distinction between:
+Documents that explain FRP computation should preserve the connected relation between:
 
 `resonant computational mechanism`
 
 and:
 
-`ternary state and retention domain`
+`balanced ternary state and retained-result domain`
 
-A document that describes the computational core must not reduce FRP to static ternary routing.
+## 53. Computational-Core Documentation Rule
 
-## 52. Computational-Core Documentation Rule
-
-When a document explains what FRP is or how FRP computes, it should preserve the full subject chain:
+When a document explains what FRP is or how FRP computes, preserve the complete subject chain at the level appropriate to that document:
 
 `Kuramoto-Sakaguchi resonant phase coupling`
 
@@ -1965,23 +2068,35 @@ When a document explains what FRP is or how FRP computes, it should preserve the
 
 ↓
 
-`phase coherence`
-
-↓
-
 `resonance selection`
 
 ↓
 
-`delay and nonlinear dynamics`
+`Kuramoto order parameter R`
 
 ↓
 
-`target-oriented transition`
+`multiscale phase coherence`
 
 ↓
 
-`balanced ternary commit`
+`delay and thermal-phase dynamics`
+
+↓
+
+`nonlinear coherence compression`
+
+↓
+
+`dynamic stability`
+
+↓
+
+`phase-derived ternary target`
+
+↓
+
+`distributed commit`
 
 ↓
 
@@ -1989,27 +2104,28 @@ When a document explains what FRP is or how FRP computes, it should preserve the
 
 ↓
 
-`stable retained state`
+`retained coherent ternary state`
 
-The exact level of detail may vary by document purpose.
+The balanced ternary encoding layer should remain identified as the hardware-facing representation of the state domain.
 
-The computational mechanism itself must not disappear.
+The resonant phase-coherence path should remain identified as the computational mechanism.
 
-## 53. Documentation Delta Discipline
+## 54. Documentation Delta Discipline
 
 When correcting one defined issue:
 
 1. preserve the source file as the control standard;
 2. change the required point;
-3. check that no unrelated technical meaning was altered;
+3. compare the result with the source;
 4. verify paths and filenames;
 5. verify current version and milestone references;
 6. verify computational-core continuity;
-7. verify historical evidence remains historical.
+7. verify historical evidence identity;
+8. verify the connected validation chain.
 
-A documentation correction must not introduce another inconsistency.
+The final delta should contain the intended technical correction and the required alignment updates.
 
-## 54. Reproducibility Requirements
+## 55. Reproducibility Requirements
 
 A reproducibility-sensitive contribution should record:
 
@@ -2034,7 +2150,7 @@ or:
 
 When checksums are part of the artifact contract, preserve SHA-256 evidence.
 
-## 55. Code Style
+## 56. Code Style
 
 Code contributions should prioritize:
 
@@ -2049,78 +2165,72 @@ Code contributions should prioritize:
 - stable machine-readable output;
 - reproducible tests.
 
-Avoid:
+Prefer:
 
-- hidden random-state dependencies;
-- environment-dependent output;
-- silent exception handling;
-- unexplained threshold changes;
-- unnecessary dependencies;
-- undocumented schema changes;
-- benchmark-specific shortcuts inside the processor kernel;
-- replacement of dynamic phase computation with hard-coded target results.
+- small explicit functions;
+- deterministic iteration order;
+- visible state updates;
+- direct validation conditions;
+- explicit schema construction;
+- traceable constants;
+- focused tests.
 
-## 56. Determinism Rules
+Kernel shortcuts require explicit architecture rationale and complete validation evidence.
 
-Where deterministic execution is part of the contract:
+## 57. Determinism Rules
 
-- preserve the declared seed;
-- preserve stable iteration order;
-- preserve explicit scheduler order;
-- preserve explicit request-lane order;
-- preserve deterministic phase-update order;
-- preserve deterministic gamma-noise generation;
-- avoid uncontrolled hash ordering;
-- avoid local-time dependence;
-- avoid locale dependence;
-- avoid unrecorded external data.
+Where deterministic execution is part of the contract, preserve:
 
-A deterministic artifact must regenerate identically from the same source state and declared inputs.
+- declared seed;
+- stable iteration order;
+- explicit scheduler order;
+- explicit request-lane order;
+- deterministic phase-update order;
+- deterministic gamma-noise generation;
+- controlled hash behavior;
+- recorded time context for release evidence;
+- controlled locale behavior;
+- declared external input state.
 
-## 57. Dependency Changes
+A deterministic artifact should regenerate identically from the same source state and declared inputs.
+
+## 58. Dependency Changes
 
 Current declared external dependency:
 
 `numpy>=1.26.0`
 
-A new dependency should be added only when it provides a clear technical need that cannot reasonably be satisfied by:
+A new dependency should provide a clear technical benefit in one or more of:
 
-- the Python standard library;
-- the existing dependency set;
-- a small transparent implementation.
+- implementation correctness;
+- deterministic validation;
+- maintainability;
+- hardware-facing tooling;
+- reproducibility.
 
-Dependency changes must update:
+Dependency changes should update:
 
 - `requirements.txt`;
 - `INSTALL.md`;
 - `REPRODUCIBILITY.md`;
-- relevant CI workflows when required.
+- relevant CI workflows;
+- any affected release documentation.
 
-## 58. Security and Public Boundary
+## 59. Security and Public Repository Discipline
 
-Do not commit:
+Public commits should contain public technical material aligned with the repository security policy.
 
-- credentials;
-- access tokens;
-- private keys;
-- API secrets;
-- authentication material;
-- private identity data;
-- unrelated personal data;
-- malicious code;
-- hidden network access;
-- unauthorized telemetry;
-- material that violates the repository security policy.
+Credentials, access tokens, private keys, API secrets, authentication material, private identity data, unrelated personal data, hidden network access, and unauthorized telemetry remain outside the repository.
 
-Security-sensitive issues should follow:
+Security-sensitive issues follow:
 
 `SECURITY.md`
 
-Do not place a vulnerability disclosure into a public pull request when private reporting is required.
+Private vulnerability reporting uses the private reporting path defined there.
 
-## 59. Generated Artifact Discipline
+## 60. Generated Artifact Discipline
 
-Generated artifacts must remain traceable to:
+Generated artifacts should remain traceable to:
 
 - source version;
 - generator;
@@ -2129,17 +2239,23 @@ Generated artifacts must remain traceable to:
 - schema;
 - deterministic seed where applicable.
 
-Do not manually edit generated output and then present it as generator output.
+Generator-produced outputs should come directly from the generator path identified in the contribution record.
 
-When a canonical result changes, the corresponding code, profile, or declared input change must explain why.
+When a canonical result changes, identify the corresponding change in:
 
-## 60. Pull Request Structure
+- code;
+- profile;
+- declared input;
+- schema;
+- architecture layer.
+
+## 61. Pull Request Structure
 
 A pull request should state:
 
 ### Change
 
-What was changed.
+What changed.
 
 ### Reason
 
@@ -2165,7 +2281,7 @@ Which part is affected:
 
 ### Affected files
 
-Which files were changed.
+Which files changed.
 
 ### Preserved invariants
 
@@ -2177,15 +2293,15 @@ Which commands were run.
 
 ### Result
 
-Whether validation passed.
+Which validation results were obtained.
 
 ### Artifact impact
 
-Whether schemas, generated outputs, canonical results, or release records changed.
+Which schemas, generated outputs, canonical results, or release records changed.
 
-Keep a pull request focused on one coherent technical change.
+Keep each pull request focused on one coherent technical change.
 
-## 61. Pull Request Review Criteria
+## 62. Pull Request Review Criteria
 
 A contribution is reviewed for:
 
@@ -2195,20 +2311,20 @@ A contribution is reviewed for:
 - phase-coherence continuity;
 - preservation of balanced ternary state domain;
 - preservation of active neutral routing;
-- zero actual direct events;
+- `actual_direct_events = 0`;
 - deterministic behavior;
 - scheduler correctness;
 - structured-output compatibility;
 - M15 artifact consistency;
 - reproducibility;
-- benchmark fairness where applicable;
+- benchmark integrity where applicable;
 - historical traceability;
 - documentation alignment;
 - security.
 
-A technically interesting change may still be rejected if it breaks the published architecture contract without an explicit versioned transition.
+Architecture-contract changes should arrive as explicit versioned transitions with corresponding validation and documentation.
 
-## 62. Current Executable Pull Request Checklist
+## 63. Current Executable Pull Request Checklist
 
 For changes to:
 
@@ -2235,9 +2351,9 @@ confirm:
 - fixed-point topology sum remains exact;
 - fixed-point thermal sum remains exact;
 - affected M15 artifacts remain valid;
-- documentation is updated where required.
+- affected documentation is aligned.
 
-## 63. Resonant-Core Pull Request Checklist
+## 64. Resonant-Core Pull Request Checklist
 
 For changes affecting the computational core, confirm:
 
@@ -2257,25 +2373,25 @@ For changes affecting the computational core, confirm:
 - opposite-polarity routing remains neutral-mediated;
 - stable state retention remains validated.
 
-## 64. M15 Artifact Pull Request Checklist
+## 65. M15 Artifact Pull Request Checklist
 
 For changes affecting M15 implementation mapping, confirm:
 
 - all affected exports complete;
 - schema identifiers are correct;
-- version remains correct;
-- milestone remains correct;
+- version identity is correct;
+- milestone identity is correct;
 - phase-domain fixed-point representation remains valid;
 - gamma representation remains valid;
 - trigonometric lookup behavior remains valid;
 - deterministic vector packages regenerate;
 - independent vector directories are byte-identical;
 - hardware encoding remains canonical;
-- reserved encoding remains rejected;
+- reserved encoding remains absent from executed state events;
 - reference equivalence remains within contract;
 - qualification closure reports `PASS`.
 
-## 65. Comparative Benchmark Pull Request Checklist
+## 66. Comparative Benchmark Pull Request Checklist
 
 For changes under:
 
@@ -2290,26 +2406,26 @@ confirm:
 - common cost model remains common;
 - common thermal proxy remains common;
 - FRP overhead remains explicit;
-- no architecture-specific winner tuning was introduced;
-- no winner assertions were introduced;
+- global coefficient scenarios remain common;
+- winner assertions remain `[]`;
 - all relevant component self-tests pass;
 - end-to-end comparison self-test passes;
 - canonical outputs regenerate deterministically where applicable.
 
-## 66. Hardware-Sensitivity Pull Request Checklist
+## 67. Hardware-Sensitivity Pull Request Checklist
 
 Confirm:
 
 - coefficient provenance is documented;
 - the same global scenario set applies to all architectures;
-- no architecture-specific coefficient vector was introduced;
 - profile validation passes;
 - profile validator self-test passes;
 - sensitivity comparison self-test passes;
 - deterministic regeneration passes;
-- canonical unit-event baseline remains unchanged unless intentionally revised.
+- canonical unit-event baseline remains traceable;
+- scenario order remains `lower_bound`, `nominal`, `upper_bound`.
 
-## 67. Documentation Pull Request Checklist
+## 68. Documentation Pull Request Checklist
 
 Confirm:
 
@@ -2320,20 +2436,21 @@ Confirm:
 - current validation index is correct;
 - current release notes are correct;
 - current workflow paths are correct;
-- obsolete current-state wording was not reintroduced;
-- historical release records remain historical;
-- the processor is not reduced to static ternary switching;
+- current root README validation badge chain is reflected accurately where relevant;
+- historical release records retain their historical identity;
 - Kuramoto-Sakaguchi resonant phase dynamics remain visible where computational identity is described;
+- the balanced ternary state and retained-result domain remains explicit;
 - coherence and stable retention remain visible where computational behavior is described;
 - commands match the current CLI;
-- referenced paths exist.
+- referenced paths exist;
+- the final delta contains the intended technical change.
 
-## 68. Final Pull Request Checklist
+## 69. Final Pull Request Checklist
 
 Before submission, confirm:
 
 - the change belongs to the stated architecture layer;
-- the change is technically necessary;
+- the technical reason is documented;
 - the processor identity remains clear;
 - the resonant phase computational mechanism remains intact;
 - the balanced ternary state domain remains `{-1, 0, 1}`;
@@ -2343,12 +2460,12 @@ Before submission, confirm:
 - relevant phase and coherence validation passes;
 - relevant M15 validation passes;
 - deterministic outputs remain deterministic;
-- benchmark boundaries remain separate;
+- benchmark roles remain correctly scoped;
 - documentation is aligned;
 - historical release evidence is preserved;
-- no sensitive material is included.
+- public repository content follows `SECURITY.md`.
 
-## 69. Current Contribution Status
+## 70. Current Contribution Status
 
 Processor:
 
@@ -2360,9 +2477,9 @@ Processor class:
 
 Computational mechanism:
 
-`Kuramoto-Sakaguchi resonant phase dynamics with hierarchical coupling, phase-coherence evaluation, delay dynamics, nonlinear coherence compression, target-oriented transition, distributed ternary commit, and active neutral routing`
+`Kuramoto-Sakaguchi resonant phase dynamics with asymmetric phase lag, hierarchical fractal coupling, phase evolution, resonance selection, Kuramoto order parameter R, multiscale phase coherence, stateful delay dynamics, local thermal-phase interaction, local correlated gamma drift, nonlinear coherence compression, dynamic stability evaluation, phase-derived ternary targets, distributed commit, mandatory active-neutral routing, and retained coherent ternary state`
 
-State domain:
+State and retained-result domain:
 
 `{-1, 0, 1}`
 
@@ -2386,6 +2503,10 @@ Current executable reference:
 
 `frp_prototype_v1_7_0.py`
 
+Current structured-output schema:
+
+`frp.structured_output.v1.7.0`
+
 Current published validation result:
 
 `PASS`
@@ -2398,9 +2519,9 @@ Current primary qualification workflow:
 
 `.github/workflows/frp-m15-implementation-mapping-qualification.yml`
 
-Current contribution boundary:
+Current contribution role:
 
-`preserve the complete FRP computational core from Kuramoto-Sakaguchi resonant phase evolution and phase-coherence dynamics through balanced ternary target formation, distributed commit, mandatory active-neutral routing, deterministic M15 implementation mapping, and qualification closure`
+`preserve and advance the complete FRP computational chain from Kuramoto-Sakaguchi resonant phase evolution, hierarchical fractal interaction, multiscale phase coherence, delay and thermal-phase dynamics, nonlinear coherence compression, phase-derived balanced ternary state formation, distributed active-neutral routing, and retained coherent state through deterministic M15 implementation mapping, RTL correlation, reference equivalence, and qualification closure`
 
 Next planned architecture layer:
 
