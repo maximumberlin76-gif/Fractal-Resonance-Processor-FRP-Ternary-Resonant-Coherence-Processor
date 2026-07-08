@@ -7386,681 +7386,98 @@ For detailed benchmark interpretation, see:
 
 `docs/benchmark_interpretation.md`
 
-## 3. Engineering Trajectory
+## 19. General-Purpose Hardware Execution
 
-The FRP development trajectory is organized as:
+The FRP software and hardware-facing reference layers have been executed and verified on general-purpose computing infrastructure.
 
-`repository stabilization`
+Validated through:
 
-↓
-
-`archival release and DOI`
-
-↓
-
-`structured machine-readable output`
-
-↓
-
-`benchmark export and hardware signal mapping`
-
-↓
-
-`HDL trace export and testbench scaffold`
-
-↓
-
-`RTL interface contract and assertion harness`
-
-↓
-
-`formal verification hooks and equivalence scaffold`
-
-↓
-
-`FPGA synthesis package and timing constraint scaffold`
-
-↓
-
-`production release package and stable interface freeze`
-
-↓
-
-`silicon and heterogeneous implementation architecture`
-
-↓
-
-`silicon production and tapeout readiness`
-
-↓
-
-`production integration and external implementation handoff`
-
-↓
-
-`external implementation feedback and production iteration`
-
-↓
-
-`production scaling and implementation stabilization`
-
-↓
-
-`physical implementation correlation and production qualification`
-
-↓
-
-`implementation mapping, domain interface, and qualification closure`
-
-↓
-
-`RTL core realization and execution semantics`
-
-The milestone trajectory is:
-
-| Milestone | Version | Architecture Layer | Position |
-|---|---|---|---|
-| M0 | v0.9.3-mobile | Repository Stabilization | Completed |
-| M1 | v0.9.3 | Archival Release and DOI | Completed |
-| M2 | v0.9.4 | Structured Output and Machine-Readable Validation | Completed |
-| M3 | v0.9.5 | Benchmark Export and Hardware Signal Mapping | Completed |
-| M4 | v0.9.6 | HDL Trace Export and Testbench Scaffold | Completed |
-| M5 | v0.9.7 | RTL Interface Contract and Assertion Harness | Completed |
-| M6 | v0.9.8 | Formal Verification Hooks and Equivalence Scaffold | Completed |
-| M7 | v0.9.9 | FPGA Synthesis Package and Timing Constraint Scaffold | Completed |
-| M8 | v1.0.0 | Production Release Package and Stable Interface Freeze | Completed |
-| M9 | v1.1.0 | Silicon and Heterogeneous Implementation Architecture | Completed |
-| M10 | v1.2.0 | Silicon Production and Tapeout Readiness Package | Completed |
-| M11 | v1.3.0 | Production Integration and External Implementation Handoff | Completed |
-| M12 | v1.4.0 | External Implementation Feedback and Production Iteration Loop | Completed |
-| M13 | v1.5.0 | Production Scaling and Implementation Stabilization Package | Completed |
-| M14 | v1.6.0 | Physical Implementation Correlation and Production Qualification Package | Completed |
-| M15 | v1.7.0 | Implementation Mapping, Domain Interface, and Qualification Closure Package | Current validated layer |
-| M16 | v1.8.0 | RTL Core Realization and Execution Semantics Package | Next planned layer |
-
-The architecture trajectory preserves traceability to the FRP computational kernel:
-
-`balanced ternary state domain {-1, 0, 1}`
-
-↓
-
-`active neutral state 0`
-
-↓
-
-`mandatory tick-separated neutral routing`
-
-↓
-
-`pending neutral route retention`
-
-↓
-
-`distributed ternary commit`
-
-↓
-
-`retained coherent ternary state`
-
-The temporal execution architecture is preserved through the explicit processor modes:
-
-`free`
-
-`7/1`
-
-`1/7`
-
-The `7/1` and `1/7` modes are part of the FRP execution semantics.
-
-They preserve the asymmetric temporal architecture of the processor across:
-
-- the semantic reference execution path;
-- the stateful quantized hardware shadow path;
-- scheduler-specific self-test qualification;
-- cycle-exact integer trace generation;
+- local Python execution path;
+- current executable reference file `frp_prototype_v1_7_0.py`;
+- reproducibility commands;
+- demo execution;
+- self-test execution;
+- benchmark execution;
+- scheduler-specific execution for `free`, `7/1`, and `1/7`;
+- scheduler-specific self-test qualification for `free`, `7/1`, and `1/7`;
+- JSON structured output execution;
+- per-tick telemetry execution;
+- optional trace export execution;
+- benchmark-matrix export;
+- deterministic fixed-point interface-profile generation;
+- balanced ternary hardware-encoding export;
+- stateful quantized hardware-shadow execution;
+- cycle-exact integer reference-trace generation;
 - deterministic RTL comparison-vector generation;
-- SystemVerilog interface mapping;
+- SystemVerilog testbench interface mapping;
 - synthesizable RTL reference-core mapping;
 - RTL assertion correlation;
 - reference RTL equivalence;
-- qualification closure.
+- deterministic vector regeneration;
+- semantic reference-to-quantized correlation;
+- exact deterministic quantized-shadow replay;
+- Comparative Architecture Benchmark execution;
+- Hardware Sensitivity Profile Qualification;
+- Hardware Sensitivity Comparison;
+- GitHub Actions workflow execution;
+- CI status verification.
 
-The current milestone position is:
+The temporal execution architecture preserves the explicit processor modes:
 
-`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+- `free`;
+- `7/1`;
+- `1/7`.
 
-The current validated M15 implementation trajectory is:
+These modes are validated across the semantic reference path, stateful quantized hardware-shadow path, scheduler-specific self-tests, cycle-exact vector generation, SystemVerilog interface mapping, and M15 qualification closure.
 
-`published M14 floating semantic reference`
-
-↓
-
-`M15 stateful quantized hardware shadow model`
-
-↓
-
-`cycle-exact integer golden trace`
-
-↓
-
-`deterministic RTL comparison vector package`
-
-↓
-
-`SystemVerilog testbench interface mapping`
-
-↓
-
-`synthesizable RTL reference-core mapping`
-
-↓
-
-`RTL assertion correlation mapping`
-
-↓
-
-`reference RTL equivalence`
-
-↓
-
-`semantic reference-to-quantized correlation`
-
-↓
-
-`exact deterministic quantized shadow replay`
-
-↓
-
-`vector-package SHA-256 integrity verification`
-
-↓
-
-`qualification closure`
-
-The engineering trajectory is continuously verified through the FRP CI qualification chain:
-
-`executable reference implementation`
-
-↓
+Current validation environment:
 
 `GitHub Actions hardware-backed CI execution`
 
-↓
-
-`structured-output validation`
-
-↓
-
-`scheduler-specific execution and self-test qualification for free, 7/1, and 1/7`
-
-↓
-
-`M15 self-test — 41 / 41 PASS`
-
-↓
-
-`benchmark smoke-test — PASS`
-
-↓
-
-`M15 implementation mapping and qualification workflow — PASS`
-
-↓
-
-`10 / 10 deterministic vector files byte-identical`
-
-↓
-
-`5 / 5 semantic correlation matches = 1.0`
-
-↓
-
-`6 / 6 exact deterministic replay matches = 1.0`
-
-↓
-
-`Comparative Architecture Benchmark — PASS`
-
-↓
-
-`Hardware Sensitivity Profile Qualification — PASS`
-
-↓
-
-`Hardware Sensitivity Comparison — PASS`
-
-↓
-
-`M15 qualification closure — PASS`
-
-The current validated CI execution includes:
+Validated current workflow runs:
 
 - `FRP Structured Output #113 — PASS`;
 - `FRP M15 Implementation Mapping and Qualification Closure #1 — PASS`;
 - `FRP Self Test #154 — PASS`;
 - `FRP Benchmark Smoke Test #152 — PASS`.
 
-The validated M15 qualification evidence records:
+Current M15 self-test result:
 
 `41 / 41 PASS`
 
-for the complete M15 self-test suite;
+Deterministic vector regeneration:
 
 `10 / 10 files byte-identical`
 
-for deterministic vector regeneration;
+Semantic reference-to-quantized correlation:
 
 `5 / 5 required matches = 1.0`
 
-for semantic reference-to-quantized correlation;
+Exact deterministic quantized-shadow replay:
 
 `6 / 6 replay matches = 1.0`
 
-for exact deterministic quantized shadow replay.
-
-Current milestone validation status:
+Comparative Architecture Benchmark:
 
 `PASS`
 
-The engineering trajectory therefore preserves one continuous chain:
+Hardware Sensitivity Profile Qualification:
 
-`FRP computational semantics`
+`PASS`
 
-↓
+Hardware Sensitivity Comparison:
 
-`free, 7/1, and 1/7 temporal execution architecture`
+`PASS`
 
-↓
+Overall M15 qualification result:
 
-`floating semantic reference`
+`PASS`
 
-↓
+Engineering role:
 
-`stateful quantized hardware shadow`
+`establish an executable software reference model for hardware-facing specification and implementation-layer work`
 
-↓
-
-`cycle-exact deterministic execution evidence`
-
-↓
-
-`RTL-facing implementation mapping`
-
-↓
-
-`GitHub Actions CI verification`
-
-↓
-
-`benchmark and hardware-sensitivity qualification`
-
-↓
-
-`M15 qualification closure`
-
-↓
-
-`M16 RTL core realization and execution semantics`
-
-Next planned architecture layer:
+The current M15 execution layer also establishes the deterministic implementation-mapping, domain-interface, RTL-facing correlation, equivalence, and qualification reference for:
 
 `FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
 
-The current repository package establishes the validated reference foundation for this next architecture layer while preserving the complete historical FRP development trajectory, temporal execution architecture, implementation-mapping chain, and CI qualification evidence.
-
-## 20. Hardware-Facing Development Path
-
-The current hardware-facing development path is organized as:
-
-`software validation → structured output → benchmark export → hardware-facing specification → FPGA mapping study → ASIC mapping study → chip-oriented implementation research → physical validation planning`
-
-Current hardware-facing documents:
-
-| File | Role |
-|---|---|
-| `docs/hardware_pathway.md` | defines the path from software validation toward hardware-facing specification, FPGA/ASIC mapping, chip-oriented implementation research, and physical validation planning |
-| `docs/implementation_layers.md` | defines the staged layer structure of FRP |
-| `docs/fpga_mapping_study.md` | defines the FPGA-oriented mapping study |
-| `docs/asic_mapping_study.md` | defines the ASIC-oriented mapping study |
-| `docs/physical_validation_plan.md` | defines the physical validation planning structure |
-
-Current structured-output bridge toward hardware-facing work:
-
-`Python model → JSON telemetry → benchmark export → hardware-facing signal map → FPGA register map → testbench comparison`
-
-## 21. Funding and Partner Package
-
-Current funding and partner document:
-
-`funding_brief.md`
-
-The funding brief provides:
-
-- executive summary
-- current validated asset list
-- software validation evidence
-- benchmark summary
-- structured-output validation evidence
-- general-purpose hardware execution summary
-- hardware-facing development path
-- funding objective
-- proposed funding milestones
-- resource needs
-- partner profile
-- technical value proposition
-- review package structure
-- funding-facing technical message
-
-Core funding-facing technical message:
-
-`FRP has a validated public software reference layer, reproducibility commands, benchmark output, structured JSON output, CI verification, and a documented pathway toward FPGA mapping, ASIC mapping, chip-oriented implementation research, and physical validation planning.`
-
-## 22. Project Milestones
-
-Current milestone document:
-
-`MILESTONES.md`
-
-The milestone structure defines:
-
-| Milestone | Name | Primary Output |
-|---|---|---|
-| M0 | Repository Stabilization | stable repository package |
-| M1 | Archival Release and DOI | GitHub release, Zenodo archive, DOI |
-| M2 | Structured Output | JSON and machine-readable summaries |
-| M3 | Extended Benchmark Layer | expanded benchmark profiles and exports |
-| M4 | FPGA Mapping Package | FPGA-oriented implementation package |
-| M5 | ASIC Mapping Package | chip-oriented implementation research package |
-| M6 | Physical Validation Protocol | measurement and validation protocol package |
-| M7 | Funding and Partner Package | review package for partners, labs, grants, and investors |
-| M8 | v1.0.0 Public Software Architecture Release | stable public software architecture release |
-
-Current active milestone:
-
-`M2 — Structured Output`
-
-Current milestone status:
-
-`PASS`
-
-## 23. Repository Navigation
-
-### 23.1 Core Root Files
-
-| File | Purpose |
-|---|---|
-| `README.md` | main public project overview |
-| `frp_prototype_v0_9_4.py` | current executable Python prototype with structured output |
-| `frp_prototype_v0_9_3_mobile.py` | previous archived reference prototype |
-| `TEST_REPORT_v0_9_4.md` | current candidate test report |
-| `TEST_REPORT_v0_9_3.md` | previous archived test report |
-| `CHANGELOG.md` | version history |
-| `RELEASE_NOTES_v0_9_4.md` | release notes for v0.9.4 |
-| `RELEASE_NOTES_v0_9_3.md` | release notes for v0.9.3-mobile |
-| `RELEASE_CHECKLIST_v0_9_3.md` | release readiness checklist for v0.9.3 |
-| `ROADMAP.md` | staged project roadmap |
-| `MILESTONES.md` | staged project milestones |
-| `funding_brief.md` | partner and funding-facing technical brief |
-| `PROJECT_STRUCTURE.md` | repository structure guide |
-| `INSTALL.md` | installation guide |
-| `USAGE.md` | usage guide |
-| `REPRODUCIBILITY.md` | reproducibility guide |
-| `CI.md` | continuous integration documentation |
-| `requirements.txt` | Python dependency list |
-| `CITATION.cff` | citation metadata |
-| `LICENSE` | Apache-2.0 license text |
-| `NOTICE` | project notice |
-| `SECURITY.md` | security policy |
-| `CONTRIBUTING.md` | contribution guide |
-| `CODE_OF_CONDUCT.md` | code of conduct |
-
-### 23.2 Documentation Files
-
-| File | Purpose |
-|---|---|
-| `docs/README.md` | documentation layer index |
-| `docs/core_principles.md` | core FRP principles |
-| `docs/resonance_computation.md` | resonance computation explanation |
-| `docs/architecture.md` | FRP architecture documentation |
-| `docs/benchmark_interpretation.md` | benchmark interpretation and evidence scope |
-| `docs/limitations.md` | current simulation evidence boundaries and scope notes |
-| `docs/output_schema.md` | structured output schema, JSON fields, test markers, benchmark markers, telemetry fields, and CI checks |
-| `docs/hardware_pathway.md` | hardware-facing development pathway |
-| `docs/implementation_layers.md` | staged implementation layer structure |
-| `docs/fpga_mapping_study.md` | FPGA-oriented mapping study |
-| `docs/asic_mapping_study.md` | ASIC-oriented mapping study |
-| `docs/physical_validation_plan.md` | physical validation planning structure |
-
-### 23.3 Verification Files
-
-| File | Purpose |
-|---|---|
-| `verification/README.md` | verification layer overview |
-| `verification/coherence_metrics.md` | operational coherence and metric definitions |
-
-### 23.4 Examples
-
-| File | Purpose |
-|---|---|
-| `examples/README.md` | examples overview |
-| `examples/resonance_convergence_example.md` | resonance convergence example |
-
-### 23.5 Models and Simulations
-
-| File | Purpose |
-|---|---|
-| `models/README.md` | model layer overview |
-| `models/kuramoto_frp_background_model.md` | background Kuramoto-type model context |
-| `simulations/README.md` | simulation layer overview |
-| `simulations/initial_kuramoto_result.md` | preliminary Kuramoto background result |
-
-### 23.6 Continuous Integration
-
-| File | Purpose |
-|---|---|
-| `.github/workflows/frp-self-test.yml` | automated standard FRP self-test |
-| `.github/workflows/frp-benchmark-smoke.yml` | automated benchmark smoke test |
-| `.github/workflows/frp-structured-output.yml` | automated v0.9.4 structured-output validation |
-
-## 24. Continuous Integration
-
-The repository currently has three GitHub Actions workflows:
-
-| Workflow | Purpose | Status |
-|---|---|---|
-| FRP Self Test | runs the standard FRP self-test | passing |
-| FRP Benchmark Smoke Test | runs the benchmark smoke test | passing |
-| FRP Structured Output | validates v0.9.4 structured JSON output and telemetry export | passing |
-
-The self-test workflow runs:
-
-`python frp_prototype_v0_9_3_mobile.py --mode test --steps 128 --seeds 5`
-
-The benchmark smoke test workflow runs:
-
-`python frp_prototype_v0_9_3_mobile.py --mode bench --steps 128 --seeds 5`
-
-The structured output workflow validates:
-
-`python frp_prototype_v0_9_4.py --mode test --steps 128 --seeds 5 --output json`
-
-`python frp_prototype_v0_9_4.py --mode bench --steps 128 --seeds 5 --output json`
-
-`python frp_prototype_v0_9_4.py --mode demo --N 16 --steps 128 --cycle-mode 7/1 --output json`
-
-`python frp_prototype_v0_9_4.py --mode demo --N 16 --steps 32 --cycle-mode 7/1 --output json --include-telemetry`
-
-For detailed continuous integration documentation, see:
-
-`CI.md`
-
-## 25. Release Readiness
-
-Current release readiness files:
-
-- `RELEASE_NOTES_v0_9_4.md`
-- `TEST_REPORT_v0_9_4.md`
-- `CHANGELOG.md`
-- `ROADMAP.md`
-- `MILESTONES.md`
-- `funding_brief.md`
-- `PROJECT_STRUCTURE.md`
-- `docs/output_schema.md`
-
-Current readiness state:
-
-- prototype present
-- tests documented
-- benchmark documented
-- structured output documented
-- JSON output documented
-- telemetry export documented
-- CI passing
-- structured-output CI passing
-- installation documented
-- usage documented
-- reproducibility documented
-- release scope documented
-- engineering trajectory documented
-- hardware pathway documented
-- implementation layers documented
-- FPGA mapping study documented
-- ASIC mapping study documented
-- physical validation plan documented
-- funding brief documented
-- milestones documented
-- citation metadata present
-- license present
-- notice present
-- security policy present
-- contribution guide present
-- code of conduct present
-- output schema documented
-
-Current release preparation target:
-
-`GitHub Release v0.9.4`
-
-Current archival status:
-
-`v0.9.3 DOI exists`
-
-Existing archived DOI:
-
-`https://doi.org/10.5281/zenodo.21112439`
-
-## 26. Archival Path
-
-Current archival status:
-
-`FRP v0.9.3 has a Zenodo DOI`
-
-Archived DOI:
-
-`https://doi.org/10.5281/zenodo.21112439`
-
-Recommended v0.9.4 archival sequence:
-
-1. final repository stabilization
-2. confirm CI passing
-3. confirm structured-output workflow passing
-4. confirm release notes
-5. confirm test report
-6. confirm changelog
-7. create GitHub release tag `v0.9.4`
-8. create Zenodo archival version record
-9. update DOI metadata if a new version DOI is issued
-10. update `CITATION.cff` if needed
-11. update README citation section if needed
-12. prepare next milestone branch or release path
-
-## 27. Release History
-
-### v0.9.4 — Structured Output and Machine-Readable Validation
-
-Release title:
-
-`Fractal Resonance Processor (FRP) v0.9.4 — Structured Output and Machine-Readable Validation`
-
-Milestone:
-
-`M2 — Structured Output`
-
-Main prototype:
-
-`frp_prototype_v0_9_4.py`
-
-Schema marker:
-
-`frp.structured_output.v0.9.4`
-
-Added:
-
-- structured JSON output
-- `--output text`
-- `--output json`
-- `--include-telemetry`
-- JSON demo output
-- JSON self-test output
-- JSON benchmark output
-- optional telemetry export
-- structured-output GitHub Actions workflow
-- machine-readable validation layer
-
-Status:
-
-`PASS`
-
-### v0.9.3 — Ternary Resonant Coherence Processor
-
-Release title:
-
-`Fractal Resonance Processor (FRP) v0.9.3 — Ternary Resonant Coherence Processor`
-
-Main prototype:
-
-`frp_prototype_v0_9_3_mobile.py`
-
-Archived DOI:
-
-`https://doi.org/10.5281/zenodo.21112439`
-
-DOI:
-
-`10.5281/zenodo.21112439`
-
-Role:
-
-`executable software reference model and public validation baseline`
-
-Status:
-
-`PASS`
-
-## 28. License
-
-Apache License 2.0.
-
-See the full license text in:
-
-`LICENSE`
-
-## 29. Citation
-
-Citation metadata is available in:
-
-`CITATION.cff`
-
-Current archived DOI:
-
-`https://doi.org/10.5281/zenodo.21112439`
-
-DOI:
-
-`10.5281/zenodo.21112439`
-
-Recommended citation:
-
-`Maksym Marnov. Fractal Resonance Processor (FRP) v0.9.3 — Ternary Resonant Coherence Processor. Zenodo. DOI: 10.5281/zenodo.21112439`
-
-The v0.9.4 archival version record should be created after publishing the GitHub Release v0.9.4.
