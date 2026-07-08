@@ -7955,3 +7955,73 @@ Historical archived DOI:
 
 `https://doi.org/10.5281/zenodo.21112439`
 
+## 27. Release History
+
+Detailed FRP v0.9.5 through v1.7.0 release layers are preserved in the architecture history above.
+
+This section retains the earlier v0.9.4 and v0.9.3 release records.
+
+### v0.9.4 — Structured Output and Machine-Readable Validation
+
+Release title:
+
+`Fractal Resonance Processor (FRP) v0.9.4 — Structured Output and Machine-Readable Validation`
+
+Milestone:
+
+`M2 — Structured Output`
+
+Main prototype:
+
+`frp_prototype_v0_9_4.py`
+
+Schema marker:
+
+`frp.structured_output.v0.9.4`
+
+Added:
+
+- structured JSON output
+- `--output text`
+- `--output json`
+- `--include-telemetry`
+- JSON demo output
+- JSON self-test output
+- JSON benchmark output
+- optional telemetry export
+- structured-output GitHub Actions workflow
+- machine-readable validation layer
+
+Status:
+
+`PASS`
+
+### v0.9.3 — Ternary Resonant Coherence Processor
+
+Release title:
+
+`Fractal Resonance Processor (FRP) v0.9.3 — Ternary Resonant Coherence Processor`
+
+Main prototype:
+
+`frp_prototype_v0_9_3_mobile.py`
+
+Archived DOI:
+
+`https://doi.org/10.5281/zenodo.21112439`
+
+DOI:
+
+`10.5281/zenodo.21112439`
+
+Role:
+
+`executable software reference model and public validation baseline`
+
+Status:
+
+`PASS`
+
+
+
+
