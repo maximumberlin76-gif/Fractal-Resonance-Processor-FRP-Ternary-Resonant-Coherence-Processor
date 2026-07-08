@@ -8022,6 +8022,42 @@ Status:
 
 `PASS`
 
+## 28. License
+
+Apache License 2.0.
+
+See the full license text in:
+
+`LICENSE`
+
+## 29. Citation
+
+Citation metadata is available in:
+
+`CITATION.cff`
+
+Current version:
+
+`FRP v1.7.0`
+
+Current DOI:
+
+`10.5281/zenodo.21183966`
+
+DOI link:
+
+`https://doi.org/10.5281/zenodo.21183966`
+
+Recommended citation:
+
+`Maksym Marnov. Fractal Resonance Processor (FRP): Ternary Resonant Coherence Processor. Version v1.7.0. Zenodo. DOI: 10.5281/zenodo.21183966`
+
+
+---
+
+**Author:**
+  Maksym Marnov  ( Alchimist)
+**Berlin, 8 July 2026**
 
 
 
