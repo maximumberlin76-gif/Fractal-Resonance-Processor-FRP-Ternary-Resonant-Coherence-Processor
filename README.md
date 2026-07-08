@@ -5914,13 +5914,15 @@ FRP is based on:
 - per-tick telemetry
 - structured machine-readable output
 - reproducible benchmark execution
-- staged hardware-facing documentation pathway
+- deterministic hardware-facing implementation and qualification pathway
 
-FRP treats computation as a dynamic process of target-oriented ternary transition, neutral conflict routing, resonance-supported phase evolution, distributed commit, and retained coherent output.
+FRP treats computation as an evolving resonant phase-coherence process driven by cell phase and frequency dynamics, Kuramoto-Sakaguchi resonant phase coupling, asymmetric Sakaguchi phase lag gamma, hierarchical fractal coupling, phase velocity and phase evolution, resonance selection, Kuramoto order parameter R, multiscale phase coherence, stateful delay dynamics, local thermal-phase interaction, local correlated gamma drift, nonlinear coherence compression, and dynamic stability C(t) - P(t).
 
-The current repository establishes the public software validation and structured-output layer of the FRP architecture.
+The balanced ternary domain `{-1, 0, 1}` provides the state, target, transition, and retained-result layer through phase-derived ternary targets, neutral conflict routing, distributed ternary commit, mandatory tick-separated routing through active neutral state `0`, and retained coherent ternary state.
 
-This layer provides the executable reference model for hardware-facing specification, FPGA mapping study, ASIC mapping study, physical validation planning, partner review, funding preparation, and later testbench comparison work.
+The current repository establishes the FRP v1.7.0 M15 Implementation Mapping, Domain Interface, and Qualification Closure Package layer of the FRP architecture.
+
+This layer provides the executable reference model for deterministic fixed-point hardware-interface mapping, stateful quantized hardware shadow execution, cycle-exact integer golden traces, deterministic RTL comparison vectors, SystemVerilog testbench interface mapping, synthesizable RTL reference-core mapping, RTL assertion correlation, reference RTL equivalence, qualification closure, comparative architecture benchmarking, hardware-sensitivity qualification, FPGA mapping study, ASIC mapping study, physical validation planning, partner review, and funding preparation.
 
 ## 2. Current Repository Position
 
