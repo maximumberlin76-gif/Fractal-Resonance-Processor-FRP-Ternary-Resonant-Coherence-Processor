@@ -7761,4 +7761,154 @@ The complete milestone definitions, objectives, primary files, validation criter
 
 `MILESTONES.md`
 
+## 23. Repository Navigation
+
+### 23.1 Core Root Files
+
+| File | Purpose |
+|---|---|
+| `README.md` | main public project overview |
+| `frp_prototype_v1_7_0.py` | current FRP v1.7.0 M15 executable reference |
+| `frp_prototype_v0_9_3_mobile.py`, `frp_prototype_v0_9_4.py`, `frp_prototype_v0_9_5.py`, `frp_prototype_v0_9_6.py`, `frp_prototype_v0_9_7.py`, `frp_prototype_v0_9_8.py`, `frp_prototype_v0_9_9.py`, `frp_prototype_v1_0_0.py`, `frp_prototype_v1_1_0.py`, `frp_prototype_v1_2_0.py`, `frp_prototype_v1_3_0.py`, `frp_prototype_v1_4_0.py`, `frp_prototype_v1_5_0.py`, `frp_prototype_v1_6_0.py` | complete historical executable chain |
+| `TEST_REPORT_v1_7_0.md` | current M15 test report |
+| `TEST_REPORT_v0_9_3.md`, `TEST_REPORT_v0_9_4.md`, `TEST_REPORT_v0_9_5.md`, `TEST_REPORT_v0_9_6.md`, `TEST_REPORT_v0_9_7.md`, `TEST_REPORT_v0_9_8.md`, `TEST_REPORT_v0_9_9.md`, `TEST_REPORT_v1_0_0.md`, `TEST_REPORT_v1_1_0.md`, `TEST_REPORT_v1_2_0.md`, `TEST_REPORT_v1_3_0.md`, `TEST_REPORT_v1_4_0.md`, `TEST_REPORT_v1_5_0.md`, `TEST_REPORT_v1_6_0.md` | historical test-report chain |
+| `FRP_VALIDATION_INDEX_v1_7_0.md` | current M15 validation index |
+| `FRP_VALIDATION_INDEX_v0_9_9.md`, `FRP_VALIDATION_INDEX_v1_0_0.md`, `FRP_VALIDATION_INDEX_v1_1_0.md`, `FRP_VALIDATION_INDEX_v1_2_0.md`, `FRP_VALIDATION_INDEX_v1_3_0.md`, `FRP_VALIDATION_INDEX_v1_4_0.md`, `FRP_VALIDATION_INDEX_v1_5_0.md`, `FRP_VALIDATION_INDEX_v1_6_0.md` | historical validation-index chain |
+| `RELEASE_NOTES_v1_7_0.md` | current M15 release notes |
+| `RELEASE_NOTES_v0_9_3.md`, `RELEASE_NOTES_v0_9_4.md`, `RELEASE_NOTES_v0_9_5.md`, `RELEASE_NOTES_v0_9_6.md`, `RELEASE_NOTES_v0_9_7.md`, `RELEASE_NOTES_v0_9_8.md`, `RELEASE_NOTES_v0_9_9.md`, `RELEASE_NOTES_v1_0_0.md`, `RELEASE_NOTES_v1_1_0.md`, `RELEASE_NOTES_v1_2_0.md`, `RELEASE_NOTES_v1_3_0.md`, `RELEASE_NOTES_v1_4_0.md`, `RELEASE_NOTES_v1_5_0.md`, `RELEASE_NOTES_v1_6_0.md` | complete historical release-note chain |
+| `FRP_PRODUCTION_RELEASE_MANIFEST_v1_0_0.md` | production release manifest |
+| `RELEASE_CHECKLIST_v0_9_3.md` | historical release-readiness checklist |
+| `CHANGELOG.md` | version history |
+| `ROADMAP.md` | staged project roadmap |
+| `MILESTONES.md` | complete milestone structure |
+| `PROJECT_STRUCTURE.md` | repository structure guide |
+| `INSTALL.md` | installation guide |
+| `USAGE.md` | usage guide |
+| `REPRODUCIBILITY.md` | reproducibility guide |
+| `CI.md` | continuous integration documentation |
+| `funding_brief.md` | project funding brief |
+| `m5_rtl_interface_assertion_harness.md` | M5 RTL interface and assertion-harness reference |
+| `requirements.txt` | Python dependency list |
+| `CITATION.cff` | citation metadata |
+| `LICENSE` | Apache-2.0 license text |
+| `NOTICE.md` | project notice |
+| `SECURITY.md` | security policy |
+| `CONTRIBUTING.md` | contribution guide |
+| `CODE_OF_CONDUCT.md` | code of conduct |
+
+### 23.2 Documentation Files
+
+| File | Purpose |
+|---|---|
+| `docs/README.md` | documentation layer index |
+| `docs/m15_implementation_mapping_domain_interface_qualification_closure.md` | current M15 architecture document |
+| `docs/core_principles.md` | core FRP principles |
+| `docs/resonance_computation.md` | resonant phase-coherence computation |
+| `docs/architecture.md` | FRP architecture documentation |
+| `docs/benchmark_interpretation.md` | cumulative benchmark interpretation and evidence scope |
+| `docs/benchmark_matrix.md` | benchmark-matrix documentation |
+| `docs/limitations.md` | current evidence boundaries and scope |
+| `docs/output_schema.md` | structured output, telemetry, benchmark, trace, and CI schema documentation |
+| `docs/hardware_signal_mapping.md` | hardware-facing signal mapping |
+| `docs/fpga_register_map_draft.md` | FPGA register-map draft |
+| `docs/testbench_comparison_plan.md` | deterministic testbench comparison plan |
+| `docs/hardware_pathway.md` | complete hardware-facing development pathway |
+| `docs/implementation_layers.md` | staged implementation-layer structure |
+| `docs/fpga_mapping_study.md` | FPGA-oriented mapping and execution-correlation study |
+| `docs/asic_mapping_study.md` | ASIC-oriented implementation and cost study |
+| `docs/physical_validation_plan.md` | physical measurement and validation-correlation plan |
+| `docs/m3_validation_targets.md` | M3 validation targets |
+| `docs/m4_hdl_trace_testbench.md` | M4 HDL trace and testbench scaffold |
+| `docs/m5_rtl_interface_assertion_harness.md` | M5 RTL interface and assertion-harness layer |
+| `docs/m6_formal_verification_equivalence.md` | M6 formal verification and equivalence layer |
+| `docs/m7_fpga_synthesis_timing.md` | M7 FPGA synthesis and timing layer |
+| `docs/m8_production_release_package.md` | M8 production release package |
+| `docs/m9_silicon_heterogeneous_architecture.md` | M9 silicon and heterogeneous implementation architecture |
+| `docs/m10_silicon_production_tapeout_readiness.md` | M10 silicon production and tapeout-readiness package |
+| `docs/m11_production_integration_external_handoff.md` | M11 production integration and external implementation handoff |
+| `docs/m12_external_implementation_feedback_iteration.md` | M12 external implementation feedback and production iteration |
+| `docs/m13_production_scaling_implementation_stabilization.md` | M13 production scaling and implementation stabilization |
+| `docs/m14_physical_implementation_correlation_production_qualification.md` | M14 physical implementation correlation and production qualification |
+
+### 23.3 Comparative Architecture Benchmark Suite
+
+| File | Purpose |
+|---|---|
+| `benchmarks/architecture_comparison/README.md` | benchmark-suite definition and execution guide |
+| `benchmarks/architecture_comparison/common_workload.py` | common deterministic semantic workload |
+| `benchmarks/architecture_comparison/common_cost_model.py` | common normalized activity-cost model |
+| `benchmarks/architecture_comparison/common_thermal_model.py` | common thermal-proxy model |
+| `benchmarks/architecture_comparison/binary_synchronous_reference.py` | binary synchronous architecture reference |
+| `benchmarks/architecture_comparison/binary_clock_gated_reference.py` | binary clock-gated architecture reference |
+| `benchmarks/architecture_comparison/direct_ternary_reference.py` | direct ternary architecture reference |
+| `benchmarks/architecture_comparison/frp_v1_7_0_adapter.py` | FRP v1.7.0 quantized-shadow benchmark adapter |
+| `benchmarks/architecture_comparison/run_architecture_comparison.py` | canonical comparative architecture benchmark runner |
+| `benchmarks/architecture_comparison/run_hardware_sensitivity_comparison.py` | hardware-sensitivity comparison runner |
+| `benchmarks/architecture_comparison/validate_hardware_sensitivity_profile.py` | hardware-sensitivity profile validator |
+| `benchmarks/architecture_comparison/profiles/workload_profile_v1.json` | canonical workload profile |
+| `benchmarks/architecture_comparison/profiles/normalized_cost_profile_v1.json` | canonical normalized cost profile |
+| `benchmarks/architecture_comparison/profiles/thermal_proxy_profile_v1.json` | canonical thermal-proxy profile |
+| `benchmarks/architecture_comparison/profiles/hardware_sensitivity_cost_profile_v1.json` | hardware-informed sensitivity cost profile |
+| `benchmarks/architecture_comparison/calibration/hardware_cost_calibration_v1.md` | hardware cost-calibration documentation |
+| `benchmarks/architecture_comparison/calibration/coefficient_provenance_map_v1.md` | coefficient provenance map |
+| `benchmarks/architecture_comparison/results/reference_comparison_seed_76.json` | canonical comparative architecture result |
+| `benchmarks/architecture_comparison/results/reference_comparison_seed_76_hardware_sensitivity_v1.json` | canonical hardware-sensitivity result |
+
+### 23.4 Verification Files
+
+| File | Purpose |
+|---|---|
+| `verification/README.md` | verification registry and validation-layer overview |
+| `verification/coherence_metrics.md` | phase-coherence and dynamic-stability metric definitions |
+
+### 23.5 Examples
+
+| File | Purpose |
+|---|---|
+| `examples/README.md` | examples overview |
+| `examples/resonance_convergence_example.md` | resonance convergence example |
+
+### 23.6 Models and Simulations
+
+| File | Purpose |
+|---|---|
+| `models/README.md` | model layer overview |
+| `models/kuramoto_frp_background_model.md` | background Kuramoto-type model context |
+| `simulations/README.md` | simulation layer overview |
+| `simulations/initial_kuramoto_result.md` | initial Kuramoto background result |
+
+### 23.7 Continuous Integration Workflows
+
+The repository contains 19 GitHub Actions workflows.
+
+| Workflow | Purpose |
+|---|---|
+| `.github/workflows/frp-self-test.yml` | current executable self-test validation |
+| `.github/workflows/frp-benchmark-smoke.yml` | benchmark smoke-test validation |
+| `.github/workflows/frp-structured-output.yml` | structured machine-readable output validation |
+| `.github/workflows/frp-m3-benchmark-signal-map.yml` | M3 benchmark export and hardware signal mapping |
+| `.github/workflows/frp-m4-hdl-trace.yml` | M4 HDL trace and testbench validation |
+| `.github/workflows/frp-m5-rtl-assertion-harness.yml` | M5 RTL interface and assertion-harness validation |
+| `.github/workflows/frp-m6-formal-verification.yml` | M6 formal verification and equivalence validation |
+| `.github/workflows/frp-m7-fpga-synthesis.yml` | M7 FPGA synthesis and timing validation |
+| `.github/workflows/frp-m8-production-release.yml` | M8 production release-package validation |
+| `.github/workflows/frp-m9-silicon-architecture.yml` | M9 silicon and heterogeneous architecture validation |
+| `.github/workflows/frp-m10-silicon-production-tapeout.yml` | M10 silicon production and tapeout-readiness validation |
+| `.github/workflows/frp-m11-production-integration-handoff.yml` | M11 production integration and handoff validation |
+| `.github/workflows/frp-m12-feedback-iteration.yml` | M12 implementation feedback and iteration validation |
+| `.github/workflows/frp-m13-production-scaling-stabilization.yml` | M13 production scaling and stabilization validation |
+| `.github/workflows/frp-m14-physical-implementation-qualification.yml` | M14 physical implementation correlation and qualification |
+| `.github/workflows/frp-m15-implementation-mapping-qualification.yml` | current M15 implementation mapping and qualification closure |
+| `.github/workflows/frp-architecture-comparison.yml` | Comparative Architecture Benchmark qualification |
+| `.github/workflows/frp-hardware-sensitivity-profile.yml` | Hardware Sensitivity Profile Qualification |
+| `.github/workflows/frp-hardware-sensitivity-comparison.yml` | Hardware Sensitivity Comparison qualification |
+
+Current primary qualification workflow:
+
+`.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+
+Current validation status:
+
+`PASS`
+
 
