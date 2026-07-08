@@ -7685,4 +7685,80 @@ The next planned hardware-facing architecture layer is:
 
 M16 extends the qualified M15 reference-core domain toward explicit RTL execution semantics while preserving the current balanced ternary state domain, active-neutral routing, `free`, `7/1`, and `1/7` temporal execution architecture, request-lane ordering, pending-route semantics, fixed-point contract, cycle-exact vector identities, topology exactness, thermal exactness, and qualification evidence.
 
+## 22. Project Milestones
+
+Current milestone document:
+
+`MILESTONES.md`
+
+The milestone structure preserves the complete FRP architecture progression:
+
+| Milestone | Version | Architecture Layer | Status |
+|---|---|---|---|
+| M0 | v0.9.3-mobile | Repository Stabilization | Completed |
+| M1 | v0.9.3 | Archival Release and DOI | Completed |
+| M2 | v0.9.4 | Structured Output and Machine-Readable Validation | Completed |
+| M3 | v0.9.5 | Benchmark Export and Hardware Signal Mapping | Completed |
+| M4 | v0.9.6 | HDL Trace Export and Testbench Scaffold | Completed |
+| M5 | v0.9.7 | RTL Interface Contract and Assertion Harness | Completed |
+| M6 | v0.9.8 | Formal Verification Hooks and Equivalence Scaffold | Completed |
+| M7 | v0.9.9 | FPGA Synthesis Package and Timing Constraint Scaffold | Completed |
+| M8 | v1.0.0 | Production Release Package and Stable Interface Freeze | Completed |
+| M9 | v1.1.0 | Silicon and Heterogeneous Implementation Architecture | Completed |
+| M10 | v1.2.0 | Silicon Production and Tapeout Readiness Package | Completed |
+| M11 | v1.3.0 | Production Integration and External Implementation Handoff | Completed |
+| M12 | v1.4.0 | External Implementation Feedback and Production Iteration Loop | Completed |
+| M13 | v1.5.0 | Production Scaling and Implementation Stabilization Package | Completed |
+| M14 | v1.6.0 | Physical Implementation Correlation and Production Qualification Package | Completed |
+| M15 | v1.7.0 | Implementation Mapping, Domain Interface, and Qualification Closure Package | Current validated layer |
+| M16 | v1.8.0 | RTL Core Realization and Execution Semantics Package | Next planned layer |
+
+The milestone progression preserves traceability to the FRP computational kernel:
+
+- balanced ternary state domain `{-1, 0, 1}`;
+- active neutral state `0`;
+- mandatory routes `-1 → 0 → 1` and `1 → 0 → -1`;
+- tick-separated neutral routing;
+- pending neutral route retention;
+- distributed ternary commit;
+- retained coherent ternary state;
+- `actual_direct_events = 0`;
+- explicit processor execution modes `free`, `7/1`, and `1/7`.
+
+The `free`, `7/1`, and `1/7` modes remain part of the FRP execution semantics across the semantic reference path, quantized hardware-shadow path, scheduler-specific qualification, cycle-exact vector generation, SystemVerilog interface mapping, synthesizable RTL reference-core mapping, and qualification closure.
+
+Current active milestone:
+
+`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+
+Current validated version:
+
+`FRP v1.7.0`
+
+Main executable reference file:
+
+`frp_prototype_v1_7_0.py`
+
+Current validation status:
+
+`PASS`
+
+Current M15 qualification evidence includes:
+
+- `41 / 41 PASS` self-test result;
+- `10 / 10 files byte-identical` deterministic vector regeneration;
+- `5 / 5 required matches = 1.0` semantic correlation;
+- `6 / 6 replay matches = 1.0` exact deterministic replay;
+- Comparative Architecture Benchmark `PASS`;
+- Hardware Sensitivity Profile Qualification `PASS`;
+- Hardware Sensitivity Comparison `PASS`.
+
+Next planned architecture layer:
+
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
+
+The complete milestone definitions, objectives, primary files, validation criteria, completion evidence, and repository-alignment rules are maintained in:
+
+`MILESTONES.md`
+
 
