@@ -7911,4 +7911,94 @@ Current validation status:
 
 `PASS`
 
+## 25. Release Readiness
+
+Current release readiness files:
+
+- `RELEASE_NOTES_v1_7_0.md`
+- `TEST_REPORT_v1_7_0.md`
+- `FRP_VALIDATION_INDEX_v1_7_0.md`
+- `CHANGELOG.md`
+- `ROADMAP.md`
+- `MILESTONES.md`
+- `funding_brief.md`
+- `PROJECT_STRUCTURE.md`
+- `docs/output_schema.md`
+
+Current readiness state:
+
+- executable processor reference present
+- complete historical executable chain preserved
+- tests documented
+- benchmark history documented
+- current M15 benchmark matrix documented
+- Comparative Architecture Benchmark documented
+- hardware-sensitivity qualification documented
+- structured output documented
+- JSON output documented
+- per-tick telemetry documented
+- optional trace export documented
+- reproducibility documented
+- installation documented
+- usage documented
+- release scope documented
+- complete milestone progression documented
+- hardware pathway documented
+- implementation layers documented
+- FPGA mapping study documented
+- ASIC mapping study documented
+- physical validation plan documented
+- funding brief present
+- citation metadata present
+- Apache-2.0 license present
+- `NOTICE.md` present
+- security policy present
+- contribution guide present
+- code of conduct present
+- output schema documented
+- deterministic fixed-point interface profile present
+- balanced ternary hardware encoding map present
+- stateful quantized hardware-shadow model present
+- cycle-exact integer reference trace present
+- deterministic RTL comparison-vector package present
+- SystemVerilog testbench interface map present
+- synthesizable RTL reference core present
+- RTL assertion correlation harness present
+- reference RTL equivalence report present
+- qualification closure manifest present
+- explicit processor execution modes `free`, `7/1`, and `1/7` preserved
+- M15 self-test qualification completed
+- deterministic vector regeneration completed
+- semantic reference-to-quantized correlation completed
+- exact deterministic quantized-shadow replay completed
+- Comparative Architecture Benchmark qualification completed
+- Hardware Sensitivity Profile Qualification completed
+- Hardware Sensitivity Comparison qualification completed
+- GitHub Actions qualification passing
+- M15 qualification closure passing
+
+Current release layer:
+
+`FRP v1.7.0 — M15 Implementation Mapping, Domain Interface, and Qualification Closure Package`
+
+Current release qualification status:
+
+`PASS`
+
+Current archival status:
+
+`FRP v1.7.0 DOI exists`
+
+Current DOI:
+
+`https://doi.org/10.5281/zenodo.21183966`
+
+Historical archived release:
+
+`FRP v0.9.3 — Ternary Resonant Coherence Processor`
+
+Historical archived DOI:
+
+`https://doi.org/10.5281/zenodo.21112439`
+
 
