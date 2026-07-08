@@ -7386,6 +7386,328 @@ For detailed benchmark interpretation, see:
 
 `docs/benchmark_interpretation.md`
 
+## 3. Engineering Trajectory
+
+The FRP development trajectory is organized as:
+
+`repository stabilization`
+
+↓
+
+`archival release and DOI`
+
+↓
+
+`structured machine-readable output`
+
+↓
+
+`benchmark export and hardware signal mapping`
+
+↓
+
+`HDL trace export and testbench scaffold`
+
+↓
+
+`RTL interface contract and assertion harness`
+
+↓
+
+`formal verification hooks and equivalence scaffold`
+
+↓
+
+`FPGA synthesis package and timing constraint scaffold`
+
+↓
+
+`production release package and stable interface freeze`
+
+↓
+
+`silicon and heterogeneous implementation architecture`
+
+↓
+
+`silicon production and tapeout readiness`
+
+↓
+
+`production integration and external implementation handoff`
+
+↓
+
+`external implementation feedback and production iteration`
+
+↓
+
+`production scaling and implementation stabilization`
+
+↓
+
+`physical implementation correlation and production qualification`
+
+↓
+
+`implementation mapping, domain interface, and qualification closure`
+
+↓
+
+`RTL core realization and execution semantics`
+
+The milestone trajectory is:
+
+| Milestone | Version | Architecture Layer | Position |
+|---|---|---|---|
+| M0 | v0.9.3-mobile | Repository Stabilization | Completed |
+| M1 | v0.9.3 | Archival Release and DOI | Completed |
+| M2 | v0.9.4 | Structured Output and Machine-Readable Validation | Completed |
+| M3 | v0.9.5 | Benchmark Export and Hardware Signal Mapping | Completed |
+| M4 | v0.9.6 | HDL Trace Export and Testbench Scaffold | Completed |
+| M5 | v0.9.7 | RTL Interface Contract and Assertion Harness | Completed |
+| M6 | v0.9.8 | Formal Verification Hooks and Equivalence Scaffold | Completed |
+| M7 | v0.9.9 | FPGA Synthesis Package and Timing Constraint Scaffold | Completed |
+| M8 | v1.0.0 | Production Release Package and Stable Interface Freeze | Completed |
+| M9 | v1.1.0 | Silicon and Heterogeneous Implementation Architecture | Completed |
+| M10 | v1.2.0 | Silicon Production and Tapeout Readiness Package | Completed |
+| M11 | v1.3.0 | Production Integration and External Implementation Handoff | Completed |
+| M12 | v1.4.0 | External Implementation Feedback and Production Iteration Loop | Completed |
+| M13 | v1.5.0 | Production Scaling and Implementation Stabilization Package | Completed |
+| M14 | v1.6.0 | Physical Implementation Correlation and Production Qualification Package | Completed |
+| M15 | v1.7.0 | Implementation Mapping, Domain Interface, and Qualification Closure Package | Current validated layer |
+| M16 | v1.8.0 | RTL Core Realization and Execution Semantics Package | Next planned layer |
+
+The architecture trajectory preserves traceability to the FRP computational kernel:
+
+`balanced ternary state domain {-1, 0, 1}`
+
+↓
+
+`active neutral state 0`
+
+↓
+
+`mandatory tick-separated neutral routing`
+
+↓
+
+`pending neutral route retention`
+
+↓
+
+`distributed ternary commit`
+
+↓
+
+`retained coherent ternary state`
+
+The temporal execution architecture is preserved through the explicit processor modes:
+
+`free`
+
+`7/1`
+
+`1/7`
+
+The `7/1` and `1/7` modes are part of the FRP execution semantics.
+
+They preserve the asymmetric temporal architecture of the processor across:
+
+- the semantic reference execution path;
+- the stateful quantized hardware shadow path;
+- scheduler-specific self-test qualification;
+- cycle-exact integer trace generation;
+- deterministic RTL comparison-vector generation;
+- SystemVerilog interface mapping;
+- synthesizable RTL reference-core mapping;
+- RTL assertion correlation;
+- reference RTL equivalence;
+- qualification closure.
+
+The current milestone position is:
+
+`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+
+The current validated M15 implementation trajectory is:
+
+`published M14 floating semantic reference`
+
+↓
+
+`M15 stateful quantized hardware shadow model`
+
+↓
+
+`cycle-exact integer golden trace`
+
+↓
+
+`deterministic RTL comparison vector package`
+
+↓
+
+`SystemVerilog testbench interface mapping`
+
+↓
+
+`synthesizable RTL reference-core mapping`
+
+↓
+
+`RTL assertion correlation mapping`
+
+↓
+
+`reference RTL equivalence`
+
+↓
+
+`semantic reference-to-quantized correlation`
+
+↓
+
+`exact deterministic quantized shadow replay`
+
+↓
+
+`vector-package SHA-256 integrity verification`
+
+↓
+
+`qualification closure`
+
+The engineering trajectory is continuously verified through the FRP CI qualification chain:
+
+`executable reference implementation`
+
+↓
+
+`GitHub Actions hardware-backed CI execution`
+
+↓
+
+`structured-output validation`
+
+↓
+
+`scheduler-specific execution and self-test qualification for free, 7/1, and 1/7`
+
+↓
+
+`M15 self-test — 41 / 41 PASS`
+
+↓
+
+`benchmark smoke-test — PASS`
+
+↓
+
+`M15 implementation mapping and qualification workflow — PASS`
+
+↓
+
+`10 / 10 deterministic vector files byte-identical`
+
+↓
+
+`5 / 5 semantic correlation matches = 1.0`
+
+↓
+
+`6 / 6 exact deterministic replay matches = 1.0`
+
+↓
+
+`Comparative Architecture Benchmark — PASS`
+
+↓
+
+`Hardware Sensitivity Profile Qualification — PASS`
+
+↓
+
+`Hardware Sensitivity Comparison — PASS`
+
+↓
+
+`M15 qualification closure — PASS`
+
+The current validated CI execution includes:
+
+- `FRP Structured Output #113 — PASS`;
+- `FRP M15 Implementation Mapping and Qualification Closure #1 — PASS`;
+- `FRP Self Test #154 — PASS`;
+- `FRP Benchmark Smoke Test #152 — PASS`.
+
+The validated M15 qualification evidence records:
+
+`41 / 41 PASS`
+
+for the complete M15 self-test suite;
+
+`10 / 10 files byte-identical`
+
+for deterministic vector regeneration;
+
+`5 / 5 required matches = 1.0`
+
+for semantic reference-to-quantized correlation;
+
+`6 / 6 replay matches = 1.0`
+
+for exact deterministic quantized shadow replay.
+
+Current milestone validation status:
+
+`PASS`
+
+The engineering trajectory therefore preserves one continuous chain:
+
+`FRP computational semantics`
+
+↓
+
+`free, 7/1, and 1/7 temporal execution architecture`
+
+↓
+
+`floating semantic reference`
+
+↓
+
+`stateful quantized hardware shadow`
+
+↓
+
+`cycle-exact deterministic execution evidence`
+
+↓
+
+`RTL-facing implementation mapping`
+
+↓
+
+`GitHub Actions CI verification`
+
+↓
+
+`benchmark and hardware-sensitivity qualification`
+
+↓
+
+`M15 qualification closure`
+
+↓
+
+`M16 RTL core realization and execution semantics`
+
+Next planned architecture layer:
+
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
+
+The current repository package establishes the validated reference foundation for this next architecture layer while preserving the complete historical FRP development trajectory, temporal execution architecture, implementation-mapping chain, and CI qualification evidence.
+
 ## 20. Hardware-Facing Development Path
 
 The current hardware-facing development path is organized as:
