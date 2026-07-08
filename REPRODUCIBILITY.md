@@ -383,9 +383,11 @@ The declared dependency file is:
 
 `requirements.txt`
 
-Current declared external dependency:
+Repository external dependency:
 
 `numpy>=1.26.0`
+
+NumPy is used by the historical FRP v0.9.3 and v0.9.4 executable layers. The current FRP v1.7.0 executable and Comparative Architecture Benchmark Suite use the Python standard library and repository-local modules.
 
 Install from the repository root:
 
