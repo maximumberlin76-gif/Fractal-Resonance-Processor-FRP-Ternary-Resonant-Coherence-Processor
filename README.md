@@ -7481,3 +7481,208 @@ The current M15 execution layer also establishes the deterministic implementatio
 
 `FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
 
+## 20. Hardware-Facing Development Path
+
+The current hardware-facing development path is organized as:
+
+1. executable semantic reference;
+2. structured machine-readable output and per-tick telemetry;
+3. benchmark export and hardware-facing signal mapping;
+4. deterministic fixed-point interface mapping;
+5. canonical balanced ternary hardware encoding;
+6. stateful quantized hardware-shadow execution;
+7. cycle-exact integer golden-trace generation;
+8. deterministic RTL comparison-vector generation;
+9. SystemVerilog testbench interface mapping;
+10. synthesizable RTL reference-core mapping;
+11. RTL assertion correlation;
+12. reference RTL equivalence and exact deterministic replay;
+13. M15 qualification closure;
+14. M16 RTL core realization and execution semantics;
+15. FPGA execution correlation;
+16. ASIC-oriented implementation and cost study;
+17. physical validation and measurement correlation.
+
+The current validated hardware-facing source domain is:
+
+`FRP v1.7.0 — M15 Implementation Mapping, Domain Interface, and Qualification Closure Package`
+
+The main executable semantic reference is:
+
+`frp_prototype_v1_7_0.py`
+
+The temporal execution architecture preserves the explicit processor modes:
+
+- `free`;
+- `7/1`;
+- `1/7`.
+
+The `7/1` and `1/7` modes are part of the FRP execution semantics and remain preserved through the semantic reference, quantized hardware shadow, scheduler-specific qualification, cycle-exact vector generation, SystemVerilog interface mapping, synthesizable RTL reference-core mapping, and qualification closure.
+
+The current M15 hardware-facing package contains ten validated artifact layers:
+
+1. `fixed_point_interface_profile`;
+2. `balanced_ternary_hardware_encoding_map`;
+3. `quantized_reference_shadow_model`;
+4. `cycle_exact_reference_trace`;
+5. `rtl_comparison_vector_package`;
+6. `systemverilog_testbench_interface_map`;
+7. `synthesizable_rtl_reference_core`;
+8. `rtl_assertion_correlation_harness`;
+9. `reference_rtl_equivalence_report`;
+10. `qualification_closure_manifest`.
+
+M15 qualification result:
+
+`PASS`
+
+Current hardware-facing documents:
+
+| File | Role |
+|---|---|
+| `docs/hardware_pathway.md` | defines the complete validated hardware-facing development path |
+| `docs/implementation_layers.md` | defines the staged FRP implementation layers |
+| `docs/fpga_mapping_study.md` | defines the FPGA-oriented mapping and execution-correlation study |
+| `docs/asic_mapping_study.md` | defines the ASIC-oriented implementation and cost study |
+| `docs/physical_validation_plan.md` | defines measurement and physical-correlation planning |
+| `docs/m15_implementation_mapping_domain_interface_qualification_closure.md` | defines the current M15 deterministic implementation-mapping architecture |
+| `docs/output_schema.md` | defines structured output and schema mapping |
+| `verification/README.md` | defines the current verification registry |
+| `verification/coherence_metrics.md` | defines current coherence and dynamic-stability metrics |
+| `funding_brief.md` | defines the funding and partner-facing engineering package |
+
+The current structured-output bridge toward hardware-facing work preserves:
+
+- processor state;
+- target state;
+- retained state;
+- active-neutral transition routing;
+- pending-route state;
+- scheduler state;
+- request-lane ordering;
+- phase and frequency state;
+- hierarchical coupling state;
+- delay state;
+- local and global thermal state;
+- gamma state;
+- multiscale coherence;
+- `C(t)`;
+- `P(t)`;
+- `C_minus_P`;
+- deterministic trace identity;
+- workload identity;
+- package digest identity.
+
+The FPGA pathway uses the qualified M15 execution contract as its correlation source.
+
+The FPGA-oriented mapping path includes:
+
+- two-bit balanced ternary state storage;
+- packed state vectors;
+- scheduler state machine;
+- explicit `free`, `7/1`, and `1/7` execution modes;
+- request lanes;
+- active-neutral route controller;
+- pending-route storage;
+- transition-capacity control;
+- phase-word registers;
+- trigonometric lookup memory;
+- hierarchical coupling weights;
+- fixed-point arithmetic;
+- delay-state registers;
+- local thermal-state registers;
+- gamma-state registers;
+- multiscale coherence datapath;
+- dynamic-stability outputs;
+- trace capture;
+- deterministic vector replay.
+
+FPGA correlation outputs can include:
+
+- synthesis report;
+- utilization report;
+- timing report;
+- memory-mapping report;
+- vector-replay result;
+- cycle-exact comparison result;
+- telemetry-capture result;
+- implementation-optimization report.
+
+The FPGA execution path preserves the same workload, preload, scheduler, request, state, trace, and digest identities used by the M15 correlation domain.
+
+The ASIC-oriented implementation path evaluates:
+
+- balanced ternary state storage;
+- two-bit state encoding;
+- active-neutral route control;
+- pending-route queue structure;
+- request-lane organization;
+- transition-capacity control;
+- scheduler logic for `free`, `7/1`, and `1/7`;
+- phase datapath;
+- trigonometric approximation strategy;
+- hierarchical coupling datapath;
+- delay-state datapath;
+- distributed thermal-state datapath;
+- gamma-state datapath;
+- coherence datapath;
+- stability-output datapath;
+- clocking and control;
+- test interface;
+- trace correlation;
+- power, performance, and area study.
+
+The current M15 event profile identifies implementation optimization targets associated with:
+
+- fixed-point multiplication and accumulation;
+- trigonometric lookup volume;
+- hierarchical coupling activity;
+- distributed thermal processing;
+- multiscale coherence processing.
+
+The physical validation path defines measurement and correlation for:
+
+- logical state correctness;
+- scheduler sequence;
+- `free`, `7/1`, and `1/7` temporal execution;
+- request-lane sequence;
+- active-neutral route sequence;
+- pending-route sequence;
+- state transitions;
+- phase evolution;
+- frequency evolution;
+- local thermal state;
+- global thermal state;
+- coherence trajectory;
+- `C(t)`;
+- `P(t)`;
+- `C_minus_P`;
+- timing;
+- activity;
+- energy;
+- temperature;
+- repeatability;
+- trace identity;
+- workload identity.
+
+A physical measurement package can preserve:
+
+- configuration identity;
+- preload identity;
+- vector-package identity;
+- workload digest;
+- clock profile;
+- measurement setup profile;
+- environmental conditions;
+- raw measurement data;
+- derived metric data;
+- correlation result;
+- review record.
+
+The next planned hardware-facing architecture layer is:
+
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
+
+M16 extends the qualified M15 reference-core domain toward explicit RTL execution semantics while preserving the current balanced ternary state domain, active-neutral routing, `free`, `7/1`, and `1/7` temporal execution architecture, request-lane ordering, pending-route semantics, fixed-point contract, cycle-exact vector identities, topology exactness, thermal exactness, and qualification evidence.
+
+
