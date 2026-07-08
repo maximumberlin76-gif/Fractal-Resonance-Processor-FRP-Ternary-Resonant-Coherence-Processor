@@ -8056,7 +8056,9 @@ Recommended citation:
 ---
 
 **Author:**
-  Maksym Marnov  ( Alchimist)
+
+Maksym Marnov  ( Alchimist)
+  
 **Berlin, 8 July 2026**
 
 
