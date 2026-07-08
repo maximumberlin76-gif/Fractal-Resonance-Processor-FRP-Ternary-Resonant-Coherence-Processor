@@ -1976,13 +1976,13 @@ install dependencies with:
     python -m pip install --upgrade pip
     pip install -r requirements.txt
 
-Current declared external dependency:
+Repository external dependency:
 
 `numpy>=1.26.0`
 
-The current M15 workflow uses Python `3.12` and executes the current reference and M15 artifact-generation path directly.
+NumPy is used by the historical FRP v0.9.3 and v0.9.4 executable layers. The current FRP v1.7.0 executable and Comparative Architecture Benchmark Suite use the Python standard library and repository-local modules.
 
-Workflow-specific dependency handling remains preserved in each workflow file.
+The current M15 workflow uses Python `3.12` and executes the current reference and M15 artifact-generation path directly.
 
 ## 41. Minimal Current M15 Validation Commands
 
