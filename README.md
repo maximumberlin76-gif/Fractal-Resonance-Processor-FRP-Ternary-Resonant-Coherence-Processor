@@ -5926,34 +5926,82 @@ This layer provides the executable reference model for deterministic fixed-point
 
 ## 2. Current Repository Position
 
-FRP v0.9.4 currently provides:
+FRP v1.7.0 currently provides:
 
 - executable Python source code
+- complete historical executable chain from FRP v0.9.3 through FRP v1.7.0
 - balanced ternary state logic
+- balanced ternary `{-1, 0, 1}` computational kernel
+- state, target, transition, and retained-result ternary domain
+- active neutral state `0`
 - neutral transition routing
+- mandatory tick-separated routing through active neutral state `0`
+- pending neutral routes
 - distributed commit behavior
+- transition-fraction control
+- deterministic request-lane ordering
 - Kuramoto-Sakaguchi resonant phase layer
+- asymmetric Sakaguchi phase lag gamma
+- hierarchical fractal coupling
+- phase velocity and phase evolution
+- resonance selection
+- Kuramoto order parameter `R`
+- multiscale phase coherence
 - nonlinear cubic saturation
-- nonlinear compression
-- delay dynamics
-- scheduler modes
+- nonlinear coherence compression
+- stateful delay dynamics
+- distributed local thermal fields
+- local thermal-phase interaction
+- local correlated gamma drift
+- dynamic stability `C(t) - P(t)`
+- scheduler modes `free`, `7/1`, and `1/7`
+- scheduler-count validation
+- scheduler-specific self-test qualification for `free`, `7/1`, and `1/7`
+- scheduler-specific deterministic vector packages for `free`, `7/1`, and `1/7`
 - per-tick telemetry
-- processor instruction layer
+- global `C(t) - P(t)` telemetry
+- optional trace export
+- historical processor instruction layers
 - self-test mode
 - benchmark mode
 - structured JSON output
-- machine-readable schema marker
+- machine-readable schema markers
 - JSON demo output
 - JSON self-test output
 - JSON benchmark output
-- optional telemetry export
 - reproducibility commands
 - benchmark output
+- cumulative benchmark history from FRP v0.9.3 through FRP v1.7.0
+- M3 benchmark-matrix history
+- current M15 benchmark matrix
+- Comparative Architecture Benchmark Suite
+- hardware-informed sensitivity qualification
+- deterministic fixed-point interface profile
+- balanced ternary hardware encoding map
+- stateful quantized reference shadow model
+- cycle-exact integer reference trace
+- deterministic RTL comparison vector package
+- SystemVerilog testbench interface map
+- synthesizable RTL reference core
+- RTL assertion correlation harness
+- reference RTL equivalence report
+- qualification closure manifest
+- deterministic vector-package integrity verification
+- semantic reference-to-quantized correlation
+- exact deterministic quantized shadow replay
 - GitHub Actions CI verification
+- 19 GitHub Actions workflows
 - structured-output GitHub Actions workflow
+- self-test GitHub Actions workflow
+- benchmark smoke-test GitHub Actions workflow
+- milestone workflows from M3 through M15
+- Comparative Architecture Benchmark workflow
+- Hardware Sensitivity Profile Qualification workflow
+- Hardware Sensitivity Comparison workflow
 - documentation package
-- release notes
-- test report
+- release notes from FRP v0.9.3 through FRP v1.7.0
+- test reports from FRP v0.9.3 through FRP v1.7.0
+- validation indexes from FRP v0.9.9 through FRP v1.7.0
 - release checklist
 - roadmap
 - milestone structure
@@ -5966,7 +6014,177 @@ FRP v0.9.4 currently provides:
 - citation metadata
 - Apache-2.0 license
 
-The current software layer has been executed and verified on general-purpose computing infrastructure through Python execution, reproducibility commands, benchmark execution, structured JSON validation, telemetry export checks, and automated CI workflows.
+The current validated release layer is:
+
+`FRP v1.7.0 — M15 Implementation Mapping, Domain Interface, and Qualification Closure Package`
+
+The main executable reference file is:
+
+`frp_prototype_v1_7_0.py`
+
+The validated M15 package preserves:
+
+- the balanced ternary `-1`, `0`, and `1` computational kernel;
+- active neutral state `0`;
+- tick-separated neutral routing;
+- pending neutral routes;
+- `actual_direct_events = 0`;
+- transition-fraction control;
+- deterministic request-lane ordering;
+- scheduler modes `free`, `7/1`, and `1/7`;
+- the published M14 hierarchical topology;
+- distributed thermal fields;
+- multiscale phase-coherence domains;
+- global `C(t) - P(t)` telemetry.
+
+The scheduler layer is preserved across:
+
+- the semantic reference path;
+- the quantized hardware shadow path;
+- cycle-exact vector generation;
+- SystemVerilog interface mapping;
+- qualification closure.
+
+Validated scheduler modes:
+
+`free`
+
+`7/1`
+
+`1/7`
+
+Validated `free` scheduler result for 16 ticks:
+
+`free = 16`
+
+Validation result:
+
+`PASS`
+
+Validated `7/1` scheduler result for 16 ticks:
+
+`balance = 14`
+
+`commit = 2`
+
+Validated default `7/1` scheduler result for 64 ticks:
+
+`balance = 56`
+
+`commit = 8`
+
+Validation result:
+
+`PASS`
+
+Validated `1/7` scheduler result for 16 ticks:
+
+`excite = 2`
+
+`neutralize = 14`
+
+Validation result:
+
+`PASS`
+
+Validated scheduler-count invariant:
+
+`sum(scheduler_counts) = ticks_recorded`
+
+Validation result:
+
+`PASS`
+
+The current M15 deterministic execution chain is:
+
+`published M14 floating semantic reference`
+
+↓
+
+`M15 stateful quantized hardware shadow model`
+
+↓
+
+`cycle-exact integer golden trace`
+
+↓
+
+`deterministic RTL comparison vector package`
+
+↓
+
+`SystemVerilog testbench interface mapping`
+
+↓
+
+`synthesizable RTL reference-core mapping`
+
+↓
+
+`RTL assertion correlation mapping`
+
+↓
+
+`reference RTL equivalence`
+
+↓
+
+`semantic reference-to-quantized correlation`
+
+↓
+
+`exact deterministic quantized shadow replay`
+
+↓
+
+`vector-package SHA-256 integrity verification`
+
+↓
+
+`qualification closure`
+
+The current M15 package contains ten validated artifact layers:
+
+1. `fixed_point_interface_profile`;
+2. `balanced_ternary_hardware_encoding_map`;
+3. `quantized_reference_shadow_model`;
+4. `cycle_exact_reference_trace`;
+5. `rtl_comparison_vector_package`;
+6. `systemverilog_testbench_interface_map`;
+7. `synthesizable_rtl_reference_core`;
+8. `rtl_assertion_correlation_harness`;
+9. `reference_rtl_equivalence_report`;
+10. `qualification_closure_manifest`.
+
+M15 artifact-layer validation result:
+
+`PASS`
+
+The current release layer has been executed and verified through GitHub Actions hardware-backed CI execution, structured JSON validation, reproducibility commands, scheduler-specific execution and self-test qualification for `free`, `7/1`, and `1/7`, benchmark execution, deterministic fixed-point mapping, stateful quantized hardware shadow execution, cycle-exact trace generation, RTL comparison-vector generation, SystemVerilog interface mapping, synthesizable RTL reference-core mapping, RTL assertion correlation, reference RTL equivalence, semantic correlation, exact deterministic replay, vector-package integrity verification, comparative architecture benchmarking, and hardware-informed sensitivity qualification.
+
+Validated M15 self-test result:
+
+`41 / 41 PASS`
+
+Validated deterministic vector regeneration:
+
+`10 / 10 files byte-identical`
+
+Validated semantic correlation:
+
+`5 / 5 required matches = 1.0`
+
+Validated exact deterministic replay:
+
+`6 / 6 replay matches = 1.0`
+
+Current M15 qualification status:
+
+`PASS`
+
+The current repository establishes the validated reference base for:
+
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
 
 ## 3. Engineering Trajectory
 
