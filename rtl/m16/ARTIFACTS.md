@@ -2,7 +2,7 @@
 
 ## Status
 
-Initial RTL artifact manifest.
+`ARTIFACT-BOUNDARY PASS`
 
 ## Version
 
@@ -18,11 +18,37 @@ This manifest records the concrete RTL artifacts introduced for the M16 RTL core
 
 `Ternary Fractal Resonant Coherence Processor`
 
-The manifest defines the artifact inventory, semantic role, integration position, and qualification status of each SystemVerilog file in `rtl/m16`.
+The manifest defines the artifact inventory, semantic role, integration position, workflow qualification state, and remaining simulator boundary for each SystemVerilog and documentation artifact in `rtl/m16`.
 
 M16 does not introduce a new processor model.
 
 M16 realizes the M15-qualified retained-state execution contract in RTL artifact form.
+
+## Current Qualification Result
+
+Current M16 RTL artifact-boundary result:
+
+`PASS`
+
+Qualified workflow:
+
+`FRP M16 RTL Artifact Boundary`
+
+Passing workflow run:
+
+`FRP M16 RTL Artifact Boundary #8`
+
+Passing commit:
+
+`12a3431`
+
+Current external simulator result:
+
+`pending external simulator execution`
+
+Current final M16 closure result:
+
+`pending simulator transcript capture`
 
 ## Preserved Execution Contract
 
@@ -67,18 +93,21 @@ Required invariant:
 
 | File | Artifact role | Status |
 |---|---|---|
-| `frp_m16_pkg.sv` | constants, encodings, helper functions, scheduler decoding, transition classification, capacity calculation | implemented |
-| `frp_m16_scheduler.sv` | scheduler-state realization for `free`, `7/1`, and `1/7` execution modes | implemented |
-| `frp_m16_request_lanes.sv` | deterministic request-lane arbitration | implemented |
-| `frp_m16_pending_routes.sv` | pending-route register layer | implemented |
-| `frp_m16_active_neutral.sv` | active-neutral transition generation | implemented |
-| `frp_m16_capacity_guard.sv` | transition-capacity enforcement | implemented |
-| `frp_m16_state_update.sv` | retained-state writeback | implemented |
-| `frp_m16_core.sv` | integrated M16 RTL core | implemented |
-| `frp_m16_assertions.sv` | assertion binding layer | implemented |
-| `frp_m16_tb.sv` | deterministic smoke testbench | implemented |
-| `README.md` | RTL layer documentation | implemented |
+| `frp_m16_pkg.sv` | constants, encodings, helper functions, scheduler decoding, transition classification, capacity calculation | present |
+| `frp_m16_scheduler.sv` | scheduler-state realization for `free`, `7/1`, and `1/7` execution modes | present |
+| `frp_m16_request_lanes.sv` | deterministic request-lane arbitration | present |
+| `frp_m16_pending_routes.sv` | pending-route register layer | present |
+| `frp_m16_active_neutral.sv` | active-neutral transition generation | present |
+| `frp_m16_capacity_guard.sv` | transition-capacity enforcement | present |
+| `frp_m16_state_update.sv` | retained-state writeback | present |
+| `frp_m16_core.sv` | integrated M16 RTL core | present |
+| `frp_m16_assertions.sv` | assertion binding layer | present |
+| `frp_m16_tb.sv` | deterministic smoke testbench | present |
+| `README.md` | RTL layer overview | present |
 | `ARTIFACTS.md` | current artifact manifest | current file |
+| `SIMULATION.md` | simulator execution instructions | present |
+| `SIMULATION_TRANSCRIPT.md` | simulation transcript template | present |
+| `CLOSURE.md` | RTL closure report | present |
 
 ## Artifact Dependency Order
 
@@ -100,6 +129,55 @@ The package file must be visible before all dependent modules.
 The integrated core imports and connects the module boundary.
 
 The testbench instantiates the integrated core and assertion layer.
+
+## Qualified Test Boundary
+
+Qualified test file:
+
+`tests/test_m16_rtl_artifact_manifest.py`
+
+The test validates:
+
+- `rtl/m16/` directory existence;
+- required RTL source artifact existence;
+- required RTL documentation artifact existence;
+- canonical balanced ternary package symbols;
+- integrated core module references;
+- assertion-layer zero-event invariants;
+- deterministic RTL smoke-testbench scope;
+- simulation instruction boundary;
+- simulation transcript placeholder boundary;
+- closure document status;
+- root README exposure;
+- project-structure exposure;
+- documentation README exposure;
+- architecture document exposure.
+
+## Qualified Workflow Boundary
+
+Qualified workflow:
+
+`.github/workflows/frp-m16-rtl-artifact-boundary.yml`
+
+Workflow name:
+
+`FRP M16 RTL Artifact Boundary`
+
+Workflow result:
+
+`PASS`
+
+Passing run:
+
+`FRP M16 RTL Artifact Boundary #8`
+
+Passing commit:
+
+`12a3431`
+
+Workflow validation command:
+
+    python -m pytest tests/test_m16_rtl_artifact_manifest.py -q
 
 ## Package Artifact
 
@@ -360,6 +438,14 @@ Required assertion result:
 
 `PASS`
 
+Current assertion source-artifact boundary result:
+
+`PASS`
+
+Current external simulator assertion result:
+
+`pending external simulator execution`
+
 ## Testbench Artifact
 
 File:
@@ -400,7 +486,7 @@ File:
 
 Role:
 
-Documents the RTL layer, artifact set, compile order, scheduler semantics, ternary encoding, transition-capacity boundary, active-neutral routing, pending-route behavior, assertion boundary, M15 compatibility position, and external FPGA review boundary.
+Documents the RTL layer, artifact set, compile order, scheduler semantics, ternary encoding, transition-capacity boundary, active-neutral routing, pending-route behavior, assertion boundary, M15 compatibility position, artifact-boundary PASS status, and external FPGA review boundary.
 
 ## Manifest Artifact
 
@@ -412,24 +498,89 @@ Role:
 
 Records the current artifact set and defines the M16 RTL artifact inventory for qualification tracking.
 
+## Simulation Instructions Artifact
+
+File:
+
+`SIMULATION.md`
+
+Role:
+
+Defines simulator command shape, artifact set under test, expected console markers, PASS conditions, assertion boundary, scheduler targets, transition targets, capacity targets, pending-route targets, and failure classification.
+
+Current status:
+
+`present`
+
+## Simulation Transcript Artifact
+
+File:
+
+`SIMULATION_TRANSCRIPT.md`
+
+Role:
+
+Defines the expected transcript format for external simulator execution.
+
+Current status:
+
+`pending external simulator execution`
+
+## Closure Artifact
+
+File:
+
+`CLOSURE.md`
+
+Role:
+
+Records the M16 RTL closure boundary, artifact-boundary PASS status, preserved execution semantics, M15 compatibility boundary, simulation boundary, corrective qualification event, closure table, and remaining simulator transcript requirements.
+
+Current status:
+
+`ARTIFACT-BOUNDARY PASS`
+
+## Corrective Qualification Event
+
+The M16 artifact-boundary workflow exposed a missing required RTL source artifact:
+
+`rtl/m16/frp_m16_pending_routes.sv`
+
+The missing pending-route RTL source artifact was added.
+
+After correction, the M16 artifact-boundary workflow passed.
+
+Corrected current result:
+
+`FRP M16 RTL Artifact Boundary #8 — PASS`
+
+Corrected commit:
+
+`12a3431`
+
 ## Current Qualification Status
 
 | Qualification group | Status |
 |---|---|
-| RTL artifact inventory | documented |
-| package artifact | implemented |
-| scheduler artifact | implemented |
-| request-lane artifact | implemented |
-| pending-route artifact | implemented |
-| active-neutral artifact | implemented |
-| capacity-guard artifact | implemented |
-| state-update artifact | implemented |
-| integrated core artifact | implemented |
-| assertion artifact | implemented |
-| testbench artifact | implemented |
+| RTL artifact inventory | PASS |
+| package artifact | present |
+| scheduler artifact | present |
+| request-lane artifact | present |
+| pending-route artifact | present |
+| active-neutral artifact | present |
+| capacity-guard artifact | present |
+| state-update artifact | present |
+| integrated core artifact | present |
+| assertion artifact | present |
+| testbench artifact | present |
+| documentation artifact set | present |
+| artifact-boundary workflow | PASS |
+| artifact-boundary qualification report | PASS |
+| M16 qualification index | implemented |
+| M16 qualification manifest | ACTIVE |
 | simulator execution transcript | pending |
 | deterministic replay adapter | pending |
-| M16 closure report | pending |
+| M16 final closure report | pending simulator transcript capture |
 | FPGA synthesis report | pending |
 
 ## M15 Compatibility Position
@@ -447,6 +598,8 @@ Compatibility chain:
 → `M16 RTL core`
 
 → `M16 assertion layer`
+
+→ `M16 simulation transcript`
 
 → `M16 qualification closure`
 
@@ -483,15 +636,24 @@ This artifact manifest is valid when:
 - every artifact has a defined role;
 - compile order is explicit;
 - preserved invariants are stated;
+- artifact-boundary workflow result is recorded;
 - M15 compatibility boundary is stated;
 - pending qualification artifacts are identified;
 - external review boundary is constrained.
 
+Current manifest result:
+
+`PASS`
+
+Current final simulator result:
+
+`pending external simulator execution`
+
 ## Next Step
 
-The next file should define the simulator execution instructions:
+The next repository step should expose artifact-boundary PASS status from:
 
-`rtl/m16/SIMULATION.md`
+`docs/README.md`
 
 ## Author
 
