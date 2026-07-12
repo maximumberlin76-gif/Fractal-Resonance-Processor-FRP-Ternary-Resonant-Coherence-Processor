@@ -146,13 +146,10 @@ def test_m16_testbench_exercises_required_smoke_scope() -> None:
         assert term in text
 
 
-def test_m16_readme_lists_all_rtl_artifacts() -> None:
+def test_m16_readme_lists_all_rtl_source_artifacts() -> None:
     text = read_text(RTL_M16 / "README.md")
 
     for artifact in RTL_FILES:
-        assert artifact in text
-
-    for artifact in DOC_FILES:
         assert artifact in text
 
 
@@ -160,6 +157,9 @@ def test_m16_artifact_manifest_lists_all_rtl_artifacts() -> None:
     text = read_text(RTL_M16 / "ARTIFACTS.md")
 
     for artifact in RTL_FILES:
+        assert artifact in text
+
+    for artifact in DOC_FILES:
         assert artifact in text
 
     for invariant in ZERO_EVENT_INVARIANTS:
@@ -240,6 +240,23 @@ def test_docs_readme_exposes_m16_rtl_layer() -> None:
         "frp_m16_core.sv",
         "frp_m16_assertions.sv",
         "frp_m16_tb.sv",
+        "pending external simulator execution",
+    ]
+
+    for term in required_terms:
+        assert term in text
+
+
+def test_architecture_document_exposes_m16_rtl_layer() -> None:
+    text = read_text(REPO_ROOT / "docs" / "architecture.md")
+
+    required_terms = [
+        "FRP v1.8.0 — M16 RTL Core Realization Layer",
+        "../rtl/m16/",
+        "../rtl/m16/frp_m16_core.sv",
+        "actual_direct_events = 0",
+        "reserved_state_events = 0",
+        "queue_overflow_events = 0",
         "pending external simulator execution",
     ]
 
