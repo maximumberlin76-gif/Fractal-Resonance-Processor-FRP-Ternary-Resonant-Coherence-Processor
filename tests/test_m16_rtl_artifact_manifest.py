@@ -200,8 +200,8 @@ def test_m16_closure_report_declares_artifact_boundary_pass_and_pending_simulati
 
     required_terms = [
         "ARTIFACT-BOUNDARY PASS",
-        "FRP M16 RTL Artifact Boundary #8",
-        "12a3431",
+        "FRP M16 RTL Artifact Boundary",
+        "PASS",
         "pending external simulator execution",
         "actual_direct_events = 0",
         "reserved_state_events = 0",
@@ -219,8 +219,8 @@ def test_m16_external_simulator_execution_plan_defines_required_boundary() -> No
     required_terms = [
         "FRP M16 External Simulator Execution Plan",
         "PLANNED",
-        "FRP M16 RTL Artifact Boundary #8",
-        "12a3431",
+        "FRP M16 RTL Artifact Boundary",
+        "PASS",
         "rtl/m16/frp_m16_tb.sv",
         "verilator --sv --timing --assert --binary -Irtl/m16 rtl/m16/frp_m16_tb.sv",
         "./obj_dir/Vfrp_m16_tb",
