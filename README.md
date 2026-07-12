@@ -120,6 +120,73 @@ Current M15 qualification evidence:
 - exact fixed-point topology closure;
 - exact fixed-point thermal closure.
 
+## FRP v1.8.0 — M16 RTL Core Realization Layer
+
+FRP v1.8.0 M16 introduces the first concrete SystemVerilog RTL realization boundary for the Ternary Fractal Resonant Coherence Processor.
+
+The M16 RTL layer preserves the M15-qualified retained-state execution contract and exposes the processor boundary as explicit RTL artifacts under:
+
+`rtl/m16/`
+
+The M16 RTL layer does not redefine the FRP processor model.
+
+It realizes the already-qualified M15 execution semantics in RTL module form.
+
+Primary M16 execution chain:
+
+`phase-derived ternary target`
+
+→ `request-lane arbitration`
+
+→ `transition-capacity guard`
+
+→ `pending-route processing`
+
+→ `active-neutral routing through 0`
+
+→ `retained balanced ternary state`
+
+Primary preserved invariants:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+M16 RTL documentation:
+
+| Path | Purpose |
+|---|---|
+| `rtl/m16/README.md` | RTL layer overview |
+| `rtl/m16/ARTIFACTS.md` | RTL artifact manifest |
+| `rtl/m16/SIMULATION.md` | simulator execution instructions |
+| `rtl/m16/SIMULATION_TRANSCRIPT.md` | simulation transcript template |
+| `rtl/m16/CLOSURE.md` | RTL closure report |
+
+M16 RTL source artifacts:
+
+| Path | Purpose |
+|---|---|
+| `rtl/m16/frp_m16_pkg.sv` | constants, encodings, helper functions |
+| `rtl/m16/frp_m16_scheduler.sv` | scheduler-state realization |
+| `rtl/m16/frp_m16_request_lanes.sv` | request-lane arbitration |
+| `rtl/m16/frp_m16_pending_routes.sv` | pending-route register layer |
+| `rtl/m16/frp_m16_active_neutral.sv` | active-neutral transition generation |
+| `rtl/m16/frp_m16_capacity_guard.sv` | transition-capacity enforcement |
+| `rtl/m16/frp_m16_state_update.sv` | retained-state writeback |
+| `rtl/m16/frp_m16_core.sv` | integrated RTL core |
+| `rtl/m16/frp_m16_assertions.sv` | assertion binding layer |
+| `rtl/m16/frp_m16_tb.sv` | deterministic RTL smoke testbench |
+
+Current M16 status:
+
+`RTL artifact boundary complete`
+
+Current final simulator qualification status:
+
+`pending external simulator execution`
+
 ## Quick Start
 
 Recommended CI-aligned Python version:
