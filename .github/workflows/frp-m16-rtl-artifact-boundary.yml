@@ -1,0 +1,45 @@
+name: FRP M16 RTL Artifact Boundary
+
+on:
+  push:
+    paths:
+      - "rtl/m16/**"
+      - "tests/test_m16_rtl_artifact_manifest.py"
+      - "README.md"
+      - "PROJECT_STRUCTURE.md"
+      - "docs/README.md"
+      - "docs/architecture.md"
+      - ".github/workflows/frp-m16-rtl-artifact-boundary.yml"
+  pull_request:
+    paths:
+      - "rtl/m16/**"
+      - "tests/test_m16_rtl_artifact_manifest.py"
+      - "README.md"
+      - "PROJECT_STRUCTURE.md"
+      - "docs/README.md"
+      - "docs/architecture.md"
+      - ".github/workflows/frp-m16-rtl-artifact-boundary.yml"
+  workflow_dispatch:
+
+jobs:
+  m16-rtl-artifact-boundary:
+    name: M16 RTL artifact boundary
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pytest
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest
+
+      - name: Validate M16 RTL artifact boundary
+        run: |
+          python -m pytest tests/test_m16_rtl_artifact_manifest.py -q
