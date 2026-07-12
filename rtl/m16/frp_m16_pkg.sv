@@ -1,0 +1,424 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// FRP M16 RTL Core Realization Package
+//
+// Project:
+//   Fractal Resonance Processor (FRP)
+//   Ternary Fractal Resonant Coherence Processor
+//
+// Version:
+//   FRP v1.8.0
+//
+// Milestone:
+//   M16 — RTL Core Realization and Execution Semantics Package
+//
+// Purpose:
+//   Defines canonical constants, encodings, scheduler modes,
+//   scheduler states, transition classes, invariant helpers,
+//   and deterministic parameter functions for the M16 RTL core.
+//
+// This package preserves the M15-qualified execution semantics:
+//   - balanced ternary retained state domain {-1, 0, +1}
+//   - active neutral state 0
+//   - mandatory neutral routing for opposite-polarity transitions
+//   - free / 7/1 / 1/7 execution modes
+//   - transition-capacity boundary
+//   - zero direct opposite-polarity execution
+//   - zero reserved-state emission
+//   - zero queue-overflow qualification target
+
+`ifndef FRP_M16_PKG_SV
+`define FRP_M16_PKG_SV
+
+package frp_m16_pkg;
+
+  // --------------------------------------------------------------------------
+  // Global M16 parameters
+  // --------------------------------------------------------------------------
+
+  localparam int FRP_M16_STATE_BITS       = 2;
+  localparam int FRP_M16_SCHED_MODE_BITS = 2;
+  localparam int FRP_M16_SCHED_BITS      = 3;
+  localparam int FRP_M16_COUNTER_BITS    = 32;
+
+  localparam int FRP_M16_DEFAULT_CELLS   = 16;
+
+  // M15 inherited transition boundary:
+  //
+  // transition_fraction = 0.25
+  //
+  // REQUEST_LANES = max(1, round(CELLS * transition_fraction))
+  //
+  // Qualified inherited profiles:
+  //   CELLS = 8  -> REQUEST_LANES = 2
+  //   CELLS = 16 -> REQUEST_LANES = 4
+  //   CELLS = 32 -> REQUEST_LANES = 8
+
+  localparam int FRP_M16_TRANSITION_FRACTION_NUM = 1;
+  localparam int FRP_M16_TRANSITION_FRACTION_DEN = 4;
+
+  // --------------------------------------------------------------------------
+  // Canonical balanced ternary encoding
+  // --------------------------------------------------------------------------
+
+  typedef enum logic [FRP_M16_STATE_BITS-1:0] {
+    FRP_TERN_ZERO     = 2'b00,
+    FRP_TERN_POS      = 2'b01,
+    FRP_TERN_RESERVED = 2'b10,
+    FRP_TERN_NEG      = 2'b11
+  } frp_m16_ternary_e;
+
+  // Semantic aliases.
+  localparam logic [1:0] FRP_STATE_NEG      = FRP_TERN_NEG;
+  localparam logic [1:0] FRP_STATE_ZERO     = FRP_TERN_ZERO;
+  localparam logic [1:0] FRP_STATE_POS      = FRP_TERN_POS;
+  localparam logic [1:0] FRP_STATE_RESERVED = FRP_TERN_RESERVED;
+
+  // Required invariant:
+  //
+  // reserved_state_events = 0
+  //
+  // The encoding 2'b10 is never a valid retained state,
+  // target state, pending route, or output state.
+
+  // --------------------------------------------------------------------------
+  // Scheduler mode encoding
+  // --------------------------------------------------------------------------
+
+  typedef enum logic [FRP_M16_SCHED_MODE_BITS-1:0] {
+    FRP_MODE_FREE     = 2'b00,
+    FRP_MODE_7_1      = 2'b01,
+    FRP_MODE_1_7      = 2'b10,
+    FRP_MODE_RESERVED = 2'b11
+  } frp_m16_scheduler_mode_e;
+
+  // --------------------------------------------------------------------------
+  // Scheduler state encoding
+  // --------------------------------------------------------------------------
+
+  typedef enum logic [FRP_M16_SCHED_BITS-1:0] {
+    FRP_SCHED_FREE       = 3'b000,
+    FRP_SCHED_BALANCE    = 3'b001,
+    FRP_SCHED_COMMIT     = 3'b010,
+    FRP_SCHED_EXCITE     = 3'b011,
+    FRP_SCHED_NEUTRALIZE = 3'b100,
+    FRP_SCHED_INVALID    = 3'b111
+  } frp_m16_scheduler_state_e;
+
+  // --------------------------------------------------------------------------
+  // Transition class encoding
+  // --------------------------------------------------------------------------
+
+  typedef enum logic [3:0] {
+    FRP_TRANS_SAME_STATE         = 4'd0,
+    FRP_TRANS_ZERO_TO_NONZERO    = 4'd1,
+    FRP_TRANS_NONZERO_TO_ZERO    = 4'd2,
+    FRP_TRANS_OPPOSITE_POLARITY  = 4'd3,
+    FRP_TRANS_PENDING_COMPLETION = 4'd4,
+    FRP_TRANS_HOLD               = 4'd5,
+    FRP_TRANS_REJECTED           = 4'd6,
+    FRP_TRANS_RESERVED_OPERAND   = 4'd7,
+    FRP_TRANS_INVALID            = 4'd15
+  } frp_m16_transition_class_e;
+
+  // --------------------------------------------------------------------------
+  // Request rejection reason encoding
+  // --------------------------------------------------------------------------
+
+  typedef enum logic [3:0] {
+    FRP_REJECT_NONE           = 4'd0,
+    FRP_REJECT_INVALID_CELL   = 4'd1,
+    FRP_REJECT_INVALID_TARGET = 4'd2,
+    FRP_REJECT_DUPLICATE_CELL = 4'd3,
+    FRP_REJECT_SCHEDULER      = 4'd4,
+    FRP_REJECT_CAPACITY       = 4'd5,
+    FRP_REJECT_PENDING_BUSY   = 4'd6,
+    FRP_REJECT_TICK_DISABLED  = 4'd7,
+    FRP_REJECT_RESERVED       = 4'd15
+  } frp_m16_reject_reason_e;
+
+  // --------------------------------------------------------------------------
+  // Invariant flag indexes
+  // --------------------------------------------------------------------------
+
+  localparam int FRP_INV_STATE_DOMAIN_VALID          = 0;
+  localparam int FRP_INV_SCHEDULER_COUNTS_VALID     = 1;
+  localparam int FRP_INV_REQUEST_LANE_ORDER_VALID   = 2;
+  localparam int FRP_INV_PENDING_POLARITY_VALID     = 3;
+  localparam int FRP_INV_ACTIVE_NEUTRAL_VALID       = 4;
+  localparam int FRP_INV_TRANSITION_CAPACITY_VALID  = 5;
+  localparam int FRP_INV_STATE_UPDATE_VALID         = 6;
+  localparam int FRP_INV_NO_ACTUAL_DIRECT_EVENTS    = 7;
+  localparam int FRP_INV_NO_RESERVED_STATE          = 8;
+  localparam int FRP_INV_NO_QUEUE_OVERFLOW          = 9;
+
+  localparam int FRP_M16_INVARIANT_FLAGS = 10;
+
+  // --------------------------------------------------------------------------
+  // Ternary domain helper functions
+  // --------------------------------------------------------------------------
+
+  function automatic logic frp_is_valid_ternary(
+    input logic [FRP_M16_STATE_BITS-1:0] value
+  );
+    begin
+      frp_is_valid_ternary =
+        (value == FRP_STATE_NEG)  ||
+        (value == FRP_STATE_ZERO) ||
+        (value == FRP_STATE_POS);
+    end
+  endfunction
+
+  function automatic logic frp_is_reserved_ternary(
+    input logic [FRP_M16_STATE_BITS-1:0] value
+  );
+    begin
+      frp_is_reserved_ternary = (value == FRP_STATE_RESERVED);
+    end
+  endfunction
+
+  function automatic logic frp_is_zero(
+    input logic [FRP_M16_STATE_BITS-1:0] value
+  );
+    begin
+      frp_is_zero = (value == FRP_STATE_ZERO);
+    end
+  endfunction
+
+  function automatic logic frp_is_positive(
+    input logic [FRP_M16_STATE_BITS-1:0] value
+  );
+    begin
+      frp_is_positive = (value == FRP_STATE_POS);
+    end
+  endfunction
+
+  function automatic logic frp_is_negative(
+    input logic [FRP_M16_STATE_BITS-1:0] value
+  );
+    begin
+      frp_is_negative = (value == FRP_STATE_NEG);
+    end
+  endfunction
+
+  function automatic logic frp_is_nonzero(
+    input logic [FRP_M16_STATE_BITS-1:0] value
+  );
+    begin
+      frp_is_nonzero =
+        (value == FRP_STATE_NEG) ||
+        (value == FRP_STATE_POS);
+    end
+  endfunction
+
+  function automatic logic frp_is_opposite_polarity(
+    input logic [FRP_M16_STATE_BITS-1:0] left,
+    input logic [FRP_M16_STATE_BITS-1:0] right
+  );
+    begin
+      frp_is_opposite_polarity =
+        ((left == FRP_STATE_NEG) && (right == FRP_STATE_POS)) ||
+        ((left == FRP_STATE_POS) && (right == FRP_STATE_NEG));
+    end
+  endfunction
+
+  function automatic logic frp_is_legal_state_change(
+    input logic [FRP_M16_STATE_BITS-1:0] from_state,
+    input logic [FRP_M16_STATE_BITS-1:0] to_state
+  );
+    begin
+      frp_is_legal_state_change =
+        frp_is_valid_ternary(from_state) &&
+        frp_is_valid_ternary(to_state)   &&
+        !frp_is_opposite_polarity(from_state, to_state);
+    end
+  endfunction
+
+  function automatic logic frp_is_state_change(
+    input logic [FRP_M16_STATE_BITS-1:0] from_state,
+    input logic [FRP_M16_STATE_BITS-1:0] to_state
+  );
+    begin
+      frp_is_state_change = (from_state != to_state);
+    end
+  endfunction
+
+  // --------------------------------------------------------------------------
+  // Transition classification helper
+  // --------------------------------------------------------------------------
+
+  function automatic frp_m16_transition_class_e frp_classify_transition(
+    input logic [FRP_M16_STATE_BITS-1:0] state_value,
+    input logic [FRP_M16_STATE_BITS-1:0] target_value,
+    input logic [FRP_M16_STATE_BITS-1:0] pending_value
+  );
+    begin
+      if (
+        !frp_is_valid_ternary(state_value)  ||
+        !frp_is_valid_ternary(target_value) ||
+        !frp_is_valid_ternary(pending_value)
+      ) begin
+        frp_classify_transition = FRP_TRANS_RESERVED_OPERAND;
+      end else if (
+        (state_value == FRP_STATE_ZERO) &&
+        (pending_value != FRP_STATE_ZERO)
+      ) begin
+        frp_classify_transition = FRP_TRANS_PENDING_COMPLETION;
+      end else if (state_value == target_value) begin
+        frp_classify_transition = FRP_TRANS_SAME_STATE;
+      end else if (
+        (state_value == FRP_STATE_ZERO) &&
+        (target_value != FRP_STATE_ZERO)
+      ) begin
+        frp_classify_transition = FRP_TRANS_ZERO_TO_NONZERO;
+      end else if (
+        (state_value != FRP_STATE_ZERO) &&
+        (target_value == FRP_STATE_ZERO)
+      ) begin
+        frp_classify_transition = FRP_TRANS_NONZERO_TO_ZERO;
+      end else if (frp_is_opposite_polarity(state_value, target_value)) begin
+        frp_classify_transition = FRP_TRANS_OPPOSITE_POLARITY;
+      end else begin
+        frp_classify_transition = FRP_TRANS_INVALID;
+      end
+    end
+  endfunction
+
+  // --------------------------------------------------------------------------
+  // Scheduler helper functions
+  // --------------------------------------------------------------------------
+
+  function automatic logic frp_is_valid_scheduler_mode(
+    input frp_m16_scheduler_mode_e mode
+  );
+    begin
+      frp_is_valid_scheduler_mode =
+        (mode == FRP_MODE_FREE) ||
+        (mode == FRP_MODE_7_1)  ||
+        (mode == FRP_MODE_1_7);
+    end
+  endfunction
+
+  function automatic frp_m16_scheduler_state_e frp_decode_scheduler_state(
+    input frp_m16_scheduler_mode_e mode,
+    input logic [2:0] period_index
+  );
+    begin
+      unique case (mode)
+        FRP_MODE_FREE: begin
+          frp_decode_scheduler_state = FRP_SCHED_FREE;
+        end
+
+        FRP_MODE_7_1: begin
+          if (period_index == 3'd7) begin
+            frp_decode_scheduler_state = FRP_SCHED_COMMIT;
+          end else begin
+            frp_decode_scheduler_state = FRP_SCHED_BALANCE;
+          end
+        end
+
+        FRP_MODE_1_7: begin
+          if (period_index == 3'd0) begin
+            frp_decode_scheduler_state = FRP_SCHED_EXCITE;
+          end else begin
+            frp_decode_scheduler_state = FRP_SCHED_NEUTRALIZE;
+          end
+        end
+
+        default: begin
+          frp_decode_scheduler_state = FRP_SCHED_INVALID;
+        end
+      endcase
+    end
+  endfunction
+
+  function automatic logic frp_scheduler_state_is_valid(
+    input frp_m16_scheduler_state_e state
+  );
+    begin
+      frp_scheduler_state_is_valid =
+        (state == FRP_SCHED_FREE)       ||
+        (state == FRP_SCHED_BALANCE)    ||
+        (state == FRP_SCHED_COMMIT)     ||
+        (state == FRP_SCHED_EXCITE)     ||
+        (state == FRP_SCHED_NEUTRALIZE);
+    end
+  endfunction
+
+  function automatic logic frp_scheduler_is_commit_capable(
+    input frp_m16_scheduler_state_e state
+  );
+    begin
+      frp_scheduler_is_commit_capable =
+        (state == FRP_SCHED_FREE)   ||
+        (state == FRP_SCHED_COMMIT) ||
+        (state == FRP_SCHED_EXCITE);
+    end
+  endfunction
+
+  function automatic logic frp_scheduler_is_neutralize_capable(
+    input frp_m16_scheduler_state_e state
+  );
+    begin
+      frp_scheduler_is_neutralize_capable =
+        (state == FRP_SCHED_FREE)       ||
+        (state == FRP_SCHED_BALANCE)    ||
+        (state == FRP_SCHED_NEUTRALIZE);
+    end
+  endfunction
+
+  // --------------------------------------------------------------------------
+  // Transition-capacity helper functions
+  // --------------------------------------------------------------------------
+
+  function automatic int frp_calc_request_lanes(
+    input int cells
+  );
+    int rounded_value;
+    begin
+      rounded_value =
+        (
+          (cells * FRP_M16_TRANSITION_FRACTION_NUM) +
+          (FRP_M16_TRANSITION_FRACTION_DEN / 2)
+        ) / FRP_M16_TRANSITION_FRACTION_DEN;
+
+      if (rounded_value < 1) begin
+        frp_calc_request_lanes = 1;
+      end else begin
+        frp_calc_request_lanes = rounded_value;
+      end
+    end
+  endfunction
+
+  function automatic int frp_cell_lsb(
+    input int cell_index
+  );
+    begin
+      frp_cell_lsb = cell_index * FRP_M16_STATE_BITS;
+    end
+  endfunction
+
+  function automatic int frp_cell_msb(
+    input int cell_index
+  );
+    begin
+      frp_cell_msb = (cell_index * FRP_M16_STATE_BITS) + (FRP_M16_STATE_BITS - 1);
+    end
+  endfunction
+
+  // --------------------------------------------------------------------------
+  // Static qualification helpers
+  // --------------------------------------------------------------------------
+
+  localparam int FRP_M16_REQUEST_LANES_8_CELLS  = frp_calc_request_lanes(8);
+  localparam int FRP_M16_REQUEST_LANES_16_CELLS = frp_calc_request_lanes(16);
+  localparam int FRP_M16_REQUEST_LANES_32_CELLS = frp_calc_request_lanes(32);
+
+  // Expected:
+  //   FRP_M16_REQUEST_LANES_8_CELLS  = 2
+  //   FRP_M16_REQUEST_LANES_16_CELLS = 4
+  //   FRP_M16_REQUEST_LANES_32_CELLS = 8
+
+endpackage : frp_m16_pkg
+
+`endif
