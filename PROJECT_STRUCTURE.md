@@ -675,6 +675,80 @@ The M15 bridge is:
 
 `qualification closure`
 
+### M16 RTL Core Realization Layer
+
+Path:
+
+`rtl/m16/`
+
+Purpose:
+
+Concrete SystemVerilog RTL realization layer for the FRP v1.8.0 M16 execution boundary.
+
+The M16 RTL layer preserves the M15-qualified retained-state execution contract and exposes the processor boundary as explicit RTL artifacts.
+
+Primary preserved invariants:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+Primary execution chain:
+
+`phase-derived ternary target`
+
+→ `request-lane arbitration`
+
+→ `transition-capacity guard`
+
+→ `pending-route processing`
+
+→ `active-neutral routing through 0`
+
+→ `retained balanced ternary state`
+
+
+### M16 RTL Files
+
+| Path | Purpose |
+|---|---|
+| `rtl/m16/frp_m16_pkg.sv` | constants, encodings, helper functions, scheduler decoding, transition classification |
+| `rtl/m16/frp_m16_scheduler.sv` | `free`, `7/1`, and `1/7` scheduler-state realization |
+| `rtl/m16/frp_m16_request_lanes.sv` | deterministic request-lane arbitration |
+| `rtl/m16/frp_m16_pending_routes.sv` | pending-route register layer |
+| `rtl/m16/frp_m16_active_neutral.sv` | active-neutral transition generation |
+| `rtl/m16/frp_m16_capacity_guard.sv` | transition-capacity enforcement |
+| `rtl/m16/frp_m16_state_update.sv` | retained-state writeback |
+| `rtl/m16/frp_m16_core.sv` | integrated M16 RTL core |
+| `rtl/m16/frp_m16_assertions.sv` | assertion binding layer |
+| `rtl/m16/frp_m16_tb.sv` | deterministic RTL smoke testbench |
+
+### M16 RTL Documentation
+
+| Path | Purpose |
+|---|---|
+| `rtl/m16/README.md` | M16 RTL layer overview |
+| `rtl/m16/ARTIFACTS.md` | RTL artifact manifest |
+| `rtl/m16/SIMULATION.md` | simulator execution instructions |
+| `rtl/m16/SIMULATION_TRANSCRIPT.md` | simulation transcript template |
+| `rtl/m16/CLOSURE.md` | RTL closure report |
+
+### M16 Closure Status
+
+Current M16 status:
+
+`RTL artifact boundary complete`
+
+Current final qualification status:
+
+`pending external simulator execution`
+
+Required final M16 qualification result:
+
+`PASS`
+
 ## 7. Balanced Ternary Hardware Encoding
 
 FRP v1.7.0 defines the canonical two-bit balanced ternary encoding:
