@@ -48,6 +48,55 @@ Next planned architecture layer:
 
 `FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
 
+## M16 RTL Core Realization Documents
+
+The M16 RTL layer introduces the first concrete SystemVerilog realization boundary for the FRP retained-state execution semantics.
+
+This layer preserves the M15-qualified execution contract and exposes the processor boundary as RTL artifacts under:
+
+`rtl/m16/`
+
+M16 RTL documentation:
+
+| Path | Purpose |
+|---|---|
+| `rtl/m16/README.md` | RTL layer overview |
+| `rtl/m16/ARTIFACTS.md` | RTL artifact manifest |
+| `rtl/m16/SIMULATION.md` | simulator execution instructions |
+| `rtl/m16/SIMULATION_TRANSCRIPT.md` | simulation transcript template |
+| `rtl/m16/CLOSURE.md` | RTL closure report |
+
+M16 RTL source artifacts:
+
+| Path | Purpose |
+|---|---|
+| `rtl/m16/frp_m16_pkg.sv` | constants, encodings, helper functions |
+| `rtl/m16/frp_m16_scheduler.sv` | scheduler-state realization |
+| `rtl/m16/frp_m16_request_lanes.sv` | request-lane arbitration |
+| `rtl/m16/frp_m16_pending_routes.sv` | pending-route register layer |
+| `rtl/m16/frp_m16_active_neutral.sv` | active-neutral transition generation |
+| `rtl/m16/frp_m16_capacity_guard.sv` | transition-capacity enforcement |
+| `rtl/m16/frp_m16_state_update.sv` | retained-state writeback |
+| `rtl/m16/frp_m16_core.sv` | integrated RTL core |
+| `rtl/m16/frp_m16_assertions.sv` | assertion binding layer |
+| `rtl/m16/frp_m16_tb.sv` | deterministic RTL smoke testbench |
+
+Preserved M16 invariants:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+Current M16 qualification status:
+
+`RTL artifact boundary complete`
+
+Final simulator qualification status:
+
+`pending external simulator execution`
+
 ## 1. Purpose
 
 The documentation layer preserves the complete published FRP architecture progression and provides the technical reference surface for:
