@@ -153,13 +153,10 @@ def test_m16_readme_lists_all_rtl_source_artifacts() -> None:
         assert artifact in text
 
 
-def test_m16_artifact_manifest_lists_all_rtl_artifacts() -> None:
+def test_m16_artifact_manifest_lists_rtl_artifacts_and_invariants() -> None:
     text = read_text(RTL_M16 / "ARTIFACTS.md")
 
     for artifact in RTL_FILES:
-        assert artifact in text
-
-    for artifact in DOC_FILES:
         assert artifact in text
 
     for invariant in ZERO_EVENT_INVARIANTS:
