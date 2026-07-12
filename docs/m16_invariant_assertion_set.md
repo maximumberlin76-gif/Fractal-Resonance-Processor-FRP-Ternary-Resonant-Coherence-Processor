@@ -1,4 +1,4 @@
-# FRP M16 Transition Capacity Guard Module
+# FRP M16 Invariant Assertion Set
 
 ## Status
 
@@ -14,37 +14,33 @@ Planned architecture layer.
 
 ## Purpose
 
-This document defines the transition-capacity guard module for the M16 RTL core realization layer.
+This document defines the M16 invariant assertion set for the RTL core realization layer.
 
-The transition-capacity guard preserves the M15-qualified switching boundary of the:
+The assertion set preserves the M15-qualified execution semantics of the:
 
 `Ternary Fractal Resonant Coherence Processor`
 
 M16 does not introduce a new processor model.
 
-M16 realizes the retained-state transition-capacity law in an explicit RTL-oriented guard module.
+M16 converts the already-qualified M15 semantic invariants into an RTL-facing assertion structure for module-level and core-level verification.
 
-## Capacity Boundary
+## Assertion Boundary
 
-The transition-capacity guard controls how many retained-state changes may be accepted during one processor tick.
+The M16 assertion set covers:
 
-It covers:
+- canonical balanced ternary state-domain assertions;
+- scheduler-state assertions;
+- request-lane arbitration assertions;
+- pending-route assertions;
+- active-neutral transition assertions;
+- transition-capacity assertions;
+- retained-state update assertions;
+- event-counter relation assertions;
+- invariant-flag correlation assertions;
+- M15 vector replay assertions;
+- M16 closure assertions.
 
-- transition-capacity parameterization;
-- request-lane capacity relation;
-- accepted-change counting;
-- capacity admission;
-- capacity rejection;
-- switch-load numerator generation;
-- scheduler-state interaction;
-- pending-route completion capacity;
-- active-neutral routing capacity;
-- capacity invariant flags;
-- event-counter source generation;
-- assertion correlation;
-- M15 vector replay compatibility.
-
-The guard does not compute:
+The assertion set does not compute:
 
 - phase words;
 - Kuramoto-Sakaguchi coupling;
@@ -53,184 +49,212 @@ The guard does not compute:
 - coherence compression;
 - `C(t)`;
 - `P(t)`;
-- phase-derived ternary target generation.
+- phase-derived ternary targets.
+
+The assertion set verifies that the RTL core preserves the M15-qualified retained-state execution contract.
 
 ## Core Identity Preserved
 
-The transition-capacity guard preserves the M15 execution boundary:
+The assertion set protects the FRP execution chain:
 
-`transition_fraction = 0.25`
+`phase-derived ternary target`
 
-This means only a bounded fraction of retained ternary cells may change during one tick.
+→ `request-lane arbitration`
 
-The guard prevents uncontrolled simultaneous switching and preserves deterministic replay against the M15 cycle-exact integer golden trace.
+→ `transition-capacity guard`
 
-Required invariant:
+→ `pending-route processing`
 
-`accepted_changes <= REQUEST_LANES`
+→ `active-neutral routing through 0`
 
-## Capacity Formula
+→ `retained balanced ternary state`
 
-The inherited M15 relation is:
+Required global invariant:
 
-`max_changes = max(1, round(CELLS × transition_fraction))`
+`actual_direct_events = 0`
 
-The M16 hardware-facing relation is:
+Required global state-domain invariant:
 
-`REQUEST_LANES = max_changes`
+`reserved_state_events = 0`
 
-Inherited default:
-
-`transition_fraction = 0.25`
-
-Validated inherited profiles:
-
-| Cells | Transition fraction | Request lanes |
-|---:|---:|---:|
-| `8` | `0.25` | `2` |
-| `16` | `0.25` | `4` |
-| `32` | `0.25` | `8` |
-
-Required relation:
-
-`REQUEST_LANES = max_changes`
-
-Required invariant:
-
-`accepted_changes <= REQUEST_LANES`
-
-## RTL Parameter Boundary
-
-The M16 transition-capacity guard is parameterized by:
-
-| Parameter | Meaning |
-|---|---|
-| `CELLS` | number of processor cells |
-| `REQUEST_LANES` | maximum accepted retained-state changes per tick |
-| `STATE_BITS` | ternary state encoding width |
-| `COUNTER_BITS` | event-counter width |
-
-Required relation:
-
-`STATE_BITS = 2`
-
-Required implementation relation:
-
-`REQUEST_LANES` is a compile-time hardware parameter derived from the selected `CELLS` profile.
-
-For the current M16 qualified profiles, `REQUEST_LANES` is not dynamically recomputed at runtime.
-
-## Module Inputs
-
-The transition-capacity guard consumes:
-
-| Signal | Width | Meaning |
-|---|---:|---|
-| `tick_enable` | `1` | enables one processor tick |
-| `scheduler_state` | scheduler-state width | current scheduler state |
-| `request_valid` | `REQUEST_LANES` | valid request lanes |
-| `request_accept_candidate` | `REQUEST_LANES` | request lanes eligible before capacity guard |
-| `request_cell_index` | `REQUEST_LANES × CELL_INDEX_BITS` | requested cell index per lane |
-| `transition_class` | per-lane class width | classified transition type |
-| `pending_completion_candidate` | `CELLS` | pending completions eligible before capacity guard |
-| `neutral_routed_candidate` | `CELLS` | active-neutral routes eligible before capacity guard |
-| `state_q` | `CELLS × STATE_BITS` | retained ternary state at tick start |
-| `state_candidate_d` | `CELLS × STATE_BITS` | candidate next retained state before capacity guard |
-
-Required relation:
-
-`state_candidate_d` must already preserve the active-neutral transition law.
-
-The capacity guard must not authorize illegal direct opposite-polarity transitions.
-
-## Module Outputs
-
-The transition-capacity guard emits:
-
-| Signal | Width | Meaning |
-|---|---:|---|
-| `request_accept_capacity` | `REQUEST_LANES` | request lanes accepted after capacity guard |
-| `request_reject_capacity` | `REQUEST_LANES` | request lanes rejected due to capacity |
-| `capacity_accept_mask` | `CELLS` | cells accepted by capacity guard |
-| `capacity_reject_mask` | `CELLS` | cells rejected by capacity guard |
-| `accepted_change_mask` | `CELLS` | retained-state changes accepted for this tick |
-| `accepted_changes` | counter width | number of accepted retained-state changes |
-| `capacity_remaining` | counter width | unused transition capacity for this tick |
-| `capacity_exhausted` | `1` | high when no more retained-state changes may be accepted |
-| `transition_capacity_valid` | `1` | capacity invariant flag |
-| `switch_load_numerator` | counter width | accepted retained-state changes |
-
-Required relation:
-
-`switch_load_numerator = accepted_changes`
-
-## Accepted Change Definition
-
-A retained-state change occurs when:
-
-`state_d_i != state_q_i`
-
-Same-state retention does not consume transition capacity.
-
-Rejected requests do not consume transition capacity.
-
-Invalid requests do not consume transition capacity.
-
-Required relation:
-
-`accepted_changes = popcount(accepted_change_mask)`
-
-Required bound:
-
-`accepted_changes <= REQUEST_LANES`
-
-## Capacity Admission Rule
-
-A transition candidate may be accepted only if accepting it does not exceed:
-
-`REQUEST_LANES`
-
-For deterministic lane order, the guard evaluates candidates in the order produced by the request-lane arbitration layer.
-
-Required admission relation:
-
-`accepted_changes_next <= REQUEST_LANES`
-
-If the relation holds, the candidate may be accepted.
-
-If the relation does not hold, the candidate must be rejected by capacity.
-
-## Capacity Rejection Rule
-
-If accepting a candidate transition would exceed:
-
-`REQUEST_LANES`
-
-then the candidate is rejected:
-
-`request_reject_capacity = 1`
-
-and:
-
-`request_accept_capacity = 0`
-
-Capacity rejection must not create:
-
-- invalid retained state;
-- invalid pending-route state;
-- direct opposite-polarity transition;
-- queue overflow;
-- scheduler counter mismatch.
-
-Required invariant:
+Required global queue invariant:
 
 `queue_overflow_events = 0`
 
-Capacity rejection is not queue overflow when the request is cleanly rejected and no state corruption occurs.
+## Assertion Layers
 
-## Tick-Enable Behavior
+The M16 assertion set is organized into the following layers:
 
-If:
+1. state-domain assertions;
+2. scheduler assertions;
+3. request-lane assertions;
+4. pending-route assertions;
+5. active-neutral transition assertions;
+6. transition-capacity assertions;
+7. retained-state update assertions;
+8. event-counter assertions;
+9. invariant-flag assertions;
+10. M15 vector replay assertions;
+11. M16 closure assertions.
+
+Each layer may be implemented as SystemVerilog assertions, simulation checks, trace validators, or deterministic replay checks.
+
+## Canonical Ternary Encoding Assertions
+
+M16 preserves the canonical two-bit ternary encoding:
+
+| Ternary state | Encoding |
+|---|---|
+| `-1` | `2'b11` |
+| `0` | `2'b00` |
+| `+1` | `2'b01` |
+| reserved | `2'b10` |
+
+The reserved encoding is invalid.
+
+### `assert_state_q_domain`
+
+Condition:
+
+`state_q_i != 2'b10`
+
+for every cell `i`.
+
+Required result:
+
+`PASS`
+
+### `assert_state_d_domain`
+
+Condition:
+
+`state_d_i != 2'b10`
+
+for every cell `i`.
+
+Required result:
+
+`PASS`
+
+### `assert_state_out_domain`
+
+Condition:
+
+`state_out_i != 2'b10`
+
+for every cell `i`.
+
+Required result:
+
+`PASS`
+
+### `assert_target_domain`
+
+Condition:
+
+`target_q_i != 2'b10`
+
+for every cell `i` during qualified replay.
+
+Required result:
+
+`PASS`
+
+### `assert_pending_route_domain`
+
+Condition:
+
+`pending_route_q_i != 2'b10`
+
+and:
+
+`pending_route_d_i != 2'b10`
+
+for every cell `i`.
+
+Required result:
+
+`PASS`
+
+### Required state-domain relation
+
+`reserved_state_events = 0`
+
+## Reset Assertions
+
+Reset establishes the active-neutral baseline.
+
+### `assert_reset_state_to_neutral`
+
+When reset is active:
+
+`state_out_i = 0`
+
+for every cell `i`.
+
+Required result:
+
+`PASS`
+
+### `assert_reset_pending_to_zero`
+
+When reset is active:
+
+`pending_route_q_i = 0`
+
+for every cell `i`.
+
+Required result:
+
+`PASS`
+
+### `assert_reset_counters_to_zero`
+
+When reset is active:
+
+`ticks_recorded = 0`
+
+`scheduler counters = 0`
+
+`event counters = 0`
+
+Required result:
+
+`PASS`
+
+### `assert_reset_no_reserved_state`
+
+After reset:
+
+`reserved_state_events = 0`
+
+Required result:
+
+`PASS`
+
+## Tick-Enable Assertions
+
+Tick execution advances only when:
+
+`tick_enable = 1`
+
+### `assert_tick_disable_holds_state`
+
+When:
+
+`tick_enable = 0`
+
+then:
+
+`state_d = state_q`
+
+Required result:
+
+`PASS`
+
+### `assert_tick_disable_no_accepted_changes`
+
+When:
 
 `tick_enable = 0`
 
@@ -238,461 +262,1015 @@ then:
 
 `accepted_changes = 0`
 
-`accepted_change_mask = 0`
+Required result:
 
-`request_accept_capacity = 0`
+`PASS`
 
-`request_reject_capacity = 0`
+### `assert_tick_disable_scheduler_hold`
 
-`capacity_exhausted = 0`
+When:
 
-No retained-state transition is accepted.
+`tick_enable = 0`
 
-Required invariant:
+then scheduler counters do not advance.
 
-`tick_enable = 0 → no capacity consumption`
+Required result:
 
-## Deterministic Candidate Order
+`PASS`
 
-The guard preserves deterministic ordering inherited from request-lane arbitration.
+### `assert_tick_disable_no_pending_clear`
 
-Order:
+When:
 
-`lane 0`
+`tick_enable = 0`
 
-→ `lane 1`
+then pending routes are not cleared by execution.
 
-→ `lane 2`
+Required result:
 
-→ `...`
+`PASS`
 
-→ `lane REQUEST_LANES - 1`
+## Scheduler Assertions
 
-Pending-route completion candidates preserve the deterministic cell order or the M15 vector-defined replay order.
+M16 preserves three execution modes:
 
-Required invariant:
+- `free`;
+- `7/1`;
+- `1/7`.
 
-`capacity guard does not reorder accepted candidates`
+### `assert_valid_scheduler_mode`
 
-## Same-State Capacity Rule
+Condition:
 
-If a candidate does not change retained state:
+`scheduler_mode != reserved`
 
-`state_candidate_d_i = state_q_i`
+Required result:
 
-then it does not consume capacity.
+`PASS`
 
-Same-state metadata may be replayed for trace compatibility, but it must not increase:
+### `assert_valid_scheduler_state`
 
-`accepted_changes`
+Condition:
 
-Required invariant:
+`scheduler_state` is one of:
 
-`same-state retention does not consume transition capacity`
+- `free`;
+- `balance`;
+- `commit`;
+- `excite`;
+- `neutralize`.
 
-## Zero-to-Nonzero Capacity Rule
+Required result:
 
-A legal transition:
+`PASS`
 
-`0 → -1`
+### `assert_onehot_scheduler_enable`
 
-or:
-
-`0 → +1`
-
-consumes one transition-capacity slot.
-
-Required relation:
-
-`zero_to_nonzero accepted → accepted_changes += 1`
-
-## Nonzero-to-Zero Capacity Rule
-
-A legal transition:
-
-`-1 → 0`
-
-or:
-
-`+1 → 0`
-
-consumes one transition-capacity slot.
+Exactly one scheduler-state enable is active per valid enabled tick.
 
 Required relation:
 
-`nonzero_to_zero accepted → accepted_changes += 1`
+`popcount(scheduler_state_enable_vector) = 1`
 
-## Active-Neutral Routing Capacity Rule
+Required result:
 
-An opposite-polarity request routed through active neutral:
+`PASS`
 
-`-1 → 0`
+### `assert_free_mode_profile`
+
+For a run entirely in `free` mode:
+
+`free_count = ticks_recorded`
+
+Required inherited profile:
+
+`16 ticks → free = 16`
+
+Required result:
+
+`PASS`
+
+### `assert_7_1_mode_profile`
+
+For a run entirely in `7/1` mode:
+
+`commit_count = floor(ticks_recorded / 8)`
+
+`balance_count = ticks_recorded - commit_count`
+
+Required inherited profile:
+
+`64 ticks → balance = 56, commit = 8`
+
+Required result:
+
+`PASS`
+
+### `assert_1_7_mode_profile`
+
+For a run entirely in `1/7` mode:
+
+`excite_count = floor((ticks_recorded + 7) / 8)`
+
+`neutralize_count = ticks_recorded - excite_count`
+
+Required inherited profile:
+
+`16 ticks → excite = 2, neutralize = 14`
+
+Required result:
+
+`PASS`
+
+### `assert_scheduler_counts_sum`
+
+Required relation:
+
+`scheduler_count_free + scheduler_count_balance + scheduler_count_commit + scheduler_count_excite + scheduler_count_neutralize = ticks_recorded`
+
+Required result:
+
+`PASS`
+
+### `assert_scheduler_no_direct_transition_authority`
+
+No scheduler state may authorize:
+
+`-1 → +1`
 
 or:
 
-`+1 → 0`
+`+1 → -1`
 
-consumes one transition-capacity slot for the current tick.
+Required result:
 
-The later completion:
+`PASS`
 
-`0 → +1`
+## Request-Lane Arbitration Assertions
 
-or:
+Request lanes are deterministic execution-control inputs.
 
-`0 → -1`
+### `assert_request_lane_order`
 
-consumes one transition-capacity slot on its completion tick.
+Request lanes are evaluated in ascending order:
 
-Required invariant:
+`0 → REQUEST_LANES - 1`
 
-`opposite-polarity route is capacity-counted per legal tick transition`
+Required result:
 
-## Pending-Completion Capacity Rule
+`PASS`
 
-A pending-route completion:
+### `assert_request_cell_index_valid`
 
-`0 → pending_route_q_i`
+Every accepted request uses:
 
-consumes one transition-capacity slot.
+`request_cell_index < CELLS`
 
-If capacity is exhausted, pending-route completion must be deferred without clearing the pending route.
+Required result:
 
-Required invariant:
+`PASS`
 
-`capacity rejection does not clear pending route`
+### `assert_request_target_valid`
 
-## Scheduler Interaction
+Every accepted request target is one of:
 
-The scheduler defines temporal eligibility.
+`2'b11`
 
-The transition-capacity guard defines how many eligible transitions may be accepted.
+`2'b00`
 
-The scheduler must not bypass the capacity guard.
+`2'b01`
 
-The capacity guard must not redefine scheduler semantics.
+Required result:
 
-Required invariant:
+`PASS`
 
-`scheduler-eligible transitions remain capacity-bounded`
+### `assert_request_target_not_reserved`
 
-## Free-State Capacity Behavior
+No accepted request target may be:
 
-In `free` scheduler state, all eligible legal transition classes remain subject to the capacity guard.
+`2'b10`
 
-Allowed capacity-counted transitions may include:
+Required result:
 
-- pending-route completion;
-- `0 → ±1`;
-- `±1 → 0`;
-- active-neutral routing through `0`.
+`PASS`
 
-Required invariant:
+### `assert_one_accepted_request_per_cell`
+
+At most one request may be accepted for a cell during one tick.
+
+Required relation:
+
+`accepted_cell_mask_i <= 1`
+
+Required result:
+
+`PASS`
+
+### `assert_duplicate_cell_rejection`
+
+If two valid request lanes target the same cell, only the lowest-numbered lane may be accepted.
+
+Later same-cell lanes must be rejected.
+
+Required result:
+
+`PASS`
+
+### `assert_no_request_accept_on_tick_disable`
+
+When:
+
+`tick_enable = 0`
+
+then:
+
+`request_accept = 0`
+
+Required result:
+
+`PASS`
+
+### `assert_scheduler_gate_applied`
+
+A request may be accepted only when its transition class is eligible under the current scheduler state.
+
+Required result:
+
+`PASS`
+
+## Pending-Route Assertions
+
+Pending routes preserve the deferred target polarity of an opposite-polarity request.
+
+### `assert_pending_created_from_opposite_request`
+
+A pending route may be created only when an accepted request is opposite-polarity.
+
+Required condition:
+
+`state_q_i × request_target_i = -1`
+
+Required result:
+
+`PASS`
+
+### `assert_pending_target_preserved`
+
+When a pending route is created:
+
+`pending_route_d_i = request_target_i`
+
+Required result:
+
+`PASS`
+
+### `assert_pending_completion_from_zero`
+
+A pending route may complete only when:
+
+`state_q_i = 0`
+
+Required result:
+
+`PASS`
+
+### `assert_pending_completion_uses_pending_target`
+
+Pending completion target must equal:
+
+`pending_route_q_i`
+
+not a new request target.
+
+Required result:
+
+`PASS`
+
+### `assert_pending_cleared_after_completion`
+
+After successful completion:
+
+`pending_route_d_i = 0`
+
+Required result:
+
+`PASS`
+
+### `assert_pending_not_overwritten`
+
+An existing pending route must not be overwritten by a different polarity before completion.
+
+Required result:
+
+`PASS`
+
+### `assert_pending_capacity_guard`
+
+If capacity rejects pending completion, the pending route remains retained.
+
+Required relation:
+
+`capacity reject → pending_route_d_i = pending_route_q_i`
+
+Required result:
+
+`PASS`
+
+### `assert_no_pending_queue_overflow`
+
+One cell may not hold more than one pending route.
+
+Required relation:
+
+`queue_overflow_events = 0`
+
+Required result:
+
+`PASS`
+
+### `assert_pending_domain_valid`
+
+Pending-route encoding must never use:
+
+`2'b10`
+
+Required result:
+
+`PASS`
+
+## Active-Neutral Transition Assertions
+
+Active neutral `0` is a functional routing state.
+
+### `assert_no_direct_negative_to_positive`
+
+Forbidden transition:
+
+`-1 → +1`
+
+Required relation:
+
+`not(state_q_i = -1 and state_d_i = +1)`
+
+Required result:
+
+`PASS`
+
+### `assert_no_direct_positive_to_negative`
+
+Forbidden transition:
+
+`+1 → -1`
+
+Required relation:
+
+`not(state_q_i = +1 and state_d_i = -1)`
+
+Required result:
+
+`PASS`
+
+### `assert_opposite_request_routes_to_zero`
+
+For accepted opposite-polarity request:
+
+`state_d_i = 0`
+
+Required result:
+
+`PASS`
+
+### `assert_negative_to_positive_route_sequence`
+
+Required route:
+
+`-1 → 0 → +1`
+
+Direct route:
+
+`-1 → +1`
+
+must remain impossible.
+
+Required result:
+
+`PASS`
+
+### `assert_positive_to_negative_route_sequence`
+
+Required route:
+
+`+1 → 0 → -1`
+
+Direct route:
+
+`+1 → -1`
+
+must remain impossible.
+
+Required result:
+
+`PASS`
+
+### `assert_zero_to_nonzero_starts_from_zero`
+
+For transition:
+
+`0 → ±1`
+
+the previous retained state must be:
+
+`0`
+
+Required result:
+
+`PASS`
+
+### `assert_nonzero_to_zero_terminates_in_zero`
+
+For transition:
+
+`±1 → 0`
+
+the next retained state must be:
+
+`0`
+
+Required result:
+
+`PASS`
+
+### `assert_pending_completion_not_direct_jump`
+
+A pending route must not complete from a nonzero retained state.
+
+Required result:
+
+`PASS`
+
+## Transition-Capacity Assertions
+
+M16 preserves:
+
+`transition_fraction = 0.25`
+
+and:
+
+`REQUEST_LANES = max(1, round(CELLS × transition_fraction))`
+
+### `assert_request_lanes_profile_8`
+
+For:
+
+`CELLS = 8`
+
+required:
+
+`REQUEST_LANES = 2`
+
+Required result:
+
+`PASS`
+
+### `assert_request_lanes_profile_16`
+
+For:
+
+`CELLS = 16`
+
+required:
+
+`REQUEST_LANES = 4`
+
+Required result:
+
+`PASS`
+
+### `assert_request_lanes_profile_32`
+
+For:
+
+`CELLS = 32`
+
+required:
+
+`REQUEST_LANES = 8`
+
+Required result:
+
+`PASS`
+
+### `assert_accepted_changes_within_lanes`
+
+Required relation:
 
 `accepted_changes <= REQUEST_LANES`
 
-## Balance-State Capacity Behavior
+Required result:
 
-In `balance` scheduler state, accepted retained-state changes remain capacity-bounded.
+`PASS`
 
-Balance-state accepted changes may include:
+### `assert_capacity_remaining_valid`
 
-- `±1 → 0`;
-- active-neutral routing through `0`.
+Required relation:
 
-Commit release remains controlled by commit-capable scheduler states.
+`capacity_remaining = REQUEST_LANES - accepted_changes`
 
-Required invariant:
+Required result:
 
-`actual_direct_events = 0`
+`PASS`
 
-## Commit-State Capacity Behavior
+### `assert_capacity_remaining_nonnegative`
 
-In `commit` scheduler state, accepted retained-state changes remain capacity-bounded.
+Required relation:
 
-Commit-state accepted changes may include:
+`capacity_remaining >= 0`
 
-- pending-route completion;
-- `0 → ±1`;
-- retained-state commit transitions.
+Required result:
 
-Required invariant:
+`PASS`
 
-`accepted_changes <= REQUEST_LANES`
-
-## Excite-State Capacity Behavior
-
-In `excite` scheduler state, accepted retained-state changes remain capacity-bounded.
-
-Excite-state accepted changes may include:
-
-- `0 → ±1`;
-- pending-route completion when eligible;
-- nonzero target acceptance.
-
-Required invariant:
-
-`switch_load_peak <= transition_fraction`
-
-## Neutralize-State Capacity Behavior
-
-In `neutralize` scheduler state, accepted retained-state changes remain capacity-bounded.
-
-Neutralize-state accepted changes may include:
-
-- `±1 → 0`;
-- active-neutral routing through `0`.
-
-Required invariant:
-
-`actual_direct_events = 0`
-
-## Switch Load Relation
-
-The transition-capacity guard emits:
-
-`switch_load_numerator = accepted_changes`
-
-The inherited switch-load relation is:
-
-`switch_load = accepted_changes / CELLS`
-
-Required bound:
-
-`switch_load_peak <= transition_fraction`
-
-For the current validated profiles:
-
-| Cells | Request lanes | Maximum switch load |
-|---:|---:|---:|
-| `8` | `2` | `0.25` |
-| `16` | `4` | `0.25` |
-| `32` | `8` | `0.25` |
-
-## Capacity Exhaustion
-
-Capacity is exhausted when:
-
-`accepted_changes = REQUEST_LANES`
-
-When capacity is exhausted, additional state-changing candidates must be rejected or deferred.
+### `assert_capacity_exhausted_equivalence`
 
 Required relation:
 
 `capacity_exhausted = (accepted_changes == REQUEST_LANES)`
 
-Capacity exhaustion must not invalidate already accepted legal transitions.
+Required result:
 
-## Capacity Remaining
+`PASS`
 
-Capacity remaining is:
+### `assert_same_state_no_capacity_use`
 
-`capacity_remaining = REQUEST_LANES - accepted_changes`
-
-Required bound:
-
-`0 <= capacity_remaining <= REQUEST_LANES`
-
-The value is a tick-local diagnostic and comparison output.
-
-## Interaction With Pending Routes
-
-The capacity guard must preserve pending-route safety.
-
-If a pending route cannot complete because capacity is exhausted:
-
-`pending_route_d_i = pending_route_q_i`
-
-The pending route remains retained for a later eligible tick.
-
-Required invariant:
-
-`pending route polarity remains stable under capacity rejection`
-
-## Interaction With Active-Neutral Routing
-
-If an opposite-polarity request cannot be routed through `0` because capacity is exhausted, the direct transition remains forbidden.
-
-The request must be rejected or deferred.
-
-Required invariant:
-
-`capacity exhaustion cannot authorize direct opposite-polarity transition`
-
-## Interaction With Reserved States
-
-The capacity guard must not accept transitions involving reserved encodings.
-
-Reserved encoding:
-
-`2'b10`
-
-Required invariant:
-
-`reserved transition candidates are not capacity-accepted`
-
-The capacity guard is not a repair mechanism for reserved-state corruption.
-
-Reserved-state detection remains part of the state-domain and transition-domain guards.
-
-## Event Counter Sources
-
-The transition-capacity guard provides counter sources for:
-
-| Counter source | Meaning |
-|---|---|
-| `capacity_candidate_events` | state-changing candidates observed |
-| `capacity_accept_events` | candidates accepted by capacity guard |
-| `capacity_reject_events` | candidates rejected by capacity guard |
-| `capacity_exhausted_events` | ticks where capacity was exhausted |
-| `accepted_change_events` | accepted retained-state changes |
-| `switch_load_numerator_events` | accepted-change count for switch-load calculation |
-
-Required relation:
-
-`capacity_accept_events = accepted_change_events`
-
-Required bound:
-
-`accepted_change_events <= REQUEST_LANES per tick`
-
-## Capacity Invariant Flags
-
-The transition-capacity guard exposes:
-
-| Flag | Required value |
-|---|---|
-| `transition_capacity_valid` | `True` |
-| `accepted_changes_within_limit` | `True` |
-| `capacity_remaining_valid` | `True` |
-| `capacity_exhaustion_valid` | `True` |
-| `same_state_capacity_valid` | `True` |
-| `pending_capacity_valid` | `True` |
-| `active_neutral_capacity_valid` | `True` |
-| `switch_load_bound_valid` | `True` |
-| `no_queue_overflow` | `True` |
-| `no_actual_direct_events` | `True` |
-
-These flags must correlate with the M16 assertion set and M15 vector replay expectations.
-
-## Assertion Support
-
-The M16 transition-capacity guard module supports the following assertion layer:
-
-| Assertion | Required condition |
-|---|---|
-| `assert_accepted_changes_within_lanes` | `accepted_changes <= REQUEST_LANES` |
-| `assert_capacity_remaining_nonnegative` | `capacity_remaining >= 0` |
-| `assert_capacity_remaining_bounded` | `capacity_remaining <= REQUEST_LANES` |
-| `assert_capacity_exhausted_equivalence` | `capacity_exhausted = (accepted_changes == REQUEST_LANES)` |
-| `assert_same_state_no_capacity_use` | same-state retention does not consume capacity |
-| `assert_no_accept_on_tick_disable` | no transition is accepted when tick disabled |
-| `assert_pending_not_cleared_on_capacity_reject` | rejected pending completion remains pending |
-| `assert_no_direct_transition_on_capacity_exhaustion` | capacity exhaustion cannot authorize direct opposite transition |
-| `assert_switch_load_bound` | `accepted_changes / CELLS <= transition_fraction` |
-| `assert_capacity_guard_replay_deterministic` | same input sequence produces same capacity outputs |
-
-## M15 Vector Replay Boundary
-
-The transition-capacity guard must replay against the M15 deterministic vector package.
-
-Comparison inputs:
-
-`tick_enable`
-
-`scheduler_state`
-
-`request_accept_candidate`
-
-`request_cell_index`
-
-`transition_class`
-
-`pending_completion_candidate`
-
-`neutral_routed_candidate`
-
-`state_q`
-
-`state_candidate_d`
-
-`REQUEST_LANES`
-
-Comparison outputs:
-
-`request_accept_capacity`
-
-`request_reject_capacity`
-
-`capacity_accept_mask`
-
-`capacity_reject_mask`
-
-`accepted_change_mask`
+Same-state retention must not increase:
 
 `accepted_changes`
 
-`capacity_remaining`
+Required result:
 
-`capacity_exhausted`
+`PASS`
 
-`switch_load_numerator`
+### `assert_capacity_reject_preserves_state`
 
-`counter deltas`
+A capacity-rejected transition must not corrupt retained state.
 
-`invariant flags`
+Required result:
 
-Expected source:
+`PASS`
 
-`M15 cycle-exact integer golden trace`
+### `assert_capacity_reject_preserves_pending`
 
-## Required M16 Capacity Invariants
+A capacity-rejected pending completion must not clear pending route.
 
-The M16 transition-capacity guard is valid only if:
+Required result:
 
-Accepted retained-state changes never exceed `REQUEST_LANES`.
+`PASS`
 
-Same-state retention does not consume capacity.
+### `assert_capacity_exhaustion_no_direct_transition`
 
-Capacity rejection does not alter retained state incorrectly.
+Capacity exhaustion cannot authorize:
 
-Capacity rejection does not clear pending routes.
+`-1 → +1`
 
-Capacity exhaustion does not authorize direct opposite-polarity transitions.
+or:
 
-Pending-route completion remains capacity-bounded.
+`+1 → -1`
 
-Active-neutral routing remains capacity-bounded.
+Required result:
+
+`PASS`
+
+### `assert_switch_load_bound`
+
+Required relation:
+
+`switch_load = accepted_changes / CELLS`
+
+Required bound:
+
+`switch_load <= transition_fraction`
+
+Required result:
+
+`PASS`
+
+## Retained-State Update Assertions
+
+The retained-state update layer commits only legal, capacity-approved transitions.
+
+### `assert_writeback_requires_capacity`
+
+A state-changing writeback requires capacity approval.
+
+Required result:
+
+`PASS`
+
+### `assert_state_write_count_within_lanes`
+
+Required relation:
+
+`state_write_enable_count <= REQUEST_LANES`
+
+Required result:
+
+`PASS`
+
+### `assert_state_write_mask_matches_change`
+
+Required relation:
+
+`state_write_enable_mask_i = 1`
+
+only when:
+
+`state_d_i != state_q_i`
+
+Required result:
+
+`PASS`
+
+### `assert_state_hold_mask_valid`
+
+If a cell is held:
+
+`state_d_i = state_q_i`
+
+Required result:
+
+`PASS`
+
+### `assert_reserved_candidate_not_committed`
+
+A candidate state equal to:
+
+`2'b10`
+
+must not be committed.
+
+Required result:
+
+`PASS`
+
+### `assert_neutral_routed_writeback_to_zero`
+
+For active-neutral routed opposite-polarity request:
+
+`state_d_i = 0`
+
+Required result:
+
+`PASS`
+
+### `assert_pending_completion_writeback_from_zero`
+
+For pending completion:
+
+`state_q_i = 0`
+
+Required result:
+
+`PASS`
+
+### `assert_state_output_not_reserved`
+
+Output retained state must never contain:
+
+`2'b10`
+
+Required result:
+
+`PASS`
+
+## Event-Counter Assertions
+
+Event counters must remain consistent with the execution trace.
+
+### `assert_actual_direct_events_zero`
+
+Required relation:
+
+`actual_direct_events = 0`
+
+Required result:
+
+`PASS`
+
+### `assert_reserved_state_events_zero`
+
+Required relation:
+
+`reserved_state_events = 0`
+
+Required result:
+
+`PASS`
+
+### `assert_queue_overflow_events_zero`
+
+Required relation:
+
+`queue_overflow_events = 0`
+
+Required result:
+
+`PASS`
+
+### `assert_prevented_direct_events_relation`
+
+Required relation:
+
+`prevented_direct_events >= requested_direct_events`
+
+Required result:
+
+`PASS`
+
+### `assert_neutral_routed_events_relation`
+
+Required relation:
+
+`neutral_routed_events >= prevented_direct_events`
+
+Required result:
+
+`PASS`
+
+### `assert_accepted_change_events_relation`
+
+Required relation:
+
+`accepted_change_events = sum(accepted_changes per tick)`
+
+Required result:
+
+`PASS`
+
+### `assert_pending_created_relation`
+
+Pending-created events must correspond to accepted opposite-polarity requests.
+
+Required result:
+
+`PASS`
+
+### `assert_pending_completed_relation`
+
+Pending-completed events must correspond to completions from active neutral `0`.
+
+Required result:
+
+`PASS`
+
+## Invariant-Flag Assertions
+
+Invariant flags are the compact replay-facing form of assertion status.
+
+### `assert_state_domain_flag`
+
+Required value:
+
+`state_domain_valid = True`
+
+Required result:
+
+`PASS`
+
+### `assert_scheduler_counts_flag`
+
+Required value:
+
+`scheduler_counts_valid = True`
+
+Required result:
+
+`PASS`
+
+### `assert_request_lane_order_flag`
+
+Required value:
+
+`request_lane_order_valid = True`
+
+Required result:
+
+`PASS`
+
+### `assert_pending_polarity_flag`
+
+Required value:
+
+`pending_polarity_valid = True`
+
+Required result:
+
+`PASS`
+
+### `assert_active_neutral_flag`
+
+Required value:
+
+`active_neutral_routing_valid = True`
+
+Required result:
+
+`PASS`
+
+### `assert_transition_capacity_flag`
+
+Required value:
+
+`transition_capacity_valid = True`
+
+Required result:
+
+`PASS`
+
+### `assert_state_update_flag`
+
+Required value:
+
+`state_update_valid = True`
+
+Required result:
+
+`PASS`
+
+### `assert_no_actual_direct_flag`
+
+Required value:
+
+`no_actual_direct_events = True`
+
+Required result:
+
+`PASS`
+
+### `assert_no_reserved_state_flag`
+
+Required value:
+
+`no_reserved_state = True`
+
+Required result:
+
+`PASS`
+
+### `assert_no_queue_overflow_flag`
+
+Required value:
+
+`no_queue_overflow = True`
+
+Required result:
+
+`PASS`
+
+## M15 Vector Replay Assertions
+
+M16 must remain replay-compatible with the M15 deterministic vector package.
+
+### `assert_m15_state_replay_match`
+
+M16 retained-state outputs must match the M15 cycle-exact integer golden trace.
+
+Required result:
+
+`PASS`
+
+### `assert_m15_pending_replay_match`
+
+M16 pending-route outputs must match the M15 cycle-exact integer golden trace.
+
+Required result:
+
+`PASS`
+
+### `assert_m15_scheduler_replay_match`
+
+M16 scheduler states and counters must match the M15 cycle-exact integer golden trace.
+
+Required result:
+
+`PASS`
+
+### `assert_m15_request_replay_match`
+
+M16 request-lane acceptance and rejection masks must match the M15 cycle-exact integer golden trace.
+
+Required result:
+
+`PASS`
+
+### `assert_m15_transition_replay_match`
+
+M16 transition masks must match the M15 cycle-exact integer golden trace.
+
+Required result:
+
+`PASS`
+
+### `assert_m15_counter_replay_match`
+
+M16 event-counter deltas must match the M15 cycle-exact integer golden trace.
+
+Required result:
+
+`PASS`
+
+### `assert_m15_invariant_flag_replay_match`
+
+M16 invariant flags must match the M15 replay expectations.
+
+Required result:
+
+`PASS`
+
+## Module-Level Assertion Matrix
+
+| Module | Required assertion group |
+|---|---|
+| `scheduler_state_rtl_realization` | scheduler assertions |
+| `request_lane_arbitration_module` | request-lane assertions |
+| `pending_route_register_module` | pending-route assertions |
+| `active_neutral_transition_module` | active-neutral transition assertions |
+| `transition_capacity_guard_module` | transition-capacity assertions |
+| `retained_state_update_module` | retained-state update assertions |
+
+Each module-level assertion group must pass independently before M16 core-level closure.
+
+## Core-Level Assertion Matrix
+
+The core-level assertion matrix requires:
+
+| Assertion group | Required status |
+|---|---|
+| state-domain assertions | `PASS` |
+| reset assertions | `PASS` |
+| tick-enable assertions | `PASS` |
+| scheduler assertions | `PASS` |
+| request-lane assertions | `PASS` |
+| pending-route assertions | `PASS` |
+| active-neutral transition assertions | `PASS` |
+| transition-capacity assertions | `PASS` |
+| retained-state update assertions | `PASS` |
+| event-counter assertions | `PASS` |
+| invariant-flag assertions | `PASS` |
+| M15 vector replay assertions | `PASS` |
+
+## Required M16 Global Invariants
+
+The M16 RTL core realization is valid only if:
+
+Canonical ternary encoding is preserved.
+
+Reserved state `2'b10` is never emitted as valid state.
+
+Reset initializes retained state to active neutral `0`.
+
+Tick-disabled cycles preserve retained state.
+
+Scheduler profiles match `free`, `7/1`, and `1/7`.
+
+Request lanes are deterministic.
+
+Accepted changes never exceed `REQUEST_LANES`.
 
 Switch load remains bounded by `transition_fraction`.
 
-Queue overflow events remain zero.
+Opposite-polarity transitions pass through `0`.
 
 Direct opposite-polarity execution remains zero.
+
+Pending routes preserve target polarity.
+
+Pending routes complete only from `0`.
+
+Capacity rejection does not clear pending routes.
+
+Queue overflow events remain zero.
+
+Event counters remain internally consistent.
+
+Invariant flags correlate with assertion results.
 
 M15 vector replay remains deterministic.
 
 ## Closure Criteria
 
-This transition-capacity guard module can be considered M16-ready when it supports:
+The M16 invariant assertion set can be considered ready when:
 
-- compile-time request-lane capacity relation;
-- deterministic candidate ordering;
-- accepted-change counting;
-- capacity admission;
-- capacity rejection;
-- capacity exhaustion detection;
-- capacity remaining output;
-- switch-load numerator generation;
-- pending-route capacity protection;
-- active-neutral capacity protection;
-- event-counter source generation;
-- invariant flag generation;
-- assertion correlation;
-- M15 vector replay compatibility.
+- every module-level assertion group is defined;
+- every core-level assertion group is defined;
+- all required M15 invariants are represented;
+- assertion names are stable;
+- invariant flags map to assertion groups;
+- event-counter relations are defined;
+- M15 vector replay assertions are defined;
+- M16 closure assertions are explicit.
 
 ## Next Step
 
-The next M16 file should define the retained-state update layer:
+The next M16 file should define the M15 vector replay compatibility layer:
 
-`docs/m16_retained_state_update_module.md`
+`docs/m16_m15_vector_replay_compatibility_report.md`
