@@ -195,11 +195,13 @@ def test_m16_simulation_transcript_remains_pending_until_external_run() -> None:
         assert term in text
 
 
-def test_m16_closure_report_declares_current_boundary_and_pending_simulation() -> None:
+def test_m16_closure_report_declares_artifact_boundary_pass_and_pending_simulation() -> None:
     text = read_text(RTL_M16 / "CLOSURE.md")
 
     required_terms = [
-        "RTL artifact boundary complete",
+        "ARTIFACT-BOUNDARY PASS",
+        "FRP M16 RTL Artifact Boundary #4",
+        "762e847",
         "pending external simulator execution",
         "actual_direct_events = 0",
         "reserved_state_events = 0",
