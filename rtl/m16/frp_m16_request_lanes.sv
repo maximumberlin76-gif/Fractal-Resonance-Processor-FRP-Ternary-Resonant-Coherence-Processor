@@ -13,14 +13,14 @@
         M16 — RTL Core Realization and Execution Semantics Package
 
     Purpose:
-        Compute the deterministic request-lane boundary for the M16 RTL
-        retained-state execution layer.
+        Compute the deterministic request-lane arbitration boundary for the
+        M16 retained-state RTL execution layer.
 
-        This module preserves the FRP cell-array execution semantics:
+        This module preserves the FRP retained-state array semantics:
 
             - CELLS defines the number of retained-state processing elements.
-            - current_state[element_index] is the retained ternary state.
-            - target_state[element_index] is the requested ternary target.
+            - current_state[element_index] is the current retained ternary state.
+            - target_state[element_index] is the requested target ternary state.
             - request_mask[element_index] marks a requested state change.
             - accepted_mask[element_index] marks an admitted state change.
 
@@ -36,16 +36,13 @@
 
             REQUEST_LANES = max(1, round(CELLS × 0.25))
 
-        The module does not perform active-neutral transition routing.
+        This module does not perform active-neutral transition routing.
         It only determines which requested state changes are admitted into
         the current execution tick.
 
     Verilator portability:
-        The local identifier named "cell" is not used anywhere in this
-        source file because Verilator treats that token as a Verilog
-        configuration reserved word. The FRP cell-array architecture is
-        preserved; only the local iteration identifier is named
-        "element_index".
+        The local identifier "cell" is not used because Verilator treats it
+        as a Verilog configuration reserved word.
 */
 
 `timescale 1ns / 1ps
@@ -94,27 +91,18 @@ module frp_m16_request_lanes #(
         end
     endfunction
 
-    function automatic logic [COUNTER_BITS-1:0] counter_one();
+    function automatic logic admission_capacity_available(
+        input int current_accepted_count
+    );
         begin
-            counter_one = '0;
-            counter_one[0] = 1'b1;
+            admission_capacity_available = (current_accepted_count < REQUEST_LANES_INT);
         end
     endfunction
 
-    function automatic logic [COUNTER_BITS-1:0] request_lane_count();
-        logic [COUNTER_BITS-1:0] value;
-        int bit_index;
-        int lane_value;
+    function automatic logic [COUNTER_BITS-1:0] counter_increment();
         begin
-            value = '0;
-            lane_value = REQUEST_LANES_INT;
-
-            for (bit_index = 0; bit_index < COUNTER_BITS; bit_index = bit_index + 1) begin
-                value[bit_index] = lane_value % 2;
-                lane_value = lane_value / 2;
-            end
-
-            request_lane_count = value;
+            counter_increment = '0;
+            counter_increment[0] = 1'b1;
         end
     endfunction
 
@@ -131,11 +119,11 @@ module frp_m16_request_lanes #(
                 target_state[element_index]
             )) begin
                 next_request_mask[element_index] = 1'b1;
-                next_requested_changes = next_requested_changes + counter_one();
+                next_requested_changes = next_requested_changes + counter_increment();
 
-                if (accepted_count < REQUEST_LANES_INT) begin
+                if (admission_capacity_available(accepted_count)) begin
                     next_accepted_mask[element_index] = 1'b1;
-                    next_accepted_changes = next_accepted_changes + counter_one();
+                    next_accepted_changes = next_accepted_changes + counter_increment();
                     accepted_count = accepted_count + 1;
                 end
             end
@@ -146,13 +134,13 @@ module frp_m16_request_lanes #(
         if (!rst_n) begin
             request_mask      <= '0;
             accepted_mask     <= '0;
-            request_lanes     <= request_lane_count();
+            request_lanes     <= REQUEST_LANES_INT;
             requested_changes <= '0;
             accepted_changes  <= '0;
         end else if (enable) begin
             request_mask      <= next_request_mask;
             accepted_mask     <= next_accepted_mask;
-            request_lanes     <= request_lane_count();
+            request_lanes     <= REQUEST_LANES_INT;
             requested_changes <= next_requested_changes;
             accepted_changes  <= next_accepted_changes;
         end
