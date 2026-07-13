@@ -14,10 +14,6 @@ concurrency:
   group: frp-m16-verilator-execution-smoke-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  M16_BUILD_DIR: ${{ runner.temp }}/frp_m16_obj
-  M16_LOG_DIR: ${{ runner.temp }}/frp_m16_logs
-
 jobs:
   m16-verilator-execution-smoke:
     name: M16 Verilator execution smoke
@@ -33,11 +29,17 @@ jobs:
         run: |
           set -euo pipefail
 
+          M16_BUILD_DIR="${RUNNER_TEMP}/frp_m16_obj"
+          M16_LOG_DIR="${RUNNER_TEMP}/frp_m16_logs"
+
           rm -rf "${M16_BUILD_DIR}"
           rm -rf "${M16_LOG_DIR}"
 
           mkdir -p "${M16_BUILD_DIR}"
           mkdir -p "${M16_LOG_DIR}"
+
+          echo "M16_BUILD_DIR=${M16_BUILD_DIR}" >> "${GITHUB_ENV}"
+          echo "M16_LOG_DIR=${M16_LOG_DIR}" >> "${GITHUB_ENV}"
 
           echo "M16_BUILD_DIR=${M16_BUILD_DIR}"
           echo "M16_LOG_DIR=${M16_LOG_DIR}"
@@ -50,9 +52,7 @@ jobs:
           git diff --exit-code
 
           repository_status="$(
-            git status \
-              --short \
-              --untracked-files=all
+            git status --short --untracked-files=all
           )"
 
           if [ -n "${repository_status}" ]; then
@@ -69,9 +69,7 @@ jobs:
           set -euo pipefail
           set -o pipefail
 
-          python - <<'PY' \
-            2>&1 \
-            | tee "${M16_LOG_DIR}/m16_rtl_graph.log"
+          python - <<'PY' 2>&1 | tee "${M16_LOG_DIR}/m16_rtl_graph.log"
           from pathlib import Path
           import re
           import sys
@@ -159,9 +157,7 @@ jobs:
                       if depth == 0:
                           return index
 
-              raise ValueError(
-                  "unmatched parenthesis"
-              )
+              raise ValueError("unmatched parenthesis")
 
           def module_ports(
               text: str,
@@ -170,8 +166,7 @@ jobs:
               source = strip_comments(text)
 
               module_match = re.search(
-                  rf"\bmodule\s+"
-                  rf"{re.escape(module_name)}\b",
+                  rf"\bmodule\s+{re.escape(module_name)}\b",
                   source,
               )
 
@@ -199,10 +194,7 @@ jobs:
                       + 1
                   )
 
-              port_start = source.find(
-                  "(",
-                  cursor,
-              )
+              port_start = source.find("(", cursor)
 
               if port_start < 0:
                   return set()
@@ -233,9 +225,7 @@ jobs:
                   )
 
                   if port_match is not None:
-                      ports.add(
-                          port_match.group(1)
-                      )
+                      ports.add(port_match.group(1))
 
               return ports
 
@@ -270,8 +260,7 @@ jobs:
               ]
 
               name_match = re.match(
-                  rf"\s*{re.escape(instance_name)}"
-                  r"\s*\(",
+                  rf"\s*{re.escape(instance_name)}\s*\(",
                   remainder,
               )
 
@@ -301,9 +290,7 @@ jobs:
                   )
               )
 
-          def include_list(
-              text: str,
-          ) -> list[str]:
+          def include_list(text: str) -> list[str]:
               return re.findall(
                   r'^\s*`include\s+"([^"]+)"',
                   text,
@@ -329,9 +316,7 @@ jobs:
                   )
 
           if errors:
-              print(
-                  "==== GRAPH INSPECTION FAILED ===="
-              )
+              print("==== GRAPH INSPECTION FAILED ====")
 
               for error in errors:
                   print(f"- {error}")
@@ -341,30 +326,22 @@ jobs:
           texts = {
               filename: (
                   root / filename
-              ).read_text(
-                  encoding="utf-8"
-              )
+              ).read_text(encoding="utf-8")
               for filename in required_files
           }
 
-          package_text = texts[
-              "frp_m16_pkg.sv"
-          ]
+          package_text = texts["frp_m16_pkg.sv"]
 
           if re.search(
-              r"(?m)^\s*package\s+"
-              r"frp_m16_pkg\b",
+              r"(?m)^\s*package\s+frp_m16_pkg\b",
               package_text,
           ) is None:
               errors.append(
                   "frp_m16_pkg.sv: "
-                  "package frp_m16_pkg "
-                  "definition missing"
+                  "package frp_m16_pkg definition missing"
               )
 
-          print(
-              "==== MODULE DEFINITIONS ===="
-          )
+          print("==== MODULE DEFINITIONS ====")
 
           for module_name, filename in definitions.items():
               definition_match = re.search(
@@ -376,8 +353,7 @@ jobs:
               if definition_match is None:
                   errors.append(
                       f"{filename}: "
-                      f"module {module_name} "
-                      "definition missing"
+                      f"module {module_name} definition missing"
                   )
               else:
                   print(
@@ -385,13 +361,8 @@ jobs:
                       f"-> rtl/m16/{filename}"
                   )
 
-          core_text = texts[
-              "frp_m16_core.sv"
-          ]
-
-          tb_text = texts[
-              "frp_m16_tb.sv"
-          ]
+          core_text = texts["frp_m16_core.sv"]
+          tb_text = texts["frp_m16_tb.sv"]
 
           actual_core_includes = include_list(
               core_text
@@ -401,54 +372,38 @@ jobs:
               tb_text
           )
 
-          print(
-              "==== CORE INCLUDE GRAPH ===="
-          )
+          print("==== CORE INCLUDE GRAPH ====")
 
           for filename in actual_core_includes:
               print(
                   f"frp_m16_core.sv -> {filename}"
               )
 
-          print(
-              "==== TESTBENCH INCLUDE GRAPH ===="
-          )
+          print("==== TESTBENCH INCLUDE GRAPH ====")
 
           for filename in actual_tb_includes:
               print(
                   f"frp_m16_tb.sv -> {filename}"
               )
 
-          if (
-              actual_core_includes
-              != expected_core_includes
-          ):
+          if actual_core_includes != expected_core_includes:
               errors.append(
-                  "frp_m16_core.sv include graph "
-                  "mismatch: "
+                  "frp_m16_core.sv include graph mismatch: "
                   f"expected={expected_core_includes}, "
                   f"actual={actual_core_includes}"
               )
 
-          if (
-              actual_tb_includes
-              != expected_tb_includes
-          ):
+          if actual_tb_includes != expected_tb_includes:
               errors.append(
-                  "frp_m16_tb.sv include graph "
-                  "mismatch: "
+                  "frp_m16_tb.sv include graph mismatch: "
                   f"expected={expected_tb_includes}, "
                   f"actual={actual_tb_includes}"
               )
 
-          print(
-              "==== MODULE / INSTANCE / PORT MAP ===="
-          )
+          print("==== MODULE / INSTANCE / PORT MAP ====")
 
           for module_name, instance_name in instances.items():
-              filename = definitions[
-                  module_name
-              ]
+              filename = definitions[module_name]
 
               defined_ports = module_ports(
                   texts[filename],
@@ -463,22 +418,18 @@ jobs:
 
               if not connected_ports:
                   errors.append(
-                      "frp_m16_core.sv: "
-                      "missing instance "
-                      f"{module_name} "
-                      f"{instance_name}"
+                      "frp_m16_core.sv: missing instance "
+                      f"{module_name} {instance_name}"
                   )
 
                   continue
 
               missing_connections = sorted(
-                  defined_ports
-                  - connected_ports
+                  defined_ports - connected_ports
               )
 
               unknown_connections = sorted(
-                  connected_ports
-                  - defined_ports
+                  connected_ports - defined_ports
               )
 
               if (
@@ -486,8 +437,7 @@ jobs:
                   or unknown_connections
               ):
                   errors.append(
-                      f"{instance_name}: "
-                      "port mismatch; "
+                      f"{instance_name}: port mismatch; "
                       f"missing={missing_connections}; "
                       f"unknown={unknown_connections}"
                   )
@@ -496,25 +446,18 @@ jobs:
                   f"{module_name} "
                   f"-> {instance_name} "
                   f"-> {filename} "
-                  f"-> defined_ports="
-                  f"{len(defined_ports)} "
-                  f"-> connected_ports="
-                  f"{len(connected_ports)}"
+                  f"-> defined_ports={len(defined_ports)} "
+                  f"-> connected_ports={len(connected_ports)}"
               )
 
-          print(
-              "==== VERILATOR COMPATIBILITY GUARDS ===="
-          )
+          print("==== VERILATOR COMPATIBILITY GUARDS ====")
 
           for filename, text in texts.items():
               for line_number, line in enumerate(
                   text.splitlines(),
                   start=1,
               ):
-                  if re.search(
-                      r"\bcell\b",
-                      line,
-                  ):
+                  if re.search(r"\bcell\b", line):
                       errors.append(
                           f"rtl/m16/{filename}:"
                           f"{line_number}: "
@@ -529,8 +472,7 @@ jobs:
                       errors.append(
                           f"rtl/m16/{filename}:"
                           f"{line_number}: "
-                          "unsupported "
-                          "default disable iff"
+                          "unsupported default disable iff"
                       )
 
                   if re.search(
@@ -540,14 +482,11 @@ jobs:
                       errors.append(
                           f"rtl/m16/{filename}:"
                           f"{line_number}: "
-                          "legacy frp_tern_t "
-                          "interface usage"
+                          "legacy frp_tern_t interface usage"
                       )
 
           if errors:
-              print(
-                  "==== GRAPH INSPECTION FAILED ===="
-              )
+              print("==== GRAPH INSPECTION FAILED ====")
 
               for error in errors:
                   print(f"- {error}")
@@ -555,8 +494,7 @@ jobs:
               sys.exit(1)
 
           print(
-              "PASS: M16 module definitions "
-              "are present."
+              "PASS: M16 module definitions are present."
           )
 
           print(
@@ -585,9 +523,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          git diff \
-            --exit-code \
-            -- rtl/m16
+          git diff --exit-code -- rtl/m16
 
           rtl_status="$(
             git status \
@@ -613,8 +549,7 @@ jobs:
           sudo apt-get install -y verilator
 
           verilator --version \
-            | tee \
-              "${M16_LOG_DIR}/m16_verilator_version.log"
+            | tee "${M16_LOG_DIR}/m16_verilator_version.log"
 
       - name: Build M16 deterministic RTL testbench
         shell: bash
@@ -633,8 +568,7 @@ jobs:
             -Irtl/m16 \
             rtl/m16/frp_m16_tb.sv \
             2>&1 \
-            | tee \
-              "${M16_LOG_DIR}/m16_verilator_build.log"
+            | tee "${M16_LOG_DIR}/m16_verilator_build.log"
 
       - name: Show first Verilator blocker
         if: failure()
@@ -642,9 +576,7 @@ jobs:
         run: |
           set -u
 
-          build_log="${
-            M16_LOG_DIR
-          }/m16_verilator_build.log"
+          build_log="${M16_LOG_DIR}/m16_verilator_build.log"
 
           if [ ! -f "${build_log}" ]; then
             echo "No Verilator build log was produced."
@@ -660,10 +592,7 @@ jobs:
 
           echo "==== FIRST 220 BUILD LOG LINES ===="
 
-          sed -n \
-            '1,220p' \
-            "${build_log}" \
-            || true
+          sed -n '1,220p' "${build_log}" || true
 
       - name: Run M16 deterministic RTL testbench
         shell: bash
@@ -671,9 +600,7 @@ jobs:
           set -euo pipefail
           set -o pipefail
 
-          testbench_binary="${
-            M16_BUILD_DIR
-          }/Vfrp_m16_tb"
+          testbench_binary="${M16_BUILD_DIR}/Vfrp_m16_tb"
 
           if [ ! -x "${testbench_binary}" ]; then
             echo "ERROR: testbench binary is missing:"
@@ -683,8 +610,7 @@ jobs:
 
           "${testbench_binary}" \
             2>&1 \
-            | tee \
-              "${M16_LOG_DIR}/m16_verilator_smoke.log"
+            | tee "${M16_LOG_DIR}/m16_verilator_smoke.log"
 
       - name: Show first M16 execution blocker
         if: failure()
@@ -692,9 +618,7 @@ jobs:
         run: |
           set -u
 
-          smoke_log="${
-            M16_LOG_DIR
-          }/m16_verilator_smoke.log"
+          smoke_log="${M16_LOG_DIR}/m16_verilator_smoke.log"
 
           if [ ! -f "${smoke_log}" ]; then
             echo "No M16 execution log was produced."
@@ -710,19 +634,14 @@ jobs:
 
           echo "==== FIRST 220 EXECUTION LOG LINES ===="
 
-          sed -n \
-            '1,220p' \
-            "${smoke_log}" \
-            || true
+          sed -n '1,220p' "${smoke_log}" || true
 
       - name: Validate M16 execution markers
         shell: bash
         run: |
           set -euo pipefail
 
-          smoke_log="${
-            M16_LOG_DIR
-          }/m16_verilator_smoke.log"
+          smoke_log="${M16_LOG_DIR}/m16_verilator_smoke.log"
 
           test -f "${smoke_log}"
 
@@ -751,9 +670,7 @@ jobs:
           git diff --exit-code
 
           repository_status="$(
-            git status \
-              --short \
-              --untracked-files=all
+            git status --short --untracked-files=all
           )"
 
           if [ -n "${repository_status}" ]; then
