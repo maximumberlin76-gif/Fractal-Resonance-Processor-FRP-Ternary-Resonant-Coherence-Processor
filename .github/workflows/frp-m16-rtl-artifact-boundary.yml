@@ -24,6 +24,8 @@ on:
       - "docs/m16_rtl_artifact_boundary_qualification.md"
       - "docs/m16_qualification_index.md"
       - "docs/m16_external_simulator_execution_plan.md"
+      - "docs/m16_artifact_boundary_test_stability_policy.md"
+      - "docs/m16_public_status_snapshot.md"
       - ".github/workflows/frp-m16-rtl-artifact-boundary.yml"
   pull_request:
     paths:
@@ -48,6 +50,8 @@ on:
       - "docs/m16_rtl_artifact_boundary_qualification.md"
       - "docs/m16_qualification_index.md"
       - "docs/m16_external_simulator_execution_plan.md"
+      - "docs/m16_artifact_boundary_test_stability_policy.md"
+      - "docs/m16_public_status_snapshot.md"
       - ".github/workflows/frp-m16-rtl-artifact-boundary.yml"
   workflow_dispatch:
 
