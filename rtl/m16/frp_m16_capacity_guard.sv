@@ -169,147 +169,148 @@ module frp_m16_capacity_guard #(
     no_actual_direct_events     = 1'b1;
 
     // ----------------------------------------------------------------------
-    // Disabled tick consumes no capacity.
+    // Pending-route completion candidates are capacity-bounded.
+    //
+    // Pending completion has deterministic priority because it represents
+    // retained continuation of an already neutralized opposite-polarity route.
+    // Disabled ticks leave all capacity outputs at their initialized values.
     // ----------------------------------------------------------------------
 
-    if (!tick_enable) begin
-      accepted_changes = '0;
-      capacity_remaining = REQUEST_LANES[COUNTER_BITS-1:0];
-      capacity_exhausted = 1'b0;
-      switch_load_numerator = '0;
-    end else begin
+    for (int element_index = 0; element_index < CELLS; element_index++) begin
+      logic state_changes;
+      logic capacity_available;
 
-      // --------------------------------------------------------------------
-      // Pending-route completion candidates are capacity-bounded.
-      //
-      // Pending completion has deterministic priority because it represents
-      // retained continuation of an already neutralized opposite-polarity route.
-      // --------------------------------------------------------------------
+      state_changes =
+        cell_state_changes(element_index);
 
-      for (int element_index = 0; element_index < CELLS; element_index++) begin
-        logic state_changes;
-        logic capacity_available;
+      capacity_available =
+        (accepted_changes < REQUEST_LANES[COUNTER_BITS-1:0]);
 
+      if (
+        tick_enable
+        && pending_completion_candidate[element_index]
+      ) begin
+        capacity_candidate_events =
+          capacity_candidate_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+
+        if (!state_changes) begin
+          capacity_accept_mask[element_index] = 1'b1;
+
+          capacity_accept_events =
+            capacity_accept_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+        end else if (capacity_available) begin
+          capacity_accept_mask[element_index] = 1'b1;
+          accepted_change_mask[element_index] = 1'b1;
+
+          accepted_changes =
+            accepted_changes + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+
+          capacity_accept_events =
+            capacity_accept_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+
+          accepted_change_events =
+            accepted_change_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+        end else begin
+          capacity_reject_mask[element_index] = 1'b1;
+
+          capacity_reject_events =
+            capacity_reject_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+
+          pending_capacity_valid = 1'b0;
+        end
+      end
+    end
+
+    // ----------------------------------------------------------------------
+    // Request-lane candidates are evaluated in deterministic ascending lane
+    // order. The guard does not reorder requests.
+    // ----------------------------------------------------------------------
+
+    for (int lane = 0; lane < REQUEST_LANES; lane++) begin
+      logic [CELL_INDEX_BITS-1:0] cell_index_value;
+      int                         cell_index_int;
+      logic                       valid_cell;
+      logic                       state_changes;
+      logic                       capacity_available;
+      frp_m16_transition_class_e  class_value;
+
+      cell_index_value = lane_cell_index(lane);
+      cell_index_int   = int'(cell_index_value);
+      valid_cell       = (cell_index_int < CELLS);
+      class_value      = lane_transition_class(lane);
+      state_changes    = 1'b0;
+
+      capacity_available =
+        (accepted_changes < REQUEST_LANES[COUNTER_BITS-1:0]);
+
+      if (valid_cell) begin
         state_changes =
-          cell_state_changes(element_index);
+          cell_state_changes(cell_index_int);
+      end
 
-        capacity_available =
-          (accepted_changes < REQUEST_LANES[COUNTER_BITS-1:0]);
+      if (
+        tick_enable
+        && request_accept_candidate[lane]
+        && valid_cell
+      ) begin
+        capacity_candidate_events =
+          capacity_candidate_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-        if (pending_completion_candidate[element_index]) begin
-          capacity_candidate_events =
-            capacity_candidate_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+        if (capacity_accept_mask[cell_index_int]) begin
+          // A pending completion or earlier deterministic candidate already
+          // consumed or accepted this element_index. Same-element_index
+          // writeback is not accepted again through the lane path.
+          request_reject_capacity[lane] = 1'b1;
+          capacity_reject_mask[cell_index_int] = 1'b1;
 
-          if (!state_changes) begin
-            capacity_accept_mask[element_index] = 1'b1;
+          capacity_reject_events =
+            capacity_reject_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+        end else if (!state_changes) begin
+          request_accept_capacity[lane] = 1'b1;
+          capacity_accept_mask[cell_index_int] = 1'b1;
 
-            capacity_accept_events =
-              capacity_accept_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
-          end else if (capacity_available) begin
-            capacity_accept_mask[element_index] = 1'b1;
-            accepted_change_mask[element_index] = 1'b1;
+          capacity_accept_events =
+            capacity_accept_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-            accepted_changes =
-              accepted_changes + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+          if (class_value != FRP_TRANS_SAME_STATE) begin
+            same_state_capacity_valid = same_state_capacity_valid;
+          end
+        end else if (capacity_available) begin
+          request_accept_capacity[lane] = 1'b1;
+          capacity_accept_mask[cell_index_int] = 1'b1;
+          accepted_change_mask[cell_index_int] = 1'b1;
 
-            capacity_accept_events =
-              capacity_accept_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+          accepted_changes =
+            accepted_changes + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-            accepted_change_events =
-              accepted_change_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
-          end else begin
-            capacity_reject_mask[element_index] = 1'b1;
+          capacity_accept_events =
+            capacity_accept_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-            capacity_reject_events =
-              capacity_reject_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+          accepted_change_events =
+            accepted_change_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-            pending_capacity_valid = 1'b0;
+          if (neutral_routed_candidate[cell_index_int]) begin
+            active_neutral_capacity_valid = 1'b1;
+          end
+        end else begin
+          request_reject_capacity[lane] = 1'b1;
+          capacity_reject_mask[cell_index_int] = 1'b1;
+
+          capacity_reject_events =
+            capacity_reject_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+
+          if (neutral_routed_candidate[cell_index_int]) begin
+            active_neutral_capacity_valid = 1'b0;
           end
         end
       end
+    end
 
-      // --------------------------------------------------------------------
-      // Request-lane candidates are evaluated in deterministic ascending lane
-      // order. The guard does not reorder requests.
-      // --------------------------------------------------------------------
+    // ----------------------------------------------------------------------
+    // Final capacity arithmetic.
+    // ----------------------------------------------------------------------
 
-      for (int lane = 0; lane < REQUEST_LANES; lane++) begin
-        logic [CELL_INDEX_BITS-1:0] cell_index_value;
-        int                         cell_index_int;
-        logic                       valid_cell;
-        logic                       state_changes;
-        logic                       capacity_available;
-        frp_m16_transition_class_e  class_value;
-
-        cell_index_value = lane_cell_index(lane);
-        cell_index_int   = int'(cell_index_value);
-        valid_cell       = (cell_index_int < CELLS);
-        class_value      = lane_transition_class(lane);
-
-        if (request_accept_candidate[lane] && valid_cell) begin
-          state_changes =
-            cell_state_changes(cell_index_int);
-
-          capacity_available =
-            (accepted_changes < REQUEST_LANES[COUNTER_BITS-1:0]);
-
-          capacity_candidate_events =
-            capacity_candidate_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
-
-          if (capacity_accept_mask[cell_index_int]) begin
-            // A pending completion or earlier deterministic candidate already
-            // consumed or accepted this element_index. Same-element_index writeback is not
-            // accepted again through the lane path.
-            request_reject_capacity[lane] = 1'b1;
-            capacity_reject_mask[cell_index_int] = 1'b1;
-
-            capacity_reject_events =
-              capacity_reject_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
-          end else if (!state_changes) begin
-            request_accept_capacity[lane] = 1'b1;
-            capacity_accept_mask[cell_index_int] = 1'b1;
-
-            capacity_accept_events =
-              capacity_accept_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
-
-            if (class_value != FRP_TRANS_SAME_STATE) begin
-              same_state_capacity_valid = same_state_capacity_valid;
-            end
-          end else if (capacity_available) begin
-            request_accept_capacity[lane] = 1'b1;
-            capacity_accept_mask[cell_index_int] = 1'b1;
-            accepted_change_mask[cell_index_int] = 1'b1;
-
-            accepted_changes =
-              accepted_changes + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
-
-            capacity_accept_events =
-              capacity_accept_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
-
-            accepted_change_events =
-              accepted_change_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
-
-            if (neutral_routed_candidate[cell_index_int]) begin
-              active_neutral_capacity_valid = 1'b1;
-            end
-          end else begin
-            request_reject_capacity[lane] = 1'b1;
-            capacity_reject_mask[cell_index_int] = 1'b1;
-
-            capacity_reject_events =
-              capacity_reject_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
-
-            if (neutral_routed_candidate[cell_index_int]) begin
-              active_neutral_capacity_valid = 1'b0;
-            end
-          end
-        end
-      end
-
-      // --------------------------------------------------------------------
-      // Final capacity arithmetic.
-      // --------------------------------------------------------------------
-
+    if (tick_enable) begin
       if (accepted_changes <= REQUEST_LANES[COUNTER_BITS-1:0]) begin
         capacity_remaining =
           REQUEST_LANES[COUNTER_BITS-1:0] - accepted_changes;
@@ -340,16 +341,22 @@ module frp_m16_capacity_guard #(
       (capacity_remaining <= REQUEST_LANES[COUNTER_BITS-1:0]);
 
     capacity_exhaustion_valid =
-      (capacity_exhausted == (accepted_changes == REQUEST_LANES[COUNTER_BITS-1:0]));
+      (
+        capacity_exhausted
+        == (
+          accepted_changes
+          == REQUEST_LANES[COUNTER_BITS-1:0]
+        )
+      );
 
     switch_load_bound_valid =
       (accepted_changes <= REQUEST_LANES[COUNTER_BITS-1:0]);
 
     transition_capacity_valid =
-      accepted_changes_within_limit &&
-      capacity_remaining_valid &&
-      capacity_exhaustion_valid &&
-      switch_load_bound_valid;
+      accepted_changes_within_limit
+      && capacity_remaining_valid
+      && capacity_exhaustion_valid
+      && switch_load_bound_valid;
 
     no_queue_overflow = 1'b1;
 
