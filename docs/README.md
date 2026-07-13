@@ -99,7 +99,7 @@ Final simulator qualification status:
 
 ## M16 Public Status Snapshot
 
-The current public-facing M16 status is recorded in:
+Current public-facing M16 status is recorded in:
 
 `docs/m16_public_status_snapshot.md`
 
@@ -122,9 +122,13 @@ Current release layer:
 
 `FRP v1.8.0 — M16 RTL`
 
+Current M16 qualification status:
+
+`M16 RTL artifact-boundary PASS`
+
 Current next boundary:
 
-`external simulator execution`
+`pending external simulator execution`
 
 ## 1. Purpose
 
