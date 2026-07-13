@@ -168,6 +168,7 @@ module frp_m16_tb;
     .clk(clk),
     .rst_n(rst_n),
     .tick_enable(tick_enable),
+    .clear_counters(clear_counters),
     .scheduler_mode_q(scheduler_mode_q),
     .scheduler_state_q(scheduler_state_q),
     .ticks_recorded_q(ticks_recorded_q),
