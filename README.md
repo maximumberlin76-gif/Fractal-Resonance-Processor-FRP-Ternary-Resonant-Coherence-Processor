@@ -1,42 +1,35 @@
 # Fractal Resonance Processor (FRP)
 
-[![FRP M15 Implementation Mapping and Qualification Closure](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m15-implementation-mapping-qualification.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m15-implementation-mapping-qualification.yml)
+<p align="center">
+  <a href="https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m16-rtl-artifact-boundary.yml">
+    <img src="https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m16-rtl-artifact-boundary.yml/badge.svg" alt="FRP M16 RTL Artifact Boundary">
+  </a>
+</p>
 
-[![FRP Hardware Sensitivity Profile Qualification](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-hardware-sensitivity-profile.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-hardware-sensitivity-profile.yml)
+<p align="center">
+  <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0">
+  <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+">
+  <img src="https://img.shields.io/badge/version-v1.8.0-purple" alt="FRP v1.8.0">
+  <img src="https://img.shields.io/badge/milestone-M16%20RTL%20Core-brightgreen" alt="M16 RTL Core">
+</p>
 
-[![FRP Hardware Sensitivity Comparison](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-hardware-sensitivity-comparison.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-hardware-sensitivity-comparison.yml)
+<p align="center">
+  <img src="https://img.shields.io/badge/processor-ternary%20fractal%20resonant%20coherence-brightgreen" alt="Ternary Fractal Resonant Coherence Processor">
+  <img src="https://img.shields.io/badge/state-balanced%20ternary%20retention-brightgreen" alt="Balanced ternary state retention">
+  <img src="https://img.shields.io/badge/routing-active--neutral%20through%200-brightgreen" alt="Active-neutral routing through zero">
+</p>
 
-[![FRP Comparative Architecture Benchmark](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-architecture-comparison.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-architecture-comparison.yml)
+<p align="center">
+  <img src="https://img.shields.io/badge/M15-41%2F41%20PASS-brightgreen" alt="M15 41/41 PASS">
+  <img src="https://img.shields.io/badge/M16-artifact--boundary%20PASS-brightgreen" alt="M16 artifact-boundary PASS">
+  <img src="https://img.shields.io/badge/simulator-pending%20external%20execution-yellow" alt="External simulator execution pending">
+</p>
 
-[![FRP M14 Physical Implementation Correlation and Production Qualification](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m14-physical-implementation-qualification.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m14-physical-implementation-qualification.yml)
-
-[![FRP M13 Production Scaling and Implementation Stabilization](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m13-production-scaling-stabilization.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m13-production-scaling-stabilization.yml)
-
-[![FRP M12 External Implementation Feedback and Production Iteration](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m12-feedback-iteration.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m12-feedback-iteration.yml)
-
-[![FRP M11 Production Integration and External Handoff](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m11-production-integration-handoff.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m11-production-integration-handoff.yml)
-
-[![FRP M10 Silicon Production and Tapeout Readiness](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m10-silicon-production-tapeout.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m10-silicon-production-tapeout.yml)
-
-[![FRP M9 Silicon and Heterogeneous Architecture](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m9-silicon-architecture.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m9-silicon-architecture.yml)
-
-[![FRP M8 Production Release Package](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m8-production-release.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m8-production-release.yml)
-
-[![FRP M7 FPGA Synthesis and Timing Scaffold](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m7-fpga-synthesis.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m7-fpga-synthesis.yml)
-
-[![FRP M6 Formal Verification and Equivalence Scaffold](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m6-formal-verification.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m6-formal-verification.yml)
-
-[![FRP M5 RTL Interface and Assertion Harness](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m5-rtl-assertion-harness.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m5-rtl-assertion-harness.yml)
-
-[![FRP M4 HDL Trace and Testbench](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m4-hdl-trace.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m4-hdl-trace.yml)
-
-[![FRP M3 Benchmark and Signal Map](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m3-benchmark-signal-map.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m3-benchmark-signal-map.yml)
-
-[![FRP Self Test](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml)
-
-[![FRP Benchmark Smoke Test](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-benchmark-smoke.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-benchmark-smoke.yml)
-
-[![FRP Structured Output](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-structured-output.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-structured-output.yml)
+<p align="center">
+  <a href="https://doi.org/10.5281/zenodo.21183966">
+    <img src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21183966-blue" alt="DOI">
+  </a>
+</p>
 
 **Ternary Resonant Coherence Processor — Structured Output Prototype**
 
