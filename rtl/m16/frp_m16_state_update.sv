@@ -12,7 +12,7 @@
 // Milestone:
 //   M16 — RTL Core Realization and Execution Semantics Package
 //
-// Preserved writeback contract:
+// Writeback contract:
 //   - reset initializes retained state to active neutral 0;
 //   - disabled ticks retain the complete state bank;
 //   - state-changing writeback requires a qualified candidate and capacity;
@@ -85,32 +85,23 @@ module frp_m16_state_update #(
   logic [(CELLS*STATE_BITS)-1:0] state_next;
   logic writeback_contract_valid;
 
+  logic [CELLS-1:0] current_valid_w;
+  logic [CELLS-1:0] candidate_valid_w;
+  logic [CELLS-1:0] state_changes_w;
+  logic [CELLS-1:0] direct_candidate_w;
+  logic [CELLS-1:0] scheduler_legal_w;
+  logic [CELLS-1:0] metadata_legal_w;
+  logic [CELLS-1:0] commit_allowed_w;
+  logic [CELLS-1:0] final_state_valid_w;
+  logic [CELLS-1:0] final_state_changed_w;
+  logic [CELLS-1:0] final_direct_w;
+
   function automatic logic [STATE_BITS-1:0] packed_state_value(
     input logic [(CELLS*STATE_BITS)-1:0] packed_state,
     input int element_index
   );
-    begin
-      packed_state_value =
-        packed_state[(element_index*STATE_BITS) +: STATE_BITS];
-    end
-  endfunction
-
-  function automatic logic [(CELLS*STATE_BITS)-1:0] set_packed_state_value(
-    input logic [(CELLS*STATE_BITS)-1:0] packed_state,
-    input int element_index,
-    input logic [STATE_BITS-1:0] value
-  );
-    logic [(CELLS*STATE_BITS)-1:0] updated_state;
-
-    begin
-      updated_state = packed_state;
-
-      updated_state[
-        (element_index*STATE_BITS) +: STATE_BITS
-      ] = value;
-
-      set_packed_state_value = updated_state;
-    end
+    packed_state_value =
+      packed_state[(element_index*STATE_BITS) +: STATE_BITS];
   endfunction
 
   always_comb begin
@@ -123,7 +114,6 @@ module frp_m16_state_update #(
 
     accepted_changes = '0;
     switch_load_numerator = '0;
-
     state_write_events = '0;
     state_hold_events = '0;
     state_reset_events = '0;
@@ -144,6 +134,67 @@ module frp_m16_state_update #(
     no_actual_direct_events = 1'b1;
     writeback_contract_valid = 1'b1;
 
+    current_valid_w = '0;
+    candidate_valid_w = '0;
+    state_changes_w = '0;
+    direct_candidate_w = '0;
+    scheduler_legal_w = '1;
+    metadata_legal_w = '1;
+    commit_allowed_w = '0;
+    final_state_valid_w = '0;
+    final_state_changed_w = '0;
+    final_direct_w = '0;
+
+    for (
+      int element_index = 0;
+      element_index < CELLS;
+      element_index++
+    ) begin
+      current_valid_w[element_index] =
+        frp_is_valid_ternary(
+          packed_state_value(
+            state_q,
+            element_index
+          )
+        );
+
+      candidate_valid_w[element_index] =
+        frp_is_valid_ternary(
+          packed_state_value(
+            state_candidate_d,
+            element_index
+          )
+        );
+
+      state_changes_w[element_index] =
+        packed_state_value(
+          state_q,
+          element_index
+        )
+        !=
+        packed_state_value(
+          state_candidate_d,
+          element_index
+        );
+
+      direct_candidate_w[element_index] =
+        actual_direct_mask[element_index]
+        || (
+          current_valid_w[element_index]
+          && candidate_valid_w[element_index]
+          && frp_is_opposite_polarity(
+            packed_state_value(
+              state_q,
+              element_index
+            ),
+            packed_state_value(
+              state_candidate_d,
+              element_index
+            )
+          )
+        );
+    end
+
     if (!rst_n) begin
       state_next = '0;
       state_reset_mask = '1;
@@ -157,105 +208,15 @@ module frp_m16_state_update #(
           state_reset_events + COUNTER_ONE;
       end
     end else begin
-
-      // First pass:
-      // preserve retained state by default and admit only a complete,
-      // scheduler-legal and capacity-approved transition contract.
-
       for (
         int element_index = 0;
         element_index < CELLS;
         element_index++
       ) begin
-        logic [STATE_BITS-1:0] current_state;
-        logic [STATE_BITS-1:0] candidate_state;
-
-        logic current_valid;
-        logic candidate_valid;
-        logic state_changes;
-        logic capacity_approved;
-        logic candidate_qualified;
-        logic neutral_routed;
-        logic pending_completion;
-        logic reserved_transition;
-        logic direct_candidate;
-        logic scheduler_valid;
-        logic scheduler_commit_capable;
-        logic scheduler_neutralize_capable;
-        logic transition_scheduler_legal;
-        logic transition_metadata_legal;
-        logic commit_allowed;
-
-        current_state =
-          packed_state_value(
-            state_q,
-            element_index
-          );
-
-        candidate_state =
-          packed_state_value(
-            state_candidate_d,
-            element_index
-          );
-
-        current_valid =
-          frp_is_valid_ternary(current_state);
-
-        candidate_valid =
-          frp_is_valid_ternary(candidate_state);
-
-        state_changes =
-          (current_state != candidate_state);
-
-        capacity_approved =
-          capacity_accept_mask[element_index];
-
-        candidate_qualified =
-          accepted_change_candidate_mask[element_index];
-
-        neutral_routed =
-          neutral_routed_mask[element_index];
-
-        pending_completion =
-          pending_completion_mask[element_index];
-
-        reserved_transition =
-          reserved_transition_mask[element_index];
-
-        direct_candidate =
-          actual_direct_mask[element_index]
-          || (
-            current_valid
-            && candidate_valid
-            && frp_is_opposite_polarity(
-              current_state,
-              candidate_state
-            )
-          );
-
-        scheduler_valid =
-          frp_scheduler_state_is_valid(
-            scheduler_state
-          );
-
-        scheduler_commit_capable =
-          frp_scheduler_is_commit_capable(
-            scheduler_state
-          );
-
-        scheduler_neutralize_capable =
-          frp_scheduler_is_neutralize_capable(
-            scheduler_state
-          );
-
-        transition_scheduler_legal = 1'b1;
-        transition_metadata_legal = 1'b1;
-        commit_allowed = 1'b0;
-
         if (
-          !current_valid
-          || !candidate_valid
-          || reserved_transition
+          !current_valid_w[element_index]
+          || !candidate_valid_w[element_index]
+          || reserved_transition_mask[element_index]
         ) begin
           state_reserved_mask[element_index] = 1'b1;
 
@@ -266,165 +227,253 @@ module frp_m16_state_update #(
           writeback_contract_valid = 1'b0;
         end
 
-        // A direct candidate is blocked at the writeback boundary.
-        // It is not counted as an actual direct event unless it reaches
-        // the final retained state.
-
-        if (direct_candidate) begin
-          transition_metadata_legal = 1'b0;
+        if (direct_candidate_w[element_index]) begin
+          metadata_legal_w[element_index] = 1'b0;
           writeback_contract_valid = 1'b0;
         end
 
         if (
-          neutral_routed
-          && pending_completion
+          neutral_routed_mask[element_index]
+          && pending_completion_mask[element_index]
         ) begin
           active_neutral_writeback_valid = 1'b0;
           pending_completion_writeback_valid = 1'b0;
-          transition_metadata_legal = 1'b0;
+          metadata_legal_w[element_index] = 1'b0;
           writeback_contract_valid = 1'b0;
         end
 
         if (
-          candidate_qualified
-          && !state_changes
+          accepted_change_candidate_mask[element_index]
+          && !state_changes_w[element_index]
         ) begin
           same_state_hold_valid = 1'b0;
-          transition_metadata_legal = 1'b0;
+          metadata_legal_w[element_index] = 1'b0;
           writeback_contract_valid = 1'b0;
         end
 
-        if (state_changes) begin
-          if (!candidate_qualified) begin
+        if (state_changes_w[element_index]) begin
+          if (
+            !accepted_change_candidate_mask[
+              element_index
+            ]
+          ) begin
             state_write_capacity_valid = 1'b0;
-            transition_metadata_legal = 1'b0;
+            metadata_legal_w[element_index] = 1'b0;
             writeback_contract_valid = 1'b0;
           end
 
-          if (neutral_routed) begin
-            transition_scheduler_legal =
-              scheduler_valid
-              && scheduler_neutralize_capable;
+          if (neutral_routed_mask[element_index]) begin
+            scheduler_legal_w[element_index] =
+              frp_scheduler_state_is_valid(
+                scheduler_state
+              )
+              &&
+              frp_scheduler_is_neutralize_capable(
+                scheduler_state
+              );
 
             if (
-              !frp_is_nonzero(current_state)
-              || !frp_is_zero(candidate_state)
+              !frp_is_nonzero(
+                packed_state_value(
+                  state_q,
+                  element_index
+                )
+              )
+              ||
+              !frp_is_zero(
+                packed_state_value(
+                  state_candidate_d,
+                  element_index
+                )
+              )
             ) begin
               active_neutral_writeback_valid = 1'b0;
-              transition_metadata_legal = 1'b0;
+              metadata_legal_w[element_index] = 1'b0;
               writeback_contract_valid = 1'b0;
             end
-          end else if (pending_completion) begin
-            transition_scheduler_legal =
-              scheduler_valid
-              && scheduler_commit_capable;
+          end else if (
+            pending_completion_mask[
+              element_index
+            ]
+          ) begin
+            scheduler_legal_w[element_index] =
+              frp_scheduler_state_is_valid(
+                scheduler_state
+              )
+              &&
+              frp_scheduler_is_commit_capable(
+                scheduler_state
+              );
 
             if (
-              !frp_is_zero(current_state)
-              || !frp_is_nonzero(candidate_state)
+              !frp_is_zero(
+                packed_state_value(
+                  state_q,
+                  element_index
+                )
+              )
+              ||
+              !frp_is_nonzero(
+                packed_state_value(
+                  state_candidate_d,
+                  element_index
+                )
+              )
             ) begin
-              pending_completion_writeback_valid = 1'b0;
-              transition_metadata_legal = 1'b0;
+              pending_completion_writeback_valid =
+                1'b0;
+
+              metadata_legal_w[element_index] =
+                1'b0;
+
               writeback_contract_valid = 1'b0;
             end
           end else if (
-            frp_is_zero(current_state)
-            && frp_is_nonzero(candidate_state)
+            frp_is_zero(
+              packed_state_value(
+                state_q,
+                element_index
+              )
+            )
+            &&
+            frp_is_nonzero(
+              packed_state_value(
+                state_candidate_d,
+                element_index
+              )
+            )
           ) begin
-            transition_scheduler_legal =
-              scheduler_valid
-              && scheduler_commit_capable;
+            scheduler_legal_w[element_index] =
+              frp_scheduler_state_is_valid(
+                scheduler_state
+              )
+              &&
+              frp_scheduler_is_commit_capable(
+                scheduler_state
+              );
           end else if (
-            frp_is_nonzero(current_state)
-            && frp_is_zero(candidate_state)
+            frp_is_nonzero(
+              packed_state_value(
+                state_q,
+                element_index
+              )
+            )
+            &&
+            frp_is_zero(
+              packed_state_value(
+                state_candidate_d,
+                element_index
+              )
+            )
           ) begin
-            transition_scheduler_legal =
-              scheduler_valid
-              && scheduler_neutralize_capable;
+            scheduler_legal_w[element_index] =
+              frp_scheduler_state_is_valid(
+                scheduler_state
+              )
+              &&
+              frp_scheduler_is_neutralize_capable(
+                scheduler_state
+              );
           end else begin
-            transition_scheduler_legal = 1'b0;
+            scheduler_legal_w[element_index] =
+              1'b0;
           end
         end
 
-        if (!transition_scheduler_legal) begin
-          if (neutral_routed) begin
-            active_neutral_writeback_valid = 1'b0;
+        if (!scheduler_legal_w[element_index]) begin
+          if (neutral_routed_mask[element_index]) begin
+            active_neutral_writeback_valid =
+              1'b0;
           end
 
-          if (pending_completion) begin
-            pending_completion_writeback_valid = 1'b0;
+          if (
+            pending_completion_mask[
+              element_index
+            ]
+          ) begin
+            pending_completion_writeback_valid =
+              1'b0;
           end
 
-          transition_metadata_legal = 1'b0;
+          metadata_legal_w[element_index] = 1'b0;
           writeback_contract_valid = 1'b0;
         end
 
-        commit_allowed =
+        commit_allowed_w[element_index] =
           tick_enable
-          && current_valid
-          && candidate_valid
-          && state_changes
-          && capacity_approved
-          && candidate_qualified
-          && !reserved_transition
-          && !direct_candidate
-          && transition_scheduler_legal
-          && transition_metadata_legal;
+          && current_valid_w[element_index]
+          && candidate_valid_w[element_index]
+          && state_changes_w[element_index]
+          && capacity_accept_mask[element_index]
+          && accepted_change_candidate_mask[
+            element_index
+          ]
+          && !reserved_transition_mask[
+            element_index
+          ]
+          && !direct_candidate_w[element_index]
+          && scheduler_legal_w[element_index]
+          && metadata_legal_w[element_index];
 
-        if (commit_allowed) begin
-          state_next =
-            set_packed_state_value(
-              state_next,
-              element_index,
-              candidate_state
+        if (commit_allowed_w[element_index]) begin
+          state_next[
+            (element_index*STATE_BITS)
+            +: STATE_BITS
+          ] =
+            packed_state_value(
+              state_candidate_d,
+              element_index
             );
         end
       end
-
-      // Second pass:
-      // derive write/hold masks and event sources from the actual
-      // retained-state edge state_q -> state_d.
 
       for (
         int element_index = 0;
         element_index < CELLS;
         element_index++
       ) begin
-        logic [STATE_BITS-1:0] current_state;
-        logic [STATE_BITS-1:0] next_state;
-        logic state_changed;
-        logic final_direct_transition;
+        final_state_valid_w[element_index] =
+          frp_is_valid_ternary(
+            packed_state_value(
+              state_next,
+              element_index
+            )
+          );
 
-        current_state =
+        final_state_changed_w[element_index] =
           packed_state_value(
             state_q,
             element_index
-          );
-
-        next_state =
+          )
+          !=
           packed_state_value(
             state_next,
             element_index
           );
 
-        state_changed =
-          (current_state != next_state);
-
-        final_direct_transition =
-          frp_is_valid_ternary(current_state)
-          && frp_is_valid_ternary(next_state)
+        final_direct_w[element_index] =
+          current_valid_w[element_index]
+          && final_state_valid_w[element_index]
           && frp_is_opposite_polarity(
-            current_state,
-            next_state
+            packed_state_value(
+              state_q,
+              element_index
+            ),
+            packed_state_value(
+              state_next,
+              element_index
+            )
           );
 
-        if (!frp_is_valid_ternary(next_state)) begin
-          state_reserved_mask[element_index] = 1'b1;
+        if (!final_state_valid_w[element_index]) begin
+          state_reserved_mask[element_index] =
+            1'b1;
+
           state_output_domain_valid = 1'b0;
           no_reserved_state_output = 1'b0;
         end
 
-        if (final_direct_transition) begin
+        if (final_direct_w[element_index]) begin
           actual_direct_events =
             actual_direct_events + COUNTER_ONE;
 
@@ -432,8 +481,14 @@ module frp_m16_state_update #(
           writeback_contract_valid = 1'b0;
         end
 
-        if (state_changed) begin
-          state_write_enable_mask[element_index] = 1'b1;
+        if (
+          final_state_changed_w[
+            element_index
+          ]
+        ) begin
+          state_write_enable_mask[
+            element_index
+          ] = 1'b1;
 
           accepted_changes =
             accepted_changes + COUNTER_ONE;
@@ -444,11 +499,9 @@ module frp_m16_state_update #(
           accepted_change_events =
             accepted_change_events + COUNTER_ONE;
 
-          if (!capacity_accept_mask[element_index]) begin
-            state_write_capacity_valid = 1'b0;
-          end
-
           if (
+            !capacity_accept_mask[element_index]
+            ||
             !accepted_change_candidate_mask[
               element_index
             ]
@@ -456,11 +509,27 @@ module frp_m16_state_update #(
             state_write_capacity_valid = 1'b0;
           end
 
-          if (neutral_routed_mask[element_index]) begin
+          if (
+            neutral_routed_mask[
+              element_index
+            ]
+          ) begin
             if (
-              frp_is_nonzero(current_state)
-              && frp_is_zero(next_state)
-              && frp_scheduler_is_neutralize_capable(
+              frp_is_nonzero(
+                packed_state_value(
+                  state_q,
+                  element_index
+                )
+              )
+              &&
+              frp_is_zero(
+                packed_state_value(
+                  state_next,
+                  element_index
+                )
+              )
+              &&
+              frp_scheduler_is_neutralize_capable(
                 scheduler_state
               )
             ) begin
@@ -468,15 +537,32 @@ module frp_m16_state_update #(
                 neutral_routed_commit_events
                 + COUNTER_ONE;
             end else begin
-              active_neutral_writeback_valid = 1'b0;
+              active_neutral_writeback_valid =
+                1'b0;
             end
           end
 
-          if (pending_completion_mask[element_index]) begin
+          if (
+            pending_completion_mask[
+              element_index
+            ]
+          ) begin
             if (
-              frp_is_zero(current_state)
-              && frp_is_nonzero(next_state)
-              && frp_scheduler_is_commit_capable(
+              frp_is_zero(
+                packed_state_value(
+                  state_q,
+                  element_index
+                )
+              )
+              &&
+              frp_is_nonzero(
+                packed_state_value(
+                  state_next,
+                  element_index
+                )
+              )
+              &&
+              frp_scheduler_is_commit_capable(
                 scheduler_state
               )
             ) begin
@@ -484,7 +570,8 @@ module frp_m16_state_update #(
                 pending_completion_commit_events
                 + COUNTER_ONE;
             end else begin
-              pending_completion_writeback_valid = 1'b0;
+              pending_completion_writeback_valid =
+                1'b0;
             end
           end
         end else begin
