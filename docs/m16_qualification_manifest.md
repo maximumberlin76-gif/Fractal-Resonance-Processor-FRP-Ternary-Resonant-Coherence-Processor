@@ -385,4 +385,128 @@ M15 established:
 
 Validated M15 package digest:
 
-`703dd4b56f4b342
+`703dd4b56f4b34289a2c5bc5521ad4ddc3113bdec8c38238c3244c69cb4d58df`
+
+## M15 to M16 Compatibility Chain
+
+Compatibility chain:
+
+`M15 quantized hardware shadow`
+
+→ `M15 cycle-exact integer golden trace`
+
+→ `M15 deterministic RTL comparison vectors`
+
+→ `M16 RTL core`
+
+→ `M16 assertion layer`
+
+→ `M16 simulation transcript`
+
+→ `M16 qualification closure`
+
+Replay target:
+
+`deterministic boundary equivalence`
+
+The replay target is not approximate behavioral similarity.
+
+## Current Qualification Table
+
+| Boundary | Result |
+|---|---|
+| M16 documentation package | implemented |
+| M16 RTL source artifact inventory | PASS |
+| M16 RTL documentation artifact inventory | PASS |
+| M16 repository exposure | PASS |
+| M16 artifact-boundary workflow | PASS |
+| M16 test stability policy | ACTIVE |
+| M16 public status snapshot | PUBLIC STATUS SYNCHRONIZED |
+| M16 external simulator execution | pending |
+| M16 simulator transcript capture | pending |
+| M16 final closure | pending |
+
+## External Simulator Boundary
+
+Simulation instructions are defined in:
+
+`rtl/m16/SIMULATION.md`
+
+Transcript template is defined in:
+
+`rtl/m16/SIMULATION_TRANSCRIPT.md`
+
+Execution plan is defined in:
+
+`docs/m16_external_simulator_execution_plan.md`
+
+Required command shape:
+
+    verilator --sv --timing --assert --binary -Irtl/m16 rtl/m16/frp_m16_tb.sv
+
+Required run command:
+
+    ./obj_dir/Vfrp_m16_tb
+
+Required completion marker:
+
+    FRP M16 deterministic RTL testbench completed.
+
+Required final counters:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+Current status:
+
+`pending external simulator execution`
+
+## Final M16 Closure Requirements
+
+M16 final closure requires:
+
+- artifact-boundary workflow PASS;
+- external simulator execution;
+- simulator transcript capture;
+- assertion-layer PASS;
+- final zero-event counter confirmation;
+- simulation transcript update;
+- closure report update;
+- final M16 qualification closure document.
+
+Current state:
+
+`artifact-boundary PASS`
+
+Remaining state:
+
+`external simulator transcript pending`
+
+## Manifest Result
+
+Current M16 manifest result:
+
+`ACTIVE`
+
+Current M16 artifact-boundary result:
+
+`PASS`
+
+Current public status result:
+
+`PUBLIC STATUS SYNCHRONIZED`
+
+Current test stability policy result:
+
+`ACTIVE`
+
+Current final M16 simulator result:
+
+`pending external simulator execution`
+
+## Author
+
+Maksym Marnov
