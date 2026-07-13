@@ -217,7 +217,7 @@ module frp_m16_tb;
     begin
       request_valid[lane] = 1'b1;
       request_cell_index[(lane*CELL_INDEX_BITS) +: CELL_INDEX_BITS] =
-        logic'(element_index[CELL_INDEX_BITS-1:0]);
+        element_index[CELL_INDEX_BITS-1:0];
       request_target[(lane*STATE_BITS) +: STATE_BITS] = target;
       target_q[(element_index*STATE_BITS) +: STATE_BITS] = target;
     end
