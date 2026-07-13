@@ -97,6 +97,35 @@ Final simulator qualification status:
 
 `pending external simulator execution`
 
+## M16 Public Status Snapshot
+
+The current public-facing M16 status is recorded in:
+
+`docs/m16_public_status_snapshot.md`
+
+This snapshot synchronizes:
+
+- README badge panel status;
+- GitHub About / Description status;
+- M15 `41 / 41 PASS` qualification evidence;
+- M16 RTL artifact-boundary `PASS`;
+- `rtl/m16/` source artifact presence;
+- external simulator pending boundary;
+- FPGA / synthesis preparation position;
+- DOI public reference.
+
+Current public status:
+
+`PUBLIC STATUS SYNCHRONIZED`
+
+Current release layer:
+
+`FRP v1.8.0 — M16 RTL`
+
+Current next boundary:
+
+`external simulator execution`
+
 ## 1. Purpose
 
 The documentation layer preserves the complete published FRP architecture progression and provides the technical reference surface for:
