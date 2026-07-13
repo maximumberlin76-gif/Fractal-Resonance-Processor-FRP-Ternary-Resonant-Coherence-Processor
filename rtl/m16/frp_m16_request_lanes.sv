@@ -109,7 +109,9 @@ module frp_m16_request_lanes #(
     );
         begin
             get_lane_index =
-                request_cell_index[(lane_index * CELL_INDEX_BITS) +: CELL_INDEX_BITS];
+                request_cell_index[
+                    (lane_index * CELL_INDEX_BITS) +: CELL_INDEX_BITS
+                ];
         end
     endfunction
 
@@ -118,7 +120,9 @@ module frp_m16_request_lanes #(
     );
         begin
             get_lane_target =
-                request_target[(lane_index * STATE_BITS) +: STATE_BITS];
+                request_target[
+                    (lane_index * STATE_BITS) +: STATE_BITS
+                ];
         end
     endfunction
 
@@ -128,7 +132,9 @@ module frp_m16_request_lanes #(
     );
         begin
             get_packed_state_value =
-                packed_state[(element_index * STATE_BITS) +: STATE_BITS];
+                packed_state[
+                    (element_index * STATE_BITS) +: STATE_BITS
+                ];
         end
     endfunction
 
@@ -199,19 +205,32 @@ module frp_m16_request_lanes #(
         no_actual_direct_events = 1'b1;
         no_queue_overflow = 1'b1;
 
-        for (int domain_index = 0; domain_index < CELLS; domain_index = domain_index + 1) begin
+        for (
+            int domain_index = 0;
+            domain_index < CELLS;
+            domain_index = domain_index + 1
+        ) begin
             logic [STATE_BITS - 1:0] retained_value;
             logic [STATE_BITS - 1:0] target_value_q;
             logic [STATE_BITS - 1:0] pending_value_q;
 
             retained_value =
-                get_packed_state_value(state_q, domain_index);
+                get_packed_state_value(
+                    state_q,
+                    domain_index
+                );
 
             target_value_q =
-                get_packed_state_value(target_q, domain_index);
+                get_packed_state_value(
+                    target_q,
+                    domain_index
+                );
 
             pending_value_q =
-                get_packed_state_value(pending_route_q, domain_index);
+                get_packed_state_value(
+                    pending_route_q,
+                    domain_index
+                );
 
             if (!frp_is_valid_ternary(retained_value)) begin
                 request_cell_domain_valid = 1'b0;
@@ -226,7 +245,11 @@ module frp_m16_request_lanes #(
             end
         end
 
-        for (int lane_index = 0; lane_index < REQUEST_LANES; lane_index = lane_index + 1) begin
+        for (
+            int lane_index = 0;
+            lane_index < REQUEST_LANES;
+            lane_index = lane_index + 1
+        ) begin
             logic [CELL_INDEX_BITS - 1:0] packed_index_value;
             int element_index_int;
 
@@ -265,13 +288,22 @@ module frp_m16_request_lanes #(
 
             if (!invalid_index) begin
                 retained_value =
-                    get_packed_state_value(state_q, element_index_int);
+                    get_packed_state_value(
+                        state_q,
+                        element_index_int
+                    );
 
                 pending_value =
-                    get_packed_state_value(pending_route_q, element_index_int);
+                    get_packed_state_value(
+                        pending_route_q,
+                        element_index_int
+                    );
 
                 lane_element_mask =
-                    ({{(CELLS - 1){1'b0}}, 1'b1} << element_index_int);
+                    (
+                        {{(CELLS - 1){1'b0}}, 1'b1}
+                        << element_index_int
+                    );
             end
 
             transition_class =
@@ -283,12 +315,18 @@ module frp_m16_request_lanes #(
 
             duplicate_index =
                 (!invalid_index)
-                && ((accepted_cell_mask & lane_element_mask) != '0);
+                && (
+                    (accepted_cell_mask & lane_element_mask)
+                    != '0
+                );
 
             pending_busy =
                 (!invalid_index)
                 && frp_is_nonzero(pending_value)
-                && (transition_class != FRP_TRANS_SAME_STATE);
+                && (
+                    transition_class
+                    != FRP_TRANS_SAME_STATE
+                );
 
             scheduler_blocked =
                 !scheduler_allows_transition(
@@ -321,7 +359,8 @@ module frp_m16_request_lanes #(
                     request_target_domain_valid = 1'b0;
 
                     rejected_cell_mask =
-                        rejected_cell_mask | lane_element_mask;
+                        rejected_cell_mask
+                        | lane_element_mask;
 
                     rejected_lane_events =
                         rejected_lane_events + COUNTER_ONE;
@@ -329,10 +368,9 @@ module frp_m16_request_lanes #(
                     request_reject[lane_index] = 1'b1;
                     request_reject_duplicate_cell[lane_index] = 1'b1;
 
-                    duplicate_cell_guard_valid = 1'b0;
-
                     rejected_cell_mask =
-                        rejected_cell_mask | lane_element_mask;
+                        rejected_cell_mask
+                        | lane_element_mask;
 
                     rejected_lane_events =
                         rejected_lane_events + COUNTER_ONE;
@@ -340,10 +378,9 @@ module frp_m16_request_lanes #(
                     request_reject[lane_index] = 1'b1;
                     request_reject_scheduler[lane_index] = 1'b1;
 
-                    scheduler_gate_valid = 1'b0;
-
                     rejected_cell_mask =
-                        rejected_cell_mask | lane_element_mask;
+                        rejected_cell_mask
+                        | lane_element_mask;
 
                     rejected_lane_events =
                         rejected_lane_events + COUNTER_ONE;
@@ -352,7 +389,8 @@ module frp_m16_request_lanes #(
                     request_reject_pending_busy[lane_index] = 1'b1;
 
                     rejected_cell_mask =
-                        rejected_cell_mask | lane_element_mask;
+                        rejected_cell_mask
+                        | lane_element_mask;
 
                     rejected_lane_events =
                         rejected_lane_events + COUNTER_ONE;
@@ -360,44 +398,89 @@ module frp_m16_request_lanes #(
                     request_accept[lane_index] = 1'b1;
 
                     accepted_cell_mask =
-                        accepted_cell_mask | lane_element_mask;
+                        accepted_cell_mask
+                        | lane_element_mask;
 
                     accepted_lane_events =
                         accepted_lane_events + COUNTER_ONE;
 
-                    if (transition_class != FRP_TRANS_SAME_STATE) begin
+                    if (
+                        transition_class
+                        != FRP_TRANS_SAME_STATE
+                    ) begin
                         accepted_changes =
                             accepted_changes + COUNTER_ONE;
                     end
 
-                    if (transition_class == FRP_TRANS_OPPOSITE_POLARITY) begin
+                    if (
+                        transition_class
+                        == FRP_TRANS_OPPOSITE_POLARITY
+                    ) begin
                         request_neutralized[lane_index] = 1'b1;
 
                         requested_direct_cell_mask =
-                            requested_direct_cell_mask | lane_element_mask;
+                            requested_direct_cell_mask
+                            | lane_element_mask;
 
                         neutral_routed_cell_mask =
-                            neutral_routed_cell_mask | lane_element_mask;
+                            neutral_routed_cell_mask
+                            | lane_element_mask;
 
                         requested_direct_events =
-                            requested_direct_events + COUNTER_ONE;
+                            requested_direct_events
+                            + COUNTER_ONE;
 
                         prevented_direct_events =
-                            prevented_direct_events + COUNTER_ONE;
+                            prevented_direct_events
+                            + COUNTER_ONE;
 
                         neutral_routed_events =
-                            neutral_routed_events + COUNTER_ONE;
+                            neutral_routed_events
+                            + COUNTER_ONE;
                     end
                 end
             end
         end
 
+        request_lane_order_valid =
+            (
+                (request_accept & request_reject)
+                == '0
+            );
+
+        duplicate_cell_guard_valid =
+            (
+                (
+                    request_accept
+                    & request_reject_duplicate_cell
+                )
+                == '0
+            );
+
+        scheduler_gate_valid =
+            (
+                (
+                    request_accept
+                    & request_reject_scheduler
+                )
+                == '0
+            );
+
         transition_capacity_valid =
-            (accepted_lane_events <= REQUEST_LANES);
+            (
+                accepted_changes
+                <= REQUEST_LANES
+            );
 
         active_neutral_routing_valid =
-            (neutral_routed_events >= prevented_direct_events)
-            && (requested_direct_events >= prevented_direct_events);
+            (
+                prevented_direct_events
+                >= requested_direct_events
+            )
+            && (
+                neutral_routed_events
+                >= prevented_direct_events
+            );
 
         no_actual_direct_events = 1'b1;
         no_queue_overflow = 1'b1;
