@@ -13,22 +13,27 @@
         M16 RTL Core Realization and Execution Semantics Package
 
     Purpose:
-        Implements retained pending-route storage for active-neutral routed
-        opposite-polarity transitions.
-
-        Required M16 routing law:
+        Retains the target polarity of every capacity-approved opposite-
+        polarity request while the retained ternary state executes the
+        mandatory active-neutral route:
 
             -1 -> 0 -> +1
             +1 -> 0 -> -1
 
-        A direct opposite-polarity request is not committed directly.
-        The current tick routes the retained state to active neutral 0.
-        The requested opposite polarity is stored as a pending route.
-        A later eligible tick completes the pending route from 0.
+        The first eligible tick commits only the nonzero-to-zero leg and
+        stores the requested opposite polarity. A later commit-capable and
+        capacity-approved tick may complete only from retained state 0, after
+        which the pending route is cleared.
 
-    Verilator portability:
-        This source does not use the lowercase reserved identifier that
-        Verilator treats as a Verilog configuration keyword.
+    Preserved architecture:
+        - one retained pending-route slot per cell;
+        - canonical balanced ternary route encoding;
+        - pending completion priority over new same-cell requests;
+        - no overwrite of retained route polarity;
+        - scheduler/capacity deferral without polarity loss;
+        - deterministic ascending request-lane processing;
+        - zero direct opposite-polarity execution;
+        - zero queue overflow in qualified operation.
 */
 
 `ifndef FRP_M16_PENDING_ROUTES_SV
@@ -48,19 +53,15 @@ module frp_m16_pending_routes #(
     input logic clk,
     input logic rst_n,
     input logic tick_enable,
-
     input logic [(CELLS * STATE_BITS) - 1:0] state_q,
-
     input logic [REQUEST_LANES - 1:0] request_accept,
     input logic [REQUEST_LANES - 1:0] request_neutralized,
     input logic [(REQUEST_LANES * CELL_INDEX_BITS) - 1:0] request_cell_index,
     input logic [(REQUEST_LANES * STATE_BITS) - 1:0] request_target,
-
     input logic [CELLS - 1:0] pending_completion_accept_mask,
 
     output logic [(CELLS * STATE_BITS) - 1:0] pending_route_q,
     output logic [(CELLS * STATE_BITS) - 1:0] pending_route_d,
-
     output logic [CELLS - 1:0] pending_active_mask,
     output logic [CELLS - 1:0] pending_created_mask,
     output logic [CELLS - 1:0] pending_completed_mask,
@@ -76,7 +77,6 @@ module frp_m16_pending_routes #(
     output logic [COUNTER_BITS - 1:0] pending_cleared_events,
     output logic [COUNTER_BITS - 1:0] pending_retained_events,
     output logic [COUNTER_BITS - 1:0] pending_reserved_events,
-
     output logic [COUNTER_BITS - 1:0] neutral_routed_events,
     output logic [COUNTER_BITS - 1:0] prevented_direct_events,
     output logic [COUNTER_BITS - 1:0] queue_overflow_events,
@@ -88,7 +88,6 @@ module frp_m16_pending_routes #(
     output logic pending_non_overwrite_valid,
     output logic pending_capacity_valid,
     output logic pending_replay_deterministic,
-
     output logic no_pending_reserved_state,
     output logic no_queue_overflow,
     output logic no_actual_direct_events
@@ -99,40 +98,40 @@ module frp_m16_pending_routes #(
     localparam logic [COUNTER_BITS - 1:0] COUNTER_ONE =
         {{(COUNTER_BITS - 1){1'b0}}, 1'b1};
 
+    localparam logic [COUNTER_BITS - 1:0] REQUEST_LANE_LIMIT =
+        REQUEST_LANES;
+
     logic [(CELLS * STATE_BITS) - 1:0] pending_route_next;
+    logic [CELLS - 1:0] creation_claimed_mask;
 
-    function automatic logic [STATE_BITS - 1:0] state_value_at_index(
-        input logic [(CELLS * STATE_BITS) - 1:0] packed_state,
+    function automatic logic [STATE_BITS - 1:0] packed_value_at_index(
+        input logic [(CELLS * STATE_BITS) - 1:0] packed_value,
         input int element_index
     );
         begin
-            state_value_at_index =
-                packed_state[
-                    (element_index * STATE_BITS) +: STATE_BITS
-                ];
+            packed_value_at_index = packed_value[
+                (element_index * STATE_BITS) +: STATE_BITS
+            ];
         end
     endfunction
 
-    function automatic logic [STATE_BITS - 1:0] pending_q_value_at_index(
-        input int element_index
-    );
-        begin
-            pending_q_value_at_index =
-                pending_route_q[
-                    (element_index * STATE_BITS) +: STATE_BITS
-                ];
-        end
-    endfunction
+    function automatic logic [(CELLS * STATE_BITS) - 1:0]
+        set_packed_value_at_index(
+            input logic [(CELLS * STATE_BITS) - 1:0] packed_value,
+            input int element_index,
+            input logic [STATE_BITS - 1:0] element_value
+        );
 
-    function automatic logic [STATE_BITS - 1:0] pending_next_value_at_index(
-        input logic [(CELLS * STATE_BITS) - 1:0] packed_pending,
-        input int element_index
-    );
+        logic [(CELLS * STATE_BITS) - 1:0] updated_value;
+
         begin
-            pending_next_value_at_index =
-                packed_pending[
-                    (element_index * STATE_BITS) +: STATE_BITS
-                ];
+            updated_value = packed_value;
+
+            updated_value[
+                (element_index * STATE_BITS) +: STATE_BITS
+            ] = element_value;
+
+            set_packed_value_at_index = updated_value;
         end
     endfunction
 
@@ -140,10 +139,9 @@ module frp_m16_pending_routes #(
         input int lane_index
     );
         begin
-            lane_index_value =
-                request_cell_index[
-                    (lane_index * CELL_INDEX_BITS) +: CELL_INDEX_BITS
-                ];
+            lane_index_value = request_cell_index[
+                (lane_index * CELL_INDEX_BITS) +: CELL_INDEX_BITS
+            ];
         end
     endfunction
 
@@ -151,35 +149,15 @@ module frp_m16_pending_routes #(
         input int lane_index
     );
         begin
-            lane_target_value =
-                request_target[
-                    (lane_index * STATE_BITS) +: STATE_BITS
-                ];
-        end
-    endfunction
-
-    function automatic logic [(CELLS * STATE_BITS) - 1:0]
-        set_pending_d_at_index(
-            input logic [(CELLS * STATE_BITS) - 1:0] packed_pending,
-            input int element_index,
-            input logic [STATE_BITS - 1:0] route_value
-        );
-
-        logic [(CELLS * STATE_BITS) - 1:0] updated_pending;
-
-        begin
-            updated_pending = packed_pending;
-
-            updated_pending[
-                (element_index * STATE_BITS) +: STATE_BITS
-            ] = route_value;
-
-            set_pending_d_at_index = updated_pending;
+            lane_target_value = request_target[
+                (lane_index * STATE_BITS) +: STATE_BITS
+            ];
         end
     endfunction
 
     always_comb begin
         pending_route_next = pending_route_q;
+        creation_claimed_mask = '0;
 
         pending_active_mask = '0;
         pending_created_mask = '0;
@@ -196,7 +174,6 @@ module frp_m16_pending_routes #(
         pending_cleared_events = '0;
         pending_retained_events = '0;
         pending_reserved_events = '0;
-
         neutral_routed_events = '0;
         prevented_direct_events = '0;
         queue_overflow_events = '0;
@@ -208,36 +185,22 @@ module frp_m16_pending_routes #(
         pending_non_overwrite_valid = 1'b1;
         pending_capacity_valid = 1'b1;
         pending_replay_deterministic = 1'b1;
-
         no_pending_reserved_state = 1'b1;
         no_queue_overflow = 1'b1;
         no_actual_direct_events = 1'b1;
 
-        // ------------------------------------------------------------------
-        // Existing pending-route state and completion processing.
-        //
-        // Completion is evaluated before new lane-created routes so an
-        // accepted completion may clear the retained pending route and a
-        // subsequent accepted neutralized request may deterministically
-        // install the next pending target in the same tick.
-        // ------------------------------------------------------------------
-
+        // Current retained pending-route domain and active-route snapshot.
         for (
             int element_index = 0;
             element_index < CELLS;
-            element_index = element_index + 1
+            element_index++
         ) begin
             logic [STATE_BITS - 1:0] pending_value;
-            logic [STATE_BITS - 1:0] retained_state;
 
-            pending_value =
-                pending_q_value_at_index(element_index);
-
-            retained_state =
-                state_value_at_index(
-                    state_q,
-                    element_index
-                );
+            pending_value = packed_value_at_index(
+                pending_route_q,
+                element_index
+            );
 
             if (!frp_is_valid_ternary(pending_value)) begin
                 pending_reserved_mask[element_index] = 1'b1;
@@ -247,66 +210,104 @@ module frp_m16_pending_routes #(
 
                 pending_domain_valid = 1'b0;
                 no_pending_reserved_state = 1'b0;
-
-                pending_route_next =
-                    set_pending_d_at_index(
-                        pending_route_next,
-                        element_index,
-                        FRP_STATE_ZERO
-                    );
             end else if (frp_is_nonzero(pending_value)) begin
                 pending_active_mask[element_index] = 1'b1;
 
-                if (
-                    tick_enable
-                    && pending_completion_accept_mask[element_index]
-                ) begin
-                    if (!frp_is_zero(retained_state)) begin
-                        pending_completion_from_zero_valid = 1'b0;
-                    end
-
-                    pending_route_next =
-                        set_pending_d_at_index(
-                            pending_route_next,
-                            element_index,
-                            FRP_STATE_ZERO
-                        );
-
-                    pending_completed_mask[element_index] = 1'b1;
-                    pending_cleared_mask[element_index] = 1'b1;
-
-                    pending_completed_events =
-                        pending_completed_events + COUNTER_ONE;
-
-                    pending_cleared_events =
-                        pending_cleared_events + COUNTER_ONE;
-                end else begin
-                    pending_retained_mask[element_index] = 1'b1;
-
-                    pending_retained_events =
-                        pending_retained_events + COUNTER_ONE;
-                end
+                pending_active_count =
+                    pending_active_count + COUNTER_ONE;
             end
         end
 
-        // ------------------------------------------------------------------
-        // New active-neutral pending routes.
-        //
-        // Request lanes are processed in deterministic ascending lane order.
-        // Only accepted opposite-polarity requests marked as neutralized may
-        // create retained pending routes.
-        // ------------------------------------------------------------------
+        // Capacity-approved completion has priority over new same-cell input.
+        for (
+            int element_index = 0;
+            element_index < CELLS;
+            element_index++
+        ) begin
+            logic [STATE_BITS - 1:0] retained_state;
+            logic [STATE_BITS - 1:0] pending_value;
+            logic route_active;
+            logic completion_requested;
+            logic completion_legal;
 
+            retained_state = packed_value_at_index(
+                state_q,
+                element_index
+            );
+
+            pending_value = packed_value_at_index(
+                pending_route_q,
+                element_index
+            );
+
+            route_active =
+                frp_is_valid_ternary(pending_value)
+                && frp_is_nonzero(pending_value);
+
+            completion_requested =
+                tick_enable
+                && pending_completion_accept_mask[element_index];
+
+            completion_legal =
+                frp_is_valid_ternary(retained_state)
+                && frp_is_zero(retained_state)
+                && route_active;
+
+            if (completion_requested && completion_legal) begin
+                pending_route_next = set_packed_value_at_index(
+                    pending_route_next,
+                    element_index,
+                    FRP_STATE_ZERO
+                );
+
+                pending_completed_mask[element_index] = 1'b1;
+                pending_cleared_mask[element_index] = 1'b1;
+
+                pending_completed_events =
+                    pending_completed_events + COUNTER_ONE;
+
+                pending_cleared_events =
+                    pending_cleared_events + COUNTER_ONE;
+            end else if (route_active) begin
+                pending_retained_mask[element_index] = 1'b1;
+                pending_blocked_mask[element_index] = 1'b1;
+
+                if (tick_enable) begin
+                    pending_retained_events =
+                        pending_retained_events + COUNTER_ONE;
+                end
+
+                if (completion_requested) begin
+                    pending_completion_from_zero_valid = 1'b0;
+                    pending_capacity_valid = 1'b0;
+                    pending_replay_deterministic = 1'b0;
+                end
+            end else if (completion_requested) begin
+                pending_capacity_valid = 1'b0;
+                pending_replay_deterministic = 1'b0;
+            end
+        end
+
+        // New route creation is legal only for a capacity-approved accepted
+        // opposite-polarity request whose first leg is routed to active zero.
         for (
             int lane_index = 0;
             lane_index < REQUEST_LANES;
-            lane_index = lane_index + 1
+            lane_index++
         ) begin
             logic [CELL_INDEX_BITS - 1:0] packed_index_value;
             int element_index_int;
-            logic [STATE_BITS - 1:0] target_value;
+
+            logic [STATE_BITS - 1:0] retained_state;
             logic [STATE_BITS - 1:0] existing_pending;
+            logic [STATE_BITS - 1:0] requested_target;
+
             logic valid_index;
+            logic route_request;
+            logic route_relation_valid;
+            logic route_slot_free;
+            logic completion_owns_cell;
+            logic duplicate_creation;
 
             packed_index_value =
                 lane_index_value(lane_index);
@@ -314,110 +315,178 @@ module frp_m16_pending_routes #(
             element_index_int =
                 int'(packed_index_value);
 
-            target_value =
+            requested_target =
                 lane_target_value(lane_index);
 
             valid_index =
                 (element_index_int < CELLS);
 
-            existing_pending = FRP_STATE_ZERO;
-
-            if (valid_index) begin
-                existing_pending =
-                    pending_q_value_at_index(element_index_int);
-            end
-
-            if (
+            route_request =
                 tick_enable
                 && request_accept[lane_index]
-                && request_neutralized[lane_index]
-            ) begin
-                prevented_direct_events =
-                    prevented_direct_events + COUNTER_ONE;
+                && request_neutralized[lane_index];
 
+            retained_state = FRP_STATE_ZERO;
+            existing_pending = FRP_STATE_ZERO;
+            route_relation_valid = 1'b0;
+            route_slot_free = 1'b0;
+            completion_owns_cell = 1'b0;
+            duplicate_creation = 1'b0;
+
+            if (valid_index) begin
+                retained_state = packed_value_at_index(
+                    state_q,
+                    element_index_int
+                );
+
+                existing_pending = packed_value_at_index(
+                    pending_route_q,
+                    element_index_int
+                );
+
+                route_relation_valid =
+                    frp_is_valid_ternary(retained_state)
+                    && frp_is_nonzero(retained_state)
+                    && frp_is_valid_ternary(requested_target)
+                    && frp_is_nonzero(requested_target)
+                    && frp_is_opposite_polarity(
+                        retained_state,
+                        requested_target
+                    );
+
+                route_slot_free =
+                    frp_is_valid_ternary(existing_pending)
+                    && frp_is_zero(existing_pending);
+
+                completion_owns_cell =
+                    pending_completed_mask[element_index_int];
+
+                duplicate_creation =
+                    creation_claimed_mask[element_index_int];
+            end
+
+            if (route_request) begin
                 neutral_routed_events =
                     neutral_routed_events + COUNTER_ONE;
 
-                if (valid_index) begin
-                    if (!frp_is_valid_ternary(target_value)) begin
-                        pending_reserved_mask[element_index_int] = 1'b1;
+                prevented_direct_events =
+                    prevented_direct_events + COUNTER_ONE;
 
-                        pending_polarity_valid = 1'b0;
-                        pending_domain_valid = 1'b0;
-                        no_pending_reserved_state = 1'b0;
-                    end else if (!frp_is_nonzero(target_value)) begin
-                        pending_polarity_valid = 1'b0;
-                    end else if (
-                        frp_is_nonzero(existing_pending)
-                        && !pending_completion_accept_mask[
-                            element_index_int
-                        ]
-                    ) begin
-                        pending_blocked_mask[element_index_int] = 1'b1;
-                        pending_overflow_mask[element_index_int] = 1'b1;
+                if (!valid_index) begin
+                    pending_domain_valid = 1'b0;
+                    pending_replay_deterministic = 1'b0;
+                end else if (!route_relation_valid) begin
+                    pending_polarity_valid = 1'b0;
+                    pending_replay_deterministic = 1'b0;
+                end else if (
+                    !route_slot_free
+                    || completion_owns_cell
+                    || duplicate_creation
+                ) begin
+                    pending_blocked_mask[element_index_int] = 1'b1;
+                    pending_overflow_mask[element_index_int] = 1'b1;
 
-                        queue_overflow_events =
-                            queue_overflow_events + COUNTER_ONE;
+                    queue_overflow_events =
+                        queue_overflow_events + COUNTER_ONE;
 
-                        pending_non_overwrite_valid = 1'b0;
-                        no_queue_overflow = 1'b0;
-                    end else begin
-                        pending_route_next =
-                            set_pending_d_at_index(
-                                pending_route_next,
-                                element_index_int,
-                                target_value
-                            );
+                    pending_non_overwrite_valid = 1'b0;
+                    pending_replay_deterministic = 1'b0;
+                end else begin
+                    pending_route_next = set_packed_value_at_index(
+                        pending_route_next,
+                        element_index_int,
+                        requested_target
+                    );
 
-                        pending_created_mask[element_index_int] = 1'b1;
+                    creation_claimed_mask[element_index_int] = 1'b1;
+                    pending_created_mask[element_index_int] = 1'b1;
 
-                        pending_created_events =
-                            pending_created_events + COUNTER_ONE;
-                    end
+                    pending_created_events =
+                        pending_created_events + COUNTER_ONE;
                 end
             end
         end
 
-        // ------------------------------------------------------------------
-        // Next-state domain and active-route accounting.
-        // ------------------------------------------------------------------
-
+        // Next-state domain, route-polarity retention, and completion clearing.
         for (
             int element_index = 0;
             element_index < CELLS;
-            element_index = element_index + 1
+            element_index++
         ) begin
-            logic [STATE_BITS - 1:0] pending_next;
+            logic [STATE_BITS - 1:0] pending_q_value;
+            logic [STATE_BITS - 1:0] pending_d_value;
 
-            pending_next =
-                pending_next_value_at_index(
-                    pending_route_next,
-                    element_index
-                );
+            pending_q_value = packed_value_at_index(
+                pending_route_q,
+                element_index
+            );
 
-            if (!frp_is_valid_ternary(pending_next)) begin
+            pending_d_value = packed_value_at_index(
+                pending_route_next,
+                element_index
+            );
+
+            if (!frp_is_valid_ternary(pending_d_value)) begin
                 pending_reserved_mask[element_index] = 1'b1;
                 pending_domain_valid = 1'b0;
                 no_pending_reserved_state = 1'b0;
             end
 
-            if (frp_is_nonzero(pending_next)) begin
-                pending_active_count =
-                    pending_active_count + COUNTER_ONE;
+            if (
+                frp_is_nonzero(pending_q_value)
+                && !pending_completed_mask[element_index]
+                && (pending_d_value != pending_q_value)
+            ) begin
+                pending_non_overwrite_valid = 1'b0;
+                pending_polarity_valid = 1'b0;
+            end
+
+            if (
+                pending_completed_mask[element_index]
+                && !frp_is_zero(pending_d_value)
+            ) begin
+                pending_capacity_valid = 1'b0;
+            end
+
+            if (
+                pending_created_mask[element_index]
+                && !frp_is_nonzero(pending_d_value)
+            ) begin
+                pending_polarity_valid = 1'b0;
             end
         end
 
-        if (queue_overflow_events != '0) begin
-            no_queue_overflow = 1'b0;
-            pending_capacity_valid = 1'b0;
-        end
+        no_queue_overflow =
+            (queue_overflow_events == '0);
 
-        if (actual_direct_events != '0) begin
-            no_actual_direct_events = 1'b0;
-        end
+        no_actual_direct_events =
+            (actual_direct_events == '0);
+
+        pending_domain_valid =
+            pending_domain_valid
+            && no_pending_reserved_state;
+
+        pending_polarity_valid =
+            pending_polarity_valid
+            && (
+                neutral_routed_events
+                >= pending_created_events
+            )
+            && (
+                prevented_direct_events
+                >= pending_created_events
+            );
+
+        pending_capacity_valid =
+            pending_capacity_valid
+            && (
+                pending_completed_events
+                <= REQUEST_LANE_LIMIT
+            );
     end
 
-    assign pending_route_d = pending_route_next;
+    assign pending_route_d =
+        pending_route_next;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
