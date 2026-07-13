@@ -11,9 +11,9 @@
   <img src="https://img.shields.io/badge/workflows-latest%20PASS-brightgreen" alt="Latest workflows PASS">
   <img src="https://img.shields.io/badge/M15-41%2F41%20PASS-brightgreen" alt="M15 41/41 PASS">
   <img src="https://img.shields.io/badge/M16-artifact%20boundary%20PASS-brightgreen" alt="M16 artifact boundary PASS">
-  <img src="https://img.shields.io/badge/RTL-core%20realization%20active-brightgreen" alt="RTL core realization active">
+  <img src="https://img.shields.io/badge/RTL-artifacts%20present-brightgreen" alt="RTL artifacts present">
   <img src="https://img.shields.io/badge/simulator-external%20pending-yellow" alt="External simulator pending">
-  <img src="https://img.shields.io/badge/release%20layer-M16%20RTL-blue" alt="M16 RTL release layer">
+  <img src="https://img.shields.io/badge/release-v1.8.0%20M16-blue" alt="Release v1.8.0 M16">
   <a href="https://doi.org/10.5281/zenodo.21183966"><img src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21183966-blue" alt="DOI"></a>
 </p>
 
