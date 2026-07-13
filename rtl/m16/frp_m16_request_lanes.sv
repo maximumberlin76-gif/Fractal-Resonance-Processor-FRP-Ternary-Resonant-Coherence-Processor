@@ -10,16 +10,16 @@
         FRP v1.8.0
 
     Milestone:
-        M16 — RTL Core Realization and Execution Semantics Package
+        M16 RTL Core Realization and Execution Semantics Package
 
     Purpose:
-        Deterministic request-lane admission for the M16 retained-state
+        Compute deterministic request-lane admission for the M16 retained-state
         RTL execution layer.
 
         Preserved semantics:
             - CELLS parameterization;
-            - current_state array evaluation;
-            - target_state array evaluation;
+            - retained current_state array;
+            - target_state array;
             - request_mask generation;
             - accepted_mask generation;
             - deterministic REQUEST_LANES capacity;
@@ -28,10 +28,6 @@
 
         This module does not perform active-neutral routing.
         It only admits requested state changes into the current execution tick.
-
-    Verilator portability:
-        This source does not use the lowercase reserved identifier that caused
-        the Verilator configuration-keyword failure.
 */
 
 `timescale 1ns / 1ps
@@ -61,13 +57,13 @@ module frp_m16_request_lanes #(
 
     logic [CELLS-1:0] request_mask_next;
     logic [CELLS-1:0] accepted_mask_next;
-    logic [CELLS-1:0] one_hot_next;
+    logic [CELLS-1:0] lane_bit;
 
     logic [COUNTER_BITS-1:0] requested_changes_next;
     logic [COUNTER_BITS-1:0] accepted_changes_next;
     logic [COUNTER_BITS-1:0] request_lanes_next;
 
-    int element_index;
+    int idx;
     int accepted_count;
 
     always_comb begin
@@ -75,36 +71,27 @@ module frp_m16_request_lanes #(
         accepted_mask_next     = '0;
         requested_changes_next = '0;
         accepted_changes_next  = '0;
-        request_lanes_next     = REQUEST_LANES_INT[COUNTER_BITS-1:0];
+        request_lanes_next     = REQUEST_LANES_INT;
         accepted_count         = 0;
-        one_hot_next           = '0;
+        lane_bit               = '0;
 
-        for (
-            element_index = 0;
-            element_index < CELLS;
-            element_index = element_index + 1
-        ) begin
-            one_hot_next = '0;
-            one_hot_next = (logic'(1'b1) << element_index);
+        for (idx = 0; idx < CELLS; idx = idx + 1) begin
+            lane_bit = '0;
+            lane_bit = ({{(CELLS - 1){1'b0}}, 1'b1} << idx);
 
             if (
-                frp_is_valid_ternary(current_state[element_index])
-                && frp_is_valid_ternary(target_state[element_index])
-                && (current_state[element_index] != target_state[element_index])
+                frp_is_valid_ternary(current_state[idx])
+                && frp_is_valid_ternary(target_state[idx])
+                && (current_state[idx] != target_state[idx])
             ) begin
-                request_mask_next =
-                    request_mask_next | one_hot_next;
-
-                requested_changes_next =
-                    requested_changes_next + {{(COUNTER_BITS - 1){1'b0}}, 1'b1};
+                request_mask_next = request_mask_next | lane_bit;
+                requested_changes_next = requested_changes_next
+                    + {{(COUNTER_BITS - 1){1'b0}}, 1'b1};
 
                 if (accepted_count < REQUEST_LANES_INT) begin
-                    accepted_mask_next =
-                        accepted_mask_next | one_hot_next;
-
-                    accepted_changes_next =
-                        accepted_changes_next + {{(COUNTER_BITS - 1){1'b0}}, 1'b1};
-
+                    accepted_mask_next = accepted_mask_next | lane_bit;
+                    accepted_changes_next = accepted_changes_next
+                        + {{(COUNTER_BITS - 1){1'b0}}, 1'b1};
                     accepted_count = accepted_count + 1;
                 end
             end
@@ -115,7 +102,7 @@ module frp_m16_request_lanes #(
         if (!rst_n) begin
             request_mask      <= '0;
             accepted_mask     <= '0;
-            request_lanes     <= REQUEST_LANES_INT[COUNTER_BITS-1:0];
+            request_lanes     <= REQUEST_LANES_INT;
             requested_changes <= '0;
             accepted_changes  <= '0;
         end else if (enable) begin
