@@ -131,7 +131,19 @@ module frp_m16_state_update #(
   // --------------------------------------------------------------------------
 
   always_comb begin
-    state_d = state_q;
+
+    // Initialize every packed state element through the same write mechanism
+    // used by all later writeback branches.
+    for (
+      int element_index = 0;
+      element_index < CELLS;
+      element_index++
+    ) begin
+      set_state_d(
+        element_index,
+        cell_state_q(element_index)
+      );
+    end
 
     state_write_enable_mask = '0;
     state_hold_mask         = '0;
@@ -161,134 +173,194 @@ module frp_m16_state_update #(
     no_actual_direct_events = 1'b1;
 
     // ----------------------------------------------------------------------
-    // Tick-disabled cycles preserve retained state.
+    // Per-element retained-state writeback.
     // ----------------------------------------------------------------------
 
-    if (!tick_enable) begin
-      state_d = state_q;
+    for (
+      int element_index = 0;
+      element_index < CELLS;
+      element_index++
+    ) begin
+      logic [STATE_BITS-1:0] current_state;
+      logic [STATE_BITS-1:0] candidate_state;
+      logic candidate_valid;
+      logic current_valid;
+      logic state_changes;
+      logic capacity_approved;
 
-      for (int element_index = 0; element_index < CELLS; element_index++) begin
+      current_state =
+        cell_state_q(element_index);
+
+      candidate_state =
+        cell_state_candidate_d(element_index);
+
+      current_valid =
+        frp_is_valid_ternary(current_state);
+
+      candidate_valid =
+        frp_is_valid_ternary(candidate_state);
+
+      state_changes =
+        (current_state != candidate_state);
+
+      capacity_approved =
+        capacity_accept_mask[element_index];
+
+      // --------------------------------------------------------------------
+      // Tick-disabled cycles preserve retained state.
+      // --------------------------------------------------------------------
+
+      if (!tick_enable) begin
+        set_state_d(
+          element_index,
+          current_state
+        );
+
         state_hold_mask[element_index] = 1'b1;
 
         state_hold_events =
-          state_hold_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
-      end
-    end else begin
+          state_hold_events
+          + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
       // --------------------------------------------------------------------
       // Tick-enabled writeback.
       // --------------------------------------------------------------------
 
-      for (int element_index = 0; element_index < CELLS; element_index++) begin
-        logic [STATE_BITS-1:0] current_state;
-        logic [STATE_BITS-1:0] candidate_state;
-        logic                  candidate_valid;
-        logic                  current_valid;
-        logic                  state_changes;
-        logic                  capacity_approved;
+      end else if (!current_valid) begin
+        state_reserved_mask[element_index] = 1'b1;
 
-        current_state = cell_state_q(element_index);
-        candidate_state = cell_state_candidate_d(element_index);
+        reserved_state_events =
+          reserved_state_events
+          + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-        current_valid = frp_is_valid_ternary(current_state);
-        candidate_valid = frp_is_valid_ternary(candidate_state);
+        state_domain_valid = 1'b0;
+        no_reserved_state_output = 1'b0;
 
-        state_changes = (current_state != candidate_state);
+        set_state_d(
+          element_index,
+          FRP_STATE_ZERO
+        );
 
-        capacity_approved = capacity_accept_mask[element_index];
+        state_write_enable_mask[element_index] = 1'b1;
+        state_reset_mask[element_index] = 1'b1;
 
-        if (!current_valid) begin
-          state_reserved_mask[element_index] = 1'b1;
+        state_reset_events =
+          state_reset_events
+          + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-          reserved_state_events =
-            reserved_state_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+      end else if (
+        !candidate_valid
+        || reserved_transition_mask[element_index]
+      ) begin
+        set_state_d(
+          element_index,
+          current_state
+        );
 
-          state_domain_valid = 1'b0;
-          no_reserved_state_output = 1'b0;
+        state_reserved_mask[element_index] = 1'b1;
 
-          set_state_d(element_index, FRP_STATE_ZERO);
+        reserved_state_events =
+          reserved_state_events
+          + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-          state_write_enable_mask[element_index] = 1'b1;
-          state_reset_mask[element_index] = 1'b1;
+        state_hold_mask[element_index] = 1'b1;
 
-          state_reset_events =
-            state_reset_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
-        end else if (!candidate_valid || reserved_transition_mask[element_index]) begin
-          set_state_d(element_index, current_state);
+        state_hold_events =
+          state_hold_events
+          + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-          state_reserved_mask[element_index] = 1'b1;
+        state_output_domain_valid = 1'b0;
+        no_reserved_state_output = 1'b0;
 
-          reserved_state_events =
-            reserved_state_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+      end else if (actual_direct_mask[element_index]) begin
+        set_state_d(
+          element_index,
+          current_state
+        );
 
-          state_hold_mask[element_index] = 1'b1;
+        actual_direct_events =
+          actual_direct_events
+          + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-          state_hold_events =
-            state_hold_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+        state_hold_mask[element_index] = 1'b1;
 
-          state_output_domain_valid = 1'b0;
-          no_reserved_state_output = 1'b0;
-        end else if (actual_direct_mask[element_index]) begin
-          set_state_d(element_index, current_state);
+        state_hold_events =
+          state_hold_events
+          + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-          actual_direct_events =
-            actual_direct_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+        no_actual_direct_events = 1'b0;
 
-          state_hold_mask[element_index] = 1'b1;
+      end else if (!state_changes) begin
+        set_state_d(
+          element_index,
+          current_state
+        );
 
-          state_hold_events =
-            state_hold_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+        state_hold_mask[element_index] = 1'b1;
 
-          no_actual_direct_events = 1'b0;
-        end else if (!state_changes) begin
-          set_state_d(element_index, current_state);
+        state_hold_events =
+          state_hold_events
+          + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-          state_hold_mask[element_index] = 1'b1;
+      end else if (
+        state_changes
+        && capacity_approved
+      ) begin
+        set_state_d(
+          element_index,
+          candidate_state
+        );
 
-          state_hold_events =
-            state_hold_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
-        end else if (state_changes && capacity_approved) begin
-          set_state_d(element_index, candidate_state);
+        state_write_enable_mask[element_index] = 1'b1;
 
-          state_write_enable_mask[element_index] = 1'b1;
+        accepted_changes =
+          accepted_changes
+          + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-          accepted_changes =
-            accepted_changes + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+        state_write_events =
+          state_write_events
+          + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-          state_write_events =
-            state_write_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+        accepted_change_events =
+          accepted_change_events
+          + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-          accepted_change_events =
-            accepted_change_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
-
-          if (neutral_routed_mask[element_index]) begin
-            if (candidate_state == FRP_STATE_ZERO) begin
-              neutral_routed_commit_events =
-                neutral_routed_commit_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
-            end else begin
-              active_neutral_writeback_valid = 1'b0;
-            end
+        if (neutral_routed_mask[element_index]) begin
+          if (candidate_state == FRP_STATE_ZERO) begin
+            neutral_routed_commit_events =
+              neutral_routed_commit_events
+              + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+          end else begin
+            active_neutral_writeback_valid = 1'b0;
           end
+        end
 
-          if (pending_completion_mask[element_index]) begin
-            if (current_state == FRP_STATE_ZERO) begin
-              pending_completion_commit_events =
-                pending_completion_commit_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
-            end else begin
-              pending_completion_writeback_valid = 1'b0;
-            end
+        if (pending_completion_mask[element_index]) begin
+          if (current_state == FRP_STATE_ZERO) begin
+            pending_completion_commit_events =
+              pending_completion_commit_events
+              + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+          end else begin
+            pending_completion_writeback_valid = 1'b0;
           end
-        end else begin
-          set_state_d(element_index, current_state);
+        end
 
-          state_hold_mask[element_index] = 1'b1;
+      end else begin
+        set_state_d(
+          element_index,
+          current_state
+        );
 
-          state_hold_events =
-            state_hold_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+        state_hold_mask[element_index] = 1'b1;
 
-          if (accepted_change_candidate_mask[element_index]) begin
-            state_write_capacity_valid = 1'b0;
-          end
+        state_hold_events =
+          state_hold_events
+          + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+
+        if (
+          accepted_change_candidate_mask[element_index]
+        ) begin
+          state_write_capacity_valid = 1'b0;
         end
       end
     end
@@ -297,54 +369,71 @@ module frp_m16_state_update #(
     // Final output-domain and direct-transition scan.
     // ----------------------------------------------------------------------
 
-    for (int element_index = 0; element_index < CELLS; element_index++) begin
-      logic [STATE_BITS-1:0] current_state;
-      logic [STATE_BITS-1:0] next_state;
-
-      current_state = cell_state_q(element_index);
-      next_state = cell_state_d(element_index);
-
-      if (!frp_is_valid_ternary(next_state)) begin
+    for (
+      int element_index = 0;
+      element_index < CELLS;
+      element_index++
+    ) begin
+      if (
+        !frp_is_valid_ternary(
+          cell_state_d(element_index)
+        )
+      ) begin
         state_reserved_mask[element_index] = 1'b1;
         state_output_domain_valid = 1'b0;
         no_reserved_state_output = 1'b0;
       end
 
       if (
-        frp_is_valid_ternary(current_state) &&
-        frp_is_valid_ternary(next_state) &&
-        frp_is_opposite_polarity(current_state, next_state)
+        frp_is_valid_ternary(
+          cell_state_q(element_index)
+        )
+        && frp_is_valid_ternary(
+          cell_state_d(element_index)
+        )
+        && frp_is_opposite_polarity(
+          cell_state_q(element_index),
+          cell_state_d(element_index)
+        )
       ) begin
         actual_direct_events =
-          actual_direct_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
+          actual_direct_events
+          + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
         no_actual_direct_events = 1'b0;
       end
     end
 
-    switch_load_numerator = accepted_changes;
+    switch_load_numerator =
+      accepted_changes;
 
-    if (accepted_changes > REQUEST_LANES[COUNTER_BITS-1:0]) begin
+    if (
+      accepted_changes
+      > REQUEST_LANES[COUNTER_BITS-1:0]
+    ) begin
       state_write_capacity_valid = 1'b0;
     end
 
     same_state_hold_valid =
-      same_state_hold_valid &&
-      ((state_write_enable_mask & state_hold_mask) == '0);
+      same_state_hold_valid
+      && (
+        (state_write_enable_mask & state_hold_mask)
+        == '0
+      );
 
     state_domain_valid =
-      state_domain_valid &&
-      state_output_domain_valid &&
-      no_reserved_state_output;
+      state_domain_valid
+      && state_output_domain_valid
+      && no_reserved_state_output;
 
     state_update_valid =
-      state_domain_valid &&
-      state_write_capacity_valid &&
-      same_state_hold_valid &&
-      active_neutral_writeback_valid &&
-      pending_completion_writeback_valid &&
-      no_reserved_state_output &&
-      no_actual_direct_events;
+      state_domain_valid
+      && state_write_capacity_valid
+      && same_state_hold_valid
+      && active_neutral_writeback_valid
+      && pending_completion_writeback_valid
+      && no_reserved_state_output
+      && no_actual_direct_events;
   end
 
   // --------------------------------------------------------------------------
