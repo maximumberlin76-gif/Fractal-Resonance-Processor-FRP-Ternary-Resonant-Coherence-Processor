@@ -31,7 +31,6 @@ jobs:
 
           for path in sorted(Path("rtl/m16").glob("*.sv")):
               text = path.read_text(encoding="utf-8")
-
               updated = re.sub(r"\bcell\b", "element_index", text)
 
               if updated != text:
@@ -44,6 +43,44 @@ jobs:
                   print(f"- {item}")
           else:
               print("No standalone lowercase cell identifiers found.")
+          PY
+
+      - name: Patch Verilator unsupported default disable iff
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("rtl/m16/frp_m16_assertions.sv")
+          text = path.read_text(encoding="utf-8")
+
+          original = text
+
+          # Verilator 5.020 rejects SystemVerilog default disable iff.
+          # Replace the global assertion default with explicit per-assert disable iff.
+          text = re.sub(
+              r"(?m)^\s*default\s+disable\s+iff\s*\(\s*!\s*rst_n\s*\)\s*;\s*$",
+              "",
+              text,
+          )
+
+          # Convert simple assert property statements:
+          #   assert property (PROPERTY);
+          # into:
+          #   assert property (disable iff (!rst_n) PROPERTY);
+          #
+          # Do not touch assertions already carrying disable iff.
+          text = re.sub(
+              r"assert\s+property\s*\(\s*(?!disable\s+iff)([^;\n]+?)\s*\)",
+              r"assert property (disable iff (!rst_n) \1)",
+              text,
+          )
+
+          if text != original:
+              path.write_text(text, encoding="utf-8")
+              print("Patched rtl/m16/frp_m16_assertions.sv for Verilator disable iff compatibility.")
+          else:
+              print("No default disable iff patch needed.")
           PY
 
       - name: Verify reserved identifier cleanup
@@ -78,7 +115,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add rtl/m16/*.sv
-            git commit -m "Fix reserved cell identifiers across M16 RTL"
+            git commit -m "Fix M16 Verilator compatibility blockers"
             git push
           fi
 
