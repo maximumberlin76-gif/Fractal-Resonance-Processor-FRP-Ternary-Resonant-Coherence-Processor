@@ -1,0 +1,67 @@
+name: FRP M16 Reserved Cell Cleanup
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup-reserved-cell:
+    name: Cleanup reserved cell identifiers
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Replace standalone reserved cell identifiers in M16 RTL
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path("rtl/m16")
+          files = sorted(root.glob("*.sv"))
+
+          changed = []
+
+          for path in files:
+              text = path.read_text(encoding="utf-8")
+
+              # Replace only standalone lowercase identifier "cell".
+              # Does not touch CELLS, CELL_INDEX_BITS, request_cell_index,
+              # or other larger identifiers.
+              new_text = re.sub(r"\bcell\b", "element_index", text)
+
+              if new_text != text:
+                  path.write_text(new_text, encoding="utf-8")
+                  changed.append(str(path))
+
+          if changed:
+              print("Changed files:")
+              for item in changed:
+                  print(f"- {item}")
+          else:
+              print("No standalone lowercase cell identifiers found.")
+          PY
+
+      - name: Show RTL diff
+        run: |
+          git diff -- rtl/m16 || true
+
+      - name: Commit cleanup
+        run: |
+          if git diff --quiet -- rtl/m16; then
+            echo "No cleanup commit required."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add rtl/m16/*.sv
+          git commit -m "Fix reserved cell identifiers across M16 RTL"
+          git push
