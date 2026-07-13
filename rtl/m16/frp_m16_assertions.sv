@@ -41,6 +41,7 @@ module frp_m16_assertions #(
   input logic rst_n,
 
   input logic tick_enable,
+  input logic clear_counters,
 
   input frp_m16_pkg::frp_m16_scheduler_mode_e  scheduler_mode_q,
   input frp_m16_pkg::frp_m16_scheduler_state_e scheduler_state_q,
@@ -391,26 +392,56 @@ module frp_m16_assertions #(
     "FRP M16 assertion failed: pending_route_out changed while tick_enable was low"
   );
 
-  // ticks_recorded_q must hold while tick_enable is low, except for the
-  // architecturally defined synchronous clear of the complete scheduler
-  // counter bank.
+  // The scheduler counter bank must hold on a disabled tick when no explicit
+  // clear is requested.
   assert property (
     disable iff (!rst_n)
-    !tick_enable
+    (!tick_enable && !clear_counters)
     |=>
     (
       $stable(ticks_recorded_q)
-      || (
-        (ticks_recorded_q == '0)
-        && (scheduler_count_free_q == '0)
-        && (scheduler_count_balance_q == '0)
-        && (scheduler_count_commit_q == '0)
-        && (scheduler_count_excite_q == '0)
-        && (scheduler_count_neutralize_q == '0)
-      )
+      && $stable(scheduler_count_free_q)
+      && $stable(scheduler_count_balance_q)
+      && $stable(scheduler_count_commit_q)
+      && $stable(scheduler_count_excite_q)
+      && $stable(scheduler_count_neutralize_q)
     )
   ) else $error(
-    "FRP M16 assertion failed: ticks_recorded changed without a complete scheduler counter clear"
+    "FRP M16 assertion failed: scheduler counters changed while tick and clear were disabled"
+  );
+
+  // clear_counters is the explicit synchronous clear of the complete scheduler
+  // counter bank. When no tick is enabled in the clear cycle, every counter
+  // must be zero on the following sampled cycle.
+  assert property (
+    disable iff (!rst_n)
+    (clear_counters && !tick_enable)
+    |=>
+    (
+      (ticks_recorded_q == '0)
+      && (scheduler_count_free_q == '0)
+      && (scheduler_count_balance_q == '0)
+      && (scheduler_count_commit_q == '0)
+      && (scheduler_count_excite_q == '0)
+      && (scheduler_count_neutralize_q == '0)
+    )
+  ) else $error(
+    "FRP M16 assertion failed: clear_counters did not clear the scheduler counter bank"
+  );
+
+  // The scheduler next-state logic applies clear first and then records an
+  // enabled tick. A simultaneous clear and tick therefore leaves exactly one
+  // recorded scheduler event on the following sampled cycle.
+  assert property (
+    disable iff (!rst_n)
+    (clear_counters && tick_enable)
+    |=>
+    (
+      (ticks_recorded_q == {{(COUNTER_BITS-1){1'b0}}, 1'b1})
+      && (scheduler_count_sum == {{(COUNTER_BITS-1){1'b0}}, 1'b1})
+    )
+  ) else $error(
+    "FRP M16 assertion failed: simultaneous counter clear and tick did not record exactly one scheduler event"
   );
 
   // --------------------------------------------------------------------------
