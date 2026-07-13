@@ -1,9 +1,5 @@
 # FRP M16 RTL Artifact Manifest
 
-## Status
-
-`ARTIFACT-BOUNDARY PASS`
-
 ## Version
 
 `FRP v1.8.0`
@@ -12,465 +8,637 @@
 
 `M16 — RTL Core Realization and Execution Semantics Package`
 
-## Purpose
+## Processor
 
-This manifest records the concrete RTL artifacts introduced for the M16 RTL core realization layer of the:
+`FRP — Ternary Fractal Resonant Coherence Processor`
 
-`Ternary Fractal Resonant Coherence Processor`
+## Artifact Boundary
 
-The manifest defines the artifact inventory, semantic role, integration position, workflow qualification state, and remaining simulator boundary for each SystemVerilog and documentation artifact in `rtl/m16`.
+The M16 RTL artifact boundary contains the SystemVerilog realization of the retained balanced ternary execution architecture.
 
-M16 does not introduce a new processor model.
+The artifact set implements:
 
-M16 realizes the M15-qualified retained-state execution contract in RTL artifact form.
+- canonical balanced ternary retained state;
+- active neutral state `0`;
+- `free`, `7/1`, and `1/7` temporal execution;
+- deterministic request-lane arbitration;
+- retained pending-route polarity;
+- mandatory tick-separated opposite-polarity routing;
+- distributed transition-capacity enforcement;
+- retained-state writeback;
+- architectural telemetry;
+- temporal and structural assertions;
+- deterministic executable qualification.
 
-## Current Qualification Result
+## Directory Inventory
 
-Current M16 RTL artifact-boundary result:
+The `rtl/m16/` directory contains:
 
-`PASS`
+- ten SystemVerilog artifacts;
+- five RTL documentation artifacts.
 
-Qualified workflow:
+### SystemVerilog Artifacts
 
-`FRP M16 RTL Artifact Boundary`
-
-Passing workflow run:
-
-`FRP M16 RTL Artifact Boundary #8`
-
-Passing commit:
-
-`12a3431`
-
-Current external simulator result:
-
-`pending external simulator execution`
-
-Current final M16 closure result:
-
-`pending simulator transcript capture`
-
-## Preserved Execution Contract
-
-The M16 RTL artifact set preserves the retained-state execution chain:
-
-`phase-derived ternary target`
-
-→ `request-lane arbitration`
-
-→ `transition-capacity guard`
-
-→ `pending-route processing`
-
-→ `active-neutral routing through 0`
-
-→ `retained balanced ternary state`
-
-Required global invariants:
-
-`actual_direct_events = 0`
-
-`reserved_state_events = 0`
-
-`queue_overflow_events = 0`
-
-## Canonical Encoding
-
-The artifact set preserves the canonical M15 balanced ternary encoding:
-
-| Ternary state | Encoding | Status |
+| File | Module or package | Architectural function |
 |---|---|---|
-| `-1` | `2'b11` | valid |
-| `0` | `2'b00` | valid active neutral |
-| `+1` | `2'b01` | valid |
-| reserved | `2'b10` | invalid |
+| `frp_m16_pkg.sv` | `frp_m16_pkg` | canonical encodings, scheduler states, transition classes, invariant indexes, capacity parameters, and shared semantic functions |
+| `frp_m16_scheduler.sv` | `frp_m16_scheduler` | potakt execution of `free`, `7/1`, and `1/7` scheduler modes |
+| `frp_m16_request_lanes.sv` | `frp_m16_request_lanes` | deterministic ascending request-lane arbitration |
+| `frp_m16_pending_routes.sv` | `frp_m16_pending_routes` | retained pending-polarity storage, deferral, completion, and clearing |
+| `frp_m16_active_neutral.sv` | `frp_m16_active_neutral` | balanced ternary transition classification and active-neutral candidate generation |
+| `frp_m16_capacity_guard.sv` | `frp_m16_capacity_guard` | per-tick distributed transition-capacity admission |
+| `frp_m16_state_update.sv` | `frp_m16_state_update` | capacity-approved retained-state writeback |
+| `frp_m16_core.sv` | `frp_m16_core` | integrated M16 RTL execution boundary |
+| `frp_m16_assertions.sv` | `frp_m16_assertions` | temporal, routing, domain, capacity, and writeback assertions |
+| `frp_m16_tb.sv` | `frp_m16_tb` | deterministic executable architectural testbench |
 
-Required invariant:
+### RTL Documentation Artifacts
 
-`reserved_state_events = 0`
-
-## Artifact Inventory
-
-| File | Artifact role | Status |
-|---|---|---|
-| `frp_m16_pkg.sv` | constants, encodings, helper functions, scheduler decoding, transition classification, capacity calculation | present |
-| `frp_m16_scheduler.sv` | scheduler-state realization for `free`, `7/1`, and `1/7` execution modes | present |
-| `frp_m16_request_lanes.sv` | deterministic request-lane arbitration | present |
-| `frp_m16_pending_routes.sv` | pending-route register layer | present |
-| `frp_m16_active_neutral.sv` | active-neutral transition generation | present |
-| `frp_m16_capacity_guard.sv` | transition-capacity enforcement | present |
-| `frp_m16_state_update.sv` | retained-state writeback | present |
-| `frp_m16_core.sv` | integrated M16 RTL core | present |
-| `frp_m16_assertions.sv` | assertion binding layer | present |
-| `frp_m16_tb.sv` | deterministic smoke testbench | present |
-| `README.md` | RTL layer overview | present |
-| `ARTIFACTS.md` | current artifact manifest | current file |
-| `SIMULATION.md` | simulator execution instructions | present |
-| `SIMULATION_TRANSCRIPT.md` | simulation transcript template | present |
-| `CLOSURE.md` | RTL closure report | present |
-
-## Artifact Dependency Order
-
-Recommended compile and dependency order:
-
-    frp_m16_pkg.sv
-    frp_m16_scheduler.sv
-    frp_m16_request_lanes.sv
-    frp_m16_pending_routes.sv
-    frp_m16_active_neutral.sv
-    frp_m16_capacity_guard.sv
-    frp_m16_state_update.sv
-    frp_m16_core.sv
-    frp_m16_assertions.sv
-    frp_m16_tb.sv
-
-The package file must be visible before all dependent modules.
-
-The integrated core imports and connects the module boundary.
-
-The testbench instantiates the integrated core and assertion layer.
-
-## Qualified Test Boundary
-
-Qualified test file:
-
-`tests/test_m16_rtl_artifact_manifest.py`
-
-The test validates:
-
-- `rtl/m16/` directory existence;
-- required RTL source artifact existence;
-- required RTL documentation artifact existence;
-- canonical balanced ternary package symbols;
-- integrated core module references;
-- assertion-layer zero-event invariants;
-- deterministic RTL smoke-testbench scope;
-- simulation instruction boundary;
-- simulation transcript placeholder boundary;
-- closure document status;
-- root README exposure;
-- project-structure exposure;
-- documentation README exposure;
-- architecture document exposure.
-
-## Qualified Workflow Boundary
-
-Qualified workflow:
-
-`.github/workflows/frp-m16-rtl-artifact-boundary.yml`
-
-Workflow name:
-
-`FRP M16 RTL Artifact Boundary`
-
-Workflow result:
-
-`PASS`
-
-Passing run:
-
-`FRP M16 RTL Artifact Boundary #8`
-
-Passing commit:
-
-`12a3431`
-
-Workflow validation command:
-
-    python -m pytest tests/test_m16_rtl_artifact_manifest.py -q
-
-## Package Artifact
-
-File:
-
-`frp_m16_pkg.sv`
-
-Role:
-
-Defines the shared RTL constants and semantic encodings used across M16.
-
-Includes:
-
-- `FRP_M16_STATE_BITS`;
-- `FRP_M16_SCHED_MODE_BITS`;
-- `FRP_M16_SCHED_BITS`;
-- `FRP_M16_COUNTER_BITS`;
-- balanced ternary state encoding;
-- scheduler mode encoding;
-- scheduler state encoding;
-- transition class encoding;
-- request rejection reason encoding;
-- invariant flag indexes;
-- ternary-domain helper functions;
-- transition-classification helper;
-- scheduler decoding helpers;
-- request-lane capacity calculation.
-
-Required package invariant:
-
-`FRP_M16_REQUEST_LANES_8_CELLS = 2`
-
-`FRP_M16_REQUEST_LANES_16_CELLS = 4`
-
-`FRP_M16_REQUEST_LANES_32_CELLS = 8`
-
-## Scheduler Artifact
-
-File:
-
-`frp_m16_scheduler.sv`
-
-Role:
-
-Implements the M16 scheduler-state realization.
-
-Preserved modes:
-
-- `free`;
-- `7/1`;
-- `1/7`.
-
-Required profiles:
-
-| Mode | Required profile |
+| File | Function |
 |---|---|
-| `free` | `16 ticks → free = 16` |
-| `7/1` | `64 ticks → balance = 56, commit = 8` |
-| `1/7` | `16 ticks → excite = 2, neutralize = 14` |
+| `README.md` | M16 RTL architecture, execution semantics, module structure, and interface |
+| `ARTIFACTS.md` | exact SystemVerilog and RTL documentation manifest |
+| `SIMULATION.md` | simulator build, execution, and result-validation procedure |
+| `SIMULATION_TRANSCRIPT.md` | simulator command and execution-result record |
+| `CLOSURE.md` | complete M16 RTL closure record |
 
-Required scheduler invariant:
+## Architectural State Domain
 
-`scheduler_count_free + scheduler_count_balance + scheduler_count_commit + scheduler_count_excite + scheduler_count_neutralize = ticks_recorded`
+The retained processor-state domain is:
 
-## Request-Lane Artifact
+`{-1, 0, +1}`
 
-File:
+Canonical encoding:
 
-`frp_m16_request_lanes.sv`
+| Ternary state | Encoding |
+|---|---|
+| `-1` | `2'b11` |
+| `0` | `2'b00` |
+| `+1` | `2'b01` |
+| reserved | `2'b10` |
 
-Role:
+The same encoding is used by:
 
-Implements deterministic request-lane arbitration.
+- retained processor state;
+- phase-derived target state;
+- request target;
+- transition candidate;
+- pending-route target;
+- retained-state output.
 
-Preserved properties:
+The state `0` is the active neutral processor state.
 
-- ascending lane order;
-- valid cell-index checking;
-- valid target-domain checking;
-- duplicate-cell rejection;
-- scheduler eligibility gating;
-- pending-route priority protection;
-- active-neutral routing classification;
-- transition-capacity compatibility.
+Its architectural functions include:
 
-Required request-lane invariant:
+- balancing;
+- phase damping;
+- transition buffering;
+- conflict neutralization;
+- polarity bridging;
+- switching-load distribution;
+- temporal separation;
+- retained-state stabilization.
 
-`request_accept & request_reject = 0`
+## Temporal Execution Artifacts
 
-## Pending-Route Artifact
+### Free Mode
 
-File:
+Every enabled processor tick is:
 
-`frp_m16_pending_routes.sv`
+`FRP_SCHED_FREE`
 
-Role:
+The free state is:
 
-Implements retained pending-route state for opposite-polarity transitions.
+- commit-capable;
+- neutralize-capable.
 
-Preserved sequence:
+It admits:
 
-`-1 → 0 → +1`
+- same-state retention;
+- `0 → -1`;
+- `0 → +1`;
+- `-1 → 0`;
+- `+1 → 0`;
+- opposite-polarity first-leg routing;
+- pending-route completion.
 
-`+1 → 0 → -1`
+### 7/1 Mode
 
-Required pending-route invariants:
+The repeating scheduler sequence is:
 
-`pending routes preserve requested target polarity`
+`balance, balance, balance, balance, balance, balance, balance, commit`
 
-`pending completion starts from 0`
+Period mapping:
 
-`queue_overflow_events = 0`
+| Period index | State |
+|---:|---|
+| `0` | `FRP_SCHED_BALANCE` |
+| `1` | `FRP_SCHED_BALANCE` |
+| `2` | `FRP_SCHED_BALANCE` |
+| `3` | `FRP_SCHED_BALANCE` |
+| `4` | `FRP_SCHED_BALANCE` |
+| `5` | `FRP_SCHED_BALANCE` |
+| `6` | `FRP_SCHED_BALANCE` |
+| `7` | `FRP_SCHED_COMMIT` |
 
-## Active-Neutral Artifact
+Balance ticks admit:
 
-File:
+- same-state retention;
+- `-1 → 0`;
+- `+1 → 0`;
+- opposite-polarity first-leg routing.
 
-`frp_m16_active_neutral.sv`
+Commit ticks admit:
 
-Role:
+- same-state retention;
+- `0 → -1`;
+- `0 → +1`;
+- pending-route completion.
 
-Implements legal retained-state transition generation.
+Required scheduler relations:
 
-Allowed transitions:
+`16 ticks → balance = 14, commit = 2`
 
-`0 → +1`
+`64 ticks → balance = 56, commit = 8`
 
-`0 → -1`
+### 1/7 Mode
 
-`+1 → 0`
+The repeating scheduler sequence is:
 
-`-1 → 0`
+`excite, neutralize, neutralize, neutralize, neutralize, neutralize, neutralize, neutralize`
 
-Forbidden direct transitions:
+Period mapping:
+
+| Period index | State |
+|---:|---|
+| `0` | `FRP_SCHED_EXCITE` |
+| `1` | `FRP_SCHED_NEUTRALIZE` |
+| `2` | `FRP_SCHED_NEUTRALIZE` |
+| `3` | `FRP_SCHED_NEUTRALIZE` |
+| `4` | `FRP_SCHED_NEUTRALIZE` |
+| `5` | `FRP_SCHED_NEUTRALIZE` |
+| `6` | `FRP_SCHED_NEUTRALIZE` |
+| `7` | `FRP_SCHED_NEUTRALIZE` |
+
+Excite ticks admit:
+
+- same-state retention;
+- `0 → -1`;
+- `0 → +1`;
+- pending-route completion.
+
+Neutralize ticks admit:
+
+- same-state retention;
+- `-1 → 0`;
+- `+1 → 0`;
+- opposite-polarity first-leg routing.
+
+Required scheduler relation:
+
+`16 ticks → excite = 2, neutralize = 14`
+
+## Active-Neutral Routing Artifacts
+
+Direct opposite-polarity execution is excluded from the retained-state boundary:
 
 `-1 → +1`
 
 `+1 → -1`
 
-Required active-neutral invariant:
+The implemented routes are:
 
-`actual_direct_events = 0`
+`-1 → 0 → +1`
 
-## Capacity-Guard Artifact
+`+1 → 0 → -1`
 
-File:
+The first eligible neutralize-capable tick performs:
 
-`frp_m16_capacity_guard.sv`
+`nonzero state → active neutral 0`
 
-Role:
+The requested opposite polarity is stored in:
 
-Implements the transition-capacity boundary.
+`pending_route`
 
-Preserved relation:
+A later commit-capable tick performs:
+
+`active neutral 0 → pending_route`
+
+The two route legs are separate state changes on separate eligible ticks.
+
+Each leg independently consumes transition capacity.
+
+## Pending-Route Artifact Contract
+
+Each cell contains one retained pending-route slot.
+
+The slot values use the canonical balanced ternary encoding:
+
+| Pending value | Meaning |
+|---|---|
+| `0` | no retained pending polarity |
+| `-1` | retained negative completion target |
+| `+1` | retained positive completion target |
+| reserved | invalid route encoding |
+
+Pending-route ownership provides:
+
+- completion priority over new same-cell requests;
+- exact target-polarity retention;
+- stability across scheduler-ineligible ticks;
+- stability across transition-capacity deferral;
+- completion only from retained active neutral `0`;
+- clearing only after accepted completion writeback;
+- one retained route per cell.
+
+## Transition-Capacity Artifacts
+
+The distributed transition fraction is:
+
+`0.25`
+
+The per-tick transition boundary is:
 
 `REQUEST_LANES = max(1, round(CELLS × 0.25))`
 
-Required capacity invariant:
+Qualified parameter relations:
+
+| Cells | Request lanes |
+|---:|---:|
+| `8` | `2` |
+| `16` | `4` |
+| `32` | `8` |
+
+Capacity is consumed by:
+
+- `0 → -1`;
+- `0 → +1`;
+- `-1 → 0`;
+- `+1 → 0`;
+- opposite-polarity first-leg execution;
+- pending-route completion.
+
+Same-state retention consumes no transition capacity.
+
+Capacity priority is:
+
+1. pending-route completion candidates in ascending cell order;
+2. accepted explicit requests in ascending lane order.
+
+Capacity relations:
 
 `accepted_changes <= REQUEST_LANES`
 
-Switch-load numerator:
+`capacity_remaining = REQUEST_LANES - accepted_changes`
+
+`capacity_exhausted = (accepted_changes == REQUEST_LANES)`
 
 `switch_load_numerator = accepted_changes`
 
-## State-Update Artifact
+## Package Artifact
 
-File:
+### File
+
+`frp_m16_pkg.sv`
+
+### Definitions
+
+The package defines:
+
+- state widths;
+- scheduler-mode widths;
+- scheduler-state widths;
+- transition-class widths;
+- counter widths;
+- default cell count;
+- transition-fraction constants;
+- canonical ternary encoding;
+- scheduler mode encoding;
+- scheduler state encoding;
+- transition-class encoding;
+- request-rejection encoding;
+- invariant flag indexes;
+- request-lane capacity calculation.
+
+### Shared Functions
+
+The package provides functions for:
+
+- canonical ternary-domain checking;
+- reserved-state detection;
+- zero-state detection;
+- nonzero-state detection;
+- positive-state detection;
+- negative-state detection;
+- opposite-polarity detection;
+- legal state-change detection;
+- pending-route detection;
+- transition classification;
+- transition target selection;
+- transition-capacity classification;
+- scheduler-mode validation;
+- scheduler-state validation;
+- scheduler-state decoding;
+- commit-capability detection;
+- neutralize-capability detection;
+- scheduler transition eligibility;
+- request-lane count calculation;
+- cell-index width calculation;
+- packed-state width calculation.
+
+## Scheduler Artifact
+
+### File
+
+`frp_m16_scheduler.sv`
+
+### Inputs
+
+- clock;
+- active-low reset;
+- tick enable;
+- counter clear;
+- scheduler mode.
+
+### Outputs
+
+- registered scheduler mode;
+- registered scheduler state;
+- tick index;
+- period index;
+- total recorded ticks;
+- free count;
+- balance count;
+- commit count;
+- excite count;
+- neutralize count;
+- state-specific enables;
+- scheduler validity;
+- scheduler-counter validity.
+
+### Counter Invariant
+
+`scheduler_count_free`
+
+`+ scheduler_count_balance`
+
+`+ scheduler_count_commit`
+
+`+ scheduler_count_excite`
+
+`+ scheduler_count_neutralize`
+
+`= ticks_recorded`
+
+## Request-Lane Artifact
+
+### File
+
+`frp_m16_request_lanes.sv`
+
+### Arbitration Order
+
+Requests are examined in ascending lane order:
+
+`lane 0 → lane 1 → ... → lane REQUEST_LANES - 1`
+
+### Rejection Classes
+
+A request may be rejected for:
+
+- invalid cell index;
+- reserved target encoding;
+- duplicate cell ownership;
+- scheduler ineligibility;
+- transition-capacity rejection;
+- retained pending-route ownership;
+- disabled tick.
+
+### Outputs
+
+The module provides:
+
+- accepted-lane mask;
+- rejected-lane mask;
+- rejection-class masks;
+- neutralized-request mask;
+- accepted-cell mask;
+- rejected-cell mask;
+- neutral-routed-cell mask;
+- requested-direct-cell mask;
+- lane-event telemetry;
+- arbitration invariant signals.
+
+## Pending-Route Artifact
+
+### File
+
+`frp_m16_pending_routes.sv`
+
+### Register Operations
+
+The module performs:
+
+- pending-route creation;
+- pending-route retention;
+- pending-route deferral;
+- pending-route completion;
+- pending-route clearing;
+- overwrite prevention;
+- reserved-state detection;
+- queue-overflow detection.
+
+A new pending route is created only when the corresponding opposite-polarity first leg receives transition capacity.
+
+A pending route is cleared only when the corresponding completion leg receives transition capacity.
+
+## Active-Neutral Artifact
+
+### File
+
+`frp_m16_active_neutral.sv`
+
+### Transition Classes
+
+The module generates candidates for:
+
+- same-state retention;
+- zero-to-nonzero transition;
+- nonzero-to-zero transition;
+- opposite-polarity first leg;
+- pending-route completion.
+
+### Outputs
+
+The module provides:
+
+- packed state candidate;
+- transition-valid mask;
+- same-state mask;
+- zero-to-nonzero mask;
+- nonzero-to-zero mask;
+- opposite-polarity mask;
+- neutral-routed mask;
+- pending-completion mask;
+- actual-direct mask;
+- reserved-transition mask;
+- accepted-change candidate mask;
+- transition event telemetry;
+- transition invariant signals.
+
+## Capacity-Guard Artifact
+
+### File
+
+`frp_m16_capacity_guard.sv`
+
+### Function
+
+The module selects the bounded subset of state-changing candidates admitted for the current tick.
+
+It provides:
+
+- capacity-approved request lanes;
+- capacity-rejected request lanes;
+- capacity-accepted cell mask;
+- capacity-rejected cell mask;
+- accepted-change mask;
+- accepted-change count;
+- remaining capacity;
+- capacity-exhausted signal;
+- switch-load numerator;
+- capacity telemetry;
+- capacity invariant signals.
+
+## Retained-State Artifact
+
+### File
 
 `frp_m16_state_update.sv`
 
-Role:
+### Function
 
-Implements final retained-state writeback.
+The module commits capacity-approved transition candidates into retained balanced ternary state.
 
-Preserved writeback rules:
+It provides:
 
-- reset initializes retained state to `0`;
-- tick-disabled cycles preserve retained state;
-- state-changing writeback requires capacity approval;
-- same-state retention does not consume capacity;
-- active-neutral routed writeback terminates in `0`;
-- pending-route completion starts from `0`;
-- reserved state output is forbidden;
-- direct opposite-polarity writeback is forbidden.
-
-Required state-update invariant:
-
-`state_out` contains no `2'b10`
+- registered retained state;
+- combinational next state;
+- public state output;
+- state-write mask;
+- state-hold mask;
+- reset mask;
+- reserved-state mask;
+- accepted-change count;
+- switch-load numerator;
+- writeback telemetry;
+- state-update invariant signals.
 
 ## Integrated Core Artifact
 
-File:
+### File
 
 `frp_m16_core.sv`
 
-Role:
+### Module Hierarchy
 
-Integrates the M16 RTL execution modules into one core boundary.
+The integrated core instantiates:
 
-Integrated modules:
+- `frp_m16_scheduler`;
+- `frp_m16_request_lanes`;
+- `frp_m16_active_neutral`;
+- `frp_m16_capacity_guard`;
+- `frp_m16_pending_routes`;
+- `frp_m16_state_update`.
 
-- scheduler;
-- request-lane arbitration;
-- active-neutral transition;
-- transition-capacity guard;
-- pending-route register layer;
-- retained-state update layer.
+### Architectural Tick Flow
 
-Core outputs include:
+For each enabled tick:
 
-- retained state;
-- pending-route state;
-- scheduler counters;
-- request accept/reject masks;
-- accepted-change mask;
-- accepted-change count;
-- capacity remaining;
-- capacity exhausted;
-- switch-load numerator;
-- event counters;
-- invariant flags.
+1. decode scheduler state;
+2. identify eligible pending completions;
+3. arbitrate explicit request lanes;
+4. classify accepted transitions;
+5. generate active-neutral candidates;
+6. apply pending-completion priority;
+7. apply transition capacity;
+8. commit retained-state changes;
+9. create or clear pending routes;
+10. update telemetry and invariant flags.
 
-Required core invariants:
+### Public Event Sources
 
-`actual_direct_events = 0`
+The integrated boundary exposes one architectural source for:
 
-`reserved_state_events = 0`
-
-`queue_overflow_events = 0`
+- requested direct events;
+- prevented direct events;
+- neutral-routed events;
+- actual direct events;
+- reserved-state events;
+- queue-overflow events.
 
 ## Assertion Artifact
 
-File:
+### File
 
 `frp_m16_assertions.sv`
 
-Role:
+### Assertion Domains
 
-Defines assertion checks for the integrated RTL boundary.
+The assertion layer checks:
 
-Assertion coverage includes:
-
-- state-domain validity;
-- pending-route-domain validity;
-- scheduler validity;
-- scheduler counter consistency;
+- reset state;
+- canonical retained-state domain;
+- canonical pending-route domain;
+- disabled-tick retention;
+- state-change authorization;
+- direct opposite-polarity exclusion;
+- active-neutral first-leg execution;
+- exact pending-polarity retention;
+- pending-route deferral;
+- completion only from active neutral `0`;
+- scheduler-mode validity;
+- scheduler-state validity;
+- scheduler-counter relations;
 - request accept/reject separation;
-- accepted-change capacity boundary;
-- capacity remaining relation;
-- capacity exhaustion relation;
-- switch-load numerator relation;
-- event-counter invariants;
-- invariant-flag validity;
-- tick-disabled hold behavior.
-
-Required assertion result:
-
-`PASS`
-
-Current assertion source-artifact boundary result:
-
-`PASS`
-
-Current external simulator assertion result:
-
-`pending external simulator execution`
+- transition-capacity relations;
+- switch-load relation;
+- zero-event invariants;
+- integrated invariant flags.
 
 ## Testbench Artifact
 
-File:
+### File
 
 `frp_m16_tb.sv`
 
-Role:
+### Execution Domains
 
-Provides the first deterministic RTL smoke testbench.
+The deterministic testbench executes:
 
-Current testbench exercises:
+- reset to active neutral state;
+- `free` execution;
+- `7/1` execution;
+- `1/7` execution;
+- `0 → +1`;
+- `+1 → 0 → -1`;
+- `-1 → 0 → +1`;
+- pending-route retention;
+- pending-route completion;
+- transition-capacity saturation;
+- counter clearing with retained state preserved.
 
-- reset-to-neutral initialization;
-- free scheduler mode;
-- `7/1` scheduler smoke profile;
-- `1/7` scheduler smoke profile;
-- neutral release `0 → +1`;
-- neutralization `+1 → 0`;
-- opposite-polarity request `+1 → -1`;
-- active-neutral route `+1 → 0`;
-- retained pending route to `-1`;
-- pending completion `0 → -1`;
-- invariant flag checks.
+### Scheduler Sequences
 
-Required final testbench counters:
+The testbench verifies:
+
+`free: 16 free ticks`
+
+`7/1: 56 balance ticks + 8 commit ticks`
+
+`1/7: 2 excite ticks + 14 neutralize ticks`
+
+### Terminal Invariants
 
 `actual_direct_events = 0`
 
@@ -478,182 +646,94 @@ Required final testbench counters:
 
 `queue_overflow_events = 0`
 
-## Documentation Artifact
+## Include and Elaboration Graph
 
-File:
+Simulation entry artifact:
 
-`README.md`
+`frp_m16_tb.sv`
 
-Role:
+The testbench includes:
 
-Documents the RTL layer, artifact set, compile order, scheduler semantics, ternary encoding, transition-capacity boundary, active-neutral routing, pending-route behavior, assertion boundary, M15 compatibility position, artifact-boundary PASS status, and external FPGA review boundary.
+- `frp_m16_pkg.sv`;
+- `frp_m16_core.sv`;
+- `frp_m16_assertions.sv`.
 
-## Manifest Artifact
+The integrated core includes:
 
-File:
+- `frp_m16_pkg.sv`;
+- `frp_m16_scheduler.sv`;
+- `frp_m16_request_lanes.sv`;
+- `frp_m16_pending_routes.sv`;
+- `frp_m16_active_neutral.sv`;
+- `frp_m16_capacity_guard.sv`;
+- `frp_m16_state_update.sv`.
 
-`ARTIFACTS.md`
+All SystemVerilog artifacts use include guards.
 
-Role:
+Top-level simulation module:
 
-Records the current artifact set and defines the M16 RTL artifact inventory for qualification tracking.
+`frp_m16_tb`
 
-## Simulation Instructions Artifact
+Top-level synthesis boundary:
 
-File:
+`frp_m16_core`
 
-`SIMULATION.md`
+## Semantic Dependency Order
 
-Role:
+The semantic dependency order is:
 
-Defines simulator command shape, artifact set under test, expected console markers, PASS conditions, assertion boundary, scheduler targets, transition targets, capacity targets, pending-route targets, and failure classification.
+`frp_m16_pkg.sv`
 
-Current status:
+→ `frp_m16_scheduler.sv`
 
-`present`
+→ `frp_m16_request_lanes.sv`
 
-## Simulation Transcript Artifact
+→ `frp_m16_active_neutral.sv`
 
-File:
+→ `frp_m16_capacity_guard.sv`
 
-`SIMULATION_TRANSCRIPT.md`
+→ `frp_m16_pending_routes.sv`
 
-Role:
+→ `frp_m16_state_update.sv`
 
-Defines the expected transcript format for external simulator execution.
+→ `frp_m16_core.sv`
 
-Current status:
+→ `frp_m16_assertions.sv`
 
-`pending external simulator execution`
+→ `frp_m16_tb.sv`
 
-## Closure Artifact
+Pending-route completion identification precedes explicit request admission inside the integrated tick relation.
 
-File:
+Pending-route register modification follows capacity admission.
 
-`CLOSURE.md`
+## Integrated Invariant Set
 
-Role:
+| Index | Invariant |
+|---:|---|
+| `0` | `FRP_INV_STATE_DOMAIN_VALID` |
+| `1` | `FRP_INV_SCHEDULER_COUNTS_VALID` |
+| `2` | `FRP_INV_REQUEST_LANE_ORDER_VALID` |
+| `3` | `FRP_INV_PENDING_POLARITY_VALID` |
+| `4` | `FRP_INV_ACTIVE_NEUTRAL_VALID` |
+| `5` | `FRP_INV_TRANSITION_CAPACITY_VALID` |
+| `6` | `FRP_INV_STATE_UPDATE_VALID` |
+| `7` | `FRP_INV_NO_ACTUAL_DIRECT_EVENTS` |
+| `8` | `FRP_INV_NO_RESERVED_STATE` |
+| `9` | `FRP_INV_NO_QUEUE_OVERFLOW` |
 
-Records the M16 RTL closure boundary, artifact-boundary PASS status, preserved execution semantics, M15 compatibility boundary, simulation boundary, corrective qualification event, closure table, and remaining simulator transcript requirements.
+## M15 to M16 Artifact Mapping
 
-Current status:
-
-`ARTIFACT-BOUNDARY PASS`
-
-## Corrective Qualification Event
-
-The M16 artifact-boundary workflow exposed a missing required RTL source artifact:
-
-`rtl/m16/frp_m16_pending_routes.sv`
-
-The missing pending-route RTL source artifact was added.
-
-After correction, the M16 artifact-boundary workflow passed.
-
-Corrected current result:
-
-`FRP M16 RTL Artifact Boundary #8 — PASS`
-
-Corrected commit:
-
-`12a3431`
-
-## Current Qualification Status
-
-| Qualification group | Status |
+| M15 execution element | M16 RTL artifact |
 |---|---|
-| RTL artifact inventory | PASS |
-| package artifact | present |
-| scheduler artifact | present |
-| request-lane artifact | present |
-| pending-route artifact | present |
-| active-neutral artifact | present |
-| capacity-guard artifact | present |
-| state-update artifact | present |
-| integrated core artifact | present |
-| assertion artifact | present |
-| testbench artifact | present |
-| documentation artifact set | present |
-| artifact-boundary workflow | PASS |
-| artifact-boundary qualification report | PASS |
-| M16 qualification index | implemented |
-| M16 qualification manifest | ACTIVE |
-| simulator execution transcript | pending |
-| deterministic replay adapter | pending |
-| M16 final closure report | pending simulator transcript capture |
-| FPGA synthesis report | pending |
-
-## M15 Compatibility Position
-
-The M16 RTL artifact set is designed to preserve the M15 deterministic retained-state boundary.
-
-Compatibility chain:
-
-`M15 quantized hardware shadow`
-
-→ `M15 cycle-exact integer golden trace`
-
-→ `M15 deterministic RTL comparison vectors`
-
-→ `M16 RTL core`
-
-→ `M16 assertion layer`
-
-→ `M16 simulation transcript`
-
-→ `M16 qualification closure`
-
-Replay target:
-
-`deterministic boundary equivalence`
-
-The replay target is not approximate behavioral similarity.
-
-## External Review Boundary
-
-The M16 RTL artifact set defines the architecture and execution semantics internally.
-
-An external FPGA or circuit-level reviewer may evaluate:
-
-- synthesis feasibility;
-- LUT utilization;
-- FF utilization;
-- BRAM usage;
-- DSP usage;
-- timing closure;
-- reset strategy;
-- clock strategy;
-- constraints;
-- target FPGA class.
-
-External review must not redefine the FRP processor semantics.
-
-## Manifest Closure Criteria
-
-This artifact manifest is valid when:
-
-- all implemented RTL files are listed;
-- every artifact has a defined role;
-- compile order is explicit;
-- preserved invariants are stated;
-- artifact-boundary workflow result is recorded;
-- M15 compatibility boundary is stated;
-- pending qualification artifacts are identified;
-- external review boundary is constrained.
-
-Current manifest result:
-
-`PASS`
-
-Current final simulator result:
-
-`pending external simulator execution`
-
-## Next Step
-
-The next repository step should expose artifact-boundary PASS status from:
-
-`docs/README.md`
+| balanced ternary retained state | `frp_m16_pkg.sv`, `frp_m16_state_update.sv` |
+| scheduler mode and scheduler state | `frp_m16_scheduler.sv` |
+| deterministic transition requests | `frp_m16_request_lanes.sv` |
+| active neutral polarity routing | `frp_m16_active_neutral.sv` |
+| retained opposite target | `frp_m16_pending_routes.sv` |
+| distributed transition fraction | `frp_m16_capacity_guard.sv` |
+| integrated retained-state tick | `frp_m16_core.sv` |
+| execution invariants | `frp_m16_assertions.sv` |
+| deterministic execution sequence | `frp_m16_tb.sv` |
 
 ## Author
 
