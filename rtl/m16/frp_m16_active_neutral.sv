@@ -139,6 +139,16 @@ module frp_m16_active_neutral #(
         end
     endfunction
 
+    task automatic set_candidate_value_at_index(
+        input int element_index,
+        input logic [STATE_BITS - 1:0] candidate_value
+    );
+        begin
+            state_candidate_d[(element_index * STATE_BITS) +: STATE_BITS] =
+                candidate_value;
+        end
+    endtask
+
     function automatic logic scheduler_allows_zero_to_nonzero(
         input frp_m16_scheduler_state_e sched
     );
@@ -167,7 +177,16 @@ module frp_m16_active_neutral #(
     endfunction
 
     always_comb begin
-        state_candidate_d = state_q;
+        for (
+            int element_index = 0;
+            element_index < CELLS;
+            element_index = element_index + 1
+        ) begin
+            set_candidate_value_at_index(
+                element_index,
+                state_value_at_index(state_q, element_index)
+            );
+        end
 
         transition_valid_mask = '0;
         same_state_mask = '0;
@@ -200,11 +219,7 @@ module frp_m16_active_neutral #(
         state_output_domain_valid = 1'b1;
         transition_replay_deterministic = 1'b1;
 
-        for (
-            int element_index = 0;
-            element_index < CELLS;
-            element_index = element_index + 1
-        ) begin
+        for (int element_index = 0; element_index < CELLS; element_index = element_index + 1) begin
             logic [STATE_BITS - 1:0] state_value;
             logic [STATE_BITS - 1:0] pending_value;
 
@@ -227,11 +242,7 @@ module frp_m16_active_neutral #(
         end
 
         if (tick_enable) begin
-            for (
-                int element_index = 0;
-                element_index < CELLS;
-                element_index = element_index + 1
-            ) begin
+            for (int element_index = 0; element_index < CELLS; element_index = element_index + 1) begin
                 logic [STATE_BITS - 1:0] state_value;
                 logic [STATE_BITS - 1:0] pending_value;
 
@@ -251,9 +262,7 @@ module frp_m16_active_neutral #(
                         frp_is_zero(state_value)
                         && scheduler_allows_pending_completion(scheduler_state)
                     ) begin
-                        state_candidate_d[
-                            (element_index * STATE_BITS) +: STATE_BITS
-                        ] = pending_value;
+                        set_candidate_value_at_index(element_index, pending_value);
 
                         transition_valid_mask[element_index] = 1'b1;
                         pending_completion_mask[element_index] = 1'b1;
@@ -274,11 +283,7 @@ module frp_m16_active_neutral #(
         end
 
         if (tick_enable) begin
-            for (
-                int lane_index = 0;
-                lane_index < REQUEST_LANES;
-                lane_index = lane_index + 1
-            ) begin
+            for (int lane_index = 0; lane_index < REQUEST_LANES; lane_index = lane_index + 1) begin
                 logic [CELL_INDEX_BITS - 1:0] packed_index_value;
                 int element_index_int;
                 logic [STATE_BITS - 1:0] state_value;
@@ -320,9 +325,7 @@ module frp_m16_active_neutral #(
 
                     unique case (transition_class)
                         FRP_TRANS_SAME_STATE: begin
-                            state_candidate_d[
-                                (element_index_int * STATE_BITS) +: STATE_BITS
-                            ] = state_value;
+                            set_candidate_value_at_index(element_index_int, state_value);
 
                             transition_valid_mask[element_index_int] = 1'b1;
                             same_state_mask[element_index_int] = 1'b1;
@@ -332,52 +335,32 @@ module frp_m16_active_neutral #(
                         end
 
                         FRP_TRANS_ZERO_TO_NONZERO: begin
-                            if (
-                                scheduler_allows_zero_to_nonzero(
-                                    scheduler_state
-                                )
-                            ) begin
-                                state_candidate_d[
-                                    (element_index_int * STATE_BITS)
-                                    +: STATE_BITS
-                                ] = target_value;
+                            if (scheduler_allows_zero_to_nonzero(scheduler_state)) begin
+                                set_candidate_value_at_index(element_index_int, target_value);
 
                                 transition_valid_mask[element_index_int] = 1'b1;
                                 zero_to_nonzero_mask[element_index_int] = 1'b1;
-                                accepted_change_candidate_mask[
-                                    element_index_int
-                                ] = 1'b1;
+                                accepted_change_candidate_mask[element_index_int] = 1'b1;
 
                                 zero_to_nonzero_events =
                                     zero_to_nonzero_events + COUNTER_ONE;
                                 accepted_change_candidate_events =
-                                    accepted_change_candidate_events
-                                    + COUNTER_ONE;
+                                    accepted_change_candidate_events + COUNTER_ONE;
                             end
                         end
 
                         FRP_TRANS_NONZERO_TO_ZERO: begin
-                            if (
-                                scheduler_allows_nonzero_to_zero(
-                                    scheduler_state
-                                )
-                            ) begin
-                                state_candidate_d[
-                                    (element_index_int * STATE_BITS)
-                                    +: STATE_BITS
-                                ] = FRP_STATE_ZERO;
+                            if (scheduler_allows_nonzero_to_zero(scheduler_state)) begin
+                                set_candidate_value_at_index(element_index_int, FRP_STATE_ZERO);
 
                                 transition_valid_mask[element_index_int] = 1'b1;
                                 nonzero_to_zero_mask[element_index_int] = 1'b1;
-                                accepted_change_candidate_mask[
-                                    element_index_int
-                                ] = 1'b1;
+                                accepted_change_candidate_mask[element_index_int] = 1'b1;
 
                                 nonzero_to_zero_events =
                                     nonzero_to_zero_events + COUNTER_ONE;
                                 accepted_change_candidate_events =
-                                    accepted_change_candidate_events
-                                    + COUNTER_ONE;
+                                    accepted_change_candidate_events + COUNTER_ONE;
                             end
                         end
 
@@ -387,22 +370,15 @@ module frp_m16_active_neutral #(
 
                             if (
                                 request_neutralized[lane_index]
-                                && scheduler_allows_nonzero_to_zero(
-                                    scheduler_state
-                                )
+                                && scheduler_allows_nonzero_to_zero(scheduler_state)
                             ) begin
-                                state_candidate_d[
-                                    (element_index_int * STATE_BITS)
-                                    +: STATE_BITS
-                                ] = FRP_STATE_ZERO;
+                                set_candidate_value_at_index(element_index_int, FRP_STATE_ZERO);
 
                                 transition_valid_mask[element_index_int] = 1'b1;
                                 opposite_polarity_mask[element_index_int] = 1'b1;
                                 neutral_routed_mask[element_index_int] = 1'b1;
                                 nonzero_to_zero_mask[element_index_int] = 1'b1;
-                                accepted_change_candidate_mask[
-                                    element_index_int
-                                ] = 1'b1;
+                                accepted_change_candidate_mask[element_index_int] = 1'b1;
 
                                 prevented_direct_events =
                                     prevented_direct_events + COUNTER_ONE;
@@ -411,8 +387,7 @@ module frp_m16_active_neutral #(
                                 nonzero_to_zero_events =
                                     nonzero_to_zero_events + COUNTER_ONE;
                                 accepted_change_candidate_events =
-                                    accepted_change_candidate_events
-                                    + COUNTER_ONE;
+                                    accepted_change_candidate_events + COUNTER_ONE;
                             end else begin
                                 active_neutral_routing_valid = 1'b0;
                             end
@@ -427,9 +402,7 @@ module frp_m16_active_neutral #(
                         end
 
                         default: begin
-                            state_candidate_d[
-                                (element_index_int * STATE_BITS) +: STATE_BITS
-                            ] = state_value;
+                            set_candidate_value_at_index(element_index_int, state_value);
                         end
                     endcase
                 end else if (
@@ -442,11 +415,7 @@ module frp_m16_active_neutral #(
             end
         end
 
-        for (
-            int element_index = 0;
-            element_index < CELLS;
-            element_index = element_index + 1
-        ) begin
+        for (int element_index = 0; element_index < CELLS; element_index = element_index + 1) begin
             logic [STATE_BITS - 1:0] state_value;
             logic [STATE_BITS - 1:0] next_value;
 
