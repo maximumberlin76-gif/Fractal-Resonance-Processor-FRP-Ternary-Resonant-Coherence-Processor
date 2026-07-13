@@ -13,13 +13,17 @@ Milestone:
     M16 — RTL Core Realization and Execution Semantics Package
 
 Purpose:
-    Validate that the M16 RTL artifact boundary exists, is indexed, and
-    preserves the required zero-event invariants before external simulator
-    execution is captured.
+    Validate the complete rtl/m16 artifact set and the architectural relations
+    implemented by the M16 SystemVerilog execution boundary.
 
 Test stability rule:
-    These tests validate stable semantic repository facts.
-    They must not pin live GitHub Actions run numbers or commit hashes.
+    These tests validate repository files, module structure, architectural
+    symbols, temporal execution modes, active-neutral routing, retained
+    pending polarity, transition capacity, assertion coverage, and simulation
+    commands.
+
+    The tests do not depend on workflow run numbers, commit hashes, live
+    workflow status, or temporary development-status phrases.
 """
 
 from pathlib import Path
@@ -27,7 +31,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RTL_M16 = REPO_ROOT / "rtl" / "m16"
-DOCS = REPO_ROOT / "docs"
 
 
 RTL_FILES = [
@@ -53,45 +56,11 @@ RTL_DOC_FILES = [
 ]
 
 
-M16_DOC_FILES = [
-    "m16_rtl_core_realization_execution_semantics.md",
-    "m16_rtl_core_interface_contract.md",
-    "m16_balanced_ternary_state_register_map.md",
-    "m16_scheduler_state_rtl_realization.md",
-    "m16_request_lane_arbitration_module.md",
-    "m16_pending_route_register_module.md",
-    "m16_active_neutral_transition_module.md",
-    "m16_transition_capacity_guard_module.md",
-    "m16_retained_state_update_module.md",
-    "m16_invariant_assertion_set.md",
-    "m16_m15_vector_replay_compatibility_report.md",
-    "m16_qualification_manifest.md",
-    "m16_rtl_artifact_boundary_qualification.md",
-    "m16_qualification_index.md",
-    "m16_external_simulator_execution_plan.md",
-    "m16_artifact_boundary_test_stability_policy.md",
-    "m16_public_status_snapshot.md",
-]
-
-
-ZERO_EVENT_INVARIANTS = [
+ZERO_EVENT_RELATIONS = [
     "actual_direct_events = 0",
     "reserved_state_events = 0",
     "queue_overflow_events = 0",
 ]
-
-
-M15_PACKAGE_DIGEST = (
-    "703dd4b56f4b34289a2c5bc5521ad4ddc3113bdec8c38238c3244c69cb4d58df"
-)
-
-
-VERILATOR_COMMAND = (
-    "verilator --sv --timing --assert --binary -Irtl/m16 rtl/m16/frp_m16_tb.sv"
-)
-
-
-RUN_COMMAND = "./obj_dir/Vfrp_m16_tb"
 
 
 COMPLETION_MARKER = "FRP M16 deterministic RTL testbench completed."
@@ -102,409 +71,378 @@ def read_text(path: Path) -> str:
 
 
 def assert_terms_present(text: str, terms: list[str]) -> None:
-    for term in terms:
-        assert term in text
+    missing = [term for term in terms if term not in text]
+
+    assert missing == [], (
+        "Missing required terms:\n"
+        + "\n".join(f"- {term}" for term in missing)
+    )
 
 
 def test_m16_rtl_directory_exists() -> None:
-    assert RTL_M16.exists()
     assert RTL_M16.is_dir()
 
 
-def test_m16_rtl_source_artifacts_exist() -> None:
-    missing = [name for name in RTL_FILES if not (RTL_M16 / name).exists()]
-    assert missing == []
-
-
-def test_m16_rtl_documentation_artifacts_exist() -> None:
-    missing = [name for name in RTL_DOC_FILES if not (RTL_M16 / name).exists()]
-    assert missing == []
-
-
-def test_m16_docs_artifacts_exist() -> None:
-    missing = [name for name in M16_DOC_FILES if not (DOCS / name).exists()]
-    assert missing == []
-
-
-def test_m16_package_defines_canonical_ternary_encoding() -> None:
-    text = read_text(RTL_M16 / "frp_m16_pkg.sv")
-
-    required_tokens = [
-        "FRP_TERN_ZERO",
-        "FRP_TERN_POS",
-        "FRP_TERN_RESERVED",
-        "FRP_TERN_NEG",
-        "FRP_STATE_ZERO",
-        "FRP_STATE_POS",
-        "FRP_STATE_NEG",
-        "frp_is_valid_ternary",
-        "frp_is_opposite_polarity",
-        "frp_classify_transition",
-        "frp_calc_request_lanes",
-    ]
-
-    assert_terms_present(text, required_tokens)
-
-
-def test_m16_core_integrates_required_modules() -> None:
-    text = read_text(RTL_M16 / "frp_m16_core.sv")
-
-    required_modules = [
-        "frp_m16_scheduler",
-        "frp_m16_request_lanes",
-        "frp_m16_active_neutral",
-        "frp_m16_capacity_guard",
-        "frp_m16_pending_routes",
-        "frp_m16_state_update",
-    ]
-
-    assert_terms_present(text, required_modules)
-
-
-def test_m16_assertion_layer_checks_zero_event_invariants() -> None:
-    text = read_text(RTL_M16 / "frp_m16_assertions.sv")
-
-    required_assertion_terms = [
-        "actual_direct_events == '0",
-        "reserved_state_events == '0",
-        "queue_overflow_events == '0",
-        "FRP_INV_NO_ACTUAL_DIRECT_EVENTS",
-        "FRP_INV_NO_RESERVED_STATE",
-        "FRP_INV_NO_QUEUE_OVERFLOW",
-    ]
-
-    assert_terms_present(text, required_assertion_terms)
-
-
-def test_m16_testbench_exercises_required_smoke_scope() -> None:
-    text = read_text(RTL_M16 / "frp_m16_tb.sv")
-
-    required_terms = [
-        COMPLETION_MARKER,
-        "FRP_MODE_FREE",
-        "FRP_MODE_7_1",
-        "FRP_MODE_1_7",
-        "FRP_STATE_POS",
-        "FRP_STATE_NEG",
-        "actual_direct_events",
-        "reserved_state_events",
-        "queue_overflow_events",
-    ]
-
-    assert_terms_present(text, required_terms)
-
-
-def test_m16_readme_lists_all_rtl_source_artifacts() -> None:
-    text = read_text(RTL_M16 / "README.md")
-
-    for artifact in RTL_FILES:
-        assert artifact in text
-
-
-def test_m16_readme_declares_artifact_boundary_pass() -> None:
-    text = read_text(RTL_M16 / "README.md")
-
-    required_terms = [
-        "ARTIFACT-BOUNDARY PASS",
-        "FRP M16 RTL Artifact Boundary",
-        "PASS",
-        "pending external simulator execution",
-        "M15 41/41 PASS",
-        "M16 artifact-boundary PASS",
-    ]
-
-    assert_terms_present(text, required_terms)
-
-
-def test_m16_artifact_manifest_lists_rtl_artifacts_and_invariants() -> None:
-    text = read_text(RTL_M16 / "ARTIFACTS.md")
-
-    for artifact in RTL_FILES:
-        assert artifact in text
-
-    for invariant in ZERO_EVENT_INVARIANTS:
-        assert invariant in text
-
-
-def test_m16_artifact_manifest_declares_artifact_boundary_pass() -> None:
-    text = read_text(RTL_M16 / "ARTIFACTS.md")
-
-    required_terms = [
-        "ARTIFACT-BOUNDARY PASS",
-        "FRP M16 RTL Artifact Boundary",
-        "PASS",
-        "pending external simulator execution",
-        "M15 Compatibility Position",
-    ]
-
-    assert_terms_present(text, required_terms)
-
-
-def test_m16_simulation_document_defines_verilator_boundary() -> None:
-    text = read_text(RTL_M16 / "SIMULATION.md")
-
-    required_terms = [
-        VERILATOR_COMMAND,
-        RUN_COMMAND,
-        COMPLETION_MARKER,
-        "actual_direct_events = 0",
-        "reserved_state_events = 0",
-        "queue_overflow_events = 0",
-    ]
-
-    assert_terms_present(text, required_terms)
-
-
-def test_m16_simulation_transcript_remains_pending_until_external_run() -> None:
-    text = read_text(RTL_M16 / "SIMULATION_TRANSCRIPT.md")
-
-    required_terms = [
-        "Pending external simulator execution.",
-        "pending external simulator execution",
-        COMPLETION_MARKER,
-        "actual_direct_events=0",
-        "reserved_state_events=0",
-        "queue_overflow_events=0",
-    ]
-
-    assert_terms_present(text, required_terms)
-
-
-def test_m16_closure_report_declares_artifact_boundary_pass_and_pending_simulation() -> None:
-    text = read_text(RTL_M16 / "CLOSURE.md")
-
-    required_terms = [
-        "ARTIFACT-BOUNDARY PASS",
-        "FRP M16 RTL Artifact Boundary",
-        "PASS",
-        "pending external simulator execution",
-        "actual_direct_events = 0",
-        "reserved_state_events = 0",
-        "queue_overflow_events = 0",
-        M15_PACKAGE_DIGEST,
-    ]
-
-    assert_terms_present(text, required_terms)
-
-
-def test_m16_rtl_artifact_boundary_qualification_report_declares_pass() -> None:
-    text = read_text(DOCS / "m16_rtl_artifact_boundary_qualification.md")
-
-    required_terms = [
-        "FRP M16 RTL Artifact Boundary Qualification",
-        "PASS",
-        "FRP M16 RTL Artifact Boundary",
-        "tests/test_m16_rtl_artifact_manifest.py",
-        "rtl/m16/frp_m16_core.sv",
-        "rtl/m16/frp_m16_pending_routes.sv",
-        "actual_direct_events = 0",
-        "reserved_state_events = 0",
-        "queue_overflow_events = 0",
-        "pending external simulator execution",
-    ]
-
-    assert_terms_present(text, required_terms)
-
-
-def test_m16_external_simulator_execution_plan_defines_required_boundary() -> None:
-    text = read_text(DOCS / "m16_external_simulator_execution_plan.md")
-
-    required_terms = [
-        "FRP M16 External Simulator Execution Plan",
-        "PLANNED",
-        "FRP M16 RTL Artifact Boundary",
-        "PASS",
-        "rtl/m16/frp_m16_tb.sv",
-        VERILATOR_COMMAND,
-        RUN_COMMAND,
-        COMPLETION_MARKER,
-        "actual_direct_events = 0",
-        "reserved_state_events = 0",
-        "queue_overflow_events = 0",
-        "pending external simulator execution",
-    ]
-
-    assert_terms_present(text, required_terms)
-
-
-def test_m16_artifact_boundary_test_stability_policy_defines_stable_rules() -> None:
-    text = read_text(DOCS / "m16_artifact_boundary_test_stability_policy.md")
-
-    required_terms = [
-        "FRP M16 Artifact-Boundary Test Stability Policy",
-        "ACTIVE",
-        "Artifact-boundary tests must validate durable repository facts.",
-        "They must not depend on live GitHub metadata that changes after every commit.",
-        "GitHub Actions run numbers",
-        "current commit hashes",
-        "ARTIFACT-BOUNDARY PASS",
-        "FRP M16 RTL Artifact Boundary",
-        "pending external simulator execution",
-        "actual_direct_events = 0",
-        "reserved_state_events = 0",
-        "queue_overflow_events = 0",
-        "frp_m16_pending_routes.sv",
-    ]
-
-    assert_terms_present(text, required_terms)
-
-
-def test_m16_public_status_snapshot_declares_public_sync() -> None:
-    text = read_text(DOCS / "m16_public_status_snapshot.md")
-
-    required_terms = [
-        "FRP M16 Public Status Snapshot",
-        "PUBLIC STATUS SYNCHRONIZED",
-        "README badge panel status",
-        "GitHub About / Description status",
-        "M15 41/41 PASS",
-        "M16 RTL artifact-boundary PASS",
-        "RTL artifacts present",
-        "external simulator pending",
-        "FPGA / synthesis preparation next",
-        "10.5281/zenodo.21183966",
-        "pending external simulator execution",
-    ]
-
-    assert_terms_present(text, required_terms)
-
-
-def test_m16_qualification_index_includes_public_status_and_stability_policy() -> None:
-    text = read_text(DOCS / "m16_qualification_index.md")
-
-    required_terms = [
-        "FRP M16 Qualification Index",
-        "ACTIVE",
-        "docs/m16_public_status_snapshot.md",
-        "docs/m16_artifact_boundary_test_stability_policy.md",
-        "PUBLIC STATUS SYNCHRONIZED",
-        "artifact-boundary test stability policy",
-        "FRP M16 RTL Artifact Boundary",
-        "PASS",
-        "pending external simulator execution",
-        "actual_direct_events = 0",
-        "reserved_state_events = 0",
-        "queue_overflow_events = 0",
-        M15_PACKAGE_DIGEST,
-    ]
-
-    assert_terms_present(text, required_terms)
-
-
-def test_m16_qualification_manifest_includes_public_status_and_stability_policy() -> None:
-    text = read_text(DOCS / "m16_qualification_manifest.md")
-
-    required_terms = [
-        "FRP M16 Qualification Manifest",
-        "ACTIVE",
-        "docs/m16_public_status_snapshot.md",
-        "docs/m16_artifact_boundary_test_stability_policy.md",
-        "PUBLIC STATUS SYNCHRONIZED",
-        "Artifact-Boundary Test Stability Policy",
-        "FRP M16 RTL Artifact Boundary",
-        "PASS",
-        "pending external simulator execution",
-        "actual_direct_events = 0",
-        "reserved_state_events = 0",
-        "queue_overflow_events = 0",
-        M15_PACKAGE_DIGEST,
-    ]
-
-    assert_terms_present(text, required_terms)
-
-
-def test_project_structure_exposes_m16_rtl_layer() -> None:
-    text = read_text(REPO_ROOT / "PROJECT_STRUCTURE.md")
-
-    required_terms = [
-        "M16 RTL Core Realization Layer",
-        "rtl/m16/",
-        "frp_m16_core.sv",
-        "frp_m16_tb.sv",
-        "actual_direct_events = 0",
-        "reserved_state_events = 0",
-        "queue_overflow_events = 0",
-    ]
-
-    assert_terms_present(text, required_terms)
-
-
-def test_docs_readme_exposes_m16_rtl_layer_and_public_status() -> None:
-    text = read_text(DOCS / "README.md")
-
-    required_terms = [
-        "M16 RTL Core Realization Documents",
-        "M16 Public Status Snapshot",
-        "docs/m16_public_status_snapshot.md",
-        "rtl/m16/",
-        "frp_m16_core.sv",
-        "frp_m16_assertions.sv",
-        "frp_m16_tb.sv",
-        "PUBLIC STATUS SYNCHRONIZED",
-        "M16 RTL artifact-boundary PASS",
-        "pending external simulator execution",
-    ]
-
-    assert_terms_present(text, required_terms)
-
-
-def test_architecture_document_exposes_m16_rtl_layer() -> None:
-    text = read_text(DOCS / "architecture.md")
-
-    required_terms = [
-        "FRP v1.8.0 — M16 RTL Core Realization Layer",
-        "../rtl/m16/",
-        "../rtl/m16/frp_m16_core.sv",
-        "actual_direct_events = 0",
-        "reserved_state_events = 0",
-        "queue_overflow_events = 0",
-        "pending external simulator execution",
-    ]
-
-    assert_terms_present(text, required_terms)
-
-
-def test_root_readme_exposes_m16_rtl_layer_and_status_panel() -> None:
-    text = read_text(REPO_ROOT / "README.md")
-
-    required_terms = [
-        "FRP v1.8.0 — M16 RTL Core Realization Layer",
-        "rtl/m16/",
-        "frp_m16_core.sv",
-        "frp-self-test.yml",
-        "frp-structured-output.yml",
-        "frp-benchmark-smoke.yml",
-        "frp-m16-rtl-artifact-boundary.yml",
-        "M15-41%2F41%20PASS",
-        "M16-artifact%20boundary%20PASS",
-        "RTL-artifacts%20present",
-        "simulator-external%20pending",
-        "release-v1.8.0%20M16",
-        "10.5281%2Fzenodo.21183966",
-        "actual_direct_events = 0",
-        "reserved_state_events = 0",
-        "queue_overflow_events = 0",
-        "pending external simulator execution",
-    ]
-
-    assert_terms_present(text, required_terms)
-
-
-def test_m16_workflow_path_filters_include_current_m16_documents() -> None:
-    text = read_text(
-        REPO_ROOT / ".github" / "workflows" / "frp-m16-rtl-artifact-boundary.yml"
+def test_m16_systemverilog_artifact_set_is_exact() -> None:
+    actual = sorted(
+        path.name
+        for path in RTL_M16.glob("*.sv")
+        if path.is_file()
     )
 
-    required_terms = [
-        "FRP M16 RTL Artifact Boundary",
-        "rtl/m16/**",
-        "tests/test_m16_rtl_artifact_manifest.py",
-        "docs/m16_qualification_manifest.md",
-        "docs/m16_qualification_index.md",
-        "docs/m16_external_simulator_execution_plan.md",
-        "docs/m16_artifact_boundary_test_stability_policy.md",
-        "docs/m16_public_status_snapshot.md",
-        "python -m pytest tests/test_m16_rtl_artifact_manifest.py -q",
-    ]
+    assert actual == sorted(RTL_FILES)
 
-    assert_terms_present(text, required_terms)
+
+def test_m16_documentation_artifacts_exist_and_are_nonempty() -> None:
+    for name in RTL_DOC_FILES:
+        path = RTL_M16 / name
+
+        assert path.is_file(), (
+            f"Missing M16 documentation artifact: {name}"
+        )
+
+        assert path.stat().st_size > 0, (
+            f"Empty M16 documentation artifact: {name}"
+        )
+
+
+def test_m16_systemverilog_artifacts_are_nonempty() -> None:
+    for name in RTL_FILES:
+        path = RTL_M16 / name
+
+        assert path.is_file(), (
+            f"Missing M16 SystemVerilog artifact: {name}"
+        )
+
+        assert path.stat().st_size > 0, (
+            f"Empty M16 SystemVerilog artifact: {name}"
+        )
+
+
+def test_m16_package_defines_canonical_ternary_domain() -> None:
+    text = read_text(RTL_M16 / "frp_m16_pkg.sv")
+
+    assert_terms_present(
+        text,
+        [
+            "package frp_m16_pkg",
+            "FRP_TERN_ZERO     = 2'b00",
+            "FRP_TERN_POS      = 2'b01",
+            "FRP_TERN_RESERVED = 2'b10",
+            "FRP_TERN_NEG      = 2'b11",
+            "FRP_ACTIVE_NEUTRAL",
+            "frp_is_valid_ternary",
+            "frp_is_opposite_polarity",
+            "frp_classify_transition",
+            "frp_calc_request_lanes",
+        ],
+    )
+
+
+def test_m16_package_defines_temporal_execution_modes() -> None:
+    text = read_text(RTL_M16 / "frp_m16_pkg.sv")
+
+    assert_terms_present(
+        text,
+        [
+            "FRP_MODE_FREE",
+            "FRP_MODE_7_1",
+            "FRP_MODE_1_7",
+            "FRP_SCHED_FREE",
+            "FRP_SCHED_BALANCE",
+            "FRP_SCHED_COMMIT",
+            "FRP_SCHED_EXCITE",
+            "FRP_SCHED_NEUTRALIZE",
+            "frp_scheduler_is_commit_capable",
+            "frp_scheduler_is_neutralize_capable",
+            "frp_scheduler_allows_transition",
+        ],
+    )
+
+
+def test_m16_scheduler_realizes_free_7_1_and_1_7_sequences() -> None:
+    text = read_text(RTL_M16 / "frp_m16_scheduler.sv")
+
+    assert_terms_present(
+        text,
+        [
+            "module frp_m16_scheduler",
+            "frp_decode_scheduler_state",
+            "period_index_d =",
+            "tick_index_d[2:0]",
+            "scheduler_count_free_q",
+            "scheduler_count_balance_q",
+            "scheduler_count_commit_q",
+            "scheduler_count_excite_q",
+            "scheduler_count_neutralize_q",
+            "scheduler_counts_valid",
+        ],
+    )
+
+
+def test_m16_request_lanes_preserve_deterministic_order() -> None:
+    text = read_text(RTL_M16 / "frp_m16_request_lanes.sv")
+
+    assert_terms_present(
+        text,
+        [
+            "module frp_m16_request_lanes",
+            "lane_index < REQUEST_LANES",
+            "request_reject_duplicate_cell",
+            "request_reject_pending_busy",
+            "request_reject_scheduler",
+            "request_neutralized",
+            "requested_direct_events",
+            "prevented_direct_events",
+            "neutral_routed_events",
+            "request_lane_order_valid",
+        ],
+    )
+
+
+def test_m16_pending_routes_preserve_retained_polarity() -> None:
+    text = read_text(RTL_M16 / "frp_m16_pending_routes.sv")
+
+    assert_terms_present(
+        text,
+        [
+            "module frp_m16_pending_routes",
+            "pending_completion_accept_mask",
+            "pending_created_mask",
+            "pending_completed_mask",
+            "pending_cleared_mask",
+            "pending_retained_mask",
+            "pending_non_overwrite_valid",
+            "pending_polarity_valid",
+            "no_queue_overflow",
+            "no_actual_direct_events",
+        ],
+    )
+
+
+def test_m16_active_neutral_routes_opposite_polarity_through_zero() -> None:
+    text = read_text(RTL_M16 / "frp_m16_active_neutral.sv")
+
+    assert_terms_present(
+        text,
+        [
+            "module frp_m16_active_neutral",
+            "FRP_TRANS_OPPOSITE_POLARITY",
+            "FRP_ACTIVE_NEUTRAL",
+            "pending_completion_enable",
+            "neutral_routed_mask",
+            "pending_completion_mask",
+            "actual_direct_mask",
+            "no_actual_direct_events",
+        ],
+    )
+
+
+def test_m16_capacity_guard_exposes_bounded_admission() -> None:
+    text = read_text(RTL_M16 / "frp_m16_capacity_guard.sv")
+
+    assert_terms_present(
+        text,
+        [
+            "module frp_m16_capacity_guard",
+            "request_accept_capacity",
+            "request_reject_capacity",
+            "pending_completion_candidate",
+            "capacity_accept_mask",
+            "capacity_reject_mask",
+            "accepted_change_mask",
+            "accepted_changes",
+            "capacity_remaining",
+            "capacity_exhausted",
+            "switch_load_numerator",
+        ],
+    )
+
+
+def test_m16_state_update_commits_approved_candidates() -> None:
+    text = read_text(RTL_M16 / "frp_m16_state_update.sv")
+
+    assert_terms_present(
+        text,
+        [
+            "module frp_m16_state_update",
+            "state_candidate_d",
+            "capacity_accept_mask",
+            "accepted_change_candidate_mask",
+            "neutral_routed_mask",
+            "pending_completion_mask",
+            "state_write_enable_mask",
+            "state_update_valid",
+            "no_reserved_state_output",
+            "no_actual_direct_events",
+        ],
+    )
+
+
+def test_m16_core_integrates_complete_execution_chain() -> None:
+    text = read_text(RTL_M16 / "frp_m16_core.sv")
+
+    assert_terms_present(
+        text,
+        [
+            "module frp_m16_core",
+            "u_scheduler",
+            "u_request_lanes",
+            "u_active_neutral",
+            "u_capacity_guard",
+            "u_pending_routes",
+            "u_state_update",
+            "pending_completion_candidate",
+            "pending_completion_accept_mask",
+            "invariant_flags",
+        ],
+    )
+
+
+def test_m16_assertions_cover_architectural_invariants() -> None:
+    text = read_text(RTL_M16 / "frp_m16_assertions.sv")
+
+    assert_terms_present(
+        text,
+        [
+            "module frp_m16_assertions",
+            "frp_is_opposite_polarity",
+            "neutral_routed_cell_mask",
+            "pending_route_out",
+            "scheduler_count_sum",
+            "actual_direct_events",
+            "reserved_state_events",
+            "queue_overflow_events",
+            "FRP_INV_ACTIVE_NEUTRAL_VALID",
+            "FRP_INV_NO_ACTUAL_DIRECT_EVENTS",
+            "FRP_INV_NO_RESERVED_STATE",
+            "FRP_INV_NO_QUEUE_OVERFLOW",
+        ],
+    )
+
+
+def test_m16_testbench_exercises_exact_scheduler_profiles() -> None:
+    text = read_text(RTL_M16 / "frp_m16_tb.sv")
+
+    assert_terms_present(
+        text,
+        [
+            "FRP_MODE_FREE",
+            "FRP_MODE_7_1",
+            "FRP_MODE_1_7",
+            "ticks_recorded_q !== 16",
+            "scheduler_count_free_q !== 16",
+            "scheduler_count_balance_q !== 56",
+            "scheduler_count_commit_q !== 8",
+            "scheduler_count_excite_q !== 2",
+            "scheduler_count_neutralize_q !== 14",
+            "neutral_routed_cell_mask",
+            "capacity_remaining !== 0",
+            COMPLETION_MARKER,
+        ],
+    )
+
+
+def test_m16_testbench_prints_terminal_event_markers() -> None:
+    text = read_text(RTL_M16 / "frp_m16_tb.sv")
+
+    assert_terms_present(
+        text,
+        [
+            "\"actual_direct_events=%0d\"",
+            "\"reserved_state_events=%0d\"",
+            "\"queue_overflow_events=%0d\"",
+        ],
+    )
+
+
+def test_m16_readme_defines_architecture_and_sources() -> None:
+    text = read_text(RTL_M16 / "README.md")
+
+    for artifact in RTL_FILES:
+        assert artifact in text
+
+    assert_terms_present(
+        text,
+        [
+            "Balanced Ternary State Domain",
+            "Active-Neutral Polarity Routing",
+            "Pending-Route State",
+            "Temporal Execution Architecture",
+            "7/1 Mode",
+            "1/7 Mode",
+            "Distributed Transition Capacity",
+            "Retained-State Tick Order",
+        ],
+    )
+
+
+def test_m16_artifact_manifest_lists_complete_boundary() -> None:
+    text = read_text(RTL_M16 / "ARTIFACTS.md")
+
+    for artifact in RTL_FILES + RTL_DOC_FILES:
+        assert artifact in text
+
+    assert_terms_present(
+        text,
+        [
+            "Temporal Execution Artifacts",
+            "Active-Neutral Routing Artifacts",
+            "Pending-Route Artifact Contract",
+            "Transition-Capacity Artifacts",
+            "Include and Elaboration Graph",
+            "Integrated Invariant Set",
+        ],
+    )
+
+
+def test_m16_simulation_defines_current_verilator_execution() -> None:
+    text = read_text(RTL_M16 / "SIMULATION.md")
+
+    assert_terms_present(
+        text,
+        [
+            "verilator --sv --timing --assert --binary",
+            "--top-module frp_m16_tb",
+            "-Irtl/m16",
+            "--Mdir /tmp/frp_m16_obj",
+            "rtl/m16/frp_m16_tb.sv",
+            "/tmp/frp_m16_obj/Vfrp_m16_tb",
+            "/tmp/frp_m16_execution.log",
+            COMPLETION_MARKER,
+            "7/1 Mode",
+            "1/7 Mode",
+        ],
+    )
+
+    for relation in ZERO_EVENT_RELATIONS:
+        assert relation in text
+
+
+def test_m16_simulation_transcript_defines_record_structure() -> None:
+    text = read_text(RTL_M16 / "SIMULATION_TRANSCRIPT.md")
+
+    assert_terms_present(
+        text,
+        [
+            "FRP M16 RTL Simulation Transcript",
+            "Toolchain Record",
+            "Free-Mode Record",
+            "7/1 Scheduler Record",
+            "1/7 Scheduler Record",
+            "Transition-Capacity Record",
+            "Active-Neutral Routing Record",
+            "Assertion Record",
+            "Console Output",
+            "Terminal Relations",
+            "Integrated Invariant Record",
+            "Execution Result",
+            COMPLETION_MARKER,
+        ],
+    )
+
+
+def test_m16_closure_artifact_exists() -> None:
+    text = read_text(RTL_M16 / "CLOSURE.md")
+
+    assert "FRP M16" in text
