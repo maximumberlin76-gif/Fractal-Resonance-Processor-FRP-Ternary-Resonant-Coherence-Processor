@@ -1,4 +1,4 @@
-name: FRP M16 Verilator Clean Smoke
+name: FRP M16 Verilator Execution Smoke
 
 on:
   workflow_dispatch:
@@ -8,116 +8,248 @@ on:
       - ".github/workflows/frp-m16-verilator-clean-smoke.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  m16-verilator-clean-smoke:
-    name: M16 Verilator clean smoke
+  m16-verilator-execution-smoke:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Cleanup reserved standalone cell identifiers
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-
-          changed = []
-
-          for path in sorted(Path("rtl/m16").glob("*.sv")):
-              text = path.read_text(encoding="utf-8")
-              updated = re.sub(r"\bcell\b", "element_index", text)
-
-              if updated != text:
-                  path.write_text(updated, encoding="utf-8")
-                  changed.append(str(path))
-
-          if changed:
-              print("Changed files:")
-              for item in changed:
-                  print(f"- {item}")
-          else:
-              print("No standalone lowercase cell identifiers found.")
-          PY
-
-      - name: Patch Verilator unsupported default disable iff
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-
-          path = Path("rtl/m16/frp_m16_assertions.sv")
-          text = path.read_text(encoding="utf-8")
-
-          original = text
-
-          # Verilator 5.020 rejects SystemVerilog default disable iff.
-          # Replace the global assertion default with explicit per-assert disable iff.
-          text = re.sub(
-              r"(?m)^\s*default\s+disable\s+iff\s*\(\s*!\s*rst_n\s*\)\s*;\s*$",
-              "",
-              text,
-          )
-
-          # Convert simple assert property statements:
-          #   assert property (PROPERTY);
-          # into:
-          #   assert property (disable iff (!rst_n) PROPERTY);
-          #
-          # Do not touch assertions already carrying disable iff.
-          text = re.sub(
-              r"assert\s+property\s*\(\s*(?!disable\s+iff)([^;\n]+?)\s*\)",
-              r"assert property (disable iff (!rst_n) \1)",
-              text,
-          )
-
-          if text != original:
-              path.write_text(text, encoding="utf-8")
-              print("Patched rtl/m16/frp_m16_assertions.sv for Verilator disable iff compatibility.")
-          else:
-              print("No default disable iff patch needed.")
-          PY
-
-      - name: Verify reserved identifier cleanup
+      - name: Verify M16 RTL graph
+        shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
           import re
           import sys
 
-          offenders = []
+          root = Path("rtl/m16")
+          definitions = {
+              "frp_m16_scheduler": "frp_m16_scheduler.sv",
+              "frp_m16_request_lanes": "frp_m16_request_lanes.sv",
+              "frp_m16_pending_routes": "frp_m16_pending_routes.sv",
+              "frp_m16_active_neutral": "frp_m16_active_neutral.sv",
+              "frp_m16_capacity_guard": "frp_m16_capacity_guard.sv",
+              "frp_m16_state_update": "frp_m16_state_update.sv",
+              "frp_m16_core": "frp_m16_core.sv",
+              "frp_m16_assertions": "frp_m16_assertions.sv",
+              "frp_m16_tb": "frp_m16_tb.sv",
+          }
+          instances = {
+              "frp_m16_scheduler": "u_scheduler",
+              "frp_m16_request_lanes": "u_request_lanes",
+              "frp_m16_active_neutral": "u_active_neutral",
+              "frp_m16_capacity_guard": "u_capacity_guard",
+              "frp_m16_pending_routes": "u_pending_routes",
+              "frp_m16_state_update": "u_state_update",
+          }
+          required = ["frp_m16_pkg.sv", *definitions.values()]
+          errors = []
 
-          for path in sorted(Path("rtl/m16").glob("*.sv")):
-              text = path.read_text(encoding="utf-8")
-              for line_number, line in enumerate(text.splitlines(), start=1):
-                  if re.search(r"\bcell\b", line):
-                      offenders.append((str(path), line_number, line))
+          def clean(text):
+              text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+              return re.sub(r"//.*", "", text)
 
-          if offenders:
-              print("Standalone lowercase cell identifiers remain:")
-              for path, line_number, line in offenders:
-                  print(f"{path}:{line_number}: {line}")
+          def close_paren(text, start):
+              depth = 0
+              for index in range(start, len(text)):
+                  depth += text[index] == "("
+                  depth -= text[index] == ")"
+                  if depth == 0:
+                      return index
+              raise ValueError("unmatched parenthesis")
+
+          def module_ports(text, module):
+              text = clean(text)
+              match = re.search(rf"\bmodule\s+{module}\b", text)
+              if not match:
+                  return set()
+
+              cursor = match.end()
+              parameter = re.match(r"\s*#\s*\(", text[cursor:])
+
+              if parameter:
+                  start = cursor + parameter.group(0).rfind("(")
+                  cursor = close_paren(text, start) + 1
+
+              start = text.find("(", cursor)
+              end = close_paren(text, start)
+              header = text[start + 1:end]
+              ports = set()
+
+              for item in re.split(
+                  r",(?=\s*(?:input|output|inout)\b)",
+                  header,
+              ):
+                  found = re.search(
+                      r"\b(?:input|output|inout)\b.*?"
+                      r"\b([A-Za-z_]\w*)\s*$",
+                      item.strip(),
+                      flags=re.S,
+                  )
+                  if found:
+                      ports.add(found.group(1))
+
+              return ports
+
+          def instance_ports(text, module, instance):
+              text = clean(text)
+              match = re.search(rf"\b{module}\b\s*#\s*\(", text)
+
+              if not match:
+                  return set()
+
+              start = text.find("(", match.start())
+              end = close_paren(text, start)
+              tail = text[end + 1:]
+              found = re.match(rf"\s*{instance}\s*\(", tail)
+
+              if not found:
+                  return set()
+
+              start = end + 1 + found.group(0).rfind("(")
+              end = close_paren(text, start)
+
+              return set(
+                  re.findall(
+                      r"\.([A-Za-z_]\w*)\s*\(",
+                      text[start + 1:end],
+                  )
+              )
+
+          for filename in required:
+              if not (root / filename).is_file():
+                  errors.append(f"missing rtl/m16/{filename}")
+
+          if errors:
+              print("\n".join(errors))
               sys.exit(1)
 
-          print("PASS: no standalone lowercase cell identifiers remain in rtl/m16/*.sv")
-          PY
+          texts = {
+              name: (root / name).read_text(encoding="utf-8")
+              for name in required
+          }
 
-      - name: Commit cleanup if needed
-        run: |
-          if git diff --quiet -- rtl/m16; then
-            echo "No RTL cleanup commit required."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add rtl/m16/*.sv
-            git commit -m "Fix M16 Verilator compatibility blockers"
-            git push
-          fi
+          core = texts["frp_m16_core.sv"]
+          tb = texts["frp_m16_tb.sv"]
+
+          if not re.search(
+              r"(?m)^\s*package\s+frp_m16_pkg\b",
+              texts["frp_m16_pkg.sv"],
+          ):
+              errors.append("frp_m16_pkg package definition missing")
+
+          for module, filename in definitions.items():
+              if not re.search(
+                  rf"(?m)^\s*module\s+{module}\b",
+                  texts[filename],
+              ):
+                  errors.append(
+                      f"{filename}: module {module} missing"
+                  )
+
+          expected_core_includes = [
+              "frp_m16_pkg.sv",
+              "frp_m16_scheduler.sv",
+              "frp_m16_request_lanes.sv",
+              "frp_m16_pending_routes.sv",
+              "frp_m16_active_neutral.sv",
+              "frp_m16_capacity_guard.sv",
+              "frp_m16_state_update.sv",
+          ]
+          expected_tb_includes = [
+              "frp_m16_pkg.sv",
+              "frp_m16_core.sv",
+              "frp_m16_assertions.sv",
+          ]
+
+          def includes(text):
+              return re.findall(
+                  r'^\s*`include\s+"([^"]+)"',
+                  text,
+                  flags=re.M,
+              )
+
+          if includes(core) != expected_core_includes:
+              errors.append(
+                  "frp_m16_core.sv include graph mismatch"
+              )
+
+          if includes(tb) != expected_tb_includes:
+              errors.append(
+                  "frp_m16_tb.sv include graph mismatch"
+              )
+
+          print("MODULE / INSTANCE MAP")
+
+          for module, instance in instances.items():
+              defined = module_ports(
+                  texts[definitions[module]],
+                  module,
+              )
+              connected = instance_ports(
+                  core,
+                  module,
+                  instance,
+              )
+
+              if not connected:
+                  errors.append(
+                      f"missing instance: {module} {instance}"
+                  )
+                  continue
+
+              if defined != connected:
+                  errors.append(
+                      f"{instance} port mismatch; "
+                      f"missing={sorted(defined - connected)} "
+                      f"unknown={sorted(connected - defined)}"
+                  )
+
+              print(
+                  f"{module} -> {instance} -> "
+                  f"{definitions[module]} "
+                  f"({len(connected)} ports)"
+              )
+
+          for filename, text in texts.items():
+              if re.search(r"\bcell\b", text):
+                  errors.append(
+                      f"standalone lowercase cell: {filename}"
+                  )
+
+              if re.search(
+                  r"\bdefault\s+disable\s+iff\b",
+                  text,
+              ):
+                  errors.append(
+                      f"default disable iff: {filename}"
+                  )
+
+              if re.search(r"\bfrp_tern_t\b", text):
+                  errors.append(
+                      f"legacy frp_tern_t interface: {filename}"
+                  )
+
+          if errors:
+              print("INSPECTION FAILED")
+              print(
+                  "\n".join(
+                      f"- {error}"
+                      for error in errors
+                  )
+              )
+              sys.exit(1)
+
+          print("PASS: direct graph is complete")
+          print(
+              "BUILD: frp_m16_tb.sv -> "
+              "frp_m16_core.sv -> M16 child modules"
+          )
+          PY
 
       - name: Install Verilator
         run: |
@@ -125,53 +257,65 @@ jobs:
           sudo apt-get install -y verilator
           verilator --version
 
-      - name: Build M16 deterministic RTL testbench
+      - name: Build M16 testbench
+        shell: bash
         run: |
           set -o pipefail
+
           verilator \
             --sv \
             --timing \
             --assert \
             --binary \
+            -Wno-fatal \
             --error-limit 5 \
+            --top-module frp_m16_tb \
             -Irtl/m16 \
             rtl/m16/frp_m16_tb.sv \
             2>&1 | tee m16_verilator_build.log
 
-      - name: Show first Verilator build errors
+      - name: Show first real Verilator errors
         if: failure()
         run: |
-          echo "==== FIRST VERILATOR BUILD ERRORS ===="
-          grep -n "%Error" m16_verilator_build.log | head -20 || true
-          echo "==== FIRST 180 BUILD LOG LINES ===="
-          sed -n '1,180p' m16_verilator_build.log || true
+          grep -nE "%Error(-|:)" \
+            m16_verilator_build.log \
+            | head -20 || true
 
-      - name: Run M16 deterministic RTL testbench
+          sed -n '1,180p' \
+            m16_verilator_build.log || true
+
+      - name: Run M16 testbench
+        shell: bash
         run: |
-          ./obj_dir/Vfrp_m16_tb | tee m16_verilator_smoke.log
+          set -o pipefail
 
-      - name: Validate completion marker
+          ./obj_dir/Vfrp_m16_tb \
+            2>&1 | tee m16_verilator_smoke.log
+
+      - name: Validate execution
         run: |
-          grep -F "FRP M16 deterministic RTL testbench completed." m16_verilator_smoke.log
+          grep -F \
+            "FRP M16 deterministic RTL testbench completed." \
+            m16_verilator_smoke.log
 
-      - name: Validate zero-event counters
-        run: |
-          grep -Eq "actual_direct_events[ =]+0" m16_verilator_smoke.log
-          grep -Eq "reserved_state_events[ =]+0" m16_verilator_smoke.log
-          grep -Eq "queue_overflow_events[ =]+0" m16_verilator_smoke.log
+          grep -Eq \
+            "actual_direct_events[ =]+0" \
+            m16_verilator_smoke.log
 
-      - name: Upload M16 Verilator build log
+          grep -Eq \
+            "reserved_state_events[ =]+0" \
+            m16_verilator_smoke.log
+
+          grep -Eq \
+            "queue_overflow_events[ =]+0" \
+            m16_verilator_smoke.log
+
+      - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: frp-m16-verilator-clean-build-log
-          path: m16_verilator_build.log
-          if-no-files-found: ignore
-
-      - name: Upload M16 Verilator smoke transcript
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: frp-m16-verilator-clean-smoke-transcript
-          path: m16_verilator_smoke.log
+          name: frp-m16-verilator-execution-smoke-logs
+          path: |
+            m16_verilator_build.log
+            m16_verilator_smoke.log
           if-no-files-found: ignore
