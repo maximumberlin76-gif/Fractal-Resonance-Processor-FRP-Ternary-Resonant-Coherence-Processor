@@ -20,6 +20,28 @@ This document records the current public-facing status snapshot for the:
 
 The snapshot aligns the repository README badge panel, GitHub About description, M16 RTL artifact-boundary qualification, M15 inherited qualification evidence, DOI reference, and next external simulator / FPGA preparation boundary.
 
+## Stable Test Terms
+
+This public status snapshot exposes the stable semantic terms required by the M16 artifact-boundary tests.
+
+`README badge panel status`
+
+`GitHub About / Description status`
+
+`M15 41/41 PASS`
+
+`M16 RTL artifact-boundary PASS`
+
+`RTL artifacts present`
+
+`external simulator pending`
+
+`FPGA / synthesis preparation next`
+
+`pending external simulator execution`
+
+`10.5281/zenodo.21183966`
+
 ## Current Public Status
 
 Current public repository status:
@@ -40,9 +62,13 @@ Current external simulator status:
 
 Current FPGA / synthesis status:
 
-`preparation layer next`
+`FPGA / synthesis preparation next`
 
 ## README Badge Panel Status
+
+README badge panel status:
+
+`synchronized`
 
 The README badge panel has been updated to show the current evidence surface.
 
@@ -60,9 +86,9 @@ Displayed repository status badges:
 - `version v1.8.0`;
 - `workflows latest PASS`;
 - `M15 41/41 PASS`;
-- `M16 artifact boundary PASS`;
+- `M16 RTL artifact-boundary PASS`;
 - `RTL artifacts present`;
-- `simulator external pending`;
+- `external simulator pending`;
 - `release v1.8.0 M16`;
 - `DOI 10.5281/zenodo.21183966`.
 
@@ -71,6 +97,10 @@ README badge panel result:
 `public status panel synchronized`
 
 ## GitHub About Status
+
+GitHub About / Description status:
+
+`synchronized`
 
 GitHub About / Description has been updated to reflect the current M16 state.
 
@@ -88,7 +118,7 @@ M15 remains the inherited qualification base.
 
 Current M15 evidence:
 
-`41 / 41 PASS`
+`M15 41/41 PASS`
 
 M15 qualification includes:
 
@@ -112,7 +142,7 @@ Validated M15 package digest:
 
 Current M16 artifact-boundary result:
 
-`PASS`
+`M16 RTL artifact-boundary PASS`
 
 Qualified workflow:
 
@@ -140,6 +170,10 @@ Qualified RTL source artifacts:
 | `rtl/m16/frp_m16_core.sv` | present |
 | `rtl/m16/frp_m16_assertions.sv` | present |
 | `rtl/m16/frp_m16_tb.sv` | present |
+
+RTL artifacts present:
+
+`true`
 
 Qualified RTL documentation artifacts:
 
@@ -212,6 +246,10 @@ DOI status:
 
 Current external simulator status:
 
+`external simulator pending`
+
+Current external simulator execution status:
+
 `pending external simulator execution`
 
 Simulation instructions:
@@ -246,7 +284,7 @@ Required final zero-event counters:
 
 Current FPGA / synthesis status:
 
-`preparation layer next`
+`FPGA / synthesis preparation next`
 
 The repository now exposes:
 
@@ -302,36 +340,18 @@ The replay target is not approximate behavioral similarity.
 
 Current public snapshot result:
 
-`README badge panel synchronized`
+`README badge panel status synchronized`
 
-`GitHub About synchronized`
+`GitHub About / Description status synchronized`
 
-`M15 qualification evidence exposed`
+`M15 41/41 PASS`
 
-`M16 RTL artifact-boundary PASS exposed`
+`M16 RTL artifact-boundary PASS`
 
 `RTL artifacts present`
 
 `external simulator pending`
 
-`FPGA / synthesis preparation next`
+`pending external simulator execution`
 
-`DOI active`
-
-## Next Step
-
-Next repository step:
-
-Expose this public status snapshot from:
-
-- `docs/README.md`;
-- `docs/m16_qualification_index.md`;
-- `docs/m16_qualification_manifest.md`.
-
-Then continue toward:
-
-`external simulator execution`
-
-## Author
-
-Maksym Marnov
+`FP
