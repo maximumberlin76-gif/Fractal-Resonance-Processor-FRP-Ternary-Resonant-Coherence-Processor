@@ -4,19 +4,38 @@
   <a href="https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m16-rtl-artifact-boundary.yml">
     <img src="https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m16-rtl-artifact-boundary.yml/badge.svg" alt="FRP M16 RTL Artifact Boundary">
   </a>
+  <a href="https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions">
+    <img src="https://img.shields.io/badge/workflows-latest%20PASS-brightgreen" alt="Latest workflows PASS">
+  </a>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0">
   <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/version-v1.8.0-purple" alt="FRP v1.8.0">
-  <img src="https://img.shields.io/badge/M16-RTL%20PASS-brightgreen" alt="M16 RTL PASS">
+  <img src="https://img.shields.io/badge/release-M16%20RTL-brightgreen" alt="M16 RTL">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/architecture-ternary%20resonant-brightgreen" alt="Ternary resonant architecture">
+  <img src="https://img.shields.io/badge/state-balanced%20ternary-brightgreen" alt="Balanced ternary state">
+  <img src="https://img.shields.io/badge/routing-active--neutral-brightgreen" alt="Active-neutral routing">
+  <img src="https://img.shields.io/badge/RTL-core%20realization-brightgreen" alt="RTL core realization">
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/M15-41%2F41%20PASS-brightgreen" alt="M15 41/41 PASS">
-  <img src="https://img.shields.io/badge/ternary-active--neutral-brightgreen" alt="Active-neutral ternary routing">
-  <img src="https://img.shields.io/badge/simulator-pending-yellow" alt="Simulator pending">
+  <img src="https://img.shields.io/badge/M16-artifact%20boundary%20PASS-brightgreen" alt="M16 artifact boundary PASS">
+  <img src="https://img.shields.io/badge/simulator-external%20pending-yellow" alt="External simulator pending">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Kuramoto--Sakaguchi-phase%20dynamics-blue" alt="Kuramoto-Sakaguchi phase dynamics">
+  <img src="https://img.shields.io/badge/transition-0.25%20capacity-blue" alt="Transition capacity 0.25">
+  <img src="https://img.shields.io/badge/direct%20events-0-brightgreen" alt="Direct events zero">
+</p>
+
+<p align="center">
   <a href="https://doi.org/10.5281/zenodo.21183966">
     <img src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21183966-blue" alt="DOI">
   </a>
