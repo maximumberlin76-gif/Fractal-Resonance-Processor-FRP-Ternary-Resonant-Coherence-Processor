@@ -1,0 +1,140 @@
+name: FRP M16 Verilator Clean Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "rtl/m16/**"
+      - ".github/workflows/frp-m16-verilator-clean-smoke.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  m16-verilator-clean-smoke:
+    name: M16 Verilator clean smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup reserved standalone cell identifiers
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          changed = []
+
+          for path in sorted(Path("rtl/m16").glob("*.sv")):
+              text = path.read_text(encoding="utf-8")
+
+              updated = re.sub(r"\bcell\b", "element_index", text)
+
+              if updated != text:
+                  path.write_text(updated, encoding="utf-8")
+                  changed.append(str(path))
+
+          if changed:
+              print("Changed files:")
+              for item in changed:
+                  print(f"- {item}")
+          else:
+              print("No standalone lowercase cell identifiers found.")
+          PY
+
+      - name: Verify reserved identifier cleanup
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          offenders = []
+
+          for path in sorted(Path("rtl/m16").glob("*.sv")):
+              text = path.read_text(encoding="utf-8")
+              for line_number, line in enumerate(text.splitlines(), start=1):
+                  if re.search(r"\bcell\b", line):
+                      offenders.append((str(path), line_number, line))
+
+          if offenders:
+              print("Standalone lowercase cell identifiers remain:")
+              for path, line_number, line in offenders:
+                  print(f"{path}:{line_number}: {line}")
+              sys.exit(1)
+
+          print("PASS: no standalone lowercase cell identifiers remain in rtl/m16/*.sv")
+          PY
+
+      - name: Commit cleanup if needed
+        run: |
+          if git diff --quiet -- rtl/m16; then
+            echo "No RTL cleanup commit required."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add rtl/m16/*.sv
+            git commit -m "Fix reserved cell identifiers across M16 RTL"
+            git push
+          fi
+
+      - name: Install Verilator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator
+          verilator --version
+
+      - name: Build M16 deterministic RTL testbench
+        run: |
+          set -o pipefail
+          verilator \
+            --sv \
+            --timing \
+            --assert \
+            --binary \
+            --error-limit 5 \
+            -Irtl/m16 \
+            rtl/m16/frp_m16_tb.sv \
+            2>&1 | tee m16_verilator_build.log
+
+      - name: Show first Verilator build errors
+        if: failure()
+        run: |
+          echo "==== FIRST VERILATOR BUILD ERRORS ===="
+          grep -n "%Error" m16_verilator_build.log | head -20 || true
+          echo "==== FIRST 180 BUILD LOG LINES ===="
+          sed -n '1,180p' m16_verilator_build.log || true
+
+      - name: Run M16 deterministic RTL testbench
+        run: |
+          ./obj_dir/Vfrp_m16_tb | tee m16_verilator_smoke.log
+
+      - name: Validate completion marker
+        run: |
+          grep -F "FRP M16 deterministic RTL testbench completed." m16_verilator_smoke.log
+
+      - name: Validate zero-event counters
+        run: |
+          grep -Eq "actual_direct_events[ =]+0" m16_verilator_smoke.log
+          grep -Eq "reserved_state_events[ =]+0" m16_verilator_smoke.log
+          grep -Eq "queue_overflow_events[ =]+0" m16_verilator_smoke.log
+
+      - name: Upload M16 Verilator build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-m16-verilator-clean-build-log
+          path: m16_verilator_build.log
+          if-no-files-found: ignore
+
+      - name: Upload M16 Verilator smoke transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-m16-verilator-clean-smoke-transcript
+          path: m16_verilator_smoke.log
+          if-no-files-found: ignore
