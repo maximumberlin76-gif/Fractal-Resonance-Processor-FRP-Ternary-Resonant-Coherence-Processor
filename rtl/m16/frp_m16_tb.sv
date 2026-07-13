@@ -211,15 +211,15 @@ module frp_m16_tb;
 
   task automatic set_lane(
     input int lane,
-    input int cell,
+    input int element_index,
     input logic [STATE_BITS-1:0] target
   );
     begin
       request_valid[lane] = 1'b1;
       request_cell_index[(lane*CELL_INDEX_BITS) +: CELL_INDEX_BITS] =
-        logic'(cell[CELL_INDEX_BITS-1:0]);
+        logic'(element_index[CELL_INDEX_BITS-1:0]);
       request_target[(lane*STATE_BITS) +: STATE_BITS] = target;
-      target_q[(cell*STATE_BITS) +: STATE_BITS] = target;
+      target_q[(element_index*STATE_BITS) +: STATE_BITS] = target;
     end
   endtask
 
@@ -294,7 +294,7 @@ module frp_m16_tb;
     expect_global_invariants();
 
     // ----------------------------------------------------------------------
-    // Free mode: neutral release 0 -> +1 on cell 0.
+    // Free mode: neutral release 0 -> +1 on element_index 0.
     // ----------------------------------------------------------------------
 
     clear_requests();
@@ -308,7 +308,7 @@ module frp_m16_tb;
     expect_global_invariants();
 
     // ----------------------------------------------------------------------
-    // Free mode: neutralization +1 -> 0 on cell 0.
+    // Free mode: neutralization +1 -> 0 on element_index 0.
     // ----------------------------------------------------------------------
 
     clear_requests();

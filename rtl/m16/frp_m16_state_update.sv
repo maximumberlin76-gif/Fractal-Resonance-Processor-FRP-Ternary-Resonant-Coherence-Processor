@@ -91,38 +91,38 @@ module frp_m16_state_update #(
   // --------------------------------------------------------------------------
 
   function automatic logic [STATE_BITS-1:0] cell_state_q(
-    input int cell
+    input int element_index
   );
     begin
       cell_state_q =
-        state_q[(cell*STATE_BITS) +: STATE_BITS];
+        state_q[(element_index*STATE_BITS) +: STATE_BITS];
     end
   endfunction
 
   function automatic logic [STATE_BITS-1:0] cell_state_candidate_d(
-    input int cell
+    input int element_index
   );
     begin
       cell_state_candidate_d =
-        state_candidate_d[(cell*STATE_BITS) +: STATE_BITS];
+        state_candidate_d[(element_index*STATE_BITS) +: STATE_BITS];
     end
   endfunction
 
   function automatic logic [STATE_BITS-1:0] cell_state_d(
-    input int cell
+    input int element_index
   );
     begin
       cell_state_d =
-        state_d[(cell*STATE_BITS) +: STATE_BITS];
+        state_d[(element_index*STATE_BITS) +: STATE_BITS];
     end
   endfunction
 
   task automatic set_state_d(
-    input int cell,
+    input int element_index,
     input logic [STATE_BITS-1:0] value
   );
     begin
-      state_d[(cell*STATE_BITS) +: STATE_BITS] = value;
+      state_d[(element_index*STATE_BITS) +: STATE_BITS] = value;
     end
   endtask
 
@@ -167,8 +167,8 @@ module frp_m16_state_update #(
     if (!tick_enable) begin
       state_d = state_q;
 
-      for (int cell = 0; cell < CELLS; cell++) begin
-        state_hold_mask[cell] = 1'b1;
+      for (int element_index = 0; element_index < CELLS; element_index++) begin
+        state_hold_mask[element_index] = 1'b1;
 
         state_hold_events =
           state_hold_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
@@ -179,7 +179,7 @@ module frp_m16_state_update #(
       // Tick-enabled writeback.
       // --------------------------------------------------------------------
 
-      for (int cell = 0; cell < CELLS; cell++) begin
+      for (int element_index = 0; element_index < CELLS; element_index++) begin
         logic [STATE_BITS-1:0] current_state;
         logic [STATE_BITS-1:0] candidate_state;
         logic                  candidate_valid;
@@ -187,18 +187,18 @@ module frp_m16_state_update #(
         logic                  state_changes;
         logic                  capacity_approved;
 
-        current_state = cell_state_q(cell);
-        candidate_state = cell_state_candidate_d(cell);
+        current_state = cell_state_q(element_index);
+        candidate_state = cell_state_candidate_d(element_index);
 
         current_valid = frp_is_valid_ternary(current_state);
         candidate_valid = frp_is_valid_ternary(candidate_state);
 
         state_changes = (current_state != candidate_state);
 
-        capacity_approved = capacity_accept_mask[cell];
+        capacity_approved = capacity_accept_mask[element_index];
 
         if (!current_valid) begin
-          state_reserved_mask[cell] = 1'b1;
+          state_reserved_mask[element_index] = 1'b1;
 
           reserved_state_events =
             reserved_state_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
@@ -206,51 +206,51 @@ module frp_m16_state_update #(
           state_domain_valid = 1'b0;
           no_reserved_state_output = 1'b0;
 
-          set_state_d(cell, FRP_STATE_ZERO);
+          set_state_d(element_index, FRP_STATE_ZERO);
 
-          state_write_enable_mask[cell] = 1'b1;
-          state_reset_mask[cell] = 1'b1;
+          state_write_enable_mask[element_index] = 1'b1;
+          state_reset_mask[element_index] = 1'b1;
 
           state_reset_events =
             state_reset_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
-        end else if (!candidate_valid || reserved_transition_mask[cell]) begin
-          set_state_d(cell, current_state);
+        end else if (!candidate_valid || reserved_transition_mask[element_index]) begin
+          set_state_d(element_index, current_state);
 
-          state_reserved_mask[cell] = 1'b1;
+          state_reserved_mask[element_index] = 1'b1;
 
           reserved_state_events =
             reserved_state_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-          state_hold_mask[cell] = 1'b1;
+          state_hold_mask[element_index] = 1'b1;
 
           state_hold_events =
             state_hold_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
           state_output_domain_valid = 1'b0;
           no_reserved_state_output = 1'b0;
-        end else if (actual_direct_mask[cell]) begin
-          set_state_d(cell, current_state);
+        end else if (actual_direct_mask[element_index]) begin
+          set_state_d(element_index, current_state);
 
           actual_direct_events =
             actual_direct_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-          state_hold_mask[cell] = 1'b1;
+          state_hold_mask[element_index] = 1'b1;
 
           state_hold_events =
             state_hold_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
           no_actual_direct_events = 1'b0;
         end else if (!state_changes) begin
-          set_state_d(cell, current_state);
+          set_state_d(element_index, current_state);
 
-          state_hold_mask[cell] = 1'b1;
+          state_hold_mask[element_index] = 1'b1;
 
           state_hold_events =
             state_hold_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
         end else if (state_changes && capacity_approved) begin
-          set_state_d(cell, candidate_state);
+          set_state_d(element_index, candidate_state);
 
-          state_write_enable_mask[cell] = 1'b1;
+          state_write_enable_mask[element_index] = 1'b1;
 
           accepted_changes =
             accepted_changes + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
@@ -261,7 +261,7 @@ module frp_m16_state_update #(
           accepted_change_events =
             accepted_change_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-          if (neutral_routed_mask[cell]) begin
+          if (neutral_routed_mask[element_index]) begin
             if (candidate_state == FRP_STATE_ZERO) begin
               neutral_routed_commit_events =
                 neutral_routed_commit_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
@@ -270,7 +270,7 @@ module frp_m16_state_update #(
             end
           end
 
-          if (pending_completion_mask[cell]) begin
+          if (pending_completion_mask[element_index]) begin
             if (current_state == FRP_STATE_ZERO) begin
               pending_completion_commit_events =
                 pending_completion_commit_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
@@ -279,14 +279,14 @@ module frp_m16_state_update #(
             end
           end
         end else begin
-          set_state_d(cell, current_state);
+          set_state_d(element_index, current_state);
 
-          state_hold_mask[cell] = 1'b1;
+          state_hold_mask[element_index] = 1'b1;
 
           state_hold_events =
             state_hold_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
-          if (accepted_change_candidate_mask[cell]) begin
+          if (accepted_change_candidate_mask[element_index]) begin
             state_write_capacity_valid = 1'b0;
           end
         end
@@ -297,15 +297,15 @@ module frp_m16_state_update #(
     // Final output-domain and direct-transition scan.
     // ----------------------------------------------------------------------
 
-    for (int cell = 0; cell < CELLS; cell++) begin
+    for (int element_index = 0; element_index < CELLS; element_index++) begin
       logic [STATE_BITS-1:0] current_state;
       logic [STATE_BITS-1:0] next_state;
 
-      current_state = cell_state_q(cell);
-      next_state = cell_state_d(cell);
+      current_state = cell_state_q(element_index);
+      next_state = cell_state_d(element_index);
 
       if (!frp_is_valid_ternary(next_state)) begin
-        state_reserved_mask[cell] = 1'b1;
+        state_reserved_mask[element_index] = 1'b1;
         state_output_domain_valid = 1'b0;
         no_reserved_state_output = 1'b0;
       end

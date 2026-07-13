@@ -325,11 +325,11 @@ module frp_m16_core #(
 
   function automatic logic [STATE_BITS-1:0] cell_state_value(
     input logic [(CELLS*STATE_BITS)-1:0] packed_state,
-    input int cell
+    input int element_index
   );
     begin
       cell_state_value =
-        packed_state[(cell*STATE_BITS) +: STATE_BITS];
+        packed_state[(element_index*STATE_BITS) +: STATE_BITS];
     end
   endfunction
 
@@ -340,22 +340,22 @@ module frp_m16_core #(
   always_comb begin
     pending_completion_candidate = '0;
 
-    for (int cell = 0; cell < CELLS; cell++) begin
+    for (int element_index = 0; element_index < CELLS; element_index++) begin
       logic [STATE_BITS-1:0] state_value;
       logic [STATE_BITS-1:0] pending_value;
 
       state_value =
-        state_q[(cell*STATE_BITS) +: STATE_BITS];
+        state_q[(element_index*STATE_BITS) +: STATE_BITS];
 
       pending_value =
-        pending_route_q[(cell*STATE_BITS) +: STATE_BITS];
+        pending_route_q[(element_index*STATE_BITS) +: STATE_BITS];
 
       if (
         frp_is_zero(state_value) &&
         frp_is_nonzero(pending_value) &&
         frp_scheduler_is_commit_capable(scheduler_state_q)
       ) begin
-        pending_completion_candidate[cell] = 1'b1;
+        pending_completion_candidate[element_index] = 1'b1;
       end
     end
   end

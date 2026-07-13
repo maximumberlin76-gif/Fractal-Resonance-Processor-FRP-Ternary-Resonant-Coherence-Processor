@@ -107,29 +107,29 @@ module frp_m16_capacity_guard #(
   endfunction
 
   function automatic logic [STATE_BITS-1:0] cell_state_q(
-    input int cell
+    input int element_index
   );
     begin
       cell_state_q =
-        state_q[(cell*STATE_BITS) +: STATE_BITS];
+        state_q[(element_index*STATE_BITS) +: STATE_BITS];
     end
   endfunction
 
   function automatic logic [STATE_BITS-1:0] cell_state_candidate_d(
-    input int cell
+    input int element_index
   );
     begin
       cell_state_candidate_d =
-        state_candidate_d[(cell*STATE_BITS) +: STATE_BITS];
+        state_candidate_d[(element_index*STATE_BITS) +: STATE_BITS];
     end
   endfunction
 
   function automatic logic cell_state_changes(
-    input int cell
+    input int element_index
   );
     begin
       cell_state_changes =
-        cell_state_q(cell) != cell_state_candidate_d(cell);
+        cell_state_q(element_index) != cell_state_candidate_d(element_index);
     end
   endfunction
 
@@ -186,28 +186,28 @@ module frp_m16_capacity_guard #(
       // retained continuation of an already neutralized opposite-polarity route.
       // --------------------------------------------------------------------
 
-      for (int cell = 0; cell < CELLS; cell++) begin
+      for (int element_index = 0; element_index < CELLS; element_index++) begin
         logic state_changes;
         logic capacity_available;
 
         state_changes =
-          cell_state_changes(cell);
+          cell_state_changes(element_index);
 
         capacity_available =
           (accepted_changes < REQUEST_LANES[COUNTER_BITS-1:0]);
 
-        if (pending_completion_candidate[cell]) begin
+        if (pending_completion_candidate[element_index]) begin
           capacity_candidate_events =
             capacity_candidate_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
 
           if (!state_changes) begin
-            capacity_accept_mask[cell] = 1'b1;
+            capacity_accept_mask[element_index] = 1'b1;
 
             capacity_accept_events =
               capacity_accept_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
           end else if (capacity_available) begin
-            capacity_accept_mask[cell] = 1'b1;
-            accepted_change_mask[cell] = 1'b1;
+            capacity_accept_mask[element_index] = 1'b1;
+            accepted_change_mask[element_index] = 1'b1;
 
             accepted_changes =
               accepted_changes + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
@@ -218,7 +218,7 @@ module frp_m16_capacity_guard #(
             accepted_change_events =
               accepted_change_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
           end else begin
-            capacity_reject_mask[cell] = 1'b1;
+            capacity_reject_mask[element_index] = 1'b1;
 
             capacity_reject_events =
               capacity_reject_events + {{(COUNTER_BITS-1){1'b0}}, 1'b1};
@@ -258,7 +258,7 @@ module frp_m16_capacity_guard #(
 
           if (capacity_accept_mask[cell_index_int]) begin
             // A pending completion or earlier deterministic candidate already
-            // consumed or accepted this cell. Same-cell writeback is not
+            // consumed or accepted this element_index. Same-element_index writeback is not
             // accepted again through the lane path.
             request_reject_capacity[lane] = 1'b1;
             capacity_reject_mask[cell_index_int] = 1'b1;
