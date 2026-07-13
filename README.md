@@ -10,22 +10,13 @@
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0">
   <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/version-v1.8.0-purple" alt="FRP v1.8.0">
-  <img src="https://img.shields.io/badge/milestone-M16%20RTL%20Core-brightgreen" alt="M16 RTL Core">
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/processor-ternary%20fractal%20resonant%20coherence-brightgreen" alt="Ternary Fractal Resonant Coherence Processor">
-  <img src="https://img.shields.io/badge/state-balanced%20ternary%20retention-brightgreen" alt="Balanced ternary state retention">
-  <img src="https://img.shields.io/badge/routing-active--neutral%20through%200-brightgreen" alt="Active-neutral routing through zero">
+  <img src="https://img.shields.io/badge/M16-RTL%20PASS-brightgreen" alt="M16 RTL PASS">
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/M15-41%2F41%20PASS-brightgreen" alt="M15 41/41 PASS">
-  <img src="https://img.shields.io/badge/M16-artifact--boundary%20PASS-brightgreen" alt="M16 artifact-boundary PASS">
-  <img src="https://img.shields.io/badge/simulator-pending%20external%20execution-yellow" alt="External simulator execution pending">
-</p>
-
-<p align="center">
+  <img src="https://img.shields.io/badge/ternary-active--neutral-brightgreen" alt="Active-neutral ternary routing">
+  <img src="https://img.shields.io/badge/simulator-pending-yellow" alt="Simulator pending">
   <a href="https://doi.org/10.5281/zenodo.21183966">
     <img src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21183966-blue" alt="DOI">
   </a>
