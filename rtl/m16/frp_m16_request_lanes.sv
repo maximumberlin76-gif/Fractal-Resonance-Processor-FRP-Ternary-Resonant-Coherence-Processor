@@ -13,13 +13,13 @@
         M16 — RTL Core Realization and Execution Semantics Package
 
     Purpose:
-        Compute deterministic request-lane admission for the M16 retained-state
+        Deterministic request-lane admission for the M16 retained-state
         RTL execution layer.
 
         Preserved semantics:
             - CELLS parameterization;
-            - retained current_state array;
-            - target_state array;
+            - current_state array evaluation;
+            - target_state array evaluation;
             - request_mask generation;
             - accepted_mask generation;
             - deterministic REQUEST_LANES capacity;
@@ -30,10 +30,8 @@
         It only admits requested state changes into the current execution tick.
 
     Verilator portability:
-        - no local identifier named "cell";
-        - no function returning parameter-width packed vectors;
-        - no dynamic packed-vector bit assignment;
-        - no helper function with unpacked-array arguments.
+        This source does not use the lowercase reserved identifier that caused
+        the Verilator configuration-keyword failure.
 */
 
 `timescale 1ns / 1ps
@@ -67,6 +65,7 @@ module frp_m16_request_lanes #(
 
     logic [COUNTER_BITS-1:0] requested_changes_next;
     logic [COUNTER_BITS-1:0] accepted_changes_next;
+    logic [COUNTER_BITS-1:0] request_lanes_next;
 
     int element_index;
     int accepted_count;
@@ -76,6 +75,7 @@ module frp_m16_request_lanes #(
         accepted_mask_next     = '0;
         requested_changes_next = '0;
         accepted_changes_next  = '0;
+        request_lanes_next     = REQUEST_LANES_INT[COUNTER_BITS-1:0];
         accepted_count         = 0;
         one_hot_next           = '0;
 
@@ -84,21 +84,27 @@ module frp_m16_request_lanes #(
             element_index < CELLS;
             element_index = element_index + 1
         ) begin
-            one_hot_next = ({{(CELLS - 1){1'b0}}, 1'b1} << element_index);
+            one_hot_next = '0;
+            one_hot_next = (logic'(1'b1) << element_index);
 
             if (
                 frp_is_valid_ternary(current_state[element_index])
                 && frp_is_valid_ternary(target_state[element_index])
                 && (current_state[element_index] != target_state[element_index])
             ) begin
-                request_mask_next = request_mask_next | one_hot_next;
+                request_mask_next =
+                    request_mask_next | one_hot_next;
+
                 requested_changes_next =
                     requested_changes_next + {{(COUNTER_BITS - 1){1'b0}}, 1'b1};
 
                 if (accepted_count < REQUEST_LANES_INT) begin
-                    accepted_mask_next = accepted_mask_next | one_hot_next;
+                    accepted_mask_next =
+                        accepted_mask_next | one_hot_next;
+
                     accepted_changes_next =
                         accepted_changes_next + {{(COUNTER_BITS - 1){1'b0}}, 1'b1};
+
                     accepted_count = accepted_count + 1;
                 end
             end
@@ -109,13 +115,13 @@ module frp_m16_request_lanes #(
         if (!rst_n) begin
             request_mask      <= '0;
             accepted_mask     <= '0;
-            request_lanes     <= REQUEST_LANES_INT;
+            request_lanes     <= REQUEST_LANES_INT[COUNTER_BITS-1:0];
             requested_changes <= '0;
             accepted_changes  <= '0;
         end else if (enable) begin
             request_mask      <= request_mask_next;
             accepted_mask     <= accepted_mask_next;
-            request_lanes     <= REQUEST_LANES_INT;
+            request_lanes     <= request_lanes_next;
             requested_changes <= requested_changes_next;
             accepted_changes  <= accepted_changes_next;
         end
