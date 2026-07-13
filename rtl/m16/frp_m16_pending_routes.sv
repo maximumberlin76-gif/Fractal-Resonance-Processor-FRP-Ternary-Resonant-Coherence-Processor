@@ -132,7 +132,9 @@ module frp_m16_pending_routes #(
     );
         begin
             lane_index_value =
-                request_cell_index[(lane_index * CELL_INDEX_BITS) +: CELL_INDEX_BITS];
+                request_cell_index[
+                    (lane_index * CELL_INDEX_BITS) +: CELL_INDEX_BITS
+                ];
         end
     endfunction
 
@@ -141,19 +143,11 @@ module frp_m16_pending_routes #(
     );
         begin
             lane_target_value =
-                request_target[(lane_index * STATE_BITS) +: STATE_BITS];
+                request_target[
+                    (lane_index * STATE_BITS) +: STATE_BITS
+                ];
         end
     endfunction
-
-    task automatic set_pending_d_at_index(
-        input int element_index,
-        input logic [STATE_BITS - 1:0] route_value
-    );
-        begin
-            pending_route_d[(element_index * STATE_BITS) +: STATE_BITS] =
-                route_value;
-        end
-    endtask
 
     always_comb begin
         pending_route_d = pending_route_q;
@@ -190,122 +184,169 @@ module frp_m16_pending_routes #(
         no_queue_overflow = 1'b1;
         no_actual_direct_events = 1'b1;
 
-        for (int element_index = 0; element_index < CELLS; element_index = element_index + 1) begin
-            logic [STATE_BITS - 1:0] pending_value;
-            logic [STATE_BITS - 1:0] retained_state;
-
-            pending_value =
-                pending_q_value_at_index(element_index);
-
-            retained_state =
-                state_value_at_index(state_q, element_index);
-
-            if (!frp_is_valid_ternary(pending_value)) begin
+        for (
+            int element_index = 0;
+            element_index < CELLS;
+            element_index = element_index + 1
+        ) begin
+            if (
+                !frp_is_valid_ternary(
+                    pending_q_value_at_index(element_index)
+                )
+            ) begin
                 pending_reserved_mask[element_index] = 1'b1;
+
                 pending_reserved_events =
                     pending_reserved_events + COUNTER_ONE;
+
                 pending_domain_valid = 1'b0;
                 no_pending_reserved_state = 1'b0;
 
-                set_pending_d_at_index(element_index, FRP_STATE_ZERO);
-            end else if (frp_is_nonzero(pending_value)) begin
+                pending_route_d[
+                    (element_index * STATE_BITS) +: STATE_BITS
+                ] = FRP_STATE_ZERO;
+            end else if (
+                frp_is_nonzero(
+                    pending_q_value_at_index(element_index)
+                )
+            ) begin
                 pending_active_mask[element_index] = 1'b1;
 
                 if (
                     tick_enable
                     && pending_completion_accept_mask[element_index]
                 ) begin
-                    if (!frp_is_zero(retained_state)) begin
+                    if (
+                        !frp_is_zero(
+                            state_value_at_index(
+                                state_q,
+                                element_index
+                            )
+                        )
+                    ) begin
                         pending_completion_from_zero_valid = 1'b0;
                     end
 
-                    set_pending_d_at_index(element_index, FRP_STATE_ZERO);
+                    pending_route_d[
+                        (element_index * STATE_BITS) +: STATE_BITS
+                    ] = FRP_STATE_ZERO;
 
                     pending_completed_mask[element_index] = 1'b1;
                     pending_cleared_mask[element_index] = 1'b1;
 
                     pending_completed_events =
                         pending_completed_events + COUNTER_ONE;
+
                     pending_cleared_events =
                         pending_cleared_events + COUNTER_ONE;
                 end else begin
                     pending_retained_mask[element_index] = 1'b1;
+
                     pending_retained_events =
                         pending_retained_events + COUNTER_ONE;
                 end
             end
         end
 
-        if (tick_enable) begin
-            for (int lane_index = 0; lane_index < REQUEST_LANES; lane_index = lane_index + 1) begin
-                logic [CELL_INDEX_BITS - 1:0] packed_index_value;
-                int element_index_int;
-                logic [STATE_BITS - 1:0] target_value;
-                logic [STATE_BITS - 1:0] existing_pending;
+        for (
+            int lane_index = 0;
+            lane_index < REQUEST_LANES;
+            lane_index = lane_index + 1
+        ) begin
+            if (
+                tick_enable
+                && request_accept[lane_index]
+                && request_neutralized[lane_index]
+            ) begin
+                prevented_direct_events =
+                    prevented_direct_events + COUNTER_ONE;
 
-                packed_index_value =
-                    lane_index_value(lane_index);
+                neutral_routed_events =
+                    neutral_routed_events + COUNTER_ONE;
 
-                element_index_int =
-                    int'(packed_index_value);
+                if (
+                    int'(lane_index_value(lane_index)) < CELLS
+                ) begin
+                    if (
+                        !frp_is_valid_ternary(
+                            lane_target_value(lane_index)
+                        )
+                    ) begin
+                        pending_reserved_mask[
+                            int'(lane_index_value(lane_index))
+                        ] = 1'b1;
 
-                target_value =
-                    lane_target_value(lane_index);
+                        pending_polarity_valid = 1'b0;
+                        pending_domain_valid = 1'b0;
+                        no_pending_reserved_state = 1'b0;
+                    end else if (
+                        !frp_is_nonzero(
+                            lane_target_value(lane_index)
+                        )
+                    ) begin
+                        pending_polarity_valid = 1'b0;
+                    end else if (
+                        frp_is_nonzero(
+                            pending_q_value_at_index(
+                                int'(lane_index_value(lane_index))
+                            )
+                        )
+                        && !pending_completion_accept_mask[
+                            int'(lane_index_value(lane_index))
+                        ]
+                    ) begin
+                        pending_blocked_mask[
+                            int'(lane_index_value(lane_index))
+                        ] = 1'b1;
 
-                if (request_accept[lane_index] && request_neutralized[lane_index]) begin
-                    prevented_direct_events =
-                        prevented_direct_events + COUNTER_ONE;
-                    neutral_routed_events =
-                        neutral_routed_events + COUNTER_ONE;
+                        pending_overflow_mask[
+                            int'(lane_index_value(lane_index))
+                        ] = 1'b1;
 
-                    if (element_index_int < CELLS) begin
-                        existing_pending =
-                            pending_q_value_at_index(element_index_int);
+                        queue_overflow_events =
+                            queue_overflow_events + COUNTER_ONE;
 
-                        if (!frp_is_valid_ternary(target_value)) begin
-                            pending_reserved_mask[element_index_int] = 1'b1;
-                            pending_polarity_valid = 1'b0;
-                            pending_domain_valid = 1'b0;
-                            no_pending_reserved_state = 1'b0;
-                        end else if (!frp_is_nonzero(target_value)) begin
-                            pending_polarity_valid = 1'b0;
-                        end else if (
-                            frp_is_nonzero(existing_pending)
-                            && !pending_completion_accept_mask[element_index_int]
-                        ) begin
-                            pending_blocked_mask[element_index_int] = 1'b1;
-                            pending_overflow_mask[element_index_int] = 1'b1;
+                        pending_non_overwrite_valid = 1'b0;
+                        no_queue_overflow = 1'b0;
+                    end else begin
+                        pending_route_d[
+                            (
+                                int'(lane_index_value(lane_index))
+                                * STATE_BITS
+                            ) +: STATE_BITS
+                        ] = lane_target_value(lane_index);
 
-                            queue_overflow_events =
-                                queue_overflow_events + COUNTER_ONE;
+                        pending_created_mask[
+                            int'(lane_index_value(lane_index))
+                        ] = 1'b1;
 
-                            pending_non_overwrite_valid = 1'b0;
-                            no_queue_overflow = 1'b0;
-                        end else begin
-                            set_pending_d_at_index(element_index_int, target_value);
-
-                            pending_created_mask[element_index_int] = 1'b1;
-                            pending_created_events =
-                                pending_created_events + COUNTER_ONE;
-                        end
+                        pending_created_events =
+                            pending_created_events + COUNTER_ONE;
                     end
                 end
             end
         end
 
-        for (int element_index = 0; element_index < CELLS; element_index = element_index + 1) begin
-            logic [STATE_BITS - 1:0] pending_next;
-
-            pending_next =
-                pending_d_value_at_index(element_index);
-
-            if (!frp_is_valid_ternary(pending_next)) begin
+        for (
+            int element_index = 0;
+            element_index < CELLS;
+            element_index = element_index + 1
+        ) begin
+            if (
+                !frp_is_valid_ternary(
+                    pending_d_value_at_index(element_index)
+                )
+            ) begin
                 pending_reserved_mask[element_index] = 1'b1;
                 pending_domain_valid = 1'b0;
                 no_pending_reserved_state = 1'b0;
             end
 
-            if (frp_is_nonzero(pending_next)) begin
+            if (
+                frp_is_nonzero(
+                    pending_d_value_at_index(element_index)
+                )
+            ) begin
                 pending_active_count =
                     pending_active_count + COUNTER_ONE;
             end
