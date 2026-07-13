@@ -99,13 +99,17 @@ module frp_m16_pending_routes #(
     localparam logic [COUNTER_BITS - 1:0] COUNTER_ONE =
         {{(COUNTER_BITS - 1){1'b0}}, 1'b1};
 
+    logic [(CELLS * STATE_BITS) - 1:0] pending_route_next;
+
     function automatic logic [STATE_BITS - 1:0] state_value_at_index(
         input logic [(CELLS * STATE_BITS) - 1:0] packed_state,
         input int element_index
     );
         begin
             state_value_at_index =
-                packed_state[(element_index * STATE_BITS) +: STATE_BITS];
+                packed_state[
+                    (element_index * STATE_BITS) +: STATE_BITS
+                ];
         end
     endfunction
 
@@ -114,16 +118,21 @@ module frp_m16_pending_routes #(
     );
         begin
             pending_q_value_at_index =
-                pending_route_q[(element_index * STATE_BITS) +: STATE_BITS];
+                pending_route_q[
+                    (element_index * STATE_BITS) +: STATE_BITS
+                ];
         end
     endfunction
 
-    function automatic logic [STATE_BITS - 1:0] pending_d_value_at_index(
+    function automatic logic [STATE_BITS - 1:0] pending_next_value_at_index(
+        input logic [(CELLS * STATE_BITS) - 1:0] packed_pending,
         input int element_index
     );
         begin
-            pending_d_value_at_index =
-                pending_route_d[(element_index * STATE_BITS) +: STATE_BITS];
+            pending_next_value_at_index =
+                packed_pending[
+                    (element_index * STATE_BITS) +: STATE_BITS
+                ];
         end
     endfunction
 
@@ -149,8 +158,28 @@ module frp_m16_pending_routes #(
         end
     endfunction
 
+    function automatic logic [(CELLS * STATE_BITS) - 1:0]
+        set_pending_d_at_index(
+            input logic [(CELLS * STATE_BITS) - 1:0] packed_pending,
+            input int element_index,
+            input logic [STATE_BITS - 1:0] route_value
+        );
+
+        logic [(CELLS * STATE_BITS) - 1:0] updated_pending;
+
+        begin
+            updated_pending = packed_pending;
+
+            updated_pending[
+                (element_index * STATE_BITS) +: STATE_BITS
+            ] = route_value;
+
+            set_pending_d_at_index = updated_pending;
+        end
+    endfunction
+
     always_comb begin
-        pending_route_d = pending_route_q;
+        pending_route_next = pending_route_q;
 
         pending_active_mask = '0;
         pending_created_mask = '0;
@@ -184,16 +213,33 @@ module frp_m16_pending_routes #(
         no_queue_overflow = 1'b1;
         no_actual_direct_events = 1'b1;
 
+        // ------------------------------------------------------------------
+        // Existing pending-route state and completion processing.
+        //
+        // Completion is evaluated before new lane-created routes so an
+        // accepted completion may clear the retained pending route and a
+        // subsequent accepted neutralized request may deterministically
+        // install the next pending target in the same tick.
+        // ------------------------------------------------------------------
+
         for (
             int element_index = 0;
             element_index < CELLS;
             element_index = element_index + 1
         ) begin
-            if (
-                !frp_is_valid_ternary(
-                    pending_q_value_at_index(element_index)
-                )
-            ) begin
+            logic [STATE_BITS - 1:0] pending_value;
+            logic [STATE_BITS - 1:0] retained_state;
+
+            pending_value =
+                pending_q_value_at_index(element_index);
+
+            retained_state =
+                state_value_at_index(
+                    state_q,
+                    element_index
+                );
+
+            if (!frp_is_valid_ternary(pending_value)) begin
                 pending_reserved_mask[element_index] = 1'b1;
 
                 pending_reserved_events =
@@ -202,34 +248,29 @@ module frp_m16_pending_routes #(
                 pending_domain_valid = 1'b0;
                 no_pending_reserved_state = 1'b0;
 
-                pending_route_d[
-                    (element_index * STATE_BITS) +: STATE_BITS
-                ] = FRP_STATE_ZERO;
-            end else if (
-                frp_is_nonzero(
-                    pending_q_value_at_index(element_index)
-                )
-            ) begin
+                pending_route_next =
+                    set_pending_d_at_index(
+                        pending_route_next,
+                        element_index,
+                        FRP_STATE_ZERO
+                    );
+            end else if (frp_is_nonzero(pending_value)) begin
                 pending_active_mask[element_index] = 1'b1;
 
                 if (
                     tick_enable
                     && pending_completion_accept_mask[element_index]
                 ) begin
-                    if (
-                        !frp_is_zero(
-                            state_value_at_index(
-                                state_q,
-                                element_index
-                            )
-                        )
-                    ) begin
+                    if (!frp_is_zero(retained_state)) begin
                         pending_completion_from_zero_valid = 1'b0;
                     end
 
-                    pending_route_d[
-                        (element_index * STATE_BITS) +: STATE_BITS
-                    ] = FRP_STATE_ZERO;
+                    pending_route_next =
+                        set_pending_d_at_index(
+                            pending_route_next,
+                            element_index,
+                            FRP_STATE_ZERO
+                        );
 
                     pending_completed_mask[element_index] = 1'b1;
                     pending_cleared_mask[element_index] = 1'b1;
@@ -248,11 +289,44 @@ module frp_m16_pending_routes #(
             end
         end
 
+        // ------------------------------------------------------------------
+        // New active-neutral pending routes.
+        //
+        // Request lanes are processed in deterministic ascending lane order.
+        // Only accepted opposite-polarity requests marked as neutralized may
+        // create retained pending routes.
+        // ------------------------------------------------------------------
+
         for (
             int lane_index = 0;
             lane_index < REQUEST_LANES;
             lane_index = lane_index + 1
         ) begin
+            logic [CELL_INDEX_BITS - 1:0] packed_index_value;
+            int element_index_int;
+            logic [STATE_BITS - 1:0] target_value;
+            logic [STATE_BITS - 1:0] existing_pending;
+            logic valid_index;
+
+            packed_index_value =
+                lane_index_value(lane_index);
+
+            element_index_int =
+                int'(packed_index_value);
+
+            target_value =
+                lane_target_value(lane_index);
+
+            valid_index =
+                (element_index_int < CELLS);
+
+            existing_pending = FRP_STATE_ZERO;
+
+            if (valid_index) begin
+                existing_pending =
+                    pending_q_value_at_index(element_index_int);
+            end
+
             if (
                 tick_enable
                 && request_accept[lane_index]
@@ -264,44 +338,23 @@ module frp_m16_pending_routes #(
                 neutral_routed_events =
                     neutral_routed_events + COUNTER_ONE;
 
-                if (
-                    int'(lane_index_value(lane_index)) < CELLS
-                ) begin
-                    if (
-                        !frp_is_valid_ternary(
-                            lane_target_value(lane_index)
-                        )
-                    ) begin
-                        pending_reserved_mask[
-                            int'(lane_index_value(lane_index))
-                        ] = 1'b1;
+                if (valid_index) begin
+                    if (!frp_is_valid_ternary(target_value)) begin
+                        pending_reserved_mask[element_index_int] = 1'b1;
 
                         pending_polarity_valid = 1'b0;
                         pending_domain_valid = 1'b0;
                         no_pending_reserved_state = 1'b0;
-                    end else if (
-                        !frp_is_nonzero(
-                            lane_target_value(lane_index)
-                        )
-                    ) begin
+                    end else if (!frp_is_nonzero(target_value)) begin
                         pending_polarity_valid = 1'b0;
                     end else if (
-                        frp_is_nonzero(
-                            pending_q_value_at_index(
-                                int'(lane_index_value(lane_index))
-                            )
-                        )
+                        frp_is_nonzero(existing_pending)
                         && !pending_completion_accept_mask[
-                            int'(lane_index_value(lane_index))
+                            element_index_int
                         ]
                     ) begin
-                        pending_blocked_mask[
-                            int'(lane_index_value(lane_index))
-                        ] = 1'b1;
-
-                        pending_overflow_mask[
-                            int'(lane_index_value(lane_index))
-                        ] = 1'b1;
+                        pending_blocked_mask[element_index_int] = 1'b1;
+                        pending_overflow_mask[element_index_int] = 1'b1;
 
                         queue_overflow_events =
                             queue_overflow_events + COUNTER_ONE;
@@ -309,16 +362,14 @@ module frp_m16_pending_routes #(
                         pending_non_overwrite_valid = 1'b0;
                         no_queue_overflow = 1'b0;
                     end else begin
-                        pending_route_d[
-                            (
-                                int'(lane_index_value(lane_index))
-                                * STATE_BITS
-                            ) +: STATE_BITS
-                        ] = lane_target_value(lane_index);
+                        pending_route_next =
+                            set_pending_d_at_index(
+                                pending_route_next,
+                                element_index_int,
+                                target_value
+                            );
 
-                        pending_created_mask[
-                            int'(lane_index_value(lane_index))
-                        ] = 1'b1;
+                        pending_created_mask[element_index_int] = 1'b1;
 
                         pending_created_events =
                             pending_created_events + COUNTER_ONE;
@@ -327,26 +378,30 @@ module frp_m16_pending_routes #(
             end
         end
 
+        // ------------------------------------------------------------------
+        // Next-state domain and active-route accounting.
+        // ------------------------------------------------------------------
+
         for (
             int element_index = 0;
             element_index < CELLS;
             element_index = element_index + 1
         ) begin
-            if (
-                !frp_is_valid_ternary(
-                    pending_d_value_at_index(element_index)
-                )
-            ) begin
+            logic [STATE_BITS - 1:0] pending_next;
+
+            pending_next =
+                pending_next_value_at_index(
+                    pending_route_next,
+                    element_index
+                );
+
+            if (!frp_is_valid_ternary(pending_next)) begin
                 pending_reserved_mask[element_index] = 1'b1;
                 pending_domain_valid = 1'b0;
                 no_pending_reserved_state = 1'b0;
             end
 
-            if (
-                frp_is_nonzero(
-                    pending_d_value_at_index(element_index)
-                )
-            ) begin
+            if (frp_is_nonzero(pending_next)) begin
                 pending_active_count =
                     pending_active_count + COUNTER_ONE;
             end
@@ -361,6 +416,8 @@ module frp_m16_pending_routes #(
             no_actual_direct_events = 1'b0;
         end
     end
+
+    assign pending_route_d = pending_route_next;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
