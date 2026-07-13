@@ -12,6 +12,48 @@
 
 `FRP — Ternary Fractal Resonant Coherence Processor`
 
+## Qualification Record
+
+Workflow:
+
+`FRP M16 RTL Artifact Boundary`
+
+Repository commit:
+
+`0abed8d`
+
+Branch:
+
+`main`
+
+Result:
+
+`PASS`
+
+SystemVerilog compilation:
+
+`PASS`
+
+Module elaboration:
+
+`PASS`
+
+Executable testbench:
+
+`PASS`
+
+Assertion execution:
+
+`PASS`
+
+Terminal marker validation:
+
+`PASS`
+
+Repository integrity:
+
+`PASS`
+
 ## Simulation Boundary
 
 Simulation source:
@@ -21,6 +63,10 @@ Simulation source:
 Top-level simulation module:
 
 `frp_m16_tb`
+
+Top-level synthesis module:
+
+`frp_m16_core`
 
 SystemVerilog include path:
 
@@ -46,7 +92,9 @@ Execution log:
 
 `/tmp/frp_m16_obj/Vfrp_m16_tb 2>&1 | tee /tmp/frp_m16_execution.log`
 
-## Artifact Set
+## Artifact Boundary
+
+The qualified RTL boundary contains ten SystemVerilog artifacts:
 
 | File | Function |
 |---|---|
@@ -61,17 +109,23 @@ Execution log:
 | `frp_m16_assertions.sv` | temporal and architectural assertion layer |
 | `frp_m16_tb.sv` | deterministic executable testbench |
 
-## Toolchain Record
+The RTL documentation boundary contains:
 
-| Field | Recorded value |
+| File | Function |
 |---|---|
-| Verilator version | |
-| C++ compiler version | |
-| Build result | |
-| Execution result | |
-| Assertion result | |
-| Repository commit | |
-| Execution date | |
+| `README.md` | M16 RTL architecture and execution semantics |
+| `ARTIFACTS.md` | RTL artifact manifest |
+| `SIMULATION.md` | build and execution procedure |
+| `SIMULATION_TRANSCRIPT.md` | executable qualification record |
+| `CLOSURE.md` | M16 RTL closure record |
+
+Artifact relation:
+
+`10 SystemVerilog artifacts + 5 RTL documentation artifacts`
+
+Artifact-boundary validation:
+
+`PASS`
 
 ## Testbench Configuration
 
@@ -86,9 +140,13 @@ Transition-capacity relation:
 
 `REQUEST_LANES = max(1, round(CELLS × 0.25))`
 
-For eight retained cells:
+Qualified relation:
 
-`REQUEST_LANES = 2`
+`8 cells → 2 request lanes`
+
+Result:
+
+`PASS`
 
 ## Balanced Ternary Encoding
 
@@ -99,296 +157,461 @@ For eight retained cells:
 | `+1` | `2'b01` |
 | reserved | `2'b10` |
 
-The state `0` is the active neutral processor state.
+The state `0` executed as the active neutral processor state.
+
+Canonical retained-state domain:
+
+`PASS`
+
+Canonical pending-route domain:
+
+`PASS`
+
+Reserved encoding exclusion:
+
+`PASS`
 
 ## Reset Record
 
-The reset sequence establishes:
+Reset established:
 
 - every retained processor cell at `0`
 - every pending-route slot at `0`
 - scheduler mode `free`
 - scheduler state `free`
-- scheduler counters at `0`
+- scheduler tick counter at `0`
+- every scheduler-state counter at `0`
 
-Recorded reset result:
-
-| Relation | Recorded value |
+| Reset relation | Result |
 |---|---|
-| `state_out = 0` | |
-| `pending_route_out = 0` | |
-| `ticks_recorded_q = 0` | |
+| `state_out = 0` | `PASS` |
+| `pending_route_out = 0` | `PASS` |
+| `ticks_recorded_q = 0` | `PASS` |
+| scheduler counters equal `0` | `PASS` |
 
 ## Free-Mode Record
 
-The free-mode sequence contains:
+Executed ticks:
 
-`16 enabled ticks`
+`16`
+
+Scheduler-state counts:
+
+| Scheduler state | Recorded count |
+|---|---:|
+| `free` | `16` |
+| `balance` | `0` |
+| `commit` | `0` |
+| `excite` | `0` |
+| `neutralize` | `0` |
 
 Scheduler relation:
 
-| Scheduler state | Required count | Recorded count |
-|---|---:|---:|
-| `free` | `16` | |
-| `balance` | `0` | |
-| `commit` | `0` | |
-| `excite` | `0` | |
-| `neutralize` | `0` | |
+`16 ticks → free = 16`
 
-The free-mode sequence executes:
+Result:
 
-- `0 → +1`
-- `+1 → 0 → -1`
-- `-1 → 0 → +1`
-- pending-route creation
-- pending-route completion
-- two-transition capacity saturation
-- scheduler-counter clearing with retained state preserved
+`PASS`
 
-Recorded free-mode result:
+### Zero-to-Positive Transition
 
-| Relation | Recorded value |
-|---|---|
-| `+1 → 0 → -1` | |
-| `-1 → 0 → +1` | |
-| opposite target retained in `pending_route` | |
-| pending route cleared after completion | |
-| two accepted changes in one tick | |
-| retained state preserved by counter clear | |
+Executed transition:
+
+`0 → +1`
+
+Result:
+
+`PASS`
+
+### Positive-to-Negative Route
+
+Requested transition:
+
+`+1 → -1`
+
+First tick:
+
+`+1 → 0`
+
+Retained route:
+
+`pending_route = -1`
+
+Following eligible tick:
+
+`0 → -1`
+
+Completed route:
+
+`+1 → 0 → -1`
+
+Result:
+
+`PASS`
+
+### Negative-to-Positive Route
+
+Requested transition:
+
+`-1 → +1`
+
+First tick:
+
+`-1 → 0`
+
+Retained route:
+
+`pending_route = +1`
+
+Following eligible tick:
+
+`0 → +1`
+
+Completed route:
+
+`-1 → 0 → +1`
+
+Result:
+
+`PASS`
+
+### Free-Mode Capacity
+
+Executed during one tick:
+
+`cell 1: 0 → +1`
+
+`cell 2: 0 → +1`
+
+Recorded relation:
+
+| Capacity signal | Value |
+|---|---:|
+| `accepted_changes` | `2` |
+| `capacity_remaining` | `0` |
+| `capacity_exhausted` | `1` |
+| `switch_load_numerator` | `2` |
+
+Result:
+
+`PASS`
+
+### Scheduler Counter Clear
+
+The scheduler counter bank was cleared while retained balanced ternary state and pending-route state remained unchanged.
+
+Result:
+
+`PASS`
 
 ## 7/1 Scheduler Record
 
-The repeating eight-tick sequence is:
+Executed ticks:
 
-| Period index | Scheduler state |
-|---:|---|
-| `0` | `balance` |
-| `1` | `balance` |
-| `2` | `balance` |
-| `3` | `balance` |
-| `4` | `balance` |
-| `5` | `balance` |
-| `6` | `balance` |
-| `7` | `commit` |
+`64`
 
-The testbench executes:
+Repeating scheduler sequence:
 
-`64 enabled ticks`
+`balance → balance → balance → balance → balance → balance → balance → commit`
 
-Scheduler relation:
+Scheduler-state counts:
 
-| Scheduler state | Required count | Recorded count |
-|---|---:|---:|
-| `free` | `0` | |
-| `balance` | `56` | |
-| `commit` | `8` | |
-| `excite` | `0` | |
-| `neutralize` | `0` | |
+| Scheduler state | Recorded count |
+|---|---:|
+| `free` | `0` |
+| `balance` | `56` |
+| `commit` | `8` |
+| `excite` | `0` |
+| `neutralize` | `0` |
 
-The `7/1` execution sequence verifies:
+Required relation:
 
-- zero-to-nonzero release is retained during balance ticks
-- zero-to-nonzero release executes during the commit tick
-- opposite-polarity first-leg routing executes during a balance tick
-- pending polarity remains retained through the following balance ticks
-- pending completion executes during the following commit tick
+`64 ticks → balance = 56, commit = 8`
 
-Recorded `7/1` result:
+Result:
 
-| Relation | Recorded value |
-|---|---|
-| seven balance ticks followed by one commit tick | |
-| `balance = 56` | |
-| `commit = 8` | |
-| first route leg executed during balance | |
-| pending polarity retained through balance | |
-| completion executed during commit | |
+`PASS`
+
+### 7/1 Zero Release
+
+During balance ticks:
+
+`0 → +1` remained uncommitted.
+
+During the commit tick:
+
+`0 → +1` executed.
+
+Result:
+
+`PASS`
+
+### 7/1 Active-Neutral Route
+
+During a balance tick:
+
+`+1 → 0`
+
+Retained route:
+
+`pending_route = -1`
+
+During the following balance ticks:
+
+`state = 0`
+
+`pending_route = -1`
+
+During the following commit tick:
+
+`0 → -1`
+
+Completed route:
+
+`+1 → 0 → -1`
+
+Result:
+
+`PASS`
+
+Pending polarity retained across the balance interval:
+
+`PASS`
+
+Pending completion restricted to the commit tick:
+
+`PASS`
 
 ## 1/7 Scheduler Record
 
-The repeating eight-tick sequence is:
+Executed ticks:
 
-| Period index | Scheduler state |
-|---:|---|
-| `0` | `excite` |
-| `1` | `neutralize` |
-| `2` | `neutralize` |
-| `3` | `neutralize` |
-| `4` | `neutralize` |
-| `5` | `neutralize` |
-| `6` | `neutralize` |
-| `7` | `neutralize` |
+`16`
 
-The testbench executes:
+Repeating scheduler sequence:
 
-`16 enabled ticks`
+`excite → neutralize → neutralize → neutralize → neutralize → neutralize → neutralize → neutralize`
 
-Scheduler relation:
+Scheduler-state counts:
 
-| Scheduler state | Required count | Recorded count |
-|---|---:|---:|
-| `free` | `0` | |
-| `balance` | `0` | |
-| `commit` | `0` | |
-| `excite` | `2` | |
-| `neutralize` | `14` | |
+| Scheduler state | Recorded count |
+|---|---:|
+| `free` | `0` |
+| `balance` | `0` |
+| `commit` | `0` |
+| `excite` | `2` |
+| `neutralize` | `14` |
 
-The `1/7` execution sequence verifies:
+Required relation:
 
-- zero-to-nonzero release executes during an excite tick
-- opposite-polarity first-leg routing executes during a neutralize tick
-- pending polarity remains retained through the following neutralize ticks
-- pending completion executes during the following excite tick
+`16 ticks → excite = 2, neutralize = 14`
 
-Recorded `1/7` result:
+Result:
 
-| Relation | Recorded value |
-|---|---|
-| one excite tick followed by seven neutralize ticks | |
-| `excite = 2` | |
-| `neutralize = 14` | |
-| first route leg executed during neutralize | |
-| pending polarity retained through neutralize | |
-| completion executed during excite | |
+`PASS`
 
-## Transition-Capacity Record
+### 1/7 Zero Release
 
-Required relations:
+During the excite tick:
 
-`accepted_changes <= REQUEST_LANES`
+`0 → +1`
 
-`capacity_remaining = REQUEST_LANES - accepted_changes`
+Result:
 
-`capacity_exhausted = (accepted_changes == REQUEST_LANES)`
+`PASS`
 
-`switch_load_numerator = accepted_changes`
+### 1/7 Active-Neutral Route
 
-Recorded transition-capacity result:
+During a neutralize tick:
 
-| Relation | Recorded value |
-|---|---|
-| `accepted_changes <= REQUEST_LANES` | |
-| `capacity_remaining` relation | |
-| `capacity_exhausted` relation | |
-| `switch_load_numerator` relation | |
-| pending completion priority | |
-| ascending request-lane order | |
+`+1 → 0`
+
+Retained route:
+
+`pending_route = -1`
+
+During the following neutralize ticks:
+
+`state = 0`
+
+`pending_route = -1`
+
+During the following excite tick:
+
+`0 → -1`
+
+Completed route:
+
+`+1 → 0 → -1`
+
+Result:
+
+`PASS`
+
+Pending polarity retained across the neutralize interval:
+
+`PASS`
+
+Pending completion restricted to the excite tick:
+
+`PASS`
 
 ## Active-Neutral Routing Record
 
-Forbidden retained-state transitions:
+Forbidden direct transitions:
 
 `-1 → +1`
 
 `+1 → -1`
 
-Executed routes:
+Executed tick-separated routes:
 
 `-1 → 0 → +1`
 
 `+1 → 0 → -1`
 
-Recorded routing result:
-
-| Relation | Recorded value |
+| Routing relation | Result |
 |---|---|
-| direct `-1 → +1` absent | |
-| direct `+1 → -1` absent | |
-| `-1 → 0 → +1` executed | |
-| `+1 → 0 → -1` executed | |
-| pending target polarity preserved | |
-| completion executed only from `0` | |
+| active neutral `0` executed as the intermediate state | `PASS` |
+| direct `-1 → +1` absent | `PASS` |
+| direct `+1 → -1` absent | `PASS` |
+| `-1 → 0 → +1` executed | `PASS` |
+| `+1 → 0 → -1` executed | `PASS` |
+| requested opposite polarity retained | `PASS` |
+| pending completion executed only from `0` | `PASS` |
+| pending route cleared after completion | `PASS` |
+
+## Pending-Route Record
+
+| Pending-route relation | Result |
+|---|---|
+| one retained route slot per cell | `PASS` |
+| exact requested polarity retained | `PASS` |
+| pending route owns its cell | `PASS` |
+| new same-cell request cannot overwrite pending route | `PASS` |
+| scheduler deferral preserves pending route | `PASS` |
+| transition-capacity deferral preserves pending route | `PASS` |
+| completion requires retained state `0` | `PASS` |
+| accepted completion clears pending route | `PASS` |
+| pending-route overflow absent | `PASS` |
+
+## Transition-Capacity Record
+
+| Relation | Result |
+|---|---|
+| `accepted_changes <= REQUEST_LANES` | `PASS` |
+| `capacity_remaining = REQUEST_LANES - accepted_changes` | `PASS` |
+| `capacity_exhausted = (accepted_changes == REQUEST_LANES)` | `PASS` |
+| `switch_load_numerator = accepted_changes` | `PASS` |
+| same-state retention consumes no capacity | `PASS` |
+| pending completion has capacity priority | `PASS` |
+| explicit requests retain ascending lane order | `PASS` |
+| each route leg consumes capacity on its own tick | `PASS` |
 
 ## Assertion Record
 
-The assertion layer verifies:
-
-- canonical retained-state encoding
-- canonical pending-route encoding
-- reset to active neutral state `0`
-- disabled-tick state retention
-- disabled-tick pending-route retention
-- state-change authorization
-- direct opposite-polarity exclusion
-- active-neutral first-leg execution
-- exact pending-polarity retention
-- pending-route deferral
-- completion only from retained state `0`
-- scheduler-mode validity
-- scheduler-state validity
-- scheduler-counter relation
-- request acceptance and rejection separation
-- transition-capacity relations
-- switch-load relation
-- integrated invariant flags
-
-Recorded assertion result:
-
-| Assertion boundary | Recorded value |
+| Assertion boundary | Result |
 |---|---|
-| state-domain assertions | |
-| pending-route assertions | |
-| scheduler assertions | |
-| active-neutral assertions | |
-| capacity assertions | |
-| retained-state writeback assertions | |
-| integrated invariant assertions | |
+| retained-state domain | `PASS` |
+| pending-route domain | `PASS` |
+| reset state | `PASS` |
+| disabled-tick state retention | `PASS` |
+| disabled-tick pending-route retention | `PASS` |
+| state-change authorization | `PASS` |
+| direct opposite-polarity exclusion | `PASS` |
+| active-neutral first-leg execution | `PASS` |
+| retained pending polarity | `PASS` |
+| pending-route deferral | `PASS` |
+| completion only from active neutral `0` | `PASS` |
+| scheduler mode and state | `PASS` |
+| scheduler-state counters | `PASS` |
+| request acceptance and rejection separation | `PASS` |
+| transition-capacity relations | `PASS` |
+| retained-state writeback | `PASS` |
+| integrated invariant flags | `PASS` |
+
+## Integrated Invariant Record
+
+| Invariant | Result |
+|---|---|
+| `FRP_INV_STATE_DOMAIN_VALID` | `PASS` |
+| `FRP_INV_SCHEDULER_COUNTS_VALID` | `PASS` |
+| `FRP_INV_REQUEST_LANE_ORDER_VALID` | `PASS` |
+| `FRP_INV_PENDING_POLARITY_VALID` | `PASS` |
+| `FRP_INV_ACTIVE_NEUTRAL_VALID` | `PASS` |
+| `FRP_INV_TRANSITION_CAPACITY_VALID` | `PASS` |
+| `FRP_INV_STATE_UPDATE_VALID` | `PASS` |
+| `FRP_INV_NO_ACTUAL_DIRECT_EVENTS` | `PASS` |
+| `FRP_INV_NO_RESERVED_STATE` | `PASS` |
+| `FRP_INV_NO_QUEUE_OVERFLOW` | `PASS` |
 
 ## Terminal Output
 
-The exact console output from:
+`FRP M16 deterministic RTL testbench completed.`
 
-`/tmp/frp_m16_execution.log`
+`CELLS=8 REQUEST_LANES=2`
 
-is recorded below.
+`ticks_recorded=16`
 
-## Console Output
+`actual_direct_events=0`
 
+`reserved_state_events=0`
+
+`queue_overflow_events=0`
 
 ## Terminal Relations
 
 | Output relation | Recorded value |
+|---|---:|
+| `CELLS` | `8` |
+| `REQUEST_LANES` | `2` |
+| final `ticks_recorded` | `16` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+
+Terminal output validation:
+
+`PASS`
+
+## Repository Integrity
+
+The build directory and simulator logs were generated under `/tmp`.
+
+Repository-local simulator directories were absent after execution.
+
+Repository source modification during qualification:
+
+`NONE`
+
+Repository integrity result:
+
+`PASS`
+
+## Qualification Result
+
+| Qualification boundary | Result |
 |---|---|
-| `FRP M16 deterministic RTL testbench completed.` | |
-| `CELLS=8 REQUEST_LANES=2` | |
-| `ticks_recorded=16` | |
-| `actual_direct_events=0` | |
-| `reserved_state_events=0` | |
-| `queue_overflow_events=0` | |
+| artifact inventory | `PASS` |
+| SystemVerilog compilation | `PASS` |
+| module elaboration | `PASS` |
+| executable testbench | `PASS` |
+| assertion execution | `PASS` |
+| `free` scheduler sequence | `PASS` |
+| `7/1` scheduler sequence | `PASS` |
+| `1/7` scheduler sequence | `PASS` |
+| active-neutral routing | `PASS` |
+| retained pending polarity | `PASS` |
+| transition-capacity enforcement | `PASS` |
+| retained-state writeback | `PASS` |
+| zero actual direct events | `PASS` |
+| zero reserved-state events | `PASS` |
+| zero queue-overflow events | `PASS` |
+| repository integrity | `PASS` |
 
-## Integrated Invariant Record
+Final M16 RTL simulation result:
 
-| Invariant | Recorded value |
-|---|---|
-| `FRP_INV_STATE_DOMAIN_VALID` | |
-| `FRP_INV_SCHEDULER_COUNTS_VALID` | |
-| `FRP_INV_REQUEST_LANE_ORDER_VALID` | |
-| `FRP_INV_PENDING_POLARITY_VALID` | |
-| `FRP_INV_ACTIVE_NEUTRAL_VALID` | |
-| `FRP_INV_TRANSITION_CAPACITY_VALID` | |
-| `FRP_INV_STATE_UPDATE_VALID` | |
-| `FRP_INV_NO_ACTUAL_DIRECT_EVENTS` | |
-| `FRP_INV_NO_RESERVED_STATE` | |
-| `FRP_INV_NO_QUEUE_OVERFLOW` | |
-
-## Execution Result
-
-| Qualification boundary | Recorded result |
-|---|---|
-| SystemVerilog compilation | |
-| module elaboration | |
-| executable testbench | |
-| assertion execution | |
-| free scheduler sequence | |
-| `7/1` scheduler sequence | |
-| `1/7` scheduler sequence | |
-| active-neutral routing | |
-| retained pending polarity | |
-| transition-capacity enforcement | |
-| retained-state writeback | |
-| zero actual direct events | |
-| zero reserved-state events | |
-| zero queue-overflow events | |
+`PASS`
 
 ## Author
 
