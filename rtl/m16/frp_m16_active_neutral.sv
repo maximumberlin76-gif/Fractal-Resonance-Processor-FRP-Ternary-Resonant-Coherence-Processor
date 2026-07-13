@@ -13,18 +13,22 @@
         M16 RTL Core Realization and Execution Semantics Package
 
     Purpose:
-        Implements the M16 active-neutral transition layer for legal
-        retained-state transition generation.
+        Generates the complete pre-capacity retained-state transition
+        candidate for the M16 RTL execution chain.
 
-        Preserved transition semantics:
-            - same-state retention;
-            - legal 0 -> +/-1 release;
-            - legal +/-1 -> 0 neutralization;
-            - forbidden direct -1 -> +1 transition;
-            - forbidden direct +1 -> -1 transition;
-            - mandatory active-neutral routing through 0;
-            - pending-route completion only from state 0;
-            - zero direct opposite-polarity execution.
+        Architectural contract:
+            - balanced ternary retained states {-1, 0, +1};
+            - active neutral 0 is an executable computational state;
+            - same-state retention is legal and consumes no state change;
+            - 0 -> +/-1 is a commit-capable release;
+            - +/-1 -> 0 is a neutralize-capable transition;
+            - direct -1 <-> +1 execution is forbidden;
+            - opposite-polarity requests execute only the first tick leg
+              +/-1 -> 0 and retain the opposite target in pending_route;
+            - pending routes complete only on a later eligible tick from 0;
+            - pending completion has priority over a new same-cell request;
+            - capacity selection is performed downstream without changing
+              the transition class or the retained pending-route polarity.
 */
 
 `ifndef FRP_M16_ACTIVE_NEUTRAL_SV
@@ -93,37 +97,37 @@ module frp_m16_active_neutral #(
     localparam logic [COUNTER_BITS - 1:0] COUNTER_ONE =
         {{(COUNTER_BITS - 1){1'b0}}, 1'b1};
 
-    function automatic logic [STATE_BITS - 1:0] state_value_at_index(
+    logic [(CELLS * STATE_BITS) - 1:0] state_candidate_next;
+    logic scheduler_state_valid;
+
+    function automatic logic [STATE_BITS - 1:0] packed_state_value(
         input logic [(CELLS * STATE_BITS) - 1:0] packed_state,
         input int element_index
     );
         begin
-            state_value_at_index =
-                packed_state[
-                    (element_index * STATE_BITS) +: STATE_BITS
-                ];
+            packed_state_value = packed_state[
+                (element_index * STATE_BITS) +: STATE_BITS
+            ];
         end
     endfunction
 
-    function automatic logic [STATE_BITS - 1:0] pending_value_at_index(
-        input int element_index
-    );
-        begin
-            pending_value_at_index =
-                pending_route_q[
-                    (element_index * STATE_BITS) +: STATE_BITS
-                ];
-        end
-    endfunction
+    function automatic logic [(CELLS * STATE_BITS) - 1:0]
+        set_packed_state_value(
+            input logic [(CELLS * STATE_BITS) - 1:0] packed_state,
+            input int element_index,
+            input logic [STATE_BITS - 1:0] element_value
+        );
 
-    function automatic logic [STATE_BITS - 1:0] candidate_value_at_index(
-        input int element_index
-    );
+        logic [(CELLS * STATE_BITS) - 1:0] updated_state;
+
         begin
-            candidate_value_at_index =
-                state_candidate_d[
-                    (element_index * STATE_BITS) +: STATE_BITS
-                ];
+            updated_state = packed_state;
+
+            updated_state[
+                (element_index * STATE_BITS) +: STATE_BITS
+            ] = element_value;
+
+            set_packed_state_value = updated_state;
         end
     endfunction
 
@@ -131,10 +135,9 @@ module frp_m16_active_neutral #(
         input int lane_index
     );
         begin
-            lane_index_value =
-                request_cell_index[
-                    (lane_index * CELL_INDEX_BITS) +: CELL_INDEX_BITS
-                ];
+            lane_index_value = request_cell_index[
+                (lane_index * CELL_INDEX_BITS) +: CELL_INDEX_BITS
+            ];
         end
     endfunction
 
@@ -142,65 +145,19 @@ module frp_m16_active_neutral #(
         input int lane_index
     );
         begin
-            lane_target_value =
-                request_target[
-                    (lane_index * STATE_BITS) +: STATE_BITS
-                ];
-        end
-    endfunction
-
-    task automatic set_candidate_value_at_index(
-        input int element_index,
-        input logic [STATE_BITS - 1:0] candidate_value
-    );
-        begin
-            state_candidate_d[
-                (element_index * STATE_BITS) +: STATE_BITS
-            ] = candidate_value;
-        end
-    endtask
-
-    function automatic logic scheduler_allows_zero_to_nonzero(
-        input frp_m16_scheduler_state_e sched
-    );
-        begin
-            scheduler_allows_zero_to_nonzero =
-                frp_scheduler_is_commit_capable(sched);
-        end
-    endfunction
-
-    function automatic logic scheduler_allows_nonzero_to_zero(
-        input frp_m16_scheduler_state_e sched
-    );
-        begin
-            scheduler_allows_nonzero_to_zero =
-                frp_scheduler_is_neutralize_capable(sched);
-        end
-    endfunction
-
-    function automatic logic scheduler_allows_pending_completion(
-        input frp_m16_scheduler_state_e sched
-    );
-        begin
-            scheduler_allows_pending_completion =
-                frp_scheduler_is_commit_capable(sched);
+            lane_target_value = request_target[
+                (lane_index * STATE_BITS) +: STATE_BITS
+            ];
         end
     endfunction
 
     always_comb begin
-        for (
-            int element_index = 0;
-            element_index < CELLS;
-            element_index = element_index + 1
-        ) begin
-            set_candidate_value_at_index(
-                element_index,
-                state_value_at_index(
-                    state_q,
-                    element_index
-                )
+        state_candidate_next = state_q;
+
+        scheduler_state_valid =
+            frp_scheduler_state_is_valid(
+                scheduler_state
             );
-        end
 
         transition_valid_mask = '0;
         same_state_mask = '0;
@@ -233,30 +190,37 @@ module frp_m16_active_neutral #(
         state_output_domain_valid = 1'b1;
         transition_replay_deterministic = 1'b1;
 
+        // Validate the complete retained-state and pending-route domains.
+        // Invalid operands are exposed and never converted into an accepted
+        // transition candidate.
+
         for (
             int element_index = 0;
             element_index < CELLS;
             element_index = element_index + 1
         ) begin
-            logic [STATE_BITS - 1:0] state_value;
-            logic [STATE_BITS - 1:0] pending_value;
+            logic [STATE_BITS - 1:0] retained_state;
+            logic [STATE_BITS - 1:0] pending_target;
 
-            state_value =
-                state_value_at_index(
+            retained_state =
+                packed_state_value(
                     state_q,
                     element_index
                 );
 
-            pending_value =
-                pending_value_at_index(
+            pending_target =
+                packed_state_value(
+                    pending_route_q,
                     element_index
                 );
 
             if (
-                !frp_is_valid_ternary(state_value)
-                || !frp_is_valid_ternary(pending_value)
+                !frp_is_valid_ternary(retained_state)
+                || !frp_is_valid_ternary(pending_target)
             ) begin
-                reserved_transition_mask[element_index] = 1'b1;
+                reserved_transition_mask[
+                    element_index
+                ] = 1'b1;
 
                 reserved_transition_events =
                     reserved_transition_events
@@ -267,90 +231,147 @@ module frp_m16_active_neutral #(
             end
         end
 
+        // Pending-route completion is evaluated before explicit request
+        // lanes. A retained pending polarity owns its cell until a later
+        // commit-capable and capacity-approved tick completes 0 -> target.
+
         for (
             int element_index = 0;
             element_index < CELLS;
             element_index = element_index + 1
         ) begin
-            logic [STATE_BITS - 1:0] state_value;
-            logic [STATE_BITS - 1:0] pending_value;
+            logic [STATE_BITS - 1:0] retained_state;
+            logic [STATE_BITS - 1:0] pending_target;
 
-            state_value =
-                state_value_at_index(
+            logic completion_requested;
+            logic completion_operands_valid;
+            logic completion_scheduler_legal;
+
+            retained_state =
+                packed_state_value(
                     state_q,
                     element_index
                 );
 
-            pending_value =
-                pending_value_at_index(
+            pending_target =
+                packed_state_value(
+                    pending_route_q,
                     element_index
                 );
 
-            if (
+            completion_requested =
                 tick_enable
-                && pending_completion_enable[element_index]
-                && frp_is_valid_ternary(state_value)
-                && frp_is_valid_ternary(pending_value)
-                && frp_is_nonzero(pending_value)
-            ) begin
-                if (
-                    frp_is_zero(state_value)
-                    && scheduler_allows_pending_completion(
-                        scheduler_state
-                    )
-                ) begin
-                    set_candidate_value_at_index(
-                        element_index,
-                        pending_value
-                    );
+                && pending_completion_enable[
+                    element_index
+                ];
 
-                    transition_valid_mask[element_index] = 1'b1;
-                    pending_completion_mask[element_index] = 1'b1;
-                    zero_to_nonzero_mask[element_index] = 1'b1;
+            completion_operands_valid =
+                frp_is_valid_ternary(
+                    retained_state
+                )
+                && frp_is_valid_ternary(
+                    pending_target
+                )
+                && frp_is_nonzero(
+                    pending_target
+                );
+
+            completion_scheduler_legal =
+                scheduler_state_valid
+                && frp_scheduler_is_commit_capable(
+                    scheduler_state
+                );
+
+            if (completion_requested) begin
+                if (
+                    completion_operands_valid
+                    && frp_is_zero(
+                        retained_state
+                    )
+                    && completion_scheduler_legal
+                ) begin
+                    state_candidate_next =
+                        set_packed_state_value(
+                            state_candidate_next,
+                            element_index,
+                            pending_target
+                        );
+
+                    transition_valid_mask[
+                        element_index
+                    ] = 1'b1;
+
+                    zero_to_nonzero_mask[
+                        element_index
+                    ] = 1'b1;
+
+                    pending_completion_mask[
+                        element_index
+                    ] = 1'b1;
 
                     accepted_change_candidate_mask[
                         element_index
                     ] = 1'b1;
 
-                    pending_completion_events =
-                        pending_completion_events
-                        + COUNTER_ONE;
-
                     zero_to_nonzero_events =
                         zero_to_nonzero_events
+                        + COUNTER_ONE;
+
+                    pending_completion_events =
+                        pending_completion_events
                         + COUNTER_ONE;
 
                     accepted_change_candidate_events =
                         accepted_change_candidate_events
                         + COUNTER_ONE;
-                end else if (!frp_is_zero(state_value)) begin
+                end else begin
                     pending_completion_from_zero_valid = 1'b0;
+                    transition_replay_deterministic = 1'b0;
+
+                    if (!completion_operands_valid) begin
+                        reserved_transition_mask[
+                            element_index
+                        ] = 1'b1;
+
+                        transition_domain_valid = 1'b0;
+                        no_reserved_transition = 1'b0;
+                    end
                 end
             end
         end
+
+        // Accepted request lanes are evaluated in deterministic ascending
+        // lane order. Request arbitration has already prevented duplicate
+        // accepted cells and blocked cells owned by a retained pending route.
 
         for (
             int lane_index = 0;
             lane_index < REQUEST_LANES;
             lane_index = lane_index + 1
         ) begin
-            logic [CELL_INDEX_BITS - 1:0] packed_index_value;
+            logic [CELL_INDEX_BITS - 1:0] packed_index;
             int element_index_int;
-            logic [STATE_BITS - 1:0] state_value;
-            logic [STATE_BITS - 1:0] target_value;
+
+            logic [STATE_BITS - 1:0] retained_state;
+            logic [STATE_BITS - 1:0] requested_target;
+
             logic valid_index;
+            logic valid_state;
             logic valid_target;
+            logic pending_completion_owns_cell;
+            logic scheduler_allows_class;
+
             frp_m16_transition_class_e transition_class;
 
-            packed_index_value =
+            packed_index =
                 lane_index_value(
                     lane_index
                 );
 
             element_index_int =
-                int'(packed_index_value);
+                int'(packed_index);
 
-            target_value =
+            requested_target =
                 lane_target_value(
                     lane_index
                 );
@@ -358,218 +379,283 @@ module frp_m16_active_neutral #(
             valid_index =
                 (element_index_int < CELLS);
 
+            retained_state = FRP_STATE_ZERO;
+            valid_state = 1'b1;
+
             valid_target =
                 frp_is_valid_ternary(
-                    target_value
+                    requested_target
                 );
 
-            state_value = FRP_STATE_ZERO;
-            transition_class = FRP_TRANS_RESERVED_OPERAND;
+            pending_completion_owns_cell = 1'b0;
+            transition_class = FRP_TRANS_INVALID;
+            scheduler_allows_class = 1'b0;
 
             if (valid_index) begin
-                state_value =
-                    state_value_at_index(
+                retained_state =
+                    packed_state_value(
                         state_q,
                         element_index_int
+                    );
+
+                valid_state =
+                    frp_is_valid_ternary(
+                        retained_state
+                    );
+
+                pending_completion_owns_cell =
+                    pending_completion_mask[
+                        element_index_int
+                    ];
+            end
+
+            if (
+                valid_index
+                && valid_state
+                && valid_target
+            ) begin
+                transition_class =
+                    frp_classify_transition(
+                        retained_state,
+                        requested_target,
+                        FRP_STATE_ZERO
+                    );
+
+                scheduler_allows_class =
+                    frp_scheduler_allows_transition(
+                        scheduler_state,
+                        transition_class
                     );
             end
 
             if (
                 tick_enable
                 && request_accept[lane_index]
-                && valid_index
-                && valid_target
-                && !pending_completion_mask[element_index_int]
             ) begin
-                transition_class =
-                    frp_classify_transition(
-                        state_value,
-                        target_value,
-                        FRP_STATE_ZERO
-                    );
+                if (!valid_index) begin
+                    transition_domain_valid = 1'b0;
+                    no_reserved_transition = 1'b0;
+                    transition_replay_deterministic = 1'b0;
+                end else if (
+                    !valid_state
+                    || !valid_target
+                ) begin
+                    reserved_transition_mask[
+                        element_index_int
+                    ] = 1'b1;
 
-                unique case (transition_class)
-                    FRP_TRANS_SAME_STATE: begin
-                        set_candidate_value_at_index(
-                            element_index_int,
-                            state_value
-                        );
+                    reserved_transition_events =
+                        reserved_transition_events
+                        + COUNTER_ONE;
 
-                        transition_valid_mask[
-                            element_index_int
-                        ] = 1'b1;
+                    transition_domain_valid = 1'b0;
+                    no_reserved_transition = 1'b0;
+                    transition_replay_deterministic = 1'b0;
+                end else if (
+                    pending_completion_owns_cell
+                ) begin
+                    // A retained pending route has strict priority.
+                    // A new same-cell request cannot replace its polarity.
 
-                        same_state_mask[
-                            element_index_int
-                        ] = 1'b1;
+                    transition_replay_deterministic = 1'b0;
+                end else begin
+                    unique case (transition_class)
 
-                        same_state_events =
-                            same_state_events
-                            + COUNTER_ONE;
-                    end
-
-                    FRP_TRANS_ZERO_TO_NONZERO: begin
-                        if (
-                            scheduler_allows_zero_to_nonzero(
-                                scheduler_state
-                            )
-                        ) begin
-                            set_candidate_value_at_index(
-                                element_index_int,
-                                target_value
-                            );
-
+                        FRP_TRANS_SAME_STATE: begin
                             transition_valid_mask[
                                 element_index_int
                             ] = 1'b1;
 
-                            zero_to_nonzero_mask[
+                            same_state_mask[
                                 element_index_int
                             ] = 1'b1;
 
-                            accepted_change_candidate_mask[
-                                element_index_int
-                            ] = 1'b1;
-
-                            zero_to_nonzero_events =
-                                zero_to_nonzero_events
-                                + COUNTER_ONE;
-
-                            accepted_change_candidate_events =
-                                accepted_change_candidate_events
+                            same_state_events =
+                                same_state_events
                                 + COUNTER_ONE;
                         end
-                    end
 
-                    FRP_TRANS_NONZERO_TO_ZERO: begin
-                        if (
-                            scheduler_allows_nonzero_to_zero(
-                                scheduler_state
-                            )
-                        ) begin
-                            set_candidate_value_at_index(
-                                element_index_int,
-                                FRP_STATE_ZERO
-                            );
+                        FRP_TRANS_ZERO_TO_NONZERO: begin
+                            if (scheduler_allows_class) begin
+                                state_candidate_next =
+                                    set_packed_state_value(
+                                        state_candidate_next,
+                                        element_index_int,
+                                        requested_target
+                                    );
 
-                            transition_valid_mask[
-                                element_index_int
-                            ] = 1'b1;
+                                transition_valid_mask[
+                                    element_index_int
+                                ] = 1'b1;
 
-                            nonzero_to_zero_mask[
-                                element_index_int
-                            ] = 1'b1;
+                                zero_to_nonzero_mask[
+                                    element_index_int
+                                ] = 1'b1;
 
-                            accepted_change_candidate_mask[
-                                element_index_int
-                            ] = 1'b1;
+                                accepted_change_candidate_mask[
+                                    element_index_int
+                                ] = 1'b1;
 
-                            nonzero_to_zero_events =
-                                nonzero_to_zero_events
-                                + COUNTER_ONE;
+                                zero_to_nonzero_events =
+                                    zero_to_nonzero_events
+                                    + COUNTER_ONE;
 
-                            accepted_change_candidate_events =
-                                accepted_change_candidate_events
-                                + COUNTER_ONE;
+                                accepted_change_candidate_events =
+                                    accepted_change_candidate_events
+                                    + COUNTER_ONE;
+                            end
                         end
-                    end
 
-                    FRP_TRANS_OPPOSITE_POLARITY: begin
-                        requested_direct_events =
-                            requested_direct_events
-                            + COUNTER_ONE;
+                        FRP_TRANS_NONZERO_TO_ZERO: begin
+                            if (scheduler_allows_class) begin
+                                state_candidate_next =
+                                    set_packed_state_value(
+                                        state_candidate_next,
+                                        element_index_int,
+                                        FRP_ACTIVE_NEUTRAL
+                                    );
 
-                        if (
-                            request_neutralized[lane_index]
-                            && scheduler_allows_nonzero_to_zero(
-                                scheduler_state
-                            )
-                        ) begin
-                            set_candidate_value_at_index(
-                                element_index_int,
-                                FRP_STATE_ZERO
-                            );
+                                transition_valid_mask[
+                                    element_index_int
+                                ] = 1'b1;
 
-                            transition_valid_mask[
-                                element_index_int
-                            ] = 1'b1;
+                                nonzero_to_zero_mask[
+                                    element_index_int
+                                ] = 1'b1;
 
-                            opposite_polarity_mask[
-                                element_index_int
-                            ] = 1'b1;
+                                accepted_change_candidate_mask[
+                                    element_index_int
+                                ] = 1'b1;
 
-                            neutral_routed_mask[
-                                element_index_int
-                            ] = 1'b1;
+                                nonzero_to_zero_events =
+                                    nonzero_to_zero_events
+                                    + COUNTER_ONE;
 
-                            nonzero_to_zero_mask[
-                                element_index_int
-                            ] = 1'b1;
-
-                            accepted_change_candidate_mask[
-                                element_index_int
-                            ] = 1'b1;
-
-                            prevented_direct_events =
-                                prevented_direct_events
-                                + COUNTER_ONE;
-
-                            neutral_routed_events =
-                                neutral_routed_events
-                                + COUNTER_ONE;
-
-                            nonzero_to_zero_events =
-                                nonzero_to_zero_events
-                                + COUNTER_ONE;
-
-                            accepted_change_candidate_events =
-                                accepted_change_candidate_events
-                                + COUNTER_ONE;
-                        end else begin
-                            active_neutral_routing_valid = 1'b0;
+                                accepted_change_candidate_events =
+                                    accepted_change_candidate_events
+                                    + COUNTER_ONE;
+                            end
                         end
-                    end
 
-                    FRP_TRANS_RESERVED_OPERAND: begin
-                        reserved_transition_mask[
-                            element_index_int
-                        ] = 1'b1;
+                        FRP_TRANS_OPPOSITE_POLARITY: begin
+                            requested_direct_events =
+                                requested_direct_events
+                                + COUNTER_ONE;
 
-                        reserved_transition_events =
-                            reserved_transition_events
-                            + COUNTER_ONE;
+                            if (
+                                request_neutralized[
+                                    lane_index
+                                ]
+                                && scheduler_allows_class
+                            ) begin
+                                // Only the first route leg executes now:
+                                //
+                                //     -1 -> 0
+                                //     +1 -> 0
+                                //
+                                // The opposite target remains available on
+                                // request_target for capacity-approved
+                                // storage by frp_m16_pending_routes.
 
-                        transition_domain_valid = 1'b0;
-                        no_reserved_transition = 1'b0;
-                    end
+                                state_candidate_next =
+                                    set_packed_state_value(
+                                        state_candidate_next,
+                                        element_index_int,
+                                        FRP_ACTIVE_NEUTRAL
+                                    );
 
-                    default: begin
-                        set_candidate_value_at_index(
-                            element_index_int,
-                            state_value
-                        );
-                    end
-                endcase
-            end else if (
-                tick_enable
-                && request_accept[lane_index]
-                && (!valid_index || !valid_target)
-            ) begin
-                transition_domain_valid = 1'b0;
-                no_reserved_transition = 1'b0;
+                                transition_valid_mask[
+                                    element_index_int
+                                ] = 1'b1;
+
+                                opposite_polarity_mask[
+                                    element_index_int
+                                ] = 1'b1;
+
+                                neutral_routed_mask[
+                                    element_index_int
+                                ] = 1'b1;
+
+                                nonzero_to_zero_mask[
+                                    element_index_int
+                                ] = 1'b1;
+
+                                accepted_change_candidate_mask[
+                                    element_index_int
+                                ] = 1'b1;
+
+                                prevented_direct_events =
+                                    prevented_direct_events
+                                    + COUNTER_ONE;
+
+                                neutral_routed_events =
+                                    neutral_routed_events
+                                    + COUNTER_ONE;
+
+                                nonzero_to_zero_events =
+                                    nonzero_to_zero_events
+                                    + COUNTER_ONE;
+
+                                accepted_change_candidate_events =
+                                    accepted_change_candidate_events
+                                    + COUNTER_ONE;
+                            end else begin
+                                active_neutral_routing_valid = 1'b0;
+                            end
+                        end
+
+                        FRP_TRANS_RESERVED_OPERAND,
+                        FRP_TRANS_INVALID: begin
+                            reserved_transition_mask[
+                                element_index_int
+                            ] = 1'b1;
+
+                            reserved_transition_events =
+                                reserved_transition_events
+                                + COUNTER_ONE;
+
+                            transition_domain_valid = 1'b0;
+                            no_reserved_transition = 1'b0;
+                            transition_replay_deterministic = 1'b0;
+                        end
+
+                        default: begin
+                            transition_replay_deterministic = 1'b0;
+                        end
+
+                    endcase
+                end
             end
         end
+
+        // Final candidate-state qualification detects any direct opposite
+        // polarity execution after all deterministic priorities have been
+        // applied. Capacity rejection later may only retain state; it cannot
+        // replace this route with a direct polarity transition.
 
         for (
             int element_index = 0;
             element_index < CELLS;
             element_index = element_index + 1
         ) begin
+            logic [STATE_BITS - 1:0] retained_state;
+            logic [STATE_BITS - 1:0] candidate_state;
+
+            retained_state =
+                packed_state_value(
+                    state_q,
+                    element_index
+                );
+
+            candidate_state =
+                packed_state_value(
+                    state_candidate_next,
+                    element_index
+                );
+
             if (
                 !frp_is_valid_ternary(
-                    candidate_value_at_index(
-                        element_index
-                    )
+                    candidate_state
                 )
             ) begin
                 reserved_transition_mask[
@@ -581,14 +667,15 @@ module frp_m16_active_neutral #(
             end
 
             if (
-                frp_is_opposite_polarity(
-                    state_value_at_index(
-                        state_q,
-                        element_index
-                    ),
-                    candidate_value_at_index(
-                        element_index
-                    )
+                frp_is_valid_ternary(
+                    retained_state
+                )
+                && frp_is_valid_ternary(
+                    candidate_state
+                )
+                && frp_is_opposite_polarity(
+                    retained_state,
+                    candidate_state
                 )
             ) begin
                 actual_direct_mask[
@@ -603,21 +690,53 @@ module frp_m16_active_neutral #(
             end
         end
 
+        state_candidate_d =
+            state_candidate_next;
+
+        transition_domain_valid =
+            transition_domain_valid
+            && state_output_domain_valid
+            && no_reserved_transition;
+
         active_neutral_routing_valid =
             active_neutral_routing_valid
+            && (
+                prevented_direct_events
+                >= requested_direct_events
+            )
             && (
                 neutral_routed_events
                 >= prevented_direct_events
             )
-            && (actual_direct_events == '0);
+            && no_actual_direct_events;
 
-        transition_domain_valid =
-            transition_domain_valid
-            && no_reserved_transition
-            && state_output_domain_valid;
+        // Candidate generation precedes the downstream capacity guard.
+        // This flag qualifies candidate accounting and one-change-per-cell
+        // determinism. The capacity guard alone authorizes the bounded
+        // subset that may reach retained-state writeback.
 
-        transition_capacity_valid = 1'b1;
-        transition_replay_deterministic = 1'b1;
+        transition_capacity_valid =
+            (
+                accepted_change_candidate_events
+                == $countones(
+                    accepted_change_candidate_mask
+                )
+            )
+            && (
+                (
+                    accepted_change_candidate_mask
+                    & actual_direct_mask
+                )
+                == '0
+            );
+
+        transition_replay_deterministic =
+            transition_replay_deterministic
+            && scheduler_state_valid
+            && transition_domain_valid
+            && pending_completion_from_zero_valid
+            && active_neutral_routing_valid
+            && no_actual_direct_events;
     end
 
 endmodule : frp_m16_active_neutral
