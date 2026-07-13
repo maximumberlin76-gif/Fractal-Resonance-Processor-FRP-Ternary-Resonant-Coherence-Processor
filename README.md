@@ -1,6 +1,21 @@
 # Fractal Resonance Processor (FRP)
 
 <p align="center">
+  <a href="https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml">
+    <img src="https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml/badge.svg" alt="FRP Self Test">
+  </a>
+</p>
+<p align="center">
+  <a href="https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-structured-output.yml">
+    <img src="https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-structured-output.yml/badge.svg" alt="FRP Structured Output">
+  </a>
+</p>
+<p align="center">
+  <a href="https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-benchmark-smoke-test.yml">
+    <img src="https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-benchmark-smoke-test.yml/badge.svg" alt="FRP Benchmark Smoke Test">
+  </a>
+</p>
+<p align="center">
   <a href="https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m16-rtl-artifact-boundary.yml">
     <img src="https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m16-rtl-artifact-boundary.yml/badge.svg" alt="FRP M16 RTL Artifact Boundary">
   </a>
