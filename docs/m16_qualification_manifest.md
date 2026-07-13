@@ -24,13 +24,17 @@ M16 realizes the M15-qualified retained-state execution contract as concrete RTL
 
 M16 does not introduce a new processor model.
 
-M16 preserves the M15-qualified execution semantics and exposes the retained-state execution boundary as SystemVerilog RTL modules, assertion layer, deterministic smoke testbench, artifact-boundary workflow, qualification documentation, public status snapshot, and test stability policy.
+M16 preserves the M15-qualified execution semantics and exposes the retained-state execution boundary as SystemVerilog RTL modules, assertion layer, deterministic smoke testbench, artifact-boundary workflow, qualification documentation, public status snapshot, test stability policy, and artifact-boundary closure report.
 
 ## Current Qualification Result
 
 Current M16 RTL artifact-boundary result:
 
 `PASS`
+
+Current M16 artifact-boundary closure result:
+
+`ARTIFACT-BOUNDARY CLOSURE COMPLETE`
 
 Qualified workflow:
 
@@ -47,6 +51,10 @@ Current test stability policy:
 Current external simulator result:
 
 `pending external simulator execution`
+
+Current simulator closure status:
+
+`SIMULATOR CLOSURE PENDING`
 
 Current final M16 closure result:
 
@@ -88,6 +96,14 @@ Artifact-boundary status:
 
 `PASS`
 
+Artifact-boundary closure status:
+
+`ARTIFACT-BOUNDARY CLOSURE COMPLETE`
+
+Simulator closure status:
+
+`SIMULATOR CLOSURE PENDING`
+
 ## Qualified RTL Source Artifacts
 
 | Path | Status |
@@ -111,7 +127,37 @@ Artifact-boundary status:
 | `rtl/m16/ARTIFACTS.md` | present |
 | `rtl/m16/SIMULATION.md` | present |
 | `rtl/m16/SIMULATION_TRANSCRIPT.md` | present |
-| `rtl/m16/CLOSURE.md` | present |
+| `rtl/m16/CLOSURE.md` | ARTIFACT-BOUNDARY CLOSURE COMPLETE |
+
+## RTL Closure Report
+
+The current RTL closure report is defined in:
+
+`rtl/m16/CLOSURE.md`
+
+Current RTL closure status:
+
+`ARTIFACT-BOUNDARY CLOSURE COMPLETE`
+
+Current simulator closure status:
+
+`SIMULATOR CLOSURE PENDING`
+
+The closure report records:
+
+- M16 RTL source artifact inventory `PASS`;
+- M16 RTL documentation artifact inventory `PASS`;
+- M16 documentation artifact inventory `PASS`;
+- M16 repository exposure `PASS`;
+- M16 artifact-boundary workflow `PASS`;
+- M16 artifact-boundary tests `PASS`;
+- M16 public status snapshot `PUBLIC STATUS SYNCHRONIZED`;
+- M16 test stability policy `ACTIVE`;
+- M15 inherited qualification `M15 41/41 PASS`;
+- M16 artifact-boundary closure `ARTIFACT-BOUNDARY CLOSURE COMPLETE`;
+- M16 external simulator execution `pending`;
+- M16 simulator transcript capture `pending`;
+- M16 final simulator closure `SIMULATOR CLOSURE PENDING`.
 
 ## Qualified Test Boundary
 
@@ -369,6 +415,10 @@ Required invariant:
 
 M16 inherits the M15 qualification boundary.
 
+Current inherited status:
+
+`M15 41/41 PASS`
+
 M15 established:
 
 - deterministic fixed-point interface mapping;
@@ -420,11 +470,13 @@ The replay target is not approximate behavioral similarity.
 | M16 RTL documentation artifact inventory | PASS |
 | M16 repository exposure | PASS |
 | M16 artifact-boundary workflow | PASS |
+| M16 artifact-boundary tests | PASS |
 | M16 test stability policy | ACTIVE |
 | M16 public status snapshot | PUBLIC STATUS SYNCHRONIZED |
+| M16 RTL closure report | ARTIFACT-BOUNDARY CLOSURE COMPLETE |
 | M16 external simulator execution | pending |
 | M16 simulator transcript capture | pending |
-| M16 final closure | pending |
+| M16 final simulator closure | SIMULATOR CLOSURE PENDING |
 
 ## External Simulator Boundary
 
@@ -460,13 +512,17 @@ Required final counters:
 
 `queue_overflow_events = 0`
 
-Current status:
+Current external simulator status:
 
 `pending external simulator execution`
 
+Current simulator closure status:
+
+`SIMULATOR CLOSURE PENDING`
+
 ## Final M16 Closure Requirements
 
-M16 final closure requires:
+M16 final simulator closure requires:
 
 - artifact-boundary workflow PASS;
 - external simulator execution;
@@ -477,13 +533,13 @@ M16 final closure requires:
 - closure report update;
 - final M16 qualification closure document.
 
-Current state:
+Current artifact state:
 
-`artifact-boundary PASS`
+`ARTIFACT-BOUNDARY CLOSURE COMPLETE`
 
-Remaining state:
+Remaining simulator state:
 
-`external simulator transcript pending`
+`SIMULATOR CLOSURE PENDING`
 
 ## Manifest Result
 
@@ -494,6 +550,10 @@ Current M16 manifest result:
 Current M16 artifact-boundary result:
 
 `PASS`
+
+Current M16 artifact-boundary closure result:
+
+`ARTIFACT-BOUNDARY CLOSURE COMPLETE`
 
 Current public status result:
 
@@ -506,6 +566,10 @@ Current test stability policy result:
 Current final M16 simulator result:
 
 `pending external simulator execution`
+
+Current simulator closure result:
+
+`SIMULATOR CLOSURE PENDING`
 
 ## Author
 
