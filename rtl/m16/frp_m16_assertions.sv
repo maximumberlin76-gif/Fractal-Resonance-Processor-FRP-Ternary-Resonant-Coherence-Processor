@@ -13,18 +13,17 @@
 //   M16 — RTL Core Realization and Execution Semantics Package
 //
 // Purpose:
-//   Verifies the complete externally visible M16 retained-state execution
-//   boundary without redefining the processor architecture.
+//   Verifies the externally visible M16 retained-state execution boundary.
 //
 // Protected architecture:
 //   - canonical balanced ternary domain {-1, 0, +1};
 //   - active neutral 0 as an executable retained state;
 //   - forbidden direct -1 <-> +1 retained-state transitions;
 //   - mandatory tick-separated opposite-polarity routing through 0;
-//   - preservation of the requested polarity in pending_route;
+//   - retained pending-route polarity;
 //   - pending completion only from retained state 0;
 //   - deterministic scheduler and request-lane boundaries;
-//   - transition-capacity relation;
+//   - transition-capacity enforcement;
 //   - zero direct, reserved-state, and queue-overflow events.
 
 `ifndef FRP_M16_ASSERTIONS_SV
@@ -35,21 +34,15 @@
 `include "frp_m16_pkg.sv"
 
 module frp_m16_assertions #(
-    parameter int CELLS =
-        frp_m16_pkg::FRP_M16_DEFAULT_CELLS,
-
-    parameter int STATE_BITS =
-        frp_m16_pkg::FRP_M16_STATE_BITS,
-
+    parameter int CELLS = frp_m16_pkg::FRP_M16_DEFAULT_CELLS,
+    parameter int STATE_BITS = frp_m16_pkg::FRP_M16_STATE_BITS,
     parameter int REQUEST_LANES =
         frp_m16_pkg::frp_calc_request_lanes(CELLS),
-
     parameter int COUNTER_BITS =
         frp_m16_pkg::FRP_M16_COUNTER_BITS
 ) (
     input logic clk,
     input logic rst_n,
-
     input logic tick_enable,
     input logic clear_counters,
 
@@ -164,8 +157,7 @@ module frp_m16_assertions #(
         ) begin
             $fatal(
                 1,
-                "FRP M16 assertion failed: "
-                "8 cells must expose 2 request lanes"
+                "FRP M16 assertion failed: 8 cells must expose 2 request lanes"
             );
         end
 
@@ -175,8 +167,7 @@ module frp_m16_assertions #(
         ) begin
             $fatal(
                 1,
-                "FRP M16 assertion failed: "
-                "16 cells must expose 4 request lanes"
+                "FRP M16 assertion failed: 16 cells must expose 4 request lanes"
             );
         end
 
@@ -186,8 +177,7 @@ module frp_m16_assertions #(
         ) begin
             $fatal(
                 1,
-                "FRP M16 assertion failed: "
-                "32 cells must expose 8 request lanes"
+                "FRP M16 assertion failed: 32 cells must expose 8 request lanes"
             );
         end
     end
@@ -213,8 +203,7 @@ module frp_m16_assertions #(
             && (pending_route_out == '0)
         )
     ) else $error(
-        "FRP M16 assertion failed: "
-        "reset did not establish active-neutral retained state"
+        "FRP M16 assertion failed: reset did not establish active-neutral retained state"
     );
 
     assert property (
@@ -229,8 +218,7 @@ module frp_m16_assertions #(
             && (scheduler_count_neutralize_q == '0)
         )
     ) else $error(
-        "FRP M16 assertion failed: "
-        "reset did not clear scheduler counters"
+        "FRP M16 assertion failed: reset did not clear scheduler counters"
     );
 
     // ----------------------------------------------------------------------
@@ -249,9 +237,6 @@ module frp_m16_assertions #(
             localparam int CELL_LSB =
                 element_index * STATE_BITS;
 
-            // Retained state and pending route must always remain inside
-            // the canonical balanced ternary encoding.
-
             assert property (
                 disable iff (!rst_n)
 
@@ -261,8 +246,7 @@ module frp_m16_assertions #(
                     ]
                 )
             ) else $error(
-                "FRP M16 assertion failed: "
-                "state_out contains reserved ternary encoding"
+                "FRP M16 assertion failed: state_out contains reserved ternary encoding"
             );
 
             assert property (
@@ -274,12 +258,8 @@ module frp_m16_assertions #(
                     ]
                 )
             ) else $error(
-                "FRP M16 assertion failed: "
-                "pending_route_out contains reserved encoding"
+                "FRP M16 assertion failed: pending_route_out contains reserved encoding"
             );
-
-            // A disabled tick must preserve both retained state and
-            // pending-route storage.
 
             assert property (
                 disable iff (!rst_n)
@@ -292,8 +272,7 @@ module frp_m16_assertions #(
                     ]
                 )
             ) else $error(
-                "FRP M16 assertion failed: "
-                "retained state changed while tick_enable was low"
+                "FRP M16 assertion failed: retained state changed while tick_enable was low"
             );
 
             assert property (
@@ -307,12 +286,8 @@ module frp_m16_assertions #(
                     ]
                 )
             ) else $error(
-                "FRP M16 assertion failed: "
-                "pending route changed while tick_enable was low"
+                "FRP M16 assertion failed: pending route changed while tick_enable was low"
             );
-
-            // A tick without an accepted state-changing transition for
-            // this cell must retain the current state.
 
             assert property (
                 disable iff (!rst_n)
@@ -330,11 +305,8 @@ module frp_m16_assertions #(
                     ]
                 )
             ) else $error(
-                "FRP M16 assertion failed: "
-                "state changed without accepted_change_mask"
+                "FRP M16 assertion failed: state changed without accepted_change_mask"
             );
-
-            // No enabled tick may commit a direct opposite-polarity jump.
 
             assert property (
                 disable iff (!rst_n)
@@ -352,18 +324,8 @@ module frp_m16_assertions #(
                     ]
                 )
             ) else $error(
-                "FRP M16 assertion failed: "
-                "direct opposite-polarity retained-state transition"
+                "FRP M16 assertion failed: direct opposite-polarity retained-state transition"
             );
-
-            // A capacity-approved opposite-polarity request must execute
-            // only the first route leg:
-            //
-            //   -1 -> 0
-            //   +1 -> 0
-            //
-            // The requested opposite polarity must be retained in the
-            // pending-route register on the following sampled cycle.
 
             assert property (
                 disable iff (!rst_n)
@@ -401,13 +363,8 @@ module frp_m16_assertions #(
                     )
                 )
             ) else $error(
-                "FRP M16 assertion failed: "
-                "opposite-polarity request did not route through "
-                "active neutral with retained pending polarity"
+                "FRP M16 assertion failed: opposite-polarity request did not route through active neutral with retained pending polarity"
             );
-
-            // An active pending route that is not accepted for completion
-            // must remain retained without polarity mutation.
 
             assert property (
                 disable iff (!rst_n)
@@ -430,17 +387,8 @@ module frp_m16_assertions #(
                     ]
                 )
             ) else $error(
-                "FRP M16 assertion failed: "
-                "deferred pending route was cleared or overwritten"
+                "FRP M16 assertion failed: deferred pending route was cleared or overwritten"
             );
-
-            // A state-changing cell that starts from active neutral while
-            // holding a pending polarity can only be a pending completion.
-            //
-            // Completion must:
-            //   - use the retained pending target;
-            //   - commit 0 -> pending polarity;
-            //   - clear the pending slot after successful writeback.
 
             assert property (
                 disable iff (!rst_n)
@@ -483,12 +431,8 @@ module frp_m16_assertions #(
                     ]
                 )
             ) else $error(
-                "FRP M16 assertion failed: "
-                "pending completion did not execute 0 to retained target"
+                "FRP M16 assertion failed: pending completion did not execute 0 to retained target"
             );
-
-            // A pending route cannot be consumed while the retained state
-            // is nonzero.
 
             assert property (
                 disable iff (!rst_n)
@@ -513,8 +457,7 @@ module frp_m16_assertions #(
                     ]
                 )
             ) else $error(
-                "FRP M16 assertion failed: "
-                "pending route completed from nonzero retained state"
+                "FRP M16 assertion failed: pending route completed from nonzero retained state"
             );
 
         end
@@ -551,8 +494,7 @@ module frp_m16_assertions #(
         ==
         ticks_recorded_q
     ) else $error(
-        "FRP M16 assertion failed: "
-        "scheduler counters do not sum to ticks_recorded"
+        "FRP M16 assertion failed: scheduler counters do not sum to ticks_recorded"
     );
 
     assert property (
@@ -568,8 +510,7 @@ module frp_m16_assertions #(
             == FRP_SCHED_FREE
         )
     ) else $error(
-        "FRP M16 assertion failed: "
-        "free mode emitted non-free scheduler state"
+        "FRP M16 assertion failed: free mode emitted non-free scheduler state"
     );
 
     assert property (
@@ -592,8 +533,7 @@ module frp_m16_assertions #(
             )
         )
     ) else $error(
-        "FRP M16 assertion failed: "
-        "7/1 mode emitted invalid scheduler state"
+        "FRP M16 assertion failed: 7/1 mode emitted invalid scheduler state"
     );
 
     assert property (
@@ -616,11 +556,8 @@ module frp_m16_assertions #(
             )
         )
     ) else $error(
-        "FRP M16 assertion failed: "
-        "1/7 mode emitted invalid scheduler state"
+        "FRP M16 assertion failed: 1/7 mode emitted invalid scheduler state"
     );
-
-    // Counter clearing is isolated from retained state and pending routes.
 
     assert property (
         disable iff (!rst_n)
@@ -639,8 +576,7 @@ module frp_m16_assertions #(
             && $stable(scheduler_count_neutralize_q)
         )
     ) else $error(
-        "FRP M16 assertion failed: "
-        "scheduler counters changed without tick or clear"
+        "FRP M16 assertion failed: scheduler counters changed without tick or clear"
     );
 
     assert property (
@@ -660,8 +596,7 @@ module frp_m16_assertions #(
             && (scheduler_count_neutralize_q == '0)
         )
     ) else $error(
-        "FRP M16 assertion failed: "
-        "clear_counters did not clear the scheduler counter bank"
+        "FRP M16 assertion failed: clear_counters did not clear the scheduler counter bank"
     );
 
     assert property (
@@ -684,8 +619,7 @@ module frp_m16_assertions #(
             )
         )
     ) else $error(
-        "FRP M16 assertion failed: "
-        "clear-plus-tick did not record exactly one scheduler event"
+        "FRP M16 assertion failed: clear-plus-tick did not record exactly one scheduler event"
     );
 
     // ----------------------------------------------------------------------
@@ -701,8 +635,7 @@ module frp_m16_assertions #(
         )
         == '0
     ) else $error(
-        "FRP M16 assertion failed: "
-        "request lane accepted and rejected simultaneously"
+        "FRP M16 assertion failed: request lane accepted and rejected simultaneously"
     );
 
     assert property (
@@ -717,8 +650,7 @@ module frp_m16_assertions #(
             && (accepted_changes == '0)
         )
     ) else $error(
-        "FRP M16 assertion failed: "
-        "execution was accepted while tick_enable was low"
+        "FRP M16 assertion failed: execution was accepted while tick_enable was low"
     );
 
     assert property (
@@ -729,8 +661,7 @@ module frp_m16_assertions #(
         )
         <= REQUEST_LANES
     ) else $error(
-        "FRP M16 assertion failed: "
-        "accepted_cell_mask exceeds request-lane boundary"
+        "FRP M16 assertion failed: accepted_cell_mask exceeds request-lane boundary"
     );
 
     assert property (
@@ -742,8 +673,7 @@ module frp_m16_assertions #(
         ==
         accepted_changes
     ) else $error(
-        "FRP M16 assertion failed: "
-        "accepted_change_mask does not match accepted_changes"
+        "FRP M16 assertion failed: accepted_change_mask does not match accepted_changes"
     );
 
     assert property (
@@ -755,8 +685,7 @@ module frp_m16_assertions #(
         )
         == '0
     ) else $error(
-        "FRP M16 assertion failed: "
-        "neutral route exists outside accepted-cell mask"
+        "FRP M16 assertion failed: neutral route exists outside accepted-cell mask"
     );
 
     assert property (
@@ -768,8 +697,7 @@ module frp_m16_assertions #(
         )
         == '0
     ) else $error(
-        "FRP M16 assertion failed: "
-        "neutral route exists without an accepted state change"
+        "FRP M16 assertion failed: neutral route exists without an accepted state change"
     );
 
     assert property (
@@ -778,8 +706,7 @@ module frp_m16_assertions #(
         accepted_changes
         <= REQUEST_LANE_LIMIT
     ) else $error(
-        "FRP M16 assertion failed: "
-        "accepted_changes exceeds REQUEST_LANES"
+        "FRP M16 assertion failed: accepted_changes exceeds REQUEST_LANES"
     );
 
     assert property (
@@ -792,8 +719,7 @@ module frp_m16_assertions #(
             - accepted_changes
         )
     ) else $error(
-        "FRP M16 assertion failed: "
-        "capacity_remaining relation mismatch"
+        "FRP M16 assertion failed: capacity_remaining relation mismatch"
     );
 
     assert property (
@@ -806,8 +732,7 @@ module frp_m16_assertions #(
             == REQUEST_LANE_LIMIT
         )
     ) else $error(
-        "FRP M16 assertion failed: "
-        "capacity_exhausted relation mismatch"
+        "FRP M16 assertion failed: capacity_exhausted relation mismatch"
     );
 
     assert property (
@@ -817,8 +742,7 @@ module frp_m16_assertions #(
         ==
         accepted_changes
     ) else $error(
-        "FRP M16 assertion failed: "
-        "switch_load_numerator must equal accepted_changes"
+        "FRP M16 assertion failed: switch_load_numerator must equal accepted_changes"
     );
 
     // ----------------------------------------------------------------------
@@ -831,8 +755,7 @@ module frp_m16_assertions #(
         actual_direct_events
         == '0
     ) else $error(
-        "FRP M16 assertion failed: "
-        "actual_direct_events must remain zero"
+        "FRP M16 assertion failed: actual_direct_events must remain zero"
     );
 
     assert property (
@@ -841,8 +764,7 @@ module frp_m16_assertions #(
         reserved_state_events
         == '0
     ) else $error(
-        "FRP M16 assertion failed: "
-        "reserved_state_events must remain zero"
+        "FRP M16 assertion failed: reserved_state_events must remain zero"
     );
 
     assert property (
@@ -851,8 +773,7 @@ module frp_m16_assertions #(
         queue_overflow_events
         == '0
     ) else $error(
-        "FRP M16 assertion failed: "
-        "queue_overflow_events must remain zero"
+        "FRP M16 assertion failed: queue_overflow_events must remain zero"
     );
 
     assert property (
@@ -861,8 +782,7 @@ module frp_m16_assertions #(
         prevented_direct_events
         >= requested_direct_events
     ) else $error(
-        "FRP M16 assertion failed: "
-        "requested direct event was not prevented"
+        "FRP M16 assertion failed: requested direct event was not prevented"
     );
 
     assert property (
@@ -871,8 +791,7 @@ module frp_m16_assertions #(
         neutral_routed_events
         >= prevented_direct_events
     ) else $error(
-        "FRP M16 assertion failed: "
-        "prevented direct event was not neutral-routed"
+        "FRP M16 assertion failed: prevented direct event was not neutral-routed"
     );
 
     // ----------------------------------------------------------------------
@@ -881,102 +800,102 @@ module frp_m16_assertions #(
 
     assert property (
         disable iff (!rst_n)
+
         invariant_flags[
             FRP_INV_STATE_DOMAIN_VALID
         ]
     ) else $error(
-        "FRP M16 assertion failed: "
-        "state-domain invariant flag is false"
+        "FRP M16 assertion failed: state-domain invariant flag is false"
     );
 
     assert property (
         disable iff (!rst_n)
+
         invariant_flags[
             FRP_INV_SCHEDULER_COUNTS_VALID
         ]
     ) else $error(
-        "FRP M16 assertion failed: "
-        "scheduler-count invariant flag is false"
+        "FRP M16 assertion failed: scheduler-count invariant flag is false"
     );
 
     assert property (
         disable iff (!rst_n)
+
         invariant_flags[
             FRP_INV_REQUEST_LANE_ORDER_VALID
         ]
     ) else $error(
-        "FRP M16 assertion failed: "
-        "request-lane invariant flag is false"
+        "FRP M16 assertion failed: request-lane invariant flag is false"
     );
 
     assert property (
         disable iff (!rst_n)
+
         invariant_flags[
             FRP_INV_PENDING_POLARITY_VALID
         ]
     ) else $error(
-        "FRP M16 assertion failed: "
-        "pending-polarity invariant flag is false"
+        "FRP M16 assertion failed: pending-polarity invariant flag is false"
     );
 
     assert property (
         disable iff (!rst_n)
+
         invariant_flags[
             FRP_INV_ACTIVE_NEUTRAL_VALID
         ]
     ) else $error(
-        "FRP M16 assertion failed: "
-        "active-neutral invariant flag is false"
+        "FRP M16 assertion failed: active-neutral invariant flag is false"
     );
 
     assert property (
         disable iff (!rst_n)
+
         invariant_flags[
             FRP_INV_TRANSITION_CAPACITY_VALID
         ]
     ) else $error(
-        "FRP M16 assertion failed: "
-        "transition-capacity invariant flag is false"
+        "FRP M16 assertion failed: transition-capacity invariant flag is false"
     );
 
     assert property (
         disable iff (!rst_n)
+
         invariant_flags[
             FRP_INV_STATE_UPDATE_VALID
         ]
     ) else $error(
-        "FRP M16 assertion failed: "
-        "state-update invariant flag is false"
+        "FRP M16 assertion failed: state-update invariant flag is false"
     );
 
     assert property (
         disable iff (!rst_n)
+
         invariant_flags[
             FRP_INV_NO_ACTUAL_DIRECT_EVENTS
         ]
     ) else $error(
-        "FRP M16 assertion failed: "
-        "no-actual-direct-events flag is false"
+        "FRP M16 assertion failed: no-actual-direct-events flag is false"
     );
 
     assert property (
         disable iff (!rst_n)
+
         invariant_flags[
             FRP_INV_NO_RESERVED_STATE
         ]
     ) else $error(
-        "FRP M16 assertion failed: "
-        "no-reserved-state flag is false"
+        "FRP M16 assertion failed: no-reserved-state flag is false"
     );
 
     assert property (
         disable iff (!rst_n)
+
         invariant_flags[
             FRP_INV_NO_QUEUE_OVERFLOW
         ]
     ) else $error(
-        "FRP M16 assertion failed: "
-        "no-queue-overflow flag is false"
+        "FRP M16 assertion failed: no-queue-overflow flag is false"
     );
 
     // ----------------------------------------------------------------------
