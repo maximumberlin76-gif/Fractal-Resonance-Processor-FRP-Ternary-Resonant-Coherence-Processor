@@ -47,24 +47,24 @@ module frp_m16_core #(
   parameter int CELL_INDEX_BITS = (CELLS <= 1) ? 1 : $clog2(CELLS),
   parameter int COUNTER_BITS = frp_m16_pkg::FRP_M16_COUNTER_BITS
 ) (
-  input  logic clk,
-  input  logic rst_n,
+  input logic clk,
+  input logic rst_n,
 
-  input  logic tick_enable,
-  input  logic clear_counters,
+  input logic tick_enable,
+  input logic clear_counters,
 
-  input  frp_m16_pkg::frp_m16_scheduler_mode_e scheduler_mode,
+  input frp_m16_pkg::frp_m16_scheduler_mode_e scheduler_mode,
 
-  input  logic [REQUEST_LANES-1:0] request_valid,
-  input  logic [(REQUEST_LANES*CELL_INDEX_BITS)-1:0] request_cell_index,
-  input  logic [(REQUEST_LANES*STATE_BITS)-1:0]      request_target,
+  input logic [REQUEST_LANES-1:0] request_valid,
+  input logic [(REQUEST_LANES*CELL_INDEX_BITS)-1:0] request_cell_index,
+  input logic [(REQUEST_LANES*STATE_BITS)-1:0] request_target,
 
-  input  logic [(CELLS*STATE_BITS)-1:0] target_q,
+  input logic [(CELLS*STATE_BITS)-1:0] target_q,
 
   output logic [(CELLS*STATE_BITS)-1:0] state_out,
   output logic [(CELLS*STATE_BITS)-1:0] pending_route_out,
 
-  output frp_m16_pkg::frp_m16_scheduler_mode_e  scheduler_mode_q,
+  output frp_m16_pkg::frp_m16_scheduler_mode_e scheduler_mode_q,
   output frp_m16_pkg::frp_m16_scheduler_state_e scheduler_state_q,
 
   output logic [COUNTER_BITS-1:0] ticks_recorded_q,
@@ -94,7 +94,9 @@ module frp_m16_core #(
   output logic [COUNTER_BITS-1:0] reserved_state_events,
   output logic [COUNTER_BITS-1:0] queue_overflow_events,
 
-  output logic [frp_m16_pkg::FRP_M16_INVARIANT_FLAGS-1:0] invariant_flags
+  output logic [
+    frp_m16_pkg::FRP_M16_INVARIANT_FLAGS-1:0
+  ] invariant_flags
 );
 
   import frp_m16_pkg::*;
@@ -104,7 +106,7 @@ module frp_m16_core #(
   // --------------------------------------------------------------------------
 
   logic [COUNTER_BITS-1:0] tick_index_q;
-  logic [2:0]              period_index_q;
+  logic [2:0] period_index_q;
 
   logic free_enable;
   logic balance_enable;
@@ -118,7 +120,7 @@ module frp_m16_core #(
   logic scheduler_counts_valid;
 
   // --------------------------------------------------------------------------
-  // Retained state wires
+  // Retained-state wires
   // --------------------------------------------------------------------------
 
   logic [(CELLS*STATE_BITS)-1:0] state_q;
@@ -269,7 +271,7 @@ module frp_m16_core #(
   logic transition_replay_deterministic;
 
   // --------------------------------------------------------------------------
-  // Capacity guard wires
+  // Capacity-guard wires
   // --------------------------------------------------------------------------
 
   logic [REQUEST_LANES-1:0] request_accept_capacity;
@@ -300,60 +302,67 @@ module frp_m16_core #(
   logic capacity_no_actual_direct_events;
 
   // --------------------------------------------------------------------------
-  // Lane transition class bus
+  // Lane transition-class bus
   // --------------------------------------------------------------------------
 
-  logic [(REQUEST_LANES*4)-1:0] lane_transition_class_bus;
+  logic [
+    (REQUEST_LANES*FRP_M16_TRANSITION_CLASS_BITS)-1:0
+  ] lane_transition_class_bus;
 
   function automatic logic [CELL_INDEX_BITS-1:0] lane_cell_index_value(
-    input int lane
+    input int lane_index
   );
     begin
       lane_cell_index_value =
-        request_cell_index[(lane*CELL_INDEX_BITS) +: CELL_INDEX_BITS];
+        request_cell_index[
+          (lane_index*CELL_INDEX_BITS) +: CELL_INDEX_BITS
+        ];
     end
   endfunction
 
   function automatic logic [STATE_BITS-1:0] lane_target_value(
-    input int lane
+    input int lane_index
   );
     begin
       lane_target_value =
-        request_target[(lane*STATE_BITS) +: STATE_BITS];
-    end
-  endfunction
-
-  function automatic logic [STATE_BITS-1:0] cell_state_value(
-    input logic [(CELLS*STATE_BITS)-1:0] packed_state,
-    input int element_index
-  );
-    begin
-      cell_state_value =
-        packed_state[(element_index*STATE_BITS) +: STATE_BITS];
+        request_target[
+          (lane_index*STATE_BITS) +: STATE_BITS
+        ];
     end
   endfunction
 
   // --------------------------------------------------------------------------
-  // Derived pending-completion candidates and transition classes
+  // Derived pending-route completions and request transition classes
   // --------------------------------------------------------------------------
 
   always_comb begin
     pending_completion_candidate = '0;
 
-    for (int element_index = 0; element_index < CELLS; element_index++) begin
-      logic [STATE_BITS-1:0] state_value;
-      logic [STATE_BITS-1:0] pending_value;
+    for (
+      int element_index = 0;
+      element_index < CELLS;
+      element_index++
+    ) begin
+      logic [STATE_BITS-1:0] retained_state;
+      logic [STATE_BITS-1:0] pending_target;
 
-      state_value =
-        state_q[(element_index*STATE_BITS) +: STATE_BITS];
+      retained_state =
+        state_q[
+          (element_index*STATE_BITS) +: STATE_BITS
+        ];
 
-      pending_value =
-        pending_route_q[(element_index*STATE_BITS) +: STATE_BITS];
+      pending_target =
+        pending_route_q[
+          (element_index*STATE_BITS) +: STATE_BITS
+        ];
 
       if (
-        frp_is_zero(state_value) &&
-        frp_is_nonzero(pending_value) &&
-        frp_scheduler_is_commit_capable(scheduler_state_q)
+        tick_enable
+        && frp_is_zero(retained_state)
+        && frp_is_nonzero(pending_target)
+        && frp_scheduler_is_commit_capable(
+          scheduler_state_q
+        )
       ) begin
         pending_completion_candidate[element_index] = 1'b1;
       end
@@ -363,40 +372,55 @@ module frp_m16_core #(
   always_comb begin
     lane_transition_class_bus = '0;
 
-    for (int lane = 0; lane < REQUEST_LANES; lane++) begin
-      logic [CELL_INDEX_BITS-1:0] cell_index_value;
-      int                         cell_index_int;
-      logic [STATE_BITS-1:0]      state_value;
-      logic [STATE_BITS-1:0]      target_value;
-      frp_m16_transition_class_e  class_value;
+    for (
+      int lane_index = 0;
+      lane_index < REQUEST_LANES;
+      lane_index++
+    ) begin
+      logic [CELL_INDEX_BITS-1:0] packed_cell_index;
+      int element_index_int;
+      logic [STATE_BITS-1:0] retained_state;
+      logic [STATE_BITS-1:0] requested_target;
+      frp_m16_transition_class_e class_value;
 
-      cell_index_value = lane_cell_index_value(lane);
-      cell_index_int   = int'(cell_index_value);
-      target_value     = lane_target_value(lane);
+      packed_cell_index =
+        lane_cell_index_value(lane_index);
 
-      state_value = FRP_STATE_ZERO;
+      element_index_int =
+        int'(packed_cell_index);
 
-      if (cell_index_int < CELLS) begin
-        state_value =
-          state_q[(cell_index_int*STATE_BITS) +: STATE_BITS];
+      requested_target =
+        lane_target_value(lane_index);
+
+      retained_state = FRP_STATE_ZERO;
+
+      if (element_index_int < CELLS) begin
+        retained_state =
+          state_q[
+            (element_index_int*STATE_BITS) +: STATE_BITS
+          ];
       end
 
       class_value =
         frp_classify_transition(
-          state_value,
-          target_value,
+          retained_state,
+          requested_target,
           FRP_STATE_ZERO
         );
 
-      lane_transition_class_bus[(lane*4) +: 4] = class_value;
+      lane_transition_class_bus[
+        (lane_index*FRP_M16_TRANSITION_CLASS_BITS)
+        +: FRP_M16_TRANSITION_CLASS_BITS
+      ] = class_value;
     end
   end
 
   assign pending_completion_accept_mask =
-    capacity_accept_mask & pending_completion_candidate;
+    capacity_accept_mask
+    & pending_completion_candidate;
 
   // --------------------------------------------------------------------------
-  // Scheduler instance
+  // Scheduler
   // --------------------------------------------------------------------------
 
   frp_m16_scheduler #(
@@ -416,7 +440,9 @@ module frp_m16_core #(
     .scheduler_count_balance_q(scheduler_count_balance_q),
     .scheduler_count_commit_q(scheduler_count_commit_q),
     .scheduler_count_excite_q(scheduler_count_excite_q),
-    .scheduler_count_neutralize_q(scheduler_count_neutralize_q),
+    .scheduler_count_neutralize_q(
+      scheduler_count_neutralize_q
+    ),
     .free_enable(free_enable),
     .balance_enable(balance_enable),
     .commit_enable(commit_enable),
@@ -429,7 +455,7 @@ module frp_m16_core #(
   );
 
   // --------------------------------------------------------------------------
-  // Request-lane arbitration instance
+  // Request-lane arbitration
   // --------------------------------------------------------------------------
 
   frp_m16_request_lanes #(
@@ -449,38 +475,86 @@ module frp_m16_core #(
     .pending_route_q(pending_route_q),
     .request_accept(request_accept_lane),
     .request_reject(request_reject_lane),
-    .request_reject_invalid_cell(request_reject_invalid_cell),
-    .request_reject_invalid_target(request_reject_invalid_target),
-    .request_reject_duplicate_cell(request_reject_duplicate_cell),
-    .request_reject_scheduler(request_reject_scheduler),
-    .request_reject_capacity(request_reject_capacity_lane),
-    .request_reject_pending_busy(request_reject_pending_busy),
-    .request_reject_tick_disabled(request_reject_tick_disabled),
-    .request_neutralized(request_neutralized_lane),
-    .accepted_cell_mask(request_accepted_cell_mask),
-    .rejected_cell_mask(request_rejected_cell_mask),
-    .neutral_routed_cell_mask(request_neutral_routed_cell_mask),
-    .requested_direct_cell_mask(request_requested_direct_cell_mask),
+    .request_reject_invalid_cell(
+      request_reject_invalid_cell
+    ),
+    .request_reject_invalid_target(
+      request_reject_invalid_target
+    ),
+    .request_reject_duplicate_cell(
+      request_reject_duplicate_cell
+    ),
+    .request_reject_scheduler(
+      request_reject_scheduler
+    ),
+    .request_reject_capacity(
+      request_reject_capacity_lane
+    ),
+    .request_reject_pending_busy(
+      request_reject_pending_busy
+    ),
+    .request_reject_tick_disabled(
+      request_reject_tick_disabled
+    ),
+    .request_neutralized(
+      request_neutralized_lane
+    ),
+    .accepted_cell_mask(
+      request_accepted_cell_mask
+    ),
+    .rejected_cell_mask(
+      request_rejected_cell_mask
+    ),
+    .neutral_routed_cell_mask(
+      request_neutral_routed_cell_mask
+    ),
+    .requested_direct_cell_mask(
+      request_requested_direct_cell_mask
+    ),
     .accepted_changes(request_accepted_changes),
     .requested_lane_events(requested_lane_events),
     .accepted_lane_events(accepted_lane_events),
     .rejected_lane_events(rejected_lane_events),
-    .requested_direct_events(request_requested_direct_events),
-    .prevented_direct_events(request_prevented_direct_events),
-    .neutral_routed_events(request_neutral_routed_events),
-    .request_lane_order_valid(request_lane_order_valid),
-    .request_cell_domain_valid(request_cell_domain_valid),
-    .request_target_domain_valid(request_target_domain_valid),
-    .duplicate_cell_guard_valid(duplicate_cell_guard_valid),
-    .scheduler_gate_valid(request_scheduler_gate_valid),
-    .transition_capacity_valid(request_transition_capacity_valid),
-    .active_neutral_routing_valid(request_active_neutral_routing_valid),
-    .no_actual_direct_events(request_no_actual_direct_events),
-    .no_queue_overflow(request_no_queue_overflow)
+    .requested_direct_events(
+      request_requested_direct_events
+    ),
+    .prevented_direct_events(
+      request_prevented_direct_events
+    ),
+    .neutral_routed_events(
+      request_neutral_routed_events
+    ),
+    .request_lane_order_valid(
+      request_lane_order_valid
+    ),
+    .request_cell_domain_valid(
+      request_cell_domain_valid
+    ),
+    .request_target_domain_valid(
+      request_target_domain_valid
+    ),
+    .duplicate_cell_guard_valid(
+      duplicate_cell_guard_valid
+    ),
+    .scheduler_gate_valid(
+      request_scheduler_gate_valid
+    ),
+    .transition_capacity_valid(
+      request_transition_capacity_valid
+    ),
+    .active_neutral_routing_valid(
+      request_active_neutral_routing_valid
+    ),
+    .no_actual_direct_events(
+      request_no_actual_direct_events
+    ),
+    .no_queue_overflow(
+      request_no_queue_overflow
+    )
   );
 
   // --------------------------------------------------------------------------
-  // Active-neutral transition instance
+  // Active-neutral candidate generation
   // --------------------------------------------------------------------------
 
   frp_m16_active_neutral #(
@@ -498,40 +572,86 @@ module frp_m16_core #(
     .request_neutralized(request_neutralized_lane),
     .request_cell_index(request_cell_index),
     .request_target(request_target),
-    .pending_completion_enable(pending_completion_candidate),
+    .pending_completion_enable(
+      pending_completion_candidate
+    ),
     .state_candidate_d(state_candidate_d),
     .transition_valid_mask(transition_valid_mask),
     .same_state_mask(same_state_mask),
     .zero_to_nonzero_mask(zero_to_nonzero_mask),
     .nonzero_to_zero_mask(nonzero_to_zero_mask),
     .opposite_polarity_mask(opposite_polarity_mask),
-    .neutral_routed_mask(transition_neutral_routed_mask),
-    .pending_completion_mask(transition_pending_completion_mask),
-    .actual_direct_mask(transition_actual_direct_mask),
-    .reserved_transition_mask(reserved_transition_mask),
-    .accepted_change_candidate_mask(accepted_change_candidate_mask),
+    .neutral_routed_mask(
+      transition_neutral_routed_mask
+    ),
+    .pending_completion_mask(
+      transition_pending_completion_mask
+    ),
+    .actual_direct_mask(
+      transition_actual_direct_mask
+    ),
+    .reserved_transition_mask(
+      reserved_transition_mask
+    ),
+    .accepted_change_candidate_mask(
+      accepted_change_candidate_mask
+    ),
     .same_state_events(same_state_events),
-    .zero_to_nonzero_events(zero_to_nonzero_events),
-    .nonzero_to_zero_events(nonzero_to_zero_events),
-    .requested_direct_events(transition_requested_direct_events),
-    .prevented_direct_events(transition_prevented_direct_events),
-    .neutral_routed_events(transition_neutral_routed_events),
-    .pending_completion_events(transition_pending_completion_events),
-    .actual_direct_events(transition_actual_direct_events),
-    .reserved_transition_events(reserved_transition_events),
-    .accepted_change_candidate_events(accepted_change_candidate_events),
-    .transition_domain_valid(transition_domain_valid),
-    .active_neutral_routing_valid(active_neutral_routing_valid),
-    .pending_completion_from_zero_valid(transition_pending_completion_from_zero_valid),
-    .no_reserved_transition(no_reserved_transition),
-    .no_actual_direct_events(transition_no_actual_direct_events),
-    .transition_capacity_valid(transition_capacity_valid_local),
-    .state_output_domain_valid(transition_state_output_domain_valid),
-    .transition_replay_deterministic(transition_replay_deterministic)
+    .zero_to_nonzero_events(
+      zero_to_nonzero_events
+    ),
+    .nonzero_to_zero_events(
+      nonzero_to_zero_events
+    ),
+    .requested_direct_events(
+      transition_requested_direct_events
+    ),
+    .prevented_direct_events(
+      transition_prevented_direct_events
+    ),
+    .neutral_routed_events(
+      transition_neutral_routed_events
+    ),
+    .pending_completion_events(
+      transition_pending_completion_events
+    ),
+    .actual_direct_events(
+      transition_actual_direct_events
+    ),
+    .reserved_transition_events(
+      reserved_transition_events
+    ),
+    .accepted_change_candidate_events(
+      accepted_change_candidate_events
+    ),
+    .transition_domain_valid(
+      transition_domain_valid
+    ),
+    .active_neutral_routing_valid(
+      active_neutral_routing_valid
+    ),
+    .pending_completion_from_zero_valid(
+      transition_pending_completion_from_zero_valid
+    ),
+    .no_reserved_transition(
+      no_reserved_transition
+    ),
+    .no_actual_direct_events(
+      transition_no_actual_direct_events
+    ),
+    .transition_capacity_valid(
+      transition_capacity_valid_local
+    ),
+    .state_output_domain_valid(
+      transition_state_output_domain_valid
+    ),
+    .transition_replay_deterministic(
+      transition_replay_deterministic
+    )
   );
 
   // --------------------------------------------------------------------------
-  // Capacity guard instance
+  // Transition-capacity guard
   // --------------------------------------------------------------------------
 
   frp_m16_capacity_guard #(
@@ -546,38 +666,80 @@ module frp_m16_core #(
     .request_accept_candidate(request_accept_lane),
     .request_cell_index(request_cell_index),
     .transition_class(lane_transition_class_bus),
-    .pending_completion_candidate(pending_completion_candidate),
-    .neutral_routed_candidate(transition_neutral_routed_mask),
+    .pending_completion_candidate(
+      pending_completion_candidate
+    ),
+    .neutral_routed_candidate(
+      transition_neutral_routed_mask
+    ),
     .state_q(state_q),
     .state_candidate_d(state_candidate_d),
-    .request_accept_capacity(request_accept_capacity),
-    .request_reject_capacity(request_reject_capacity),
+    .request_accept_capacity(
+      request_accept_capacity
+    ),
+    .request_reject_capacity(
+      request_reject_capacity
+    ),
     .capacity_accept_mask(capacity_accept_mask),
     .capacity_reject_mask(capacity_reject_mask),
-    .accepted_change_mask(capacity_accepted_change_mask),
+    .accepted_change_mask(
+      capacity_accepted_change_mask
+    ),
     .accepted_changes(capacity_accepted_changes),
     .capacity_remaining(capacity_remaining),
     .capacity_exhausted(capacity_exhausted),
-    .switch_load_numerator(capacity_switch_load_numerator),
-    .capacity_candidate_events(capacity_candidate_events),
-    .capacity_accept_events(capacity_accept_events),
-    .capacity_reject_events(capacity_reject_events),
-    .capacity_exhausted_events(capacity_exhausted_events),
-    .accepted_change_events(capacity_accepted_change_events),
-    .transition_capacity_valid(capacity_transition_capacity_valid),
-    .accepted_changes_within_limit(accepted_changes_within_limit),
-    .capacity_remaining_valid(capacity_remaining_valid),
-    .capacity_exhaustion_valid(capacity_exhaustion_valid),
-    .same_state_capacity_valid(same_state_capacity_valid),
-    .pending_capacity_valid(capacity_pending_capacity_valid),
-    .active_neutral_capacity_valid(capacity_active_neutral_capacity_valid),
-    .switch_load_bound_valid(switch_load_bound_valid),
-    .no_queue_overflow(capacity_no_queue_overflow),
-    .no_actual_direct_events(capacity_no_actual_direct_events)
+    .switch_load_numerator(
+      capacity_switch_load_numerator
+    ),
+    .capacity_candidate_events(
+      capacity_candidate_events
+    ),
+    .capacity_accept_events(
+      capacity_accept_events
+    ),
+    .capacity_reject_events(
+      capacity_reject_events
+    ),
+    .capacity_exhausted_events(
+      capacity_exhausted_events
+    ),
+    .accepted_change_events(
+      capacity_accepted_change_events
+    ),
+    .transition_capacity_valid(
+      capacity_transition_capacity_valid
+    ),
+    .accepted_changes_within_limit(
+      accepted_changes_within_limit
+    ),
+    .capacity_remaining_valid(
+      capacity_remaining_valid
+    ),
+    .capacity_exhaustion_valid(
+      capacity_exhaustion_valid
+    ),
+    .same_state_capacity_valid(
+      same_state_capacity_valid
+    ),
+    .pending_capacity_valid(
+      capacity_pending_capacity_valid
+    ),
+    .active_neutral_capacity_valid(
+      capacity_active_neutral_capacity_valid
+    ),
+    .switch_load_bound_valid(
+      switch_load_bound_valid
+    ),
+    .no_queue_overflow(
+      capacity_no_queue_overflow
+    ),
+    .no_actual_direct_events(
+      capacity_no_actual_direct_events
+    )
   );
 
   // --------------------------------------------------------------------------
-  // Pending-route register instance
+  // Pending-route retained register
   // --------------------------------------------------------------------------
 
   frp_m16_pending_routes #(
@@ -595,7 +757,9 @@ module frp_m16_core #(
     .request_neutralized(request_neutralized_lane),
     .request_cell_index(request_cell_index),
     .request_target(request_target),
-    .pending_completion_accept_mask(pending_completion_accept_mask),
+    .pending_completion_accept_mask(
+      pending_completion_accept_mask
+    ),
     .pending_route_q(pending_route_q),
     .pending_route_d(pending_route_d),
     .pending_active_mask(pending_active_mask),
@@ -608,27 +772,57 @@ module frp_m16_core #(
     .pending_overflow_mask(pending_overflow_mask),
     .pending_active_count(pending_active_count),
     .pending_created_events(pending_created_events),
-    .pending_completed_events(pending_completed_events),
+    .pending_completed_events(
+      pending_completed_events
+    ),
     .pending_cleared_events(pending_cleared_events),
-    .pending_retained_events(pending_retained_events),
-    .pending_reserved_events(pending_reserved_events),
-    .neutral_routed_events(pending_neutral_routed_events),
-    .prevented_direct_events(pending_prevented_direct_events),
-    .queue_overflow_events(pending_queue_overflow_events),
-    .actual_direct_events(pending_actual_direct_events),
+    .pending_retained_events(
+      pending_retained_events
+    ),
+    .pending_reserved_events(
+      pending_reserved_events
+    ),
+    .neutral_routed_events(
+      pending_neutral_routed_events
+    ),
+    .prevented_direct_events(
+      pending_prevented_direct_events
+    ),
+    .queue_overflow_events(
+      pending_queue_overflow_events
+    ),
+    .actual_direct_events(
+      pending_actual_direct_events
+    ),
     .pending_domain_valid(pending_domain_valid),
-    .pending_polarity_valid(pending_polarity_valid),
-    .pending_completion_from_zero_valid(pending_completion_from_zero_valid),
-    .pending_non_overwrite_valid(pending_non_overwrite_valid),
-    .pending_capacity_valid(pending_capacity_valid),
-    .pending_replay_deterministic(pending_replay_deterministic),
-    .no_pending_reserved_state(no_pending_reserved_state),
-    .no_queue_overflow(pending_no_queue_overflow),
-    .no_actual_direct_events(pending_no_actual_direct_events)
+    .pending_polarity_valid(
+      pending_polarity_valid
+    ),
+    .pending_completion_from_zero_valid(
+      pending_completion_from_zero_valid
+    ),
+    .pending_non_overwrite_valid(
+      pending_non_overwrite_valid
+    ),
+    .pending_capacity_valid(
+      pending_capacity_valid
+    ),
+    .pending_replay_deterministic(
+      pending_replay_deterministic
+    ),
+    .no_pending_reserved_state(
+      no_pending_reserved_state
+    ),
+    .no_queue_overflow(
+      pending_no_queue_overflow
+    ),
+    .no_actual_direct_events(
+      pending_no_actual_direct_events
+    )
   );
 
   // --------------------------------------------------------------------------
-  // Retained-state update instance
+  // Retained-state writeback
   // --------------------------------------------------------------------------
 
   frp_m16_state_update #(
@@ -643,37 +837,77 @@ module frp_m16_core #(
     .scheduler_state(scheduler_state_q),
     .state_candidate_d(state_candidate_d),
     .capacity_accept_mask(capacity_accept_mask),
-    .accepted_change_candidate_mask(accepted_change_candidate_mask),
-    .neutral_routed_mask(transition_neutral_routed_mask),
-    .pending_completion_mask(transition_pending_completion_mask),
-    .reserved_transition_mask(reserved_transition_mask),
-    .actual_direct_mask(transition_actual_direct_mask),
+    .accepted_change_candidate_mask(
+      accepted_change_candidate_mask
+    ),
+    .neutral_routed_mask(
+      transition_neutral_routed_mask
+    ),
+    .pending_completion_mask(
+      transition_pending_completion_mask
+    ),
+    .reserved_transition_mask(
+      reserved_transition_mask
+    ),
+    .actual_direct_mask(
+      transition_actual_direct_mask
+    ),
     .state_q(state_q),
     .state_d(state_d),
     .state_out(state_out),
-    .state_write_enable_mask(state_write_enable_mask),
+    .state_write_enable_mask(
+      state_write_enable_mask
+    ),
     .state_hold_mask(state_hold_mask),
     .state_reset_mask(state_reset_mask),
     .state_reserved_mask(state_reserved_mask),
-    .accepted_changes(state_update_accepted_changes),
-    .switch_load_numerator(state_update_switch_load_numerator),
+    .accepted_changes(
+      state_update_accepted_changes
+    ),
+    .switch_load_numerator(
+      state_update_switch_load_numerator
+    ),
     .state_write_events(state_write_events),
     .state_hold_events(state_hold_events),
     .state_reset_events(state_reset_events),
-    .accepted_change_events(state_accepted_change_events),
-    .neutral_routed_commit_events(neutral_routed_commit_events),
-    .pending_completion_commit_events(pending_completion_commit_events),
-    .reserved_state_events(state_reserved_state_events),
-    .actual_direct_events(state_actual_direct_events),
+    .accepted_change_events(
+      state_accepted_change_events
+    ),
+    .neutral_routed_commit_events(
+      neutral_routed_commit_events
+    ),
+    .pending_completion_commit_events(
+      pending_completion_commit_events
+    ),
+    .reserved_state_events(
+      state_reserved_state_events
+    ),
+    .actual_direct_events(
+      state_actual_direct_events
+    ),
     .state_domain_valid(state_domain_valid),
-    .state_output_domain_valid(state_output_domain_valid),
+    .state_output_domain_valid(
+      state_output_domain_valid
+    ),
     .state_update_valid(state_update_valid),
-    .state_write_capacity_valid(state_write_capacity_valid),
-    .same_state_hold_valid(same_state_hold_valid),
-    .active_neutral_writeback_valid(active_neutral_writeback_valid),
-    .pending_completion_writeback_valid(pending_completion_writeback_valid),
-    .no_reserved_state_output(no_reserved_state_output),
-    .no_actual_direct_events(state_update_no_actual_direct_events)
+    .state_write_capacity_valid(
+      state_write_capacity_valid
+    ),
+    .same_state_hold_valid(
+      same_state_hold_valid
+    ),
+    .active_neutral_writeback_valid(
+      active_neutral_writeback_valid
+    ),
+    .pending_completion_writeback_valid(
+      pending_completion_writeback_valid
+    ),
+    .no_reserved_state_output(
+      no_reserved_state_output
+    ),
+    .no_actual_direct_events(
+      state_update_no_actual_direct_events
+    )
   );
 
   // --------------------------------------------------------------------------
@@ -685,13 +919,16 @@ module frp_m16_core #(
   assign request_accept = request_accept_capacity;
 
   assign request_reject =
-    request_reject_lane | request_reject_capacity;
+    request_reject_lane
+    | request_reject_capacity;
 
   assign accepted_cell_mask =
-    request_accepted_cell_mask & capacity_accept_mask;
+    request_accepted_cell_mask
+    & capacity_accept_mask;
 
   assign neutral_routed_cell_mask =
-    transition_neutral_routed_mask;
+    transition_neutral_routed_mask
+    & capacity_accept_mask;
 
   assign accepted_change_mask =
     capacity_accepted_change_mask;
@@ -702,99 +939,135 @@ module frp_m16_core #(
   assign switch_load_numerator =
     capacity_switch_load_numerator;
 
+  // Use one canonical transition-stage source for each direct-request event.
+  // The same event is therefore not added repeatedly at arbitration,
+  // transition generation, pending storage, and retained writeback.
+
   assign requested_direct_events =
-    request_requested_direct_events +
     transition_requested_direct_events;
 
   assign prevented_direct_events =
-    request_prevented_direct_events +
-    transition_prevented_direct_events +
-    pending_prevented_direct_events;
+    transition_prevented_direct_events;
 
   assign neutral_routed_events =
-    request_neutral_routed_events +
-    transition_neutral_routed_events +
-    pending_neutral_routed_events;
+    transition_neutral_routed_events;
+
+  // Actual execution is defined at the retained-state writeback boundary.
 
   assign actual_direct_events =
-    transition_actual_direct_events +
-    pending_actual_direct_events +
     state_actual_direct_events;
 
   assign reserved_state_events =
-    reserved_transition_events +
-    pending_reserved_events +
-    state_reserved_state_events;
+    reserved_transition_events
+    + pending_reserved_events
+    + state_reserved_state_events;
 
   assign queue_overflow_events =
     pending_queue_overflow_events;
 
   // --------------------------------------------------------------------------
-  // Invariant flag aggregation
+  // Integrated invariant aggregation
   // --------------------------------------------------------------------------
 
   always_comb begin
     invariant_flags = '0;
 
     invariant_flags[FRP_INV_STATE_DOMAIN_VALID] =
-      state_domain_valid &&
-      state_output_domain_valid &&
-      transition_domain_valid &&
-      pending_domain_valid;
+      request_cell_domain_valid
+      && request_target_domain_valid
+      && transition_domain_valid
+      && transition_state_output_domain_valid
+      && pending_domain_valid
+      && state_domain_valid
+      && state_output_domain_valid;
 
     invariant_flags[FRP_INV_SCHEDULER_COUNTS_VALID] =
-      scheduler_counts_valid &&
-      scheduler_valid;
+      scheduler_valid
+      && scheduler_counts_valid;
 
     invariant_flags[FRP_INV_REQUEST_LANE_ORDER_VALID] =
-      request_lane_order_valid &&
-      request_cell_domain_valid &&
-      request_target_domain_valid &&
-      duplicate_cell_guard_valid &&
-      request_scheduler_gate_valid;
+      request_lane_order_valid
+      && request_cell_domain_valid
+      && request_target_domain_valid
+      && duplicate_cell_guard_valid
+      && request_scheduler_gate_valid
+      && request_transition_capacity_valid
+      && request_active_neutral_routing_valid;
 
     invariant_flags[FRP_INV_PENDING_POLARITY_VALID] =
-      pending_polarity_valid &&
-      pending_completion_from_zero_valid &&
-      pending_non_overwrite_valid &&
-      pending_capacity_valid;
+      pending_domain_valid
+      && pending_polarity_valid
+      && pending_completion_from_zero_valid
+      && pending_non_overwrite_valid
+      && pending_capacity_valid
+      && pending_replay_deterministic
+      && no_pending_reserved_state;
 
     invariant_flags[FRP_INV_ACTIVE_NEUTRAL_VALID] =
-      active_neutral_routing_valid &&
-      active_neutral_writeback_valid &&
-      transition_no_actual_direct_events;
+      request_active_neutral_routing_valid
+      && active_neutral_routing_valid
+      && transition_pending_completion_from_zero_valid
+      && transition_replay_deterministic
+      && capacity_active_neutral_capacity_valid
+      && active_neutral_writeback_valid
+      && pending_completion_writeback_valid
+      && transition_no_actual_direct_events
+      && state_update_no_actual_direct_events;
 
     invariant_flags[FRP_INV_TRANSITION_CAPACITY_VALID] =
-      capacity_transition_capacity_valid &&
-      accepted_changes_within_limit &&
-      capacity_remaining_valid &&
-      capacity_exhaustion_valid &&
-      switch_load_bound_valid;
+      request_transition_capacity_valid
+      && transition_capacity_valid_local
+      && capacity_transition_capacity_valid
+      && accepted_changes_within_limit
+      && capacity_remaining_valid
+      && capacity_exhaustion_valid
+      && same_state_capacity_valid
+      && capacity_pending_capacity_valid
+      && capacity_active_neutral_capacity_valid
+      && switch_load_bound_valid
+      && (
+        capacity_accepted_changes
+        == state_update_accepted_changes
+      )
+      && (
+        capacity_accepted_change_mask
+        == state_write_enable_mask
+      )
+      && (
+        capacity_switch_load_numerator
+        == state_update_switch_load_numerator
+      );
 
     invariant_flags[FRP_INV_STATE_UPDATE_VALID] =
-      state_update_valid &&
-      state_write_capacity_valid &&
-      same_state_hold_valid &&
-      pending_completion_writeback_valid;
+      state_update_valid
+      && state_domain_valid
+      && state_output_domain_valid
+      && state_write_capacity_valid
+      && same_state_hold_valid
+      && active_neutral_writeback_valid
+      && pending_completion_writeback_valid
+      && no_reserved_state_output
+      && state_update_no_actual_direct_events;
 
     invariant_flags[FRP_INV_NO_ACTUAL_DIRECT_EVENTS] =
-      request_no_actual_direct_events &&
-      transition_no_actual_direct_events &&
-      pending_no_actual_direct_events &&
-      state_update_no_actual_direct_events &&
-      (actual_direct_events == '0);
+      request_no_actual_direct_events
+      && transition_no_actual_direct_events
+      && pending_no_actual_direct_events
+      && capacity_no_actual_direct_events
+      && state_update_no_actual_direct_events
+      && (actual_direct_events == '0);
 
     invariant_flags[FRP_INV_NO_RESERVED_STATE] =
-      no_reserved_transition &&
-      no_pending_reserved_state &&
-      no_reserved_state_output &&
-      (reserved_state_events == '0);
+      no_reserved_transition
+      && no_pending_reserved_state
+      && no_reserved_state_output
+      && (reserved_state_events == '0);
 
     invariant_flags[FRP_INV_NO_QUEUE_OVERFLOW] =
-      request_no_queue_overflow &&
-      pending_no_queue_overflow &&
-      capacity_no_queue_overflow &&
-      (queue_overflow_events == '0);
+      request_no_queue_overflow
+      && pending_no_queue_overflow
+      && capacity_no_queue_overflow
+      && (queue_overflow_events == '0);
   end
 
 endmodule : frp_m16_core
