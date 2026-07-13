@@ -14,45 +14,94 @@
 
 ## Purpose
 
-This directory contains the first concrete SystemVerilog RTL realization layer for the:
+This directory contains the M16 RTL artifact layer for the:
 
 `Ternary Fractal Resonant Coherence Processor`
 
-The M16 RTL layer preserves the M15-qualified retained-state execution semantics and exposes the processor boundary as explicit RTL artifacts.
+M16 realizes the M15-qualified retained-state execution contract as concrete SystemVerilog RTL artifacts.
 
 M16 does not introduce a new processor model.
 
-M16 realizes the already-qualified M15 execution contract in RTL module form.
+M16 preserves the M15 execution semantics and exposes the retained-state execution boundary as RTL modules, assertion layer, deterministic smoke testbench, simulator instructions, transcript template, and closure surface.
 
-## Current Qualification Result
+## Current Qualification Status
 
-Current M16 RTL artifact-boundary result:
+Current RTL artifact-boundary status:
 
-`PASS`
+`ARTIFACT-BOUNDARY PASS`
+
+Current M16 qualification status:
+
+`M16 artifact-boundary PASS`
+
+M16 artifact-boundary status:
+
+`M16 artifact-boundary PASS`
+
+M15 inherited qualification status:
+
+`M15 41/41 PASS`
 
 Qualified workflow:
 
 `FRP M16 RTL Artifact Boundary`
 
-Passing workflow run:
+Qualified test file:
 
-`FRP M16 RTL Artifact Boundary #8`
+`tests/test_m16_rtl_artifact_manifest.py`
 
-Passing commit:
-
-`12a3431`
-
-Current external simulator result:
+External simulator status:
 
 `pending external simulator execution`
 
-Current final M16 closure result:
+Final simulator qualification status:
 
-`pending simulator transcript capture`
+`pending external simulator execution`
 
-## Preserved Processor Identity
+## M15 Inherited Qualification Status
 
-The M16 RTL layer preserves the FRP execution chain:
+M15 remains the inherited qualification base for the M16 RTL artifact layer.
+
+M15 inherited qualification status:
+
+`M15 41/41 PASS`
+
+M15 validated package digest:
+
+`703dd4b56f4b34289a2c5bc5521ad4ddc3113bdec8c38238c3244c69cb4d58df`
+
+M16 does not replace the M15 qualification boundary.
+
+M16 realizes the M15-qualified retained-state execution contract as RTL artifacts.
+
+## RTL Source Artifacts
+
+| Path | Purpose | Status |
+|---|---|---|
+| `frp_m16_pkg.sv` | canonical package, enums, constants, helper functions | present |
+| `frp_m16_scheduler.sv` | scheduler-state realization | present |
+| `frp_m16_request_lanes.sv` | request-lane calculation and arbitration boundary | present |
+| `frp_m16_pending_routes.sv` | pending-route register module | present |
+| `frp_m16_active_neutral.sv` | active-neutral transition routing | present |
+| `frp_m16_capacity_guard.sv` | transition-capacity guard | present |
+| `frp_m16_state_update.sv` | retained-state update module | present |
+| `frp_m16_core.sv` | integrated M16 RTL core | present |
+| `frp_m16_assertions.sv` | assertion layer for invariant preservation | present |
+| `frp_m16_tb.sv` | deterministic smoke testbench | present |
+
+## RTL Documentation Artifacts
+
+| Path | Purpose | Status |
+|---|---|---|
+| `README.md` | current RTL layer overview | present |
+| `ARTIFACTS.md` | RTL artifact manifest | present |
+| `SIMULATION.md` | external simulator execution instructions | present |
+| `SIMULATION_TRANSCRIPT.md` | simulator transcript placeholder | present |
+| `CLOSURE.md` | current M16 RTL closure surface | present |
+
+## Preserved Execution Chain
+
+M16 preserves the retained-state execution chain:
 
 `phase-derived ternary target`
 
@@ -66,185 +115,22 @@ The M16 RTL layer preserves the FRP execution chain:
 
 → `retained balanced ternary state`
 
-Required global invariants:
-
-`actual_direct_events = 0`
-
-`reserved_state_events = 0`
-
-`queue_overflow_events = 0`
-
 ## Canonical Balanced Ternary Encoding
 
-The M16 RTL layer preserves the canonical two-bit ternary encoding:
+M16 preserves the canonical balanced ternary encoding:
 
-| Ternary state | Encoding | Meaning |
+| Ternary state | Encoding | Status |
 |---|---|---|
-| `-1` | `2'b11` | negative retained polarity |
-| `0` | `2'b00` | active neutral state |
-| `+1` | `2'b01` | positive retained polarity |
-| reserved | `2'b10` | invalid state |
-
-The reserved encoding is forbidden in qualified execution.
+| `-1` | `2'b11` | valid |
+| `0` | `2'b00` | valid active neutral |
+| `+1` | `2'b01` | valid |
+| reserved | `2'b10` | invalid |
 
 Required invariant:
 
 `reserved_state_events = 0`
 
-## RTL Artifact Set
-
-Current M16 RTL artifacts:
-
-| Artifact | Purpose | Status |
-|---|---|---|
-| `frp_m16_pkg.sv` | canonical constants, encodings, helper functions, scheduler decoding, transition classification, request-lane calculation | present |
-| `frp_m16_scheduler.sv` | `free`, `7/1`, and `1/7` scheduler-state realization | present |
-| `frp_m16_request_lanes.sv` | deterministic request-lane arbitration | present |
-| `frp_m16_pending_routes.sv` | retained pending-route register layer | present |
-| `frp_m16_active_neutral.sv` | legal active-neutral transition generation | present |
-| `frp_m16_capacity_guard.sv` | transition-capacity enforcement | present |
-| `frp_m16_state_update.sv` | retained-state writeback | present |
-| `frp_m16_core.sv` | integrated M16 RTL core | present |
-| `frp_m16_assertions.sv` | assertion binding layer | present |
-| `frp_m16_tb.sv` | deterministic RTL smoke testbench | present |
-
-## M16 RTL Documentation
-
-Current M16 RTL documentation artifacts:
-
-| Artifact | Purpose | Status |
-|---|---|---|
-| `README.md` | RTL layer overview | current file |
-| `ARTIFACTS.md` | RTL artifact manifest | present |
-| `SIMULATION.md` | simulator execution instructions | present |
-| `SIMULATION_TRANSCRIPT.md` | simulation transcript template | present |
-| `CLOSURE.md` | RTL closure report | present |
-
-## Include Order
-
-Recommended compilation include order:
-
-    frp_m16_pkg.sv
-    frp_m16_scheduler.sv
-    frp_m16_request_lanes.sv
-    frp_m16_pending_routes.sv
-    frp_m16_active_neutral.sv
-    frp_m16_capacity_guard.sv
-    frp_m16_state_update.sv
-    frp_m16_core.sv
-    frp_m16_assertions.sv
-    frp_m16_tb.sv
-
-The package must be available before all dependent modules.
-
-The integrated core includes the required submodules.
-
-The testbench includes the integrated core and assertion layer.
-
-## Qualified Test Boundary
-
-Qualified test file:
-
-`tests/test_m16_rtl_artifact_manifest.py`
-
-The test validates:
-
-- `rtl/m16/` directory existence;
-- required RTL source artifact existence;
-- required RTL documentation artifact existence;
-- canonical balanced ternary package symbols;
-- integrated core module references;
-- assertion-layer zero-event invariants;
-- deterministic RTL smoke-testbench scope;
-- simulation instruction boundary;
-- simulation transcript placeholder boundary;
-- closure document status;
-- root README exposure;
-- project-structure exposure;
-- documentation README exposure;
-- architecture document exposure.
-
-## Qualified Workflow Boundary
-
-Qualified workflow:
-
-`.github/workflows/frp-m16-rtl-artifact-boundary.yml`
-
-Workflow name:
-
-`FRP M16 RTL Artifact Boundary`
-
-Workflow result:
-
-`PASS`
-
-Passing run:
-
-`FRP M16 RTL Artifact Boundary #8`
-
-Passing commit:
-
-`12a3431`
-
-Workflow validation command:
-
-    python -m pytest tests/test_m16_rtl_artifact_manifest.py -q
-
-## Scheduler Semantics
-
-M16 preserves three explicit processor execution modes:
-
-| Mode | Meaning |
-|---|---|
-| `free` | every enabled tick is free / commit-capable |
-| `7/1` | seven balance ticks followed by one commit tick |
-| `1/7` | one excite tick followed by seven neutralize ticks |
-
-Required inherited scheduler profiles:
-
-| Mode | Required profile |
-|---|---|
-| `free` | `16 ticks → free = 16` |
-| `7/1` | `64 ticks → balance = 56, commit = 8` |
-| `1/7` | `16 ticks → excite = 2, neutralize = 14` |
-
-## Transition-Capacity Boundary
-
-M16 preserves the inherited M15 transition boundary:
-
-`transition_fraction = 0.25`
-
-Required relation:
-
-`REQUEST_LANES = max(1, round(CELLS × transition_fraction))`
-
-Validated inherited profiles:
-
-| Cells | Request lanes | Packed state width |
-|---:|---:|---:|
-| `8` | `2` | `16 bits` |
-| `16` | `4` | `32 bits` |
-| `32` | `8` | `64 bits` |
-
-Required capacity invariant:
-
-`accepted_changes <= REQUEST_LANES`
-
-Switch-load numerator:
-
-`switch_load_numerator = accepted_changes`
-
-Switch-load relation:
-
-`switch_load = accepted_changes / CELLS`
-
-Required bound:
-
-`switch_load_peak <= transition_fraction`
-
-## Active-Neutral Routing
-
-M16 preserves mandatory active-neutral routing.
+## Active-Neutral Transition Rule
 
 Forbidden direct transitions:
 
@@ -252,19 +138,19 @@ Forbidden direct transitions:
 
 `+1 → -1`
 
-Required routed sequences:
+Required routed transitions:
 
 `-1 → 0 → +1`
 
 `+1 → 0 → -1`
 
-Required direct-transition invariant:
+Required invariant:
 
 `actual_direct_events = 0`
 
-## Pending-Route Semantics
+## Pending-Route Boundary
 
-An accepted opposite-polarity request creates a retained pending route.
+Opposite-polarity requests are routed through active neutral state `0`.
 
 For:
 
@@ -298,82 +184,138 @@ A later eligible tick completes:
 
 `0 → +1`
 
-Required pending-route invariants:
-
-`pending routes preserve requested target polarity`
-
-`pending completion starts from 0`
+Required invariant:
 
 `queue_overflow_events = 0`
 
-## Testbench Coverage
+## Transition-Capacity Boundary
 
-The current deterministic smoke testbench exercises:
+M16 preserves the inherited transition-capacity relation:
 
-- reset-to-neutral initialization;
-- free scheduler mode;
-- `7/1` scheduler mode;
-- `1/7` scheduler mode;
-- neutral release `0 → +1`;
-- neutralization `+1 → 0`;
-- opposite-polarity request `+1 → -1`;
-- active-neutral route `+1 → 0`;
-- retained pending route to `-1`;
-- pending completion `0 → -1`;
-- invariant flags;
-- zero direct opposite-polarity events;
-- zero reserved-state events;
-- zero queue-overflow events.
+`REQUEST_LANES = max(1, round(CELLS × 0.25))`
+
+Validated inherited profiles:
+
+| Cells | Request lanes |
+|---:|---:|
+| `8` | `2` |
+| `16` | `4` |
+| `32` | `8` |
+
+Required invariant:
+
+`accepted_changes <= REQUEST_LANES`
+
+Required switch-load relation:
+
+`switch_load_numerator = accepted_changes`
+
+## Scheduler Boundary
+
+M16 preserves three scheduler execution modes:
+
+| Mode | Meaning |
+|---|---|
+| `free` | every enabled tick is free / commit-capable |
+| `7/1` | seven balance ticks followed by one commit tick |
+| `1/7` | one excite tick followed by seven neutralize ticks |
+
+Required inherited scheduler profiles:
+
+| Mode | Required profile |
+|---|---|
+| `free` | `16 ticks → free = 16` |
+| `7/1` | `64 ticks → balance = 56, commit = 8` |
+| `1/7` | `16 ticks → excite = 2, neutralize = 14` |
+
+## Zero-Event Invariants
+
+The M16 RTL artifact boundary preserves the following invariant targets:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+These are artifact-boundary invariants and external simulator closure targets.
 
 ## Assertion Boundary
 
-The assertion layer checks:
+The assertion layer is defined in:
 
-- state-domain validity;
-- pending-route-domain validity;
-- scheduler validity;
-- scheduler counter consistency;
-- request accept/reject separation;
-- accepted-change capacity boundary;
-- capacity remaining relation;
-- capacity exhaustion relation;
-- switch-load numerator relation;
-- zero direct opposite-polarity events;
-- zero reserved-state events;
-- zero queue-overflow events;
-- invariant-flag validity;
-- tick-disabled hold behavior.
+`frp_m16_assertions.sv`
 
-## Current Qualification Status
+The assertion layer preserves:
 
-Current RTL artifact status:
+- no actual direct opposite-polarity transition;
+- no reserved ternary state;
+- no pending-route queue overflow.
 
-| Layer | Status |
-|---|---|
-| package constants and encodings | present |
-| scheduler RTL module | present |
-| request-lane RTL module | present |
-| pending-route RTL module | present |
-| active-neutral RTL module | present |
-| transition-capacity RTL module | present |
-| retained-state update RTL module | present |
-| integrated RTL core | present |
-| assertion binding layer | present |
-| deterministic RTL smoke testbench | present |
-| artifact-boundary workflow | PASS |
-| artifact-boundary qualification report | PASS |
-| M16 qualification index | implemented |
-| M16 qualification manifest | ACTIVE |
-| external simulator transcript | pending |
-| FPGA synthesis report | pending |
-| timing report | pending |
-| resource utilization report | pending |
+Required assertion terms:
 
-## M15 Compatibility Boundary
+`FRP_INV_NO_ACTUAL_DIRECT_EVENTS`
 
-The M16 RTL layer is designed to replay the M15 deterministic execution contract at the retained-state boundary.
+`FRP_INV_NO_RESERVED_STATE`
 
-Required compatibility chain:
+`FRP_INV_NO_QUEUE_OVERFLOW`
+
+## Deterministic Testbench Boundary
+
+The deterministic smoke testbench is defined in:
+
+`frp_m16_tb.sv`
+
+The testbench covers:
+
+- `FRP_MODE_FREE`;
+- `FRP_MODE_7_1`;
+- `FRP_MODE_1_7`;
+- active-neutral routing;
+- pending-route completion;
+- zero-event invariant counters.
+
+Required completion marker:
+
+`FRP M16 deterministic RTL testbench completed.`
+
+## External Simulator Boundary
+
+Current external simulator status:
+
+`pending external simulator execution`
+
+Simulation instructions:
+
+`SIMULATION.md`
+
+Transcript template:
+
+`SIMULATION_TRANSCRIPT.md`
+
+Required command shape:
+
+    verilator --sv --timing --assert --binary -Irtl/m16 rtl/m16/frp_m16_tb.sv
+
+Required run command:
+
+    ./obj_dir/Vfrp_m16_tb
+
+Required completion marker:
+
+    FRP M16 deterministic RTL testbench completed.
+
+Required final counters:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+## M15 to M16 Compatibility Chain
+
+Compatibility chain:
 
 `M15 quantized hardware shadow`
 
@@ -385,6 +327,8 @@ Required compatibility chain:
 
 → `M16 assertion layer`
 
+→ `M16 simulation transcript`
+
 → `M16 qualification closure`
 
 Replay target:
@@ -393,60 +337,51 @@ Replay target:
 
 The replay target is not approximate behavioral similarity.
 
-## External FPGA Review Position
+## Current Result
 
-The architecture, execution semantics, RTL boundary, and core module structure are defined inside this repository.
+Current RTL source artifact inventory:
 
-External FPGA or circuit-level review may evaluate:
+`PASS`
 
-- synthesis feasibility;
-- LUT / FF / BRAM / DSP utilization;
-- timing closure;
-- reset and clock strategy;
-- interface constraints;
-- board-level integration;
-- target FPGA class.
+Current RTL documentation artifact inventory:
 
-External review must not redefine the FRP processor semantics.
+`PASS`
 
-## Corrective Qualification Event
+Current M16 artifact-boundary workflow:
 
-The M16 artifact-boundary workflow exposed a missing required RTL source artifact:
+`PASS`
 
-`rtl/m16/frp_m16_pending_routes.sv`
+Current M16 artifact-boundary status:
 
-The missing pending-route RTL source artifact was added.
+`M16 artifact-boundary PASS`
 
-After correction, the M16 artifact-boundary workflow passed.
+Current M15 inherited qualification status:
 
-Corrected current result:
+`M15 41/41 PASS`
 
-`FRP M16 RTL Artifact Boundary #8 — PASS`
+Current public status:
 
-Corrected commit:
+`PUBLIC STATUS SYNCHRONIZED`
 
-`12a3431`
+Current external simulator status:
 
-## Closure Direction
+`pending external simulator execution`
 
-M16 final closure requires:
-
-1. artifact-boundary workflow PASS;
-2. external simulator execution;
-3. simulator transcript capture;
-4. assertion-layer PASS under simulator execution;
-5. final zero-event counter confirmation;
-6. simulation transcript update;
-7. closure report update;
-8. final M16 qualification closure document.
-
-Current state:
-
-`artifact-boundary PASS`
+## Remaining Boundary
 
 Remaining state:
 
 `external simulator transcript pending`
+
+Final M16 closure requires:
+
+- external simulator execution;
+- simulator transcript capture;
+- assertion-layer PASS;
+- final zero-event counter confirmation;
+- simulation transcript update;
+- closure report update;
+- final M16 qualification closure document.
 
 ## Author
 
