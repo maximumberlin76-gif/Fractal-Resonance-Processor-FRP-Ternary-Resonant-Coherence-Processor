@@ -1,8 +1,4 @@
-# FRP M16 RTL Simulation Instructions
-
-## Status
-
-Initial simulation instruction layer.
+# FRP M16 RTL Simulation
 
 ## Version
 
@@ -12,340 +8,689 @@ Initial simulation instruction layer.
 
 `M16 — RTL Core Realization and Execution Semantics Package`
 
-## Purpose
+## Processor
 
-This document defines the initial simulator execution instructions for the M16 RTL core realization layer of the:
+`FRP — Ternary Fractal Resonant Coherence Processor`
 
-`Ternary Fractal Resonant Coherence Processor`
+## Simulation Entry Point
 
-The simulation boundary validates that the concrete RTL artifact set preserves the M15-qualified retained-state execution semantics.
+Simulation entry file:
 
-M16 does not introduce a new processor model.
+`rtl/m16/frp_m16_tb.sv`
 
-M16 realizes the M15-qualified execution contract in RTL form and prepares the next step toward deterministic simulation transcript capture.
+Top-level simulation module:
 
-## Simulation Boundary
+`frp_m16_tb`
 
-The current simulation boundary covers:
+The testbench includes:
 
-- package loading;
-- integrated RTL core elaboration;
-- assertion binding layer;
-- deterministic smoke testbench;
-- reset-to-neutral behavior;
-- scheduler smoke profiles;
-- active-neutral routing;
-- pending-route creation;
-- pending-route completion;
-- transition-capacity boundary;
-- invariant-flag checks;
-- zero-event qualification counters.
+- `frp_m16_pkg.sv`;
+- `frp_m16_core.sv`;
+- `frp_m16_assertions.sv`.
 
-Required final simulation invariants:
+The integrated core includes:
 
-`actual_direct_events = 0`
+- `frp_m16_scheduler.sv`;
+- `frp_m16_request_lanes.sv`;
+- `frp_m16_pending_routes.sv`;
+- `frp_m16_active_neutral.sv`;
+- `frp_m16_capacity_guard.sv`;
+- `frp_m16_state_update.sv`.
 
-`reserved_state_events = 0`
-
-`queue_overflow_events = 0`
-
-## RTL Artifact Set
-
-The simulation boundary uses the following files:
-
-| File | Role |
-|---|---|
-| `frp_m16_pkg.sv` | constants, encodings, helper functions |
-| `frp_m16_scheduler.sv` | scheduler execution modes |
-| `frp_m16_request_lanes.sv` | request-lane arbitration |
-| `frp_m16_pending_routes.sv` | pending-route registers |
-| `frp_m16_active_neutral.sv` | active-neutral transition generation |
-| `frp_m16_capacity_guard.sv` | transition-capacity enforcement |
-| `frp_m16_state_update.sv` | retained-state writeback |
-| `frp_m16_core.sv` | integrated RTL core |
-| `frp_m16_assertions.sv` | assertion binding layer |
-| `frp_m16_tb.sv` | deterministic smoke testbench |
-
-## Recommended Working Directory
-
-Run simulation commands from the repository root.
-
-Expected RTL directory:
+SystemVerilog include path:
 
 `rtl/m16`
 
-## Include Path
+## Build and Execution
 
-The simulator must include:
+Commands are executed from the repository root.
 
-`rtl/m16`
+Check Verilator:
 
-The SystemVerilog files use local include directives for the M16 RTL layer.
+```
+verilator --version
+```
 
-## Verilator Command Shape
+Check the C++ compiler:
 
-Reference command shape:
+```
+g++ --version
+```
 
-    verilator --sv --timing --assert --binary -Irtl/m16 rtl/m16/frp_m16_tb.sv
+Define build and log paths:
 
-Expected generated binary location:
+```
+BUILD_DIR="${TMPDIR:-/tmp}/frp_m16_obj"
+BUILD_LOG="${TMPDIR:-/tmp}/frp_m16_build.log"
+EXECUTION_LOG="${TMPDIR:-/tmp}/frp_m16_execution.log"
 
-    obj_dir/Vfrp_m16_tb
+rm -rf "${BUILD_DIR}"
+rm -f "${BUILD_LOG}"
+rm -f "${EXECUTION_LOG}"
 
-Run command:
+mkdir -p "${BUILD_DIR}"
+```
 
-    ./obj_dir/Vfrp_m16_tb
+Build the M16 testbench:
 
-## Alternative File-List Shape
+```
+verilator \
+  --sv \
+  --timing \
+  --assert \
+  --binary \
+  --top-module frp_m16_tb \
+  -Irtl/m16 \
+  --Mdir "${BUILD_DIR}" \
+  rtl/m16/frp_m16_tb.sv \
+  2>&1 | tee "${BUILD_LOG}"
+```
 
-A simulator may also be driven by an explicit file-list boundary.
+Generated executable:
 
-Recommended order:
+```
+${BUILD_DIR}/Vfrp_m16_tb
+```
 
-    rtl/m16/frp_m16_pkg.sv
-    rtl/m16/frp_m16_scheduler.sv
-    rtl/m16/frp_m16_request_lanes.sv
-    rtl/m16/frp_m16_pending_routes.sv
-    rtl/m16/frp_m16_active_neutral.sv
-    rtl/m16/frp_m16_capacity_guard.sv
-    rtl/m16/frp_m16_state_update.sv
-    rtl/m16/frp_m16_core.sv
-    rtl/m16/frp_m16_assertions.sv
-    rtl/m16/frp_m16_tb.sv
+Check the executable:
 
-The package must be visible before all dependent modules.
+```
+test -x "${BUILD_DIR}/Vfrp_m16_tb"
+```
 
-## Expected Testbench Scope
+Run the testbench:
 
-The deterministic smoke testbench exercises:
+```
+"${BUILD_DIR}/Vfrp_m16_tb" \
+  2>&1 | tee "${EXECUTION_LOG}"
+```
 
-- reset-to-neutral retained-state initialization;
-- reset-to-zero pending-route initialization;
-- free scheduler mode;
-- `7/1` scheduler smoke profile;
-- `1/7` scheduler smoke profile;
-- neutral release `0 → +1`;
-- neutralization `+1 → 0`;
-- opposite-polarity request `+1 → -1`;
-- active-neutral route `+1 → 0`;
-- retained pending route to `-1`;
-- pending-route completion `0 → -1`;
-- invariant flag checks;
-- final zero-event qualification counters.
+## Complete Command Sequence
 
-## Expected Console Markers
+```
+set -euo pipefail
 
-A successful deterministic smoke simulation should emit:
+BUILD_DIR="${TMPDIR:-/tmp}/frp_m16_obj"
+BUILD_LOG="${TMPDIR:-/tmp}/frp_m16_build.log"
+EXECUTION_LOG="${TMPDIR:-/tmp}/frp_m16_execution.log"
 
-    FRP M16 deterministic RTL testbench completed.
+rm -rf "${BUILD_DIR}"
+rm -f "${BUILD_LOG}"
+rm -f "${EXECUTION_LOG}"
 
-The final report should include:
+mkdir -p "${BUILD_DIR}"
 
-    CELLS=8 REQUEST_LANES=2
-    actual_direct_events=0
-    reserved_state_events=0
-    queue_overflow_events=0
+verilator \
+  --sv \
+  --timing \
+  --assert \
+  --binary \
+  --top-module frp_m16_tb \
+  -Irtl/m16 \
+  --Mdir "${BUILD_DIR}" \
+  rtl/m16/frp_m16_tb.sv \
+  2>&1 | tee "${BUILD_LOG}"
 
-The exact `ticks_recorded` value is determined by the current deterministic smoke sequence.
+test -x "${BUILD_DIR}/Vfrp_m16_tb"
 
-## Required PASS Conditions
+"${BUILD_DIR}/Vfrp_m16_tb" \
+  2>&1 | tee "${EXECUTION_LOG}"
+```
 
-A simulation pass requires:
+## Testbench Configuration
 
-`actual_direct_events = 0`
+The testbench uses:
 
-`reserved_state_events = 0`
+```
+CELLS = 8
+STATE_BITS = 2
+REQUEST_LANES = 2
+COUNTER_BITS = 32
+```
 
-`queue_overflow_events = 0`
+Transition-capacity relation:
 
-`invariant_flags[FRP_INV_NO_ACTUAL_DIRECT_EVENTS] = 1`
+`REQUEST_LANES = max(1, round(CELLS × 0.25))`
 
-`invariant_flags[FRP_INV_NO_RESERVED_STATE] = 1`
-
-`invariant_flags[FRP_INV_NO_QUEUE_OVERFLOW] = 1`
-
-The assertion layer must not emit a fatal assertion failure.
-
-The testbench must reach:
-
-`$finish`
-
-## Assertion Boundary
-
-The assertion layer checks:
-
-- valid retained-state ternary domain;
-- valid pending-route ternary domain;
-- valid scheduler mode;
-- valid scheduler state;
-- scheduler counter sum;
-- request accept/reject separation;
-- accepted cell count within `REQUEST_LANES`;
-- accepted change count within `REQUEST_LANES`;
-- capacity remaining relation;
-- capacity exhaustion relation;
-- switch-load numerator relation;
-- zero direct opposite-polarity events;
-- zero reserved-state events;
-- zero queue-overflow events;
-- invariant-flag validity;
-- tick-disabled hold behavior.
-
-## Scheduler Simulation Targets
-
-The simulation must preserve the scheduler identities:
-
-| Mode | Required behavior |
-|---|---|
-| `free` | every enabled tick is free / commit-capable |
-| `7/1` | seven balance ticks followed by one commit tick |
-| `1/7` | one excite tick followed by seven neutralize ticks |
-
-The smoke testbench currently exercises all three modes.
-
-## Transition Simulation Targets
-
-The simulation must preserve legal transition behavior:
-
-| Transition | Status |
-|---|---|
-| `0 → +1` | legal |
-| `0 → -1` | legal |
-| `+1 → 0` | legal |
-| `-1 → 0` | legal |
-| `+1 → -1` | forbidden direct transition |
-| `-1 → +1` | forbidden direct transition |
-
-Required routed sequences:
-
-`+1 → 0 → -1`
-
-`-1 → 0 → +1`
-
-## Capacity Simulation Targets
-
-For the current smoke profile:
-
-`CELLS = 8`
-
-Required relation:
+For eight retained cells:
 
 `REQUEST_LANES = 2`
 
-Required invariant:
+## Balanced Ternary Encoding
 
-`accepted_changes <= REQUEST_LANES`
+| State | Encoding |
+|---|---|
+| `-1` | `2'b11` |
+| `0` | `2'b00` |
+| `+1` | `2'b01` |
+| reserved | `2'b10` |
 
-Required switch-load numerator:
+Reset establishes:
 
-`switch_load_numerator = accepted_changes`
+```
+state_out = 0
+pending_route_out = 0
+ticks_recorded_q = 0
+```
 
-## Pending-Route Simulation Targets
+The state `0` is the active neutral processor state.
 
-For an opposite-polarity request:
+## Clock
 
-`+1 → -1`
+The testbench clock is generated by:
 
-Required M16 behavior:
+```
+forever #5 clk = ~clk;
+```
+
+Clock period:
+
+`10 ns`
+
+Requests are prepared at the negative clock edge.
+
+Retained state and pending-route registers update at the positive clock edge.
+
+Results are checked after the following negative clock edge.
+
+## Reset Sequence
+
+For each scheduler mode, the testbench:
+
+1. disables tick execution;
+2. clears the request lanes;
+3. selects the scheduler mode;
+4. drives `rst_n = 0`;
+5. holds reset for three negative clock edges;
+6. drives `rst_n = 1`;
+7. waits two negative clock edges;
+8. checks retained state;
+9. checks pending-route state;
+10. checks scheduler counters.
+
+## Free Mode
+
+The free-mode sequence contains:
+
+`16 enabled ticks`
+
+Scheduler relation:
+
+```
+free = 16
+balance = 0
+commit = 0
+excite = 0
+neutralize = 0
+```
+
+The `free` scheduler state is commit-capable and neutralize-capable.
+
+### Tick 0
+
+Request:
+
+`cell 0: 0 → +1`
+
+Result:
+
+```
+state[0] = +1
+pending_route[0] = 0
+```
+
+### Tick 1
+
+Request:
+
+`cell 0: +1 → -1`
+
+First active-neutral route leg:
+
+```
+state[0] = 0
+pending_route[0] = -1
+```
+
+Event relation:
+
+```
+requested_direct_events = 1
+prevented_direct_events = 1
+neutral_routed_events = 1
+actual_direct_events = 0
+```
+
+### Tick 2
+
+Pending-route completion:
+
+```
+state[0] = -1
+pending_route[0] = 0
+```
+
+Completed route:
+
+`+1 → 0 → -1`
+
+### Tick 3
+
+Request:
+
+`cell 0: -1 → +1`
+
+First active-neutral route leg:
+
+```
+state[0] = 0
+pending_route[0] = +1
+```
+
+Event relation:
+
+```
+requested_direct_events = 1
+prevented_direct_events = 1
+neutral_routed_events = 1
+actual_direct_events = 0
+```
+
+### Tick 4
+
+Pending-route completion:
+
+```
+state[0] = +1
+pending_route[0] = 0
+```
+
+Completed route:
+
+`-1 → 0 → +1`
+
+### Tick 5
+
+Two state-changing requests execute on the same tick:
+
+```
+cell 1: 0 → +1
+cell 2: 0 → +1
+```
+
+Capacity relation:
+
+```
+accepted_changes = 2
+capacity_remaining = 0
+capacity_exhausted = 1
+switch_load_numerator = 2
+```
+
+## Scheduler Counter Clear
+
+After the free-mode sequence:
+
+```
+clear_counters = 1
+tick_enable = 0
+```
+
+The operation clears:
+
+- `ticks_recorded_q`;
+- free count;
+- balance count;
+- commit count;
+- excite count;
+- neutralize count.
+
+The operation preserves:
+
+- retained balanced ternary state;
+- retained pending-route state.
+
+## 7/1 Mode
+
+The `7/1` sequence contains:
+
+`64 enabled ticks`
+
+Repeating eight-tick sequence:
+
+```
+balance
+balance
+balance
+balance
+balance
+balance
+balance
+commit
+```
+
+Scheduler relation:
+
+```
+balance = 56
+commit = 8
+free = 0
+excite = 0
+neutralize = 0
+```
+
+### Ticks 0–6
+
+Request:
+
+`cell 0: 0 → +1`
+
+The seven balance ticks retain:
+
+```
+state[0] = 0
+pending_route[0] = 0
+```
+
+### Tick 7
+
+Scheduler state:
+
+`commit`
+
+Result:
+
+```
+state[0] = +1
+pending_route[0] = 0
+```
+
+### Tick 8
+
+Scheduler state:
+
+`balance`
+
+Request:
+
+`cell 0: +1 → -1`
+
+First active-neutral route leg:
+
+```
+state[0] = 0
+pending_route[0] = -1
+```
+
+### Ticks 9–14
+
+Scheduler state:
+
+`balance`
+
+The pending route remains retained:
+
+```
+state[0] = 0
+pending_route[0] = -1
+```
+
+### Tick 15
+
+Scheduler state:
+
+`commit`
+
+Pending-route completion:
+
+```
+state[0] = -1
+pending_route[0] = 0
+```
+
+The `7/1` scheduler separates:
 
 `+1 → 0`
 
-with:
-
-`pending_route = -1`
-
-Later eligible completion:
+from:
 
 `0 → -1`
 
-Required pending-route invariants:
+across the balance interval and the following commit tick.
 
-`pending routes preserve requested target polarity`
+## 1/7 Mode
 
-`pending completion starts from 0`
+The `1/7` sequence contains:
 
-`queue_overflow_events = 0`
+`16 enabled ticks`
 
-## Failure Classification
+Repeating eight-tick sequence:
 
-Any simulation failure should be classified by boundary:
+```
+excite
+neutralize
+neutralize
+neutralize
+neutralize
+neutralize
+neutralize
+neutralize
+```
 
-| Failure category | Boundary |
-|---|---|
-| `compile_failure` | simulator cannot parse or elaborate RTL |
-| `scheduler_failure` | scheduler mode or counter mismatch |
-| `state_domain_failure` | reserved ternary state emitted |
-| `request_lane_failure` | request accept/reject mismatch |
-| `pending_route_failure` | pending route creation or completion mismatch |
-| `active_neutral_failure` | direct opposite-polarity transition detected |
-| `capacity_failure` | accepted changes exceed `REQUEST_LANES` |
-| `state_update_failure` | retained-state writeback mismatch |
-| `assertion_failure` | assertion layer reports failure |
-| `counter_failure` | final zero-event counters fail |
+Scheduler relation:
 
-Unclassified simulation failure is not allowed.
+```
+excite = 2
+neutralize = 14
+free = 0
+balance = 0
+commit = 0
+```
 
-## Current Simulation Status
+### Tick 0
 
-Current repository status:
+Scheduler state:
 
-| Layer | Status |
-|---|---|
-| RTL files | implemented |
-| integrated core | implemented |
-| assertion layer | implemented |
-| deterministic smoke testbench | implemented |
-| simulation instructions | current file |
-| external simulator transcript | pending |
-| CI simulator workflow | pending |
-| deterministic replay adapter | pending |
-| M16 closure report | pending |
+`excite`
 
-## M15 Compatibility Position
+Request:
 
-The simulation layer is a preliminary RTL smoke boundary.
+`cell 0: 0 → +1`
 
-The full M15 replay boundary remains:
+Result:
 
-`M15 quantized hardware shadow`
+```
+state[0] = +1
+pending_route[0] = 0
+```
 
-→ `M15 cycle-exact integer golden trace`
+### Tick 1
 
-→ `M15 deterministic RTL comparison vectors`
+Scheduler state:
 
-→ `M16 RTL core`
+`neutralize`
 
-→ `M16 assertion layer`
+Request:
 
-→ `M16 deterministic replay transcript`
+`cell 0: +1 → -1`
 
-→ `M16 qualification closure`
+First active-neutral route leg:
 
-Replay target:
+```
+state[0] = 0
+pending_route[0] = -1
+```
 
-`deterministic boundary equivalence`
+### Ticks 2–7
 
-## External FPGA Review Position
+Scheduler state:
 
-After simulation transcript capture, the M16 RTL layer can be prepared for external FPGA review.
+`neutralize`
 
-External review may evaluate:
+The pending route remains retained:
 
-- synthesis feasibility;
-- LUT utilization;
-- FF utilization;
-- BRAM usage;
-- DSP usage;
-- timing closure;
-- clock strategy;
-- reset strategy;
-- target FPGA class.
+```
+state[0] = 0
+pending_route[0] = -1
+```
 
-External review must not redefine FRP processor semantics.
+### Tick 8
 
-## Next Step
+Scheduler state:
 
-The next file should define the simulation transcript placeholder and result format:
+`excite`
+
+Pending-route completion:
+
+```
+state[0] = -1
+pending_route[0] = 0
+```
+
+The `1/7` scheduler separates:
+
+`+1 → 0`
+
+from:
+
+`0 → -1`
+
+across the neutralize interval and the following excite tick.
+
+## Assertion Set
+
+The testbench executes the assertion module with:
+
+```
+--assert
+```
+
+The assertion set checks:
+
+- canonical retained-state encoding;
+- canonical pending-route encoding;
+- reset to active neutral `0`;
+- retained-state stability while `tick_enable = 0`;
+- pending-route stability while `tick_enable = 0`;
+- state changes only through `accepted_change_mask`;
+- absence of direct opposite-polarity writeback;
+- active-neutral first-leg execution;
+- retention of the opposite pending polarity;
+- pending-route stability during deferral;
+- completion only from retained state `0`;
+- pending-route clearing after completion;
+- scheduler-mode validity;
+- scheduler-state validity;
+- scheduler-counter relation;
+- request acceptance and rejection separation;
+- transition-capacity relation;
+- switch-load relation;
+- integrated invariant flags.
+
+## Terminal Output
+
+The testbench terminates with:
+
+```
+FRP M16 deterministic RTL testbench completed.
+CELLS=8 REQUEST_LANES=2
+ticks_recorded=16
+actual_direct_events=0
+reserved_state_events=0
+queue_overflow_events=0
+```
+
+The final `ticks_recorded=16` value belongs to the final `1/7` sequence.
+
+## Result Validation
+
+```
+set -euo pipefail
+
+grep -Fqx \
+  "FRP M16 deterministic RTL testbench completed." \
+  "${EXECUTION_LOG}"
+
+grep -Fqx \
+  "CELLS=8 REQUEST_LANES=2" \
+  "${EXECUTION_LOG}"
+
+grep -Fqx \
+  "ticks_recorded=16" \
+  "${EXECUTION_LOG}"
+
+grep -Fqx \
+  "actual_direct_events=0" \
+  "${EXECUTION_LOG}"
+
+grep -Fqx \
+  "reserved_state_events=0" \
+  "${EXECUTION_LOG}"
+
+grep -Fqx \
+  "queue_overflow_events=0" \
+  "${EXECUTION_LOG}"
+```
+
+## Execution Relations
+
+```
+free ticks = 16
+
+7/1:
+balance ticks = 56
+commit ticks = 8
+
+1/7:
+excite ticks = 2
+neutralize ticks = 14
+
++1 → 0 → -1 executed
+
+-1 → 0 → +1 executed
+
+pending polarity retained across scheduler-ineligible ticks
+
+pending completion executed only from active neutral 0
+
+accepted_changes <= REQUEST_LANES
+
+capacity_remaining = REQUEST_LANES - accepted_changes
+
+capacity_exhausted = (accepted_changes == REQUEST_LANES)
+
+switch_load_numerator = accepted_changes
+
+actual_direct_events = 0
+
+reserved_state_events = 0
+
+queue_overflow_events = 0
+```
+
+## Repository State
+
+Check the repository after execution:
+
+```
+git status --short
+```
+
+The simulator files remain outside the repository:
+
+```
+${TMPDIR:-/tmp}/frp_m16_obj
+${TMPDIR:-/tmp}/frp_m16_build.log
+${TMPDIR:-/tmp}/frp_m16_execution.log
+```
+
+The contents of:
+
+```
+${EXECUTION_LOG}
+```
+
+are recorded in:
 
 `rtl/m16/SIMULATION_TRANSCRIPT.md`
 
