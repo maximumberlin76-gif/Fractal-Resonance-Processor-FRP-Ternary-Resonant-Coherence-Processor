@@ -13,27 +13,21 @@
         M16 — RTL Core Realization and Execution Semantics Package
 
     Purpose:
-        Compute the deterministic request-lane arbitration boundary for the
-        M16 retained-state RTL execution layer.
+        Compute deterministic request-lane admission for the M16 retained-state
+        RTL execution layer.
 
-        This module preserves:
+        Preserved semantics:
+            - CELLS parameterization;
+            - retained current_state array;
+            - target_state array;
+            - request_mask generation;
+            - accepted_mask generation;
+            - deterministic REQUEST_LANES capacity;
+            - requested_changes counter;
+            - accepted_changes counter.
 
-        - CELLS parameterization;
-        - current_state indexed by element_index;
-        - target_state indexed by element_index;
-        - request_mask generation;
-        - accepted_mask generation;
-        - deterministic REQUEST_LANES capacity;
-        - requested_changes counting;
-        - accepted_changes counting.
-
-        The module does not perform active-neutral routing.
-        It only determines which requested state changes are admitted into
-        the current execution tick.
-
-    Verilator portability:
-        The local identifier "cell" is not used.
-        Dynamic packed-vector bit assignment is avoided.
+        This module does not perform active-neutral routing.
+        It only admits requested changes into the current execution tick.
 */
 
 `timescale 1ns / 1ps
@@ -61,38 +55,88 @@ module frp_m16_request_lanes #(
 
     localparam int REQUEST_LANES_INT = frp_calc_request_lanes(CELLS);
 
-    logic [CELLS-1:0] next_request_mask;
-    logic [CELLS-1:0] next_accepted_mask;
+    localparam logic [COUNTER_BITS-1:0] REQUEST_LANES_VALUE =
+        REQUEST_LANES_INT;
+
+    localparam logic [COUNTER_BITS-1:0] COUNTER_ONE =
+        {{(COUNTER_BITS - 1){1'b0}}, 1'b1};
+
+    localparam logic [CELLS-1:0] ONE_HOT_LSB =
+        {{(CELLS - 1){1'b0}}, 1'b1};
+
+    logic [CELLS-1:0] request_mask_next;
+    logic [CELLS-1:0] accepted_mask_next;
     logic [CELLS-1:0] one_hot_mask;
 
-    logic [COUNTER_BITS-1:0] next_requested_changes;
-    logic [COUNTER_BITS-1:0] next_accepted_changes;
+    logic [COUNTER_BITS-1:0] requested_changes_next;
+    logic [COUNTER_BITS-1:0] accepted_changes_next;
 
     int element_index;
     int accepted_count;
 
-    always_comb begin
-        next_request_mask      = '0;
-        next_accepted_mask     = '0;
-        next_requested_changes = '0;
-        next_accepted_changes  = '0;
-        accepted_count         = 0;
-        one_hot_mask           = '0;
+    function automatic logic request_is_valid_change(
+        input frp_tern_t current_value,
+        input frp_tern_t target_value
+    );
+        begin
+            request_is_valid_change =
+                frp_is_valid_ternary(current_value)
+                && frp_is_valid_ternary(target_value)
+                && (current_value != target_value);
+        end
+    endfunction
 
-        for (element_index = 0; element_index < CELLS; element_index = element_index + 1) begin
-            one_hot_mask = {{(CELLS - 1){1'b0}}, 1'b1} << element_index;
+    function automatic logic admission_capacity_available(
+        input int current_accepted_count
+    );
+        begin
+            admission_capacity_available =
+                (current_accepted_count < REQUEST_LANES_INT);
+        end
+    endfunction
+
+    function automatic logic [CELLS-1:0] one_hot_for_index(
+        input int requested_index
+    );
+        begin
+            one_hot_for_index = ONE_HOT_LSB << requested_index;
+        end
+    endfunction
+
+    always_comb begin
+        request_mask_next      = '0;
+        accepted_mask_next     = '0;
+        requested_changes_next = '0;
+        accepted_changes_next  = '0;
+        one_hot_mask           = '0;
+        accepted_count         = 0;
+
+        for (
+            element_index = 0;
+            element_index < CELLS;
+            element_index = element_index + 1
+        ) begin
+            one_hot_mask = one_hot_for_index(element_index);
 
             if (
-                frp_is_valid_ternary(current_state[element_index])
-                && frp_is_valid_ternary(target_state[element_index])
-                && (current_state[element_index] != target_state[element_index])
+                request_is_valid_change(
+                    current_state[element_index],
+                    target_state[element_index]
+                )
             ) begin
-                next_request_mask = next_request_mask | one_hot_mask;
-                next_requested_changes = next_requested_changes + 1;
+                request_mask_next =
+                    request_mask_next | one_hot_mask;
 
-                if (accepted_count < REQUEST_LANES_INT) begin
-                    next_accepted_mask = next_accepted_mask | one_hot_mask;
-                    next_accepted_changes = next_accepted_changes + 1;
+                requested_changes_next =
+                    requested_changes_next + COUNTER_ONE;
+
+                if (admission_capacity_available(accepted_count)) begin
+                    accepted_mask_next =
+                        accepted_mask_next | one_hot_mask;
+
+                    accepted_changes_next =
+                        accepted_changes_next + COUNTER_ONE;
+
                     accepted_count = accepted_count + 1;
                 end
             end
@@ -103,15 +147,15 @@ module frp_m16_request_lanes #(
         if (!rst_n) begin
             request_mask      <= '0;
             accepted_mask     <= '0;
-            request_lanes     <= REQUEST_LANES_INT;
+            request_lanes     <= REQUEST_LANES_VALUE;
             requested_changes <= '0;
             accepted_changes  <= '0;
         end else if (enable) begin
-            request_mask      <= next_request_mask;
-            accepted_mask     <= next_accepted_mask;
-            request_lanes     <= REQUEST_LANES_INT;
-            requested_changes <= next_requested_changes;
-            accepted_changes  <= next_accepted_changes;
+            request_mask      <= request_mask_next;
+            accepted_mask     <= accepted_mask_next;
+            request_lanes     <= REQUEST_LANES_VALUE;
+            requested_changes <= requested_changes_next;
+            accepted_changes  <= accepted_changes_next;
         end
     end
 
