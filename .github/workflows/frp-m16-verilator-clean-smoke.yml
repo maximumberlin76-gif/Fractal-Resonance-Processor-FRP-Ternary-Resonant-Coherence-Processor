@@ -10,23 +10,48 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: frp-m16-verilator-execution-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   m16-verilator-execution-smoke:
+    name: M16 Verilator execution smoke
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - name: Verify M16 RTL graph
+      - name: Verify clean checkout state
         shell: bash
         run: |
-          python - <<'PY'
+          set -euo pipefail
+
+          git diff --exit-code
+
+          if [ -n "$(git status --short)" ]; then
+            echo "ERROR: checkout contains uncommitted files."
+            git status --short
+            exit 1
+          fi
+
+          echo "PASS: checkout state is clean."
+
+      - name: Verify M16 RTL module and build graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -o pipefail
+
+          python - <<'PY' 2>&1 | tee m16_rtl_graph.log
           from pathlib import Path
           import re
           import sys
 
           root = Path("rtl/m16")
+
           definitions = {
               "frp_m16_scheduler": "frp_m16_scheduler.sv",
               "frp_m16_request_lanes": "frp_m16_request_lanes.sv",
@@ -38,6 +63,7 @@ jobs:
               "frp_m16_assertions": "frp_m16_assertions.sv",
               "frp_m16_tb": "frp_m16_tb.sv",
           }
+
           instances = {
               "frp_m16_scheduler": "u_scheduler",
               "frp_m16_request_lanes": "u_request_lanes",
@@ -46,110 +72,19 @@ jobs:
               "frp_m16_pending_routes": "u_pending_routes",
               "frp_m16_state_update": "u_state_update",
           }
-          required = ["frp_m16_pkg.sv", *definitions.values()]
-          errors = []
 
-          def clean(text):
-              text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
-              return re.sub(r"//.*", "", text)
-
-          def close_paren(text, start):
-              depth = 0
-              for index in range(start, len(text)):
-                  depth += text[index] == "("
-                  depth -= text[index] == ")"
-                  if depth == 0:
-                      return index
-              raise ValueError("unmatched parenthesis")
-
-          def module_ports(text, module):
-              text = clean(text)
-              match = re.search(rf"\bmodule\s+{module}\b", text)
-              if not match:
-                  return set()
-
-              cursor = match.end()
-              parameter = re.match(r"\s*#\s*\(", text[cursor:])
-
-              if parameter:
-                  start = cursor + parameter.group(0).rfind("(")
-                  cursor = close_paren(text, start) + 1
-
-              start = text.find("(", cursor)
-              end = close_paren(text, start)
-              header = text[start + 1:end]
-              ports = set()
-
-              for item in re.split(
-                  r",(?=\s*(?:input|output|inout)\b)",
-                  header,
-              ):
-                  found = re.search(
-                      r"\b(?:input|output|inout)\b.*?"
-                      r"\b([A-Za-z_]\w*)\s*$",
-                      item.strip(),
-                      flags=re.S,
-                  )
-                  if found:
-                      ports.add(found.group(1))
-
-              return ports
-
-          def instance_ports(text, module, instance):
-              text = clean(text)
-              match = re.search(rf"\b{module}\b\s*#\s*\(", text)
-
-              if not match:
-                  return set()
-
-              start = text.find("(", match.start())
-              end = close_paren(text, start)
-              tail = text[end + 1:]
-              found = re.match(rf"\s*{instance}\s*\(", tail)
-
-              if not found:
-                  return set()
-
-              start = end + 1 + found.group(0).rfind("(")
-              end = close_paren(text, start)
-
-              return set(
-                  re.findall(
-                      r"\.([A-Za-z_]\w*)\s*\(",
-                      text[start + 1:end],
-                  )
-              )
-
-          for filename in required:
-              if not (root / filename).is_file():
-                  errors.append(f"missing rtl/m16/{filename}")
-
-          if errors:
-              print("\n".join(errors))
-              sys.exit(1)
-
-          texts = {
-              name: (root / name).read_text(encoding="utf-8")
-              for name in required
-          }
-
-          core = texts["frp_m16_core.sv"]
-          tb = texts["frp_m16_tb.sv"]
-
-          if not re.search(
-              r"(?m)^\s*package\s+frp_m16_pkg\b",
-              texts["frp_m16_pkg.sv"],
-          ):
-              errors.append("frp_m16_pkg package definition missing")
-
-          for module, filename in definitions.items():
-              if not re.search(
-                  rf"(?m)^\s*module\s+{module}\b",
-                  texts[filename],
-              ):
-                  errors.append(
-                      f"{filename}: module {module} missing"
-                  )
+          required_files = [
+              "frp_m16_pkg.sv",
+              "frp_m16_scheduler.sv",
+              "frp_m16_request_lanes.sv",
+              "frp_m16_pending_routes.sv",
+              "frp_m16_active_neutral.sv",
+              "frp_m16_capacity_guard.sv",
+              "frp_m16_state_update.sv",
+              "frp_m16_core.sv",
+              "frp_m16_assertions.sv",
+              "frp_m16_tb.sv",
+          ]
 
           expected_core_includes = [
               "frp_m16_pkg.sv",
@@ -160,104 +95,419 @@ jobs:
               "frp_m16_capacity_guard.sv",
               "frp_m16_state_update.sv",
           ]
+
           expected_tb_includes = [
               "frp_m16_pkg.sv",
               "frp_m16_core.sv",
               "frp_m16_assertions.sv",
           ]
 
-          def includes(text):
+          errors = []
+
+          def strip_comments(text: str) -> str:
+              text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+              return re.sub(r"//.*", "", text)
+
+          def matching_parenthesis(text: str, start: int) -> int:
+              depth = 0
+
+              for index in range(start, len(text)):
+                  if text[index] == "(":
+                      depth += 1
+                  elif text[index] == ")":
+                      depth -= 1
+
+                      if depth == 0:
+                          return index
+
+              raise ValueError("unmatched parenthesis")
+
+          def module_ports(
+              text: str,
+              module_name: str,
+          ) -> set[str]:
+              source = strip_comments(text)
+
+              module_match = re.search(
+                  rf"\bmodule\s+{re.escape(module_name)}\b",
+                  source,
+              )
+
+              if module_match is None:
+                  return set()
+
+              cursor = module_match.end()
+
+              parameter_match = re.match(
+                  r"\s*#\s*\(",
+                  source[cursor:],
+              )
+
+              if parameter_match is not None:
+                  parameter_start = (
+                      cursor
+                      + parameter_match.group(0).rfind("(")
+                  )
+
+                  cursor = (
+                      matching_parenthesis(
+                          source,
+                          parameter_start,
+                      )
+                      + 1
+                  )
+
+              port_start = source.find("(", cursor)
+
+              if port_start < 0:
+                  return set()
+
+              port_end = matching_parenthesis(
+                  source,
+                  port_start,
+              )
+
+              header = source[
+                  port_start + 1:
+                  port_end
+              ]
+
+              ports = set()
+
+              declarations = re.split(
+                  r",(?=\s*(?:input|output|inout)\b)",
+                  header,
+              )
+
+              for declaration in declarations:
+                  port_match = re.search(
+                      r"\b(?:input|output|inout)\b.*?"
+                      r"\b([A-Za-z_]\w*)\s*$",
+                      declaration.strip(),
+                      flags=re.S,
+                  )
+
+                  if port_match is not None:
+                      ports.add(port_match.group(1))
+
+              return ports
+
+          def instance_ports(
+              text: str,
+              module_name: str,
+              instance_name: str,
+          ) -> set[str]:
+              source = strip_comments(text)
+
+              instance_match = re.search(
+                  rf"\b{re.escape(module_name)}\b"
+                  r"\s*#\s*\(",
+                  source,
+              )
+
+              if instance_match is None:
+                  return set()
+
+              parameter_start = source.find(
+                  "(",
+                  instance_match.start(),
+              )
+
+              parameter_end = matching_parenthesis(
+                  source,
+                  parameter_start,
+              )
+
+              remainder = source[
+                  parameter_end + 1:
+              ]
+
+              name_match = re.match(
+                  rf"\s*{re.escape(instance_name)}\s*\(",
+                  remainder,
+              )
+
+              if name_match is None:
+                  return set()
+
+              port_start = (
+                  parameter_end
+                  + 1
+                  + name_match.group(0).rfind("(")
+              )
+
+              port_end = matching_parenthesis(
+                  source,
+                  port_start,
+              )
+
+              body = source[
+                  port_start + 1:
+                  port_end
+              ]
+
+              return set(
+                  re.findall(
+                      r"\.([A-Za-z_]\w*)\s*\(",
+                      body,
+                  )
+              )
+
+          def include_list(text: str) -> list[str]:
               return re.findall(
                   r'^\s*`include\s+"([^"]+)"',
                   text,
                   flags=re.M,
               )
 
-          if includes(core) != expected_core_includes:
-              errors.append(
-                  "frp_m16_core.sv include graph mismatch"
-              )
+          print("==== RTL/M16 FILES ====")
 
-          if includes(tb) != expected_tb_includes:
-              errors.append(
-                  "frp_m16_tb.sv include graph mismatch"
-              )
+          actual_files = sorted(
+              path.name
+              for path in root.glob("*.sv")
+          )
 
-          print("MODULE / INSTANCE MAP")
+          for filename in actual_files:
+              print(filename)
 
-          for module, instance in instances.items():
-              defined = module_ports(
-                  texts[definitions[module]],
-                  module,
-              )
-              connected = instance_ports(
-                  core,
-                  module,
-                  instance,
-              )
+          for filename in required_files:
+              path = root / filename
 
-              if not connected:
+              if not path.is_file():
                   errors.append(
-                      f"missing instance: {module} {instance}"
-                  )
-                  continue
-
-              if defined != connected:
-                  errors.append(
-                      f"{instance} port mismatch; "
-                      f"missing={sorted(defined - connected)} "
-                      f"unknown={sorted(connected - defined)}"
-                  )
-
-              print(
-                  f"{module} -> {instance} -> "
-                  f"{definitions[module]} "
-                  f"({len(connected)} ports)"
-              )
-
-          for filename, text in texts.items():
-              if re.search(r"\bcell\b", text):
-                  errors.append(
-                      f"standalone lowercase cell: {filename}"
-                  )
-
-              if re.search(
-                  r"\bdefault\s+disable\s+iff\b",
-                  text,
-              ):
-                  errors.append(
-                      f"default disable iff: {filename}"
-                  )
-
-              if re.search(r"\bfrp_tern_t\b", text):
-                  errors.append(
-                      f"legacy frp_tern_t interface: {filename}"
+                      f"missing rtl/m16/{filename}"
                   )
 
           if errors:
-              print("INSPECTION FAILED")
-              print(
-                  "\n".join(
-                      f"- {error}"
-                      for error in errors
-                  )
-              )
+              print("==== GRAPH INSPECTION FAILED ====")
+
+              for error in errors:
+                  print(f"- {error}")
+
               sys.exit(1)
 
-          print("PASS: direct graph is complete")
+          texts = {
+              filename: (
+                  root / filename
+              ).read_text(encoding="utf-8")
+              for filename in required_files
+          }
+
+          package_text = texts["frp_m16_pkg.sv"]
+
+          if re.search(
+              r"(?m)^\s*package\s+frp_m16_pkg\b",
+              package_text,
+          ) is None:
+              errors.append(
+                  "frp_m16_pkg.sv: "
+                  "package frp_m16_pkg definition missing"
+              )
+
+          print("==== MODULE DEFINITIONS ====")
+
+          for module_name, filename in definitions.items():
+              definition_match = re.search(
+                  rf"(?m)^\s*module\s+"
+                  rf"{re.escape(module_name)}\b",
+                  texts[filename],
+              )
+
+              if definition_match is None:
+                  errors.append(
+                      f"{filename}: "
+                      f"module {module_name} definition missing"
+                  )
+              else:
+                  print(
+                      f"{module_name} "
+                      f"-> rtl/m16/{filename}"
+                  )
+
+          core_text = texts["frp_m16_core.sv"]
+          tb_text = texts["frp_m16_tb.sv"]
+
+          actual_core_includes = include_list(
+              core_text
+          )
+
+          actual_tb_includes = include_list(
+              tb_text
+          )
+
+          print("==== CORE INCLUDE GRAPH ====")
+
+          for filename in actual_core_includes:
+              print(
+                  f"frp_m16_core.sv -> {filename}"
+              )
+
+          print("==== TESTBENCH INCLUDE GRAPH ====")
+
+          for filename in actual_tb_includes:
+              print(
+                  f"frp_m16_tb.sv -> {filename}"
+              )
+
+          if actual_core_includes != expected_core_includes:
+              errors.append(
+                  "frp_m16_core.sv include graph mismatch: "
+                  f"expected={expected_core_includes}, "
+                  f"actual={actual_core_includes}"
+              )
+
+          if actual_tb_includes != expected_tb_includes:
+              errors.append(
+                  "frp_m16_tb.sv include graph mismatch: "
+                  f"expected={expected_tb_includes}, "
+                  f"actual={actual_tb_includes}"
+              )
+
+          print("==== MODULE / INSTANCE / PORT MAP ====")
+
+          for module_name, instance_name in instances.items():
+              filename = definitions[module_name]
+
+              defined_ports = module_ports(
+                  texts[filename],
+                  module_name,
+              )
+
+              connected_ports = instance_ports(
+                  core_text,
+                  module_name,
+                  instance_name,
+              )
+
+              if not connected_ports:
+                  errors.append(
+                      "frp_m16_core.sv: missing instance "
+                      f"{module_name} {instance_name}"
+                  )
+
+                  continue
+
+              missing_connections = sorted(
+                  defined_ports - connected_ports
+              )
+
+              unknown_connections = sorted(
+                  connected_ports - defined_ports
+              )
+
+              if (
+                  missing_connections
+                  or unknown_connections
+              ):
+                  errors.append(
+                      f"{instance_name}: port mismatch; "
+                      f"missing={missing_connections}; "
+                      f"unknown={unknown_connections}"
+                  )
+
+              print(
+                  f"{module_name} "
+                  f"-> {instance_name} "
+                  f"-> {filename} "
+                  f"-> defined_ports={len(defined_ports)} "
+                  f"-> connected_ports={len(connected_ports)}"
+              )
+
+          print("==== VERILATOR COMPATIBILITY GUARDS ====")
+
+          for filename, text in texts.items():
+              for line_number, line in enumerate(
+                  text.splitlines(),
+                  start=1,
+              ):
+                  if re.search(r"\bcell\b", line):
+                      errors.append(
+                          f"rtl/m16/{filename}:"
+                          f"{line_number}: "
+                          "standalone lowercase "
+                          "reserved identifier cell"
+                      )
+
+                  if re.search(
+                      r"\bdefault\s+disable\s+iff\b",
+                      line,
+                  ):
+                      errors.append(
+                          f"rtl/m16/{filename}:"
+                          f"{line_number}: "
+                          "unsupported default disable iff"
+                      )
+
+                  if re.search(
+                      r"\bfrp_tern_t\b",
+                      line,
+                  ):
+                      errors.append(
+                          f"rtl/m16/{filename}:"
+                          f"{line_number}: "
+                          "legacy frp_tern_t interface usage"
+                      )
+
+          if errors:
+              print("==== GRAPH INSPECTION FAILED ====")
+
+              for error in errors:
+                  print(f"- {error}")
+
+              sys.exit(1)
+
           print(
-              "BUILD: frp_m16_tb.sv -> "
-              "frp_m16_core.sv -> M16 child modules"
+              "PASS: M16 module definitions are present."
+          )
+
+          print(
+              "PASS: M16 core instances resolve "
+              "to matching modules."
+          )
+
+          print(
+              "PASS: M16 instance port maps match "
+              "module port maps."
+          )
+
+          print(
+              "PASS: M16 include graph is complete "
+              "and deterministic."
+          )
+
+          print(
+              "PASS: no forbidden compatibility "
+              "patterns detected."
           )
           PY
 
-      - name: Install Verilator
+      - name: Verify workflow did not modify RTL
+        shell: bash
         run: |
+          set -euo pipefail
+
+          git diff --exit-code -- rtl/m16
+
+          if [ -n "$(git status --short -- rtl/m16)" ]; then
+            echo "ERROR: workflow modified rtl/m16."
+            git status --short -- rtl/m16
+            exit 1
+          fi
+
+          echo "PASS: workflow did not modify RTL."
+
+      - name: Install Verilator
+        shell: bash
+        run: |
+          set -euo pipefail
+
           sudo apt-get update
           sudo apt-get install -y verilator
-          verilator --version
 
-      - name: Build M16 testbench
+          verilator --version \
+            | tee m16_verilator_version.log
+
+      - name: Build M16 deterministic RTL testbench
         shell: bash
         run: |
           set -o pipefail
@@ -267,24 +517,34 @@ jobs:
             --timing \
             --assert \
             --binary \
-            -Wno-fatal \
             --error-limit 5 \
             --top-module frp_m16_tb \
             -Irtl/m16 \
             rtl/m16/frp_m16_tb.sv \
             2>&1 | tee m16_verilator_build.log
 
-      - name: Show first real Verilator errors
-        if: failure()
+      - name: Show first Verilator blocker
+        if: >-
+          ${{
+            failure()
+            && hashFiles('m16_verilator_build.log') != ''
+          }}
+        shell: bash
         run: |
-          grep -nE "%Error(-|:)" \
+          echo "==== FIRST VERILATOR DIAGNOSTICS ===="
+
+          grep -nEm 20 \
+            '^%((Error|Warning)(-[A-Z0-9_]+)?):' \
             m16_verilator_build.log \
-            | head -20 || true
+            || true
 
-          sed -n '1,180p' \
-            m16_verilator_build.log || true
+          echo "==== FIRST 220 BUILD LOG LINES ===="
 
-      - name: Run M16 testbench
+          sed -n '1,220p' \
+            m16_verilator_build.log \
+            || true
+
+      - name: Run M16 deterministic RTL testbench
         shell: bash
         run: |
           set -o pipefail
@@ -292,8 +552,32 @@ jobs:
           ./obj_dir/Vfrp_m16_tb \
             2>&1 | tee m16_verilator_smoke.log
 
-      - name: Validate execution
+      - name: Show first M16 execution blocker
+        if: >-
+          ${{
+            failure()
+            && hashFiles('m16_verilator_smoke.log') != ''
+          }}
+        shell: bash
         run: |
+          echo "==== FIRST EXECUTION ERRORS ===="
+
+          grep -nEm 20 \
+            '%Error:|Assertion failed|Verilog \$stop|Aborting' \
+            m16_verilator_smoke.log \
+            || true
+
+          echo "==== FIRST 220 EXECUTION LOG LINES ===="
+
+          sed -n '1,220p' \
+            m16_verilator_smoke.log \
+            || true
+
+      - name: Validate M16 execution markers
+        shell: bash
+        run: |
+          set -euo pipefail
+
           grep -F \
             "FRP M16 deterministic RTL testbench completed." \
             m16_verilator_smoke.log
@@ -310,12 +594,29 @@ jobs:
             "queue_overflow_events[ =]+0" \
             m16_verilator_smoke.log
 
-      - name: Upload logs
+      - name: Verify final repository state is unmodified
         if: always()
-        uses: actions/upload-artifact@v4
+        shell: bash
+        run: |
+          git diff --exit-code
+
+          if [ -n "$(git status --short)" ]; then
+            echo "ERROR: workflow modified repository files."
+            git status --short
+            exit 1
+          fi
+
+          echo "PASS: repository remained unmodified."
+
+      - name: Upload M16 Verilator logs
+        if: always()
+        uses: actions/upload-artifact@v7
         with:
           name: frp-m16-verilator-execution-smoke-logs
           path: |
+            m16_rtl_graph.log
+            m16_verilator_version.log
             m16_verilator_build.log
             m16_verilator_smoke.log
           if-no-files-found: ignore
+          retention-days: 14
