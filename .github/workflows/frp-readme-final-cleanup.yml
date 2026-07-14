@@ -1,0 +1,326 @@
+name: FRP README Final Cleanup
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: frp-readme-final-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Remove exact README duplicates
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply exact README cleanup
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+
+          readme = Path("README.md")
+          workflow = Path(
+              ".github/workflows/frp-readme-final-cleanup.yml"
+          )
+
+          expected_input_sha256 = (
+              "6d6a11cc68fde238f82842f9c5ee87f50bec0db1f1521bbe4dd26b997b227025"
+          )
+          expected_output_sha256 = (
+              "4e757da057e29e785db39ff9dc19aaaec885882c68f2cee68071f1683d2abdbd"
+          )
+
+          raw = readme.read_bytes()
+          input_sha256 = sha256(raw).hexdigest()
+
+          if input_sha256 != expected_input_sha256:
+              raise SystemExit(
+                  "README.md input SHA-256 mismatch: "
+                  f"expected {expected_input_sha256}, got {input_sha256}"
+              )
+
+          text = raw.decode("utf-8")
+          root_heading = "# Fractal Resonance Processor (FRP)\n"
+
+          if text.count(root_heading) != 2:
+              raise SystemExit(
+                  "Expected exactly two root README headings before cleanup"
+              )
+
+          second_root_heading = text.find(
+              root_heading,
+              len(root_heading),
+          )
+          legacy_prefix = text[:second_root_heading]
+
+          required_prefix_markers = (
+              '<p align="center">',
+              "</p>",
+              "badge.svg",
+              "img.shields.io",
+          )
+
+          for marker in required_prefix_markers:
+              if marker not in legacy_prefix:
+                  raise SystemExit(
+                      f"Legacy badge prefix marker is missing: {marker}"
+                  )
+
+          text = text[second_root_heading:]
+
+          benchmark_heading = "## Benchmark Summary\n"
+          following_heading = (
+              "## Benchmark-Supported Technical Position\n"
+          )
+
+          if text.count(benchmark_heading) != 2:
+              raise SystemExit(
+                  "Expected exactly two Benchmark Summary blocks before cleanup"
+              )
+
+          first_benchmark = text.find(benchmark_heading)
+          second_benchmark = text.find(
+              benchmark_heading,
+              first_benchmark + len(benchmark_heading),
+          )
+          following_section = text.find(
+              following_heading,
+              second_benchmark + len(benchmark_heading),
+          )
+
+          if not (
+              first_benchmark >= 0
+              and second_benchmark > first_benchmark
+              and following_section > second_benchmark
+          ):
+              raise SystemExit(
+                  "Benchmark Summary cleanup boundaries were not found"
+              )
+
+          first_block = text[first_benchmark:second_benchmark]
+          second_block = text[second_benchmark:following_section]
+
+          if first_block != second_block:
+              raise SystemExit(
+                  "The two Benchmark Summary blocks are not byte-identical"
+              )
+
+          text = text[:second_benchmark] + text[following_section:]
+          output = text.encode("utf-8")
+          output_sha256 = sha256(output).hexdigest()
+
+          if output_sha256 != expected_output_sha256:
+              raise SystemExit(
+                  "README.md output SHA-256 mismatch: "
+                  f"expected {expected_output_sha256}, got {output_sha256}"
+              )
+
+          readme.write_bytes(output)
+
+          if not workflow.is_file():
+              raise SystemExit(
+                  "One-shot cleanup workflow file was not found"
+              )
+
+          workflow.unlink()
+
+          print(f"README_INPUT_SHA256={input_sha256}")
+          print(f"README_OUTPUT_SHA256={output_sha256}")
+          print("README_FINAL_LINE_COUNT=4793")
+          print("README_FINAL_BYTE_COUNT=117215")
+          PY
+
+      - name: Validate final README structure
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+          import re
+
+          readme = Path("README.md")
+          workflow = Path(
+              ".github/workflows/frp-readme-final-cleanup.yml"
+          )
+          raw = readme.read_bytes()
+          text = raw.decode("utf-8")
+
+          expected_sha256 = (
+              "4e757da057e29e785db39ff9dc19aaaec885882c68f2cee68071f1683d2abdbd"
+          )
+          actual_sha256 = sha256(raw).hexdigest()
+
+          if actual_sha256 != expected_sha256:
+              raise SystemExit(
+                  "Final README.md SHA-256 mismatch: "
+                  f"expected {expected_sha256}, got {actual_sha256}"
+              )
+
+          if len(text.splitlines()) != 4793:
+              raise SystemExit("Final README.md line count is not 4793")
+
+          if len(raw) != 117215:
+              raise SystemExit("Final README.md byte count is not 117215")
+
+          root_heading = "# Fractal Resonance Processor (FRP)\n"
+
+          if not text.startswith(root_heading):
+              raise SystemExit(
+                  "README.md does not start with the root heading"
+              )
+
+          if text.count(root_heading) != 1:
+              raise SystemExit(
+                  "README.md root heading count is not one"
+              )
+
+          if text.count("## Benchmark Summary\n") != 1:
+              raise SystemExit(
+                  "Benchmark Summary heading count is not one"
+              )
+
+          forbidden_markers = (
+              "badge.svg",
+              "img.shields.io",
+              '<p align="center">',
+              "Resonant Processing Unit",
+              "Physics of Resonance",
+          )
+
+          for marker in forbidden_markers:
+              if marker in text:
+                  raise SystemExit(
+                      f"Forbidden README marker remains: {marker}"
+                  )
+
+          if re.search(
+              r"(?i)(?<![A-Za-z])RPU(?![A-Za-z])",
+              text,
+          ):
+              raise SystemExit(
+                  "Forbidden RPU token remains in README.md"
+              )
+
+          expected_sections = [
+              "## Current Architecture Layer",
+              "## FRP v1.8.0 — M16 RTL Core Realization and FPGA Preparation",
+              "## Mathematical and Physical Foundation",
+              "## Quick Start",
+              "## Processor Architecture",
+              "## Structured Output and Trace",
+              "## Validation and Qualification",
+              "## Benchmark Summary",
+              "## Benchmark-Supported Technical Position",
+              "## Hardware-Facing Development Path",
+              "## Project Milestones",
+              "## Historical Technical Archive",
+              "## Repository Navigation",
+              "## Release Status",
+              "## License",
+              "## Citation",
+          ]
+          actual_sections = [
+              line
+              for line in text.splitlines()
+              if line.startswith("## ")
+          ]
+
+          if actual_sections != expected_sections:
+              raise SystemExit(
+                  "Top-level README section sequence mismatch:\n"
+                  + "\n".join(actual_sections)
+              )
+
+          required_markers = (
+              "`FRP v1.8.0`",
+              "`frp_prototype_v1_7_0.py`",
+              "`docs/mathematical_foundation.md`",
+              "`docs/physical_foundation.md`",
+              "`FRP M16 RTL Artifact Boundary`",
+              "`.github/workflows/frp-m16-rtl-artifact-boundary.yml`",
+              "`#82`",
+              "`a68a2af`",
+              "`M16 RTL EXECUTION LAYER CLOSED`",
+              "`FRP M16 FPGA Preparation`",
+              "`.github/workflows/frp-m16-fpga-preparation.yml`",
+              "`#1`",
+              "`326b69e`",
+              "`M16 FPGA PREPARATION LAYER CLOSED`",
+              "`10.5281/zenodo.21183966`",
+          )
+
+          for marker in required_markers:
+              if marker not in text:
+                  raise SystemExit(
+                      f"Required README marker is missing: {marker}"
+                  )
+
+          stale_current_state = (
+              "Current release:\n\n`FRP v1.7.0`",
+              "Current version:\n\n`v1.7.0`",
+              "Current milestone:\n\n`M15",
+              "Current release layer:\n\n`FRP v1.7.0",
+              "Next planned architecture layer:",
+          )
+
+          for marker in stale_current_state:
+              if marker in text:
+                  raise SystemExit(
+                      f"Stale current-state marker remains: {marker}"
+                  )
+
+          if workflow.exists():
+              raise SystemExit(
+                  "One-shot cleanup workflow did not remove itself"
+              )
+
+          print("README_FINAL_STRUCTURE=PASS")
+          print("README_ROOT_HEADING_COUNT=1")
+          print("README_BENCHMARK_SUMMARY_COUNT=1")
+          print("README_BADGE_MARKER_COUNT=0")
+          print("README_RPU_MARKER_COUNT=0")
+          PY
+
+          git diff --check
+
+          actual_numstat="$(git diff --numstat -- README.md)"
+          expected_numstat=$'0\t482\tREADME.md'
+
+          if [ "$actual_numstat" != "$expected_numstat" ]; then
+            echo "Unexpected README.md diff statistics"
+            echo "Expected: $expected_numstat"
+            echo "Actual:   $actual_numstat"
+            exit 1
+          fi
+
+      - name: Commit exact cleanup
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A README.md .github/workflows/frp-readme-final-cleanup.yml
+          git diff --cached --check
+
+          if git diff --cached --quiet; then
+            echo "No cleanup changes were produced"
+            exit 1
+          fi
+
+          git commit \
+            -m "Remove duplicate README sections and badges" \
+            -m "Removes the legacy badge prefix, retains one root heading, removes the second byte-identical Benchmark Summary block, and preserves the remaining README content unchanged."
+
+          git push origin HEAD:main
