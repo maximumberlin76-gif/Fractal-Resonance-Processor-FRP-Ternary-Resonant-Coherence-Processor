@@ -18,43 +18,72 @@ Workflow:
 
 `FRP M16 RTL Artifact Boundary`
 
+Workflow file:
+
+`.github/workflows/frp-m16-rtl-artifact-boundary.yml`
+
+Trigger:
+
+`workflow_dispatch`
+
+Workflow run:
+
+`#82`
+
 Repository commit:
 
-`0abed8d`
+`a68a2af`
 
 Branch:
 
 `main`
 
-Result:
+Final workflow status:
+
+`SUCCESS`
+
+Qualification artifact count:
+
+`1`
+
+## Final Qualified Source State
+
+The successful qualification run was executed after correction of:
+
+- SystemVerilog assertion message syntax in `frp_m16_assertions.sv`
+- inferred combinational latches in `frp_m16_state_update.sv`
+- inferred combinational latches in `frp_m16_request_lanes.sv`
+
+The final qualified source boundary therefore includes the complete corrected M16 RTL chain at commit:
+
+`a68a2af`
+
+## Qualification Boundary
+
+The workflow completed:
+
+- repository checkout
+- exact M16 artifact-boundary validation
+- obsolete-workflow absence validation
+- isolated simulation-path preparation
+- Verilator toolchain installation
+- M16 source-hash generation
+- integrated SystemVerilog testbench build
+- module elaboration
+- executable testbench generation
+- architectural testbench execution
+- assertion execution
+- terminal marker validation
+- qualification result generation
+- repository-integrity validation
+- qualification evidence upload
+- GitHub Actions summary publication
+
+Overall qualification result:
 
 `PASS`
 
-SystemVerilog compilation:
-
-`PASS`
-
-Module elaboration:
-
-`PASS`
-
-Executable testbench:
-
-`PASS`
-
-Assertion execution:
-
-`PASS`
-
-Terminal marker validation:
-
-`PASS`
-
-Repository integrity:
-
-`PASS`
-
-## Simulation Boundary
+## Simulation Entry Point
 
 Simulation source:
 
@@ -64,7 +93,7 @@ Top-level simulation module:
 
 `frp_m16_tb`
 
-Top-level synthesis module:
+Top-level synthesis boundary:
 
 `frp_m16_core`
 
@@ -84,6 +113,18 @@ Execution log:
 
 `/tmp/frp_m16_execution.log`
 
+Toolchain log:
+
+`/tmp/frp_m16_toolchain.log`
+
+Source-hash record:
+
+`/tmp/frp_m16_sources.sha256`
+
+Qualification record:
+
+`/tmp/frp_m16_qualification.txt`
+
 ## Build Command
 
 `verilator --sv --timing --assert --binary --top-module frp_m16_tb -Irtl/m16 --Mdir /tmp/frp_m16_obj rtl/m16/frp_m16_tb.sv 2>&1 | tee /tmp/frp_m16_build.log`
@@ -94,14 +135,14 @@ Execution log:
 
 ## Artifact Boundary
 
-The qualified RTL boundary contains ten SystemVerilog artifacts:
+The qualified M16 RTL boundary contains ten SystemVerilog artifacts:
 
 | File | Function |
 |---|---|
-| `frp_m16_pkg.sv` | balanced ternary encodings, scheduler states, transition classes, invariant indexes, and shared functions |
-| `frp_m16_scheduler.sv` | `free`, `7/1`, and `1/7` potakt execution |
+| `frp_m16_pkg.sv` | balanced ternary encoding, scheduler types, transition classes, invariant indexes, and shared functions |
+| `frp_m16_scheduler.sv` | `free`, `7/1`, and `1/7` temporal execution |
 | `frp_m16_request_lanes.sv` | deterministic request-lane arbitration |
-| `frp_m16_pending_routes.sv` | retained pending-polarity storage and completion |
+| `frp_m16_pending_routes.sv` | retained pending-polarity creation, retention, completion, and clearing |
 | `frp_m16_active_neutral.sv` | active-neutral transition generation |
 | `frp_m16_capacity_guard.sv` | distributed transition-capacity admission |
 | `frp_m16_state_update.sv` | retained balanced ternary state writeback |
@@ -109,7 +150,7 @@ The qualified RTL boundary contains ten SystemVerilog artifacts:
 | `frp_m16_assertions.sv` | temporal and architectural assertion layer |
 | `frp_m16_tb.sv` | deterministic executable testbench |
 
-The RTL documentation boundary contains:
+The qualified documentation boundary contains five artifacts:
 
 | File | Function |
 |---|---|
@@ -140,7 +181,7 @@ Transition-capacity relation:
 
 `REQUEST_LANES = max(1, round(CELLS × 0.25))`
 
-Qualified relation:
+Qualified parameter relation:
 
 `8 cells → 2 request lanes`
 
@@ -157,23 +198,20 @@ Result:
 | `+1` | `2'b01` |
 | reserved | `2'b10` |
 
-The state `0` executed as the active neutral processor state.
+The state `0` executes as the active neutral processor state.
 
-Canonical retained-state domain:
+Qualified relations:
 
-`PASS`
-
-Canonical pending-route domain:
-
-`PASS`
-
-Reserved encoding exclusion:
-
-`PASS`
+| Relation | Result |
+|---|---|
+| canonical retained-state encoding | `PASS` |
+| canonical pending-route encoding | `PASS` |
+| active neutral state `0` | `PASS` |
+| reserved encoding excluded | `PASS` |
 
 ## Reset Record
 
-Reset established:
+Reset establishes:
 
 - every retained processor cell at `0`
 - every pending-route slot at `0`
@@ -205,7 +243,7 @@ Scheduler-state counts:
 | `excite` | `0` |
 | `neutralize` | `0` |
 
-Scheduler relation:
+Qualified scheduler relation:
 
 `16 ticks → free = 16`
 
@@ -229,7 +267,7 @@ Requested transition:
 
 `+1 → -1`
 
-First tick:
+First eligible tick:
 
 `+1 → 0`
 
@@ -255,7 +293,7 @@ Requested transition:
 
 `-1 → +1`
 
-First tick:
+First eligible tick:
 
 `-1 → 0`
 
@@ -277,13 +315,11 @@ Result:
 
 ### Free-Mode Capacity
 
-Executed during one tick:
+Two retained-state changes execute during one tick:
 
 `cell 1: 0 → +1`
 
 `cell 2: 0 → +1`
-
-Recorded relation:
 
 | Capacity signal | Value |
 |---|---:|
@@ -298,7 +334,10 @@ Result:
 
 ### Scheduler Counter Clear
 
-The scheduler counter bank was cleared while retained balanced ternary state and pending-route state remained unchanged.
+The scheduler counter bank clears while preserving:
+
+- retained balanced ternary state
+- retained pending-route state
 
 Result:
 
@@ -310,7 +349,7 @@ Executed ticks:
 
 `64`
 
-Repeating scheduler sequence:
+Repeating eight-tick sequence:
 
 `balance → balance → balance → balance → balance → balance → balance → commit`
 
@@ -324,7 +363,7 @@ Scheduler-state counts:
 | `excite` | `0` |
 | `neutralize` | `0` |
 
-Required relation:
+Qualified scheduler relation:
 
 `64 ticks → balance = 56, commit = 8`
 
@@ -336,11 +375,11 @@ Result:
 
 During balance ticks:
 
-`0 → +1` remained uncommitted.
+`0 → +1` remains uncommitted.
 
 During the commit tick:
 
-`0 → +1` executed.
+`0 → +1` executes.
 
 Result:
 
@@ -370,17 +409,11 @@ Completed route:
 
 `+1 → 0 → -1`
 
-Result:
-
-`PASS`
-
-Pending polarity retained across the balance interval:
-
-`PASS`
-
-Pending completion restricted to the commit tick:
-
-`PASS`
+| Relation | Result |
+|---|---|
+| first route leg during balance | `PASS` |
+| pending polarity retained through balance | `PASS` |
+| completion during commit | `PASS` |
 
 ## 1/7 Scheduler Record
 
@@ -388,7 +421,7 @@ Executed ticks:
 
 `16`
 
-Repeating scheduler sequence:
+Repeating eight-tick sequence:
 
 `excite → neutralize → neutralize → neutralize → neutralize → neutralize → neutralize → neutralize`
 
@@ -402,7 +435,7 @@ Scheduler-state counts:
 | `excite` | `2` |
 | `neutralize` | `14` |
 
-Required relation:
+Qualified scheduler relation:
 
 `16 ticks → excite = 2, neutralize = 14`
 
@@ -444,27 +477,21 @@ Completed route:
 
 `+1 → 0 → -1`
 
-Result:
-
-`PASS`
-
-Pending polarity retained across the neutralize interval:
-
-`PASS`
-
-Pending completion restricted to the excite tick:
-
-`PASS`
+| Relation | Result |
+|---|---|
+| first route leg during neutralize | `PASS` |
+| pending polarity retained through neutralize | `PASS` |
+| completion during excite | `PASS` |
 
 ## Active-Neutral Routing Record
 
-Forbidden direct transitions:
+Forbidden direct retained-state transitions:
 
 `-1 → +1`
 
 `+1 → -1`
 
-Executed tick-separated routes:
+Qualified tick-separated routes:
 
 `-1 → 0 → +1`
 
@@ -472,7 +499,7 @@ Executed tick-separated routes:
 
 | Routing relation | Result |
 |---|---|
-| active neutral `0` executed as the intermediate state | `PASS` |
+| active neutral `0` executed as intermediate state | `PASS` |
 | direct `-1 → +1` absent | `PASS` |
 | direct `+1 → -1` absent | `PASS` |
 | `-1 → 0 → +1` executed | `PASS` |
@@ -488,25 +515,69 @@ Executed tick-separated routes:
 | one retained route slot per cell | `PASS` |
 | exact requested polarity retained | `PASS` |
 | pending route owns its cell | `PASS` |
-| new same-cell request cannot overwrite pending route | `PASS` |
-| scheduler deferral preserves pending route | `PASS` |
-| transition-capacity deferral preserves pending route | `PASS` |
+| same-cell overwrite prevented | `PASS` |
+| scheduler deferral preserves route | `PASS` |
+| transition-capacity deferral preserves route | `PASS` |
 | completion requires retained state `0` | `PASS` |
-| accepted completion clears pending route | `PASS` |
+| accepted completion clears route | `PASS` |
 | pending-route overflow absent | `PASS` |
 
-## Transition-Capacity Record
+## Request-Lane Arbitration Record
+
+The request boundary executes deterministic ascending lane order:
+
+`lane 0 → lane 1 → ... → lane REQUEST_LANES - 1`
+
+Qualified relations:
 
 | Relation | Result |
 |---|---|
-| `accepted_changes <= REQUEST_LANES` | `PASS` |
-| `capacity_remaining = REQUEST_LANES - accepted_changes` | `PASS` |
-| `capacity_exhausted = (accepted_changes == REQUEST_LANES)` | `PASS` |
-| `switch_load_numerator = accepted_changes` | `PASS` |
+| canonical request-target validation | `PASS` |
+| valid cell-index enforcement | `PASS` |
+| one accepted request per cell per tick | `PASS` |
+| earlier accepted-lane ownership | `PASS` |
+| pending-route ownership priority | `PASS` |
+| scheduler transition eligibility | `PASS` |
+| acceptance and rejection separation | `PASS` |
+| latch-free combinational arbitration | `PASS` |
+
+## Transition-Capacity Record
+
+Qualified relations:
+
+`accepted_changes <= REQUEST_LANES`
+
+`capacity_remaining = REQUEST_LANES - accepted_changes`
+
+`capacity_exhausted = (accepted_changes == REQUEST_LANES)`
+
+`switch_load_numerator = accepted_changes`
+
+| Capacity relation | Result |
+|---|---|
+| bounded accepted changes | `PASS` |
+| capacity-remaining relation | `PASS` |
+| capacity-exhausted relation | `PASS` |
+| switch-load relation | `PASS` |
 | same-state retention consumes no capacity | `PASS` |
-| pending completion has capacity priority | `PASS` |
-| explicit requests retain ascending lane order | `PASS` |
+| pending completion has priority | `PASS` |
+| explicit requests preserve lane order | `PASS` |
 | each route leg consumes capacity on its own tick | `PASS` |
+
+## Retained-State Writeback Record
+
+| Writeback relation | Result |
+|---|---|
+| reset initializes active neutral state | `PASS` |
+| disabled ticks retain state | `PASS` |
+| state-changing writeback requires capacity | `PASS` |
+| same-state retention consumes no capacity | `PASS` |
+| opposite polarity commits first leg only | `PASS` |
+| pending completion commits from `0` | `PASS` |
+| capacity rejection preserves retained state | `PASS` |
+| reserved encoding is not committed | `PASS` |
+| direct opposite-polarity writeback is absent | `PASS` |
+| latch-free combinational writeback | `PASS` |
 
 ## Assertion Record
 
@@ -529,6 +600,7 @@ Executed tick-separated routes:
 | transition-capacity relations | `PASS` |
 | retained-state writeback | `PASS` |
 | integrated invariant flags | `PASS` |
+| assertion message syntax | `PASS` |
 
 ## Integrated Invariant Record
 
@@ -570,44 +642,73 @@ Executed tick-separated routes:
 | `reserved_state_events` | `0` |
 | `queue_overflow_events` | `0` |
 
-Terminal output validation:
+Terminal marker validation:
 
 `PASS`
 
 ## Repository Integrity
 
-The build directory and simulator logs were generated under `/tmp`.
+The simulator build directory and logs were generated under:
 
-Repository-local simulator directories were absent after execution.
+`/tmp`
+
+Repository-local simulator directories were absent after qualification.
 
 Repository source modification during qualification:
 
 `NONE`
 
-Repository integrity result:
+Repository-integrity result:
 
 `PASS`
 
-## Qualification Result
+## Qualification Evidence
+
+The workflow uploaded one qualification artifact containing:
+
+- toolchain record
+- SystemVerilog source hashes
+- Verilator build log
+- architectural execution log
+- qualification result record
+
+Qualification evidence result:
+
+`PASS`
+
+## Final Qualification Result
 
 | Qualification boundary | Result |
 |---|---|
 | artifact inventory | `PASS` |
-| SystemVerilog compilation | `PASS` |
+| documentation inventory | `PASS` |
+| SystemVerilog parsing | `PASS` |
 | module elaboration | `PASS` |
-| executable testbench | `PASS` |
+| latch-free required combinational boundaries | `PASS` |
+| executable testbench generation | `PASS` |
 | assertion execution | `PASS` |
 | `free` scheduler sequence | `PASS` |
 | `7/1` scheduler sequence | `PASS` |
 | `1/7` scheduler sequence | `PASS` |
 | active-neutral routing | `PASS` |
 | retained pending polarity | `PASS` |
+| request-lane arbitration | `PASS` |
 | transition-capacity enforcement | `PASS` |
 | retained-state writeback | `PASS` |
+| integrated invariants | `PASS` |
 | zero actual direct events | `PASS` |
 | zero reserved-state events | `PASS` |
 | zero queue-overflow events | `PASS` |
 | repository integrity | `PASS` |
+| qualification evidence upload | `PASS` |
+
+Final workflow record:
+
+`FRP M16 RTL Artifact Boundary #82`
+
+Final qualified commit:
+
+`a68a2af`
 
 Final M16 RTL simulation result:
 
