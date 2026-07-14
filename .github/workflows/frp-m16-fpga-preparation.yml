@@ -1,0 +1,372 @@
+name: FRP M16 FPGA Preparation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-m16-fpga-preparation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  m16-fpga-qualification:
+    name: M16 FPGA Integration Qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      FPGA_BUILD_DIR: /tmp/frp_m16_fpga_obj
+      FPGA_TOP_LINT_LOG: /tmp/frp_m16_fpga_top_lint.log
+      FPGA_BUILD_LOG: /tmp/frp_m16_fpga_build.log
+      FPGA_EXECUTION_LOG: /tmp/frp_m16_fpga_execution.log
+      FPGA_TOOLCHAIN_LOG: /tmp/frp_m16_fpga_toolchain.log
+      FPGA_METADATA: /tmp/frp_m16_fpga_qualification.txt
+      FPGA_SOURCE_HASHES: /tmp/frp_m16_fpga_sources.sha256
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify M16 FPGA artifact boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          fpga_directory = Path("fpga/m16")
+          rtl_directory = Path("rtl/m16")
+
+          expected_fpga_systemverilog = {
+              "frp_m16_fpga_top.sv",
+              "frp_m16_fpga_tb.sv",
+          }
+
+          required_rtl_systemverilog = {
+              "frp_m16_pkg.sv",
+              "frp_m16_scheduler.sv",
+              "frp_m16_request_lanes.sv",
+              "frp_m16_pending_routes.sv",
+              "frp_m16_active_neutral.sv",
+              "frp_m16_capacity_guard.sv",
+              "frp_m16_state_update.sv",
+              "frp_m16_core.sv",
+              "frp_m16_assertions.sv",
+          }
+
+          if not fpga_directory.is_dir():
+              raise SystemExit(
+                  "Missing FPGA preparation directory: fpga/m16"
+              )
+
+          if not rtl_directory.is_dir():
+              raise SystemExit(
+                  "Missing qualified RTL directory: rtl/m16"
+              )
+
+          actual_fpga_systemverilog = {
+              path.name
+              for path in fpga_directory.glob("*.sv")
+              if path.is_file()
+          }
+
+          missing_fpga = sorted(
+              expected_fpga_systemverilog
+              - actual_fpga_systemverilog
+          )
+
+          unexpected_fpga = sorted(
+              actual_fpga_systemverilog
+              - expected_fpga_systemverilog
+          )
+
+          missing_rtl = sorted(
+              name
+              for name in required_rtl_systemverilog
+              if not (rtl_directory / name).is_file()
+          )
+
+          empty_artifacts = sorted(
+              str(path)
+              for path in [
+                  *(
+                      fpga_directory / name
+                      for name in expected_fpga_systemverilog
+                  ),
+                  *(
+                      rtl_directory / name
+                      for name in required_rtl_systemverilog
+                  ),
+              ]
+              if path.is_file()
+              and path.stat().st_size == 0
+          )
+
+          if missing_fpga:
+              raise SystemExit(
+                  "Missing M16 FPGA SystemVerilog artifacts:\n"
+                  + "\n".join(
+                      f"- {name}"
+                      for name in missing_fpga
+                  )
+              )
+
+          if unexpected_fpga:
+              raise SystemExit(
+                  "Unexpected M16 FPGA SystemVerilog artifacts:\n"
+                  + "\n".join(
+                      f"- {name}"
+                      for name in unexpected_fpga
+                  )
+              )
+
+          if missing_rtl:
+              raise SystemExit(
+                  "Missing qualified M16 RTL dependencies:\n"
+                  + "\n".join(
+                      f"- {name}"
+                      for name in missing_rtl
+                  )
+              )
+
+          if empty_artifacts:
+              raise SystemExit(
+                  "Empty M16 FPGA or RTL artifacts:\n"
+                  + "\n".join(
+                      f"- {name}"
+                      for name in empty_artifacts
+                  )
+              )
+
+          print("M16 FPGA SystemVerilog artifacts: 2")
+          print("Qualified M16 RTL dependencies: 9")
+          print(
+              "M16 FPGA preparation artifact boundary: complete"
+          )
+          PY
+
+      - name: Prepare isolated FPGA simulation paths
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf "${FPGA_BUILD_DIR}"
+          rm -f "${FPGA_TOP_LINT_LOG}"
+          rm -f "${FPGA_BUILD_LOG}"
+          rm -f "${FPGA_EXECUTION_LOG}"
+          rm -f "${FPGA_TOOLCHAIN_LOG}"
+          rm -f "${FPGA_METADATA}"
+          rm -f "${FPGA_SOURCE_HASHES}"
+
+          mkdir -p "${FPGA_BUILD_DIR}"
+
+      - name: Install Verilator toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sudo apt-get update
+          sudo apt-get install --yes verilator g++
+
+          {
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "commit=${GITHUB_SHA}"
+            echo "ref=${GITHUB_REF}"
+            echo "run_id=${GITHUB_RUN_ID}"
+            echo "run_number=${GITHUB_RUN_NUMBER}"
+            echo \
+              "execution_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            verilator --version
+            g++ --version | head -n 1
+          } | tee "${FPGA_TOOLCHAIN_LOG}"
+
+      - name: Record M16 FPGA and RTL source hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sha256sum \
+            rtl/m16/*.sv \
+            fpga/m16/*.sv \
+            | sort \
+            | tee "${FPGA_SOURCE_HASHES}"
+
+      - name: Elaborate M16 FPGA integration top
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          verilator \
+            --sv \
+            --lint-only \
+            --top-module frp_m16_fpga_top \
+            -Irtl/m16 \
+            -Ifpga/m16 \
+            fpga/m16/frp_m16_fpga_top.sv \
+            2>&1 | tee "${FPGA_TOP_LINT_LOG}"
+
+      - name: Build M16 FPGA integration testbench
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          verilator \
+            --sv \
+            --timing \
+            --assert \
+            --binary \
+            --top-module frp_m16_fpga_tb \
+            -Irtl/m16 \
+            -Ifpga/m16 \
+            --Mdir "${FPGA_BUILD_DIR}" \
+            fpga/m16/frp_m16_fpga_tb.sv \
+            2>&1 | tee "${FPGA_BUILD_LOG}"
+
+          test -x \
+            "${FPGA_BUILD_DIR}/Vfrp_m16_fpga_tb"
+
+      - name: Reject latch and multidriven diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if grep -E \
+            '%Warning-(LATCH|MULTIDRIVEN)' \
+            "${FPGA_TOP_LINT_LOG}" \
+            "${FPGA_BUILD_LOG}"; then
+            echo \
+              "Forbidden combinational or multidriven diagnostic detected."
+            exit 1
+          fi
+
+      - name: Execute M16 FPGA integration testbench
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          "${FPGA_BUILD_DIR}/Vfrp_m16_fpga_tb" \
+            2>&1 | tee "${FPGA_EXECUTION_LOG}"
+
+      - name: Validate FPGA integration terminal markers
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          grep -Fqx \
+            "FRP M16 FPGA integration testbench completed." \
+            "${FPGA_EXECUTION_LOG}"
+
+          grep -Fqx \
+            "CELLS=8 REQUEST_LANES=2" \
+            "${FPGA_EXECUTION_LOG}"
+
+          grep -Fqx \
+            "core_ready=1" \
+            "${FPGA_EXECUTION_LOG}"
+
+          grep -Fqx \
+            "ticks_recorded=1" \
+            "${FPGA_EXECUTION_LOG}"
+
+          grep -Fqx \
+            "actual_direct_events=0" \
+            "${FPGA_EXECUTION_LOG}"
+
+          grep -Fqx \
+            "reserved_state_events=0" \
+            "${FPGA_EXECUTION_LOG}"
+
+          grep -Fqx \
+            "queue_overflow_events=0" \
+            "${FPGA_EXECUTION_LOG}"
+
+          grep -Fqx \
+            "invariant_flags=1111111111" \
+            "${FPGA_EXECUTION_LOG}"
+
+      - name: Record FPGA preparation qualification result
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          {
+            echo "FRP M16 FPGA Preparation"
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "commit=${GITHUB_SHA}"
+            echo "ref=${GITHUB_REF}"
+            echo "run_id=${GITHUB_RUN_ID}"
+            echo "run_number=${GITHUB_RUN_NUMBER}"
+            echo "result=PASS"
+            echo "fpga_systemverilog_artifacts=2"
+            echo "qualified_rtl_dependencies=9"
+            echo "synthesis_top=frp_m16_fpga_top"
+            echo "simulation_top=frp_m16_fpga_tb"
+            echo "cells=8"
+            echo "request_lanes=2"
+            echo "reset_release_stages=2"
+            echo "core_ready=1"
+            echo "ticks_recorded=1"
+            echo "invariant_flags=1111111111"
+            echo "actual_direct_events=0"
+            echo "reserved_state_events=0"
+            echo "queue_overflow_events=0"
+          } | tee "${FPGA_METADATA}"
+
+      - name: Verify repository remains unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git diff --exit-code
+
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git status --short
+            exit 1
+          fi
+
+          test ! -e obj_dir
+          test ! -e rtl/m16/obj_dir
+          test ! -e fpga/m16/obj_dir
+
+      - name: Upload M16 FPGA qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: >-
+            frp-m16-fpga-preparation-${{
+            github.run_number }}
+          path: |
+            /tmp/frp_m16_fpga_toolchain.log
+            /tmp/frp_m16_fpga_sources.sha256
+            /tmp/frp_m16_fpga_top_lint.log
+            /tmp/frp_m16_fpga_build.log
+            /tmp/frp_m16_fpga_execution.log
+            /tmp/frp_m16_fpga_qualification.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Publish FPGA preparation summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## FRP M16 FPGA Preparation"
+            echo
+            echo "- Job result: ${{ job.status }}"
+            echo "- FPGA SystemVerilog artifacts: 2"
+            echo "- Qualified RTL dependencies: 9"
+            echo "- Synthesis top: frp_m16_fpga_top"
+            echo "- Simulation top: frp_m16_fpga_tb"
+            echo "- Reset release stages: 2"
+            echo "- core_ready terminal state: 1"
+            echo \
+              "- Integrated invariant flags: 1111111111"
+            echo "- Actual direct events: 0"
+            echo "- Reserved-state events: 0"
+            echo "- Queue-overflow events: 0"
+            echo \
+              "- Build directory: /tmp/frp_m16_fpga_obj"
+          } >> "${GITHUB_STEP_SUMMARY}"
