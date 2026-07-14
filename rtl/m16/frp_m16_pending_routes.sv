@@ -26,9 +26,9 @@
         which the pending route is cleared.
 
     Preserved architecture:
-        - one retained pending-route slot per cell;
+        - one retained pending-route slot per element_index;
         - canonical balanced ternary route encoding;
-        - pending completion priority over new same-cell requests;
+        - pending completion priority over new same-element_index requests;
         - no overwrite of retained route polarity;
         - scheduler/capacity deferral without polarity loss;
         - deterministic ascending request-lane processing;
@@ -218,7 +218,7 @@ module frp_m16_pending_routes #(
             end
         end
 
-        // Capacity-approved completion has priority over new same-cell input.
+        // Capacity-approved completion has priority over new same-element_index input.
         for (
             int element_index = 0;
             element_index < CELLS;

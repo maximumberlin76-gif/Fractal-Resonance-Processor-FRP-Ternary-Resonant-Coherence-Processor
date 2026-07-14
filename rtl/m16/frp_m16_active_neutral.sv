@@ -26,7 +26,7 @@
             - opposite-polarity requests execute only the first tick leg
               +/-1 -> 0 and retain the opposite target in pending_route;
             - pending routes complete only on a later eligible tick from 0;
-            - pending completion has priority over a new same-cell request;
+            - pending completion has priority over a new same-element_index request;
             - capacity selection is performed downstream without changing
               the transition class or the retained pending-route polarity.
 */
@@ -232,7 +232,7 @@ module frp_m16_active_neutral #(
         end
 
         // Pending-route completion is evaluated before explicit request
-        // lanes. A retained pending polarity owns its cell until a later
+        // lanes. A retained pending polarity owns its element_index until a later
         // commit-capable and capacity-approved tick completes 0 -> target.
 
         for (
@@ -455,7 +455,7 @@ module frp_m16_active_neutral #(
                     pending_completion_owns_cell
                 ) begin
                     // A retained pending route has strict priority.
-                    // A new same-cell request cannot replace its polarity.
+                    // A new same-element_index request cannot replace its polarity.
 
                     transition_replay_deterministic = 1'b0;
                 end else begin
@@ -711,7 +711,7 @@ module frp_m16_active_neutral #(
             && no_actual_direct_events;
 
         // Candidate generation precedes the downstream capacity guard.
-        // This flag qualifies candidate accounting and one-change-per-cell
+        // This flag qualifies candidate accounting and one-change-per-element_index
         // determinism. The capacity guard alone authorizes the bounded
         // subset that may reach retained-state writeback.
 

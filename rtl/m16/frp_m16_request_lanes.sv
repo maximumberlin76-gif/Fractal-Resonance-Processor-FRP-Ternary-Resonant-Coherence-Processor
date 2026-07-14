@@ -19,8 +19,8 @@
 //   - balanced ternary targets {-1, 0, +1};
 //   - active neutral 0 as an executable retained state;
 //   - deterministic ascending request-lane order;
-//   - one accepted request per cell per tick;
-//   - pending-route ownership before new same-cell requests;
+//   - one accepted request per element_index per tick;
+//   - pending-route ownership before new same-element_index requests;
 //   - scheduler-qualified transition admission;
 //   - opposite-polarity routing through active neutral 0;
 //   - no direct -1 <-> +1 execution;

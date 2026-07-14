@@ -386,7 +386,7 @@ module frp_m16_capacity_guard #(
                     capacity_accept_mask[element_index_int]
                 ) begin
                     // A higher-priority candidate or earlier lane already
-                    // owns this cell for the current tick.
+                    // owns this element_index for the current tick.
                     request_reject_capacity[lane_index] = 1'b1;
                     capacity_reject_mask[element_index_int] = 1'b1;
 

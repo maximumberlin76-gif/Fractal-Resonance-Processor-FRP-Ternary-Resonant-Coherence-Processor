@@ -222,7 +222,7 @@ module frp_m16_assertions #(
     );
 
     // ----------------------------------------------------------------------
-    // Per-cell ternary and retained-route assertions
+    // Per-element_index ternary and retained-route assertions
     // ----------------------------------------------------------------------
 
     genvar element_index;
@@ -685,7 +685,7 @@ module frp_m16_assertions #(
         )
         == '0
     ) else $error(
-        "FRP M16 assertion failed: neutral route exists outside accepted-cell mask"
+        "FRP M16 assertion failed: neutral route exists outside accepted-element_index mask"
     );
 
     assert property (

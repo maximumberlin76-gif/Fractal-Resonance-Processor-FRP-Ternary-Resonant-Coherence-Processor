@@ -306,7 +306,7 @@ package frp_m16_pkg;
         frp_is_zero(state_value)
         && frp_has_pending_route(pending_value)
       ) begin
-        // Retained pending continuation has priority over a new same-cell
+        // Retained pending continuation has priority over a new same-element_index
         // target. Completion uses pending_value, never target_value.
 
         frp_classify_transition =

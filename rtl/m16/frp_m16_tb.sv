@@ -243,13 +243,13 @@ module frp_m16_tb;
         packed_cell_value(state_out, element_index)
         !== expected_state
       ) begin
-        $fatal(1, "FRP M16 TB: retained state mismatch at cell %0d", element_index);
+        $fatal(1, "FRP M16 TB: retained state mismatch at element_index %0d", element_index);
       end
       if (
         packed_cell_value(pending_route_out, element_index)
         !== expected_pending
       ) begin
-        $fatal(1, "FRP M16 TB: pending route mismatch at cell %0d", element_index);
+        $fatal(1, "FRP M16 TB: pending route mismatch at element_index %0d", element_index);
       end
     end
   endtask
