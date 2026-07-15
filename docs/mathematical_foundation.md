@@ -829,7 +829,7 @@ The balanced ternary layer provides:
 
 The processor state domain is:
 
-`T = {-1, 0, +1}`
+`T = {-1, 0, 1}`
 
 Canonical M16 hardware encoding:
 
@@ -1049,9 +1049,9 @@ The ternary layer qualifies, routes, and retains its discrete operational result
 
 The current qualified execution boundary preserves:
 
-`state_i in {-1, 0, +1}`
+`state_i in {-1, 0, 1}`
 
-`pending_route_i in {-1, 0, +1}`
+`pending_route_i in {-1, 0, 1}`
 
 `actual_direct_events = 0`
 
@@ -1121,7 +1121,6 @@ The mathematical foundation is derived from the following connected but distinct
 - Resonance Window and Retention Theorem;
 - Recursive Synthesis and Endogenous Bifurcation Dynamics;
 - Endogenous Dynamics of the Continuum;
-- Physics of Resonance and the Resonant Processing Unit;
 - the qualified Fractal Resonance Processor reference architecture;
 - the qualified M16 RTL execution boundary;
 - the qualified M16 FPGA preparation boundary.
@@ -1155,7 +1154,7 @@ The resonant dynamic layer forms the evolving computational field.
 
 The balanced ternary layer converts the direction of that field into the retained domain:
 
-`{-1, 0, +1}`
+`{-1, 0, 1}`
 
 The active neutral state preserves transition continuity between opposite polarities.
 
@@ -1178,3 +1177,4 @@ while preserving explicit distinctions between theoretical parameters, processor
 ## Author
 
 Maksym Marnov
+
