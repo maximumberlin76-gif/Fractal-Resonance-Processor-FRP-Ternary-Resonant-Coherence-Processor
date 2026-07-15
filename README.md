@@ -1,5 +1,3 @@
-[![FRP v1.8.0 — M16 — RTL Core Realization and Execution Semantics Package](docs/frp_v1_8_0_m16_architecture.gif)](#current-architecture-layer)
-
 # Fractal Resonance Processor (FRP)
 
 **Ternary Fractal Resonant Coherence Processor**
@@ -7,6 +5,8 @@
 **Ternary Resonant Coherence Processor — Structured Output Prototype**
 
 **(Ternary Architecture)**
+
+[![FRP v1.8.0 — M16 — RTL Core Realization and Execution Semantics Package](docs/frp_v1_8_0_m16_architecture.gif)](#current-architecture-layer)
 
 Fractal Resonance Processor (FRP) is a **Ternary Fractal Resonant Coherence Processor** reference architecture.
 
