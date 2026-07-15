@@ -1,4 +1,4 @@
-[![FRP v1.8.0 — M16 — RTL Core Realization and Execution Semantics Package](docs/frp_v1_8_0_m16_architecture-1.gif)](docs/frp_v1_8_0_m16_architecture-1.gif)
+[![FRP v1.8.0 — M16 — RTL Core Realization and Execution Semantics Package](docs/frp_v1_8_0_m16_architecture-1.gif)](#current-architecture-layer)
 
 # Fractal Resonance Processor (FRP)
 
