@@ -1,9 +1,9 @@
 # CI — Fractal Resonance Processor (FRP)
 
-# CI — Fractal Resonance Processor (FRP)
-
 [![FRP M16 RTL Artifact Boundary](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m16-rtl-artifact-boundary.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m16-rtl-artifact-boundary.yml)
 [![FRP M16 FPGA Preparation](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m16-fpga-preparation.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m16-fpga-preparation.yml)
+[![FRP M16 Canonical Core Domain](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m16-canonical-core-domain.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m16-canonical-core-domain.yml)
+[![FRP M16 Reserved Cell Cleanup](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m16-reserved-cell-cleanup.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m16-reserved-cell-cleanup.yml)
 [![FRP M15 Implementation Mapping and Qualification Closure](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m15-implementation-mapping-qualification.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m15-implementation-mapping-qualification.yml)
 [![FRP M14 Physical Implementation Correlation and Production Qualification](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m14-physical-implementation-qualification.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m14-physical-implementation-qualification.yml)
 [![FRP M13 Production Scaling and Implementation Stabilization](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m13-production-scaling-stabilization.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m13-production-scaling-stabilization.yml)
@@ -48,11 +48,16 @@ Benchmark-matrix schema:
 
 `frp.m3.benchmark_matrix.v1.7.0`
 
-Current workflow layers:
+Current qualification workflow layers:
 
 - `.github/workflows/frp-m15-implementation-mapping-qualification.yml`;
 - `.github/workflows/frp-m16-rtl-artifact-boundary.yml`;
 - `.github/workflows/frp-m16-fpga-preparation.yml`.
+
+Current M16 canonical-domain and repository-maintenance workflows:
+
+- `.github/workflows/frp-m16-canonical-core-domain.yml`;
+- `.github/workflows/frp-m16-reserved-cell-cleanup.yml`.
 
 Qualified M15 semantic and implementation-mapping result:
 
