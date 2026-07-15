@@ -6,13 +6,13 @@ This document defines the current phase-coherence, multiscale-coherence, compres
 
 Current version:
 
-`FRP v1.7.0`
+`FRP v1.8.0`
 
 Current milestone:
 
-`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+`M16 — RTL Core Realization and Execution Semantics Package`
 
-Current executable reference:
+Current executable semantic reference:
 
 `../frp_prototype_v1_7_0.py`
 
@@ -24,25 +24,37 @@ Current M15 benchmark-matrix schema:
 
 `frp.m3.benchmark_matrix.v1.7.0`
 
-Current architecture document:
+Inherited M15 semantic and implementation-mapping document:
 
 `../docs/m15_implementation_mapping_domain_interface_qualification_closure.md`
 
+Current M16 architecture document:
+
+`../docs/m16_rtl_core_realization_execution_semantics.md`
+
 Current test report:
 
-`../TEST_REPORT_v1_7_0.md`
+`../TEST_REPORT_v1_8_0.md`
 
 Current validation index:
 
-`../FRP_VALIDATION_INDEX_v1_7_0.md`
+`../FRP_VALIDATION_INDEX_v1_8_0.md`
 
 Current release notes:
 
-`../RELEASE_NOTES_v1_7_0.md`
+`../RELEASE_NOTES_v1_8_0.md`
 
-Current primary qualification workflow:
+Inherited M15 qualification workflow:
 
 `../.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+
+Current M16 RTL qualification workflow:
+
+`../.github/workflows/frp-m16-rtl-artifact-boundary.yml`
+
+Current M16 FPGA preparation workflow:
+
+`../.github/workflows/frp-m16-fpga-preparation.yml`
 
 Current published validation result:
 
@@ -51,6 +63,14 @@ Current published validation result:
 Current validated M15 self-test result:
 
 `41/41 PASS`
+
+Current M16 RTL qualification result:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+Current M16 FPGA preparation qualification result:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
 
 ## 1. Purpose
 
@@ -117,7 +137,12 @@ The current metrics also preserve traceability to:
 - active-neutral routing;
 - deterministic fixed-point representation;
 - semantic correlation;
-- exact quantized replay.
+- exact quantized replay;
+- M16 scheduler and request-interface propagation;
+- M16 active-neutral route execution;
+- M16 retained pending-route completion;
+- M16 transition-capacity and retained-state results;
+- M16 invariant flags and zero-event counters.
 
 ## 2. Current Stability Condition
 
@@ -141,7 +166,7 @@ Current validated condition:
 
 `C_minus_P_min > 0.0`
 
-The current M15 workflow checks this condition directly in the structured execution summary and the quantized hardware-shadow summary.
+The qualified M15 workflow checks this condition directly in the structured execution summary and the quantized hardware-shadow summary.
 
 ## 3. Metric Architecture
 
@@ -1067,7 +1092,7 @@ Each profile preserves:
 
 ## 41. M15 Artifact Layers Carrying Coherence Evidence
 
-The current M15 package contains ten artifact layers:
+The qualified M15 package contains ten artifact layers:
 
 1. `fixed_point_interface_profile`;
 2. `balanced_ternary_hardware_encoding_map`;
@@ -1112,21 +1137,21 @@ The coherence and stability path appears across:
 
 `qualification closure`
 
-## 42. Current M15 Workflow Verification
+## 42. Inherited M15 Workflow Verification
 
-Current workflow:
+Inherited qualification workflow:
 
 `../.github/workflows/frp-m15-implementation-mapping-qualification.yml`
 
-Current workflow name:
+Workflow name:
 
 `FRP M15 Implementation Mapping and Qualification Closure`
 
-Current environment:
+Execution environment:
 
 `ubuntu-latest`
 
-Current Python version:
+Python version:
 
 `3.12`
 
@@ -1150,11 +1175,92 @@ The workflow directly validates:
 
 and the complete exact quantized replay set.
 
-Current workflow result:
+Qualified workflow result:
 
 `PASS`
 
-## 43. Current Comparative Workload Coherence Evidence
+## 43. M16 Execution-Side Coherence Boundary Verification
+
+The FRP v1.7.0 M15 executable semantic reference remains the source of the current phase-coherence, multiscale-coherence, thermal, `C(t)`, `P(t)`, and `C_minus_P` quantities.
+
+The FRP v1.8.0 M16 execution layer begins at the phase-derived balanced ternary target and request boundary.
+
+Current metric and execution binding:
+
+| Quantity or boundary | Qualified source | M16 execution relation |
+|---|---|---|
+| Kuramoto order parameter `R` | M15 executable semantic reference | phase-derived target source |
+| multiscale phase coherence | M15 executable semantic reference | phase-derived target source |
+| thermal state | M15 executable semantic reference | endogenous target-generation input |
+| operational coherence `C(t)` | M15 executable semantic reference | semantic qualification source |
+| destabilizing load `P(t)` | M15 executable semantic reference | semantic qualification source |
+| `C_minus_P` | M15 executable semantic reference | semantic qualification source |
+| balanced ternary target | M15-to-M16 interface boundary | request target input |
+| scheduler state | M16 RTL execution layer | transition eligibility |
+| request-lane order | M16 RTL execution layer | deterministic request arbitration |
+| pending route | M16 RTL execution layer | retained opposite-polarity target |
+| active neutral state `0` | M16 RTL execution layer | mandatory intermediate retained state |
+| accepted changes | M16 RTL execution layer | transition-capacity record |
+| switch-load numerator | M16 RTL execution layer | `switch_load_numerator = accepted_changes` |
+
+Qualified M16 RTL execution relations:
+
+- `free`, `7/1`, and `1/7` scheduler execution;
+- deterministic request-lane arbitration;
+- active-neutral first-leg execution;
+- retained pending polarity;
+- pending-route completion only from retained state `0`;
+- transition-capacity enforcement;
+- retained-state writeback;
+- canonical retained-state encoding;
+- canonical pending-route encoding.
+
+Qualified M16 FPGA preparation relations:
+
+- asynchronous external reset assertion;
+- two-stage synchronous reset release;
+- `core_ready` generation;
+- execution-input gating;
+- scheduler propagation;
+- request-interface propagation;
+- active-neutral route execution;
+- retained pending-route completion.
+
+Qualified M16 terminal records:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+`invariant_flags = 1111111111`
+
+M16 RTL qualification record:
+
+| Field | Recorded value |
+|---|---|
+| Workflow | `FRP M16 RTL Artifact Boundary` |
+| Initial workflow run | `#82` |
+| Initial qualified commit | `a68a2af` |
+| Qualification rerun | `#84` |
+| Rerun qualified commit | `ede53cf` |
+| Result | `SUCCESS` |
+| Closure status | `M16 RTL EXECUTION LAYER CLOSED` |
+
+M16 FPGA preparation qualification record:
+
+| Field | Recorded value |
+|---|---|
+| Workflow | `FRP M16 FPGA Preparation` |
+| Initial workflow run | `#1` |
+| Initial qualified commit | `326b69e` |
+| Qualification rerun | `#2` |
+| Rerun qualified commit | `ede53cf` |
+| Result | `SUCCESS` |
+| Closure status | `M16 FPGA PREPARATION LAYER CLOSED` |
+
+## 44. Current Comparative Workload Coherence Evidence
 
 The current Comparative Architecture Benchmark Suite preserves a separate 256-command, 16-cell, seed-76, `transaction_serial` workload contour.
 
@@ -1186,9 +1292,9 @@ The same comparative row records:
 
 `pending_route_count_final = 0`
 
-This is a workload-specific current M15 comparison contour.
+This is the workload-specific M15 comparison contour retained by FRP v1.8.0.
 
-## 44. Historical Archived Transition Benchmark
+## 45. Historical Archived Transition Benchmark
 
 The repository preserves the historical transition benchmark in:
 
@@ -1210,7 +1316,7 @@ Recorded historical result:
 | `distributed_neutral_ternary` | `1.000` | `0.174750` | `0.003250` | `0.250000` | `0` | `0` | `2052` |
 | `frp_distributed_resonant` | `1.000` | `0.144750` | `0.107000` | `0.250000` | `0` | `3820` | `2392` |
 
-## 45. Archived Ternary-to-Binary Thermal Result
+## 46. Archived Ternary-to-Binary Thermal Result
 
 The archived benchmark directly records:
 
@@ -1246,7 +1352,7 @@ The same archived result records:
 
 This archived run preserves direct repository evidence that the distributed-neutral ternary transition path ran substantially colder than the binary-style forced-switching path inside that release-specific benchmark model.
 
-## 46. Historical and Current Metric Contours
+## 47. Historical and Current Metric Contours
 
 The historical v0.9.3 contour measures:
 
@@ -1258,7 +1364,7 @@ The historical v0.9.3 contour measures:
 - switching load;
 - historical `heat_peak`.
 
-The current v1.7.0 M15 contour measures:
+The inherited v1.7.0 M15 contour measures:
 
 - raw phase coherence;
 - pair-domain coherence;
@@ -1276,9 +1382,24 @@ The current v1.7.0 M15 contour measures:
 - quantized correlation;
 - exact deterministic replay.
 
+The current v1.8.0 M16 execution-side contour verifies:
+
+- propagation of phase-derived balanced ternary targets through the request interface;
+- scheduler-qualified transition eligibility;
+- deterministic request-lane arbitration;
+- active-neutral route execution;
+- retained pending-route completion;
+- transition-capacity records;
+- retained-state writeback;
+- `actual_direct_events = 0`;
+- `reserved_state_events = 0`;
+- `queue_overflow_events = 0`;
+- ten integrated invariant flags;
+- target-independent FPGA integration propagation.
+
 Each contour retains its release-specific metric definitions and result records.
 
-## 47. Metric Interpretation Registry
+## 48. Metric Interpretation Registry
 
 Use the following evidence mapping:
 
@@ -1296,10 +1417,13 @@ Use the following evidence mapping:
 | `C_q16`, `P_q16`, `C_minus_P_q16` | current M15 fixed-point stability path |
 | historical `heat_peak` | release-specific v0.9.3 transition benchmark |
 | comparative `temperature_proxy` | current common RC thermal-proxy model |
+| `accepted_changes` | current M16 transition-capacity record |
+| `switch_load_numerator` | current M16 accepted state-change count |
+| `invariant_flags` | current M16 integrated execution-invariant vector |
 
 This registry keeps each metric attached to the model that generates it.
 
-## 48. Reproduction Commands
+## 49. Reproduction Commands
 
 Compile the current executable:
 
@@ -1329,7 +1453,23 @@ Generate the current qualification closure manifest:
 
     python frp_prototype_v1_7_0.py --export-qualification-closure-manifest
 
-## 49. Coherence-Metric Failure Diagnosis
+Build and run the current M16 RTL testbench:
+
+    verilator --sv --timing --assert --binary --top-module frp_m16_tb -Irtl/m16 --Mdir /tmp/frp_m16_obj rtl/m16/frp_m16_tb.sv
+
+    /tmp/frp_m16_obj/Vfrp_m16_tb
+
+Elaborate the current M16 FPGA integration top:
+
+    verilator --sv --lint-only --top-module frp_m16_fpga_top -Irtl/m16 -Ifpga/m16 fpga/m16/frp_m16_fpga_top.sv
+
+Build and run the current M16 FPGA preparation testbench:
+
+    verilator --sv --timing --assert --binary --top-module frp_m16_fpga_tb -Irtl/m16 -Ifpga/m16 --Mdir /tmp/frp_m16_fpga_obj fpga/m16/frp_m16_fpga_tb.sv
+
+    /tmp/frp_m16_fpga_obj/Vfrp_m16_fpga_tb
+
+## 50. Coherence-Metric Failure Diagnosis
 
 When a coherence or stability result changes, inspect the first affected layer in this order:
 
@@ -1391,6 +1531,22 @@ When a coherence or stability result changes, inspect the first affected layer i
 
 `exact quantized replay`
 
+↓
+
+`M16 target and request-interface boundary`
+
+↓
+
+`M16 scheduler, request-lane, pending-route, active-neutral, capacity, and writeback execution`
+
+↓
+
+`M16 invariant and zero-event records`
+
+↓
+
+`M16 FPGA reset, gating, scheduler, request, and route propagation`
+
 Record:
 
 - first changed tick;
@@ -1400,40 +1556,47 @@ Record:
 - first changed stability field;
 - first changed deterministic digest.
 
-## 50. Current Release Validation Evidence
+## 51. Current Release Validation Evidence
 
 Current validated release layer:
 
-`FRP v1.7.0 — M15 Implementation Mapping, Domain Interface, and Qualification Closure Package`
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
 
 Current validation environment:
 
 `GitHub Actions hardware-backed CI execution`
 
-Validated release commit:
+Inherited M15 semantic and implementation-mapping qualification:
 
-`5fd9a4f`
+`41/41 PASS`
 
-Recorded workflow stack:
+M16 RTL qualification records:
 
-- `FRP Structured Output #113 — PASS`;
-- `FRP M15 Implementation Mapping and Qualification Closure #1 — PASS`;
-- `FRP Self Test #154 — PASS`;
-- `FRP Benchmark Smoke Test #152 — PASS`.
+| Record | Workflow run | Qualified commit | Result |
+|---|---:|---|---:|
+| initial closure | `#82` | `a68a2af` | `SUCCESS` |
+| qualification rerun | `#84` | `ede53cf` | `SUCCESS` |
+
+M16 FPGA preparation qualification records:
+
+| Record | Workflow run | Qualified commit | Result |
+|---|---:|---|---:|
+| initial closure | `#1` | `326b69e` | `SUCCESS` |
+| qualification rerun | `#2` | `ede53cf` | `SUCCESS` |
 
 Current overall published result:
 
 `PASS`
 
-## 51. Current File Alignment
+## 52. Current File Alignment
 
 This coherence-metrics layer is aligned with:
 
 - `../README.md`;
 - `../frp_prototype_v1_7_0.py`;
-- `../TEST_REPORT_v1_7_0.md`;
-- `../FRP_VALIDATION_INDEX_v1_7_0.md`;
-- `../RELEASE_NOTES_v1_7_0.md`;
+- `../TEST_REPORT_v1_8_0.md`;
+- `../FRP_VALIDATION_INDEX_v1_8_0.md`;
+- `../RELEASE_NOTES_v1_8_0.md`;
 - `../CI.md`;
 - `../REPRODUCIBILITY.md`;
 - `../USAGE.md`;
@@ -1446,16 +1609,34 @@ This coherence-metrics layer is aligned with:
 - `../docs/implementation_layers.md`;
 - `../docs/benchmark_interpretation.md`;
 - `../docs/limitations.md`;
+- `../docs/mathematical_foundation.md`;
+- `../docs/physical_foundation.md`;
 - `../docs/m15_implementation_mapping_domain_interface_qualification_closure.md`;
+- `../docs/m16_rtl_core_realization_execution_semantics.md`;
 - `./README.md`;
-- `../.github/workflows/frp-m15-implementation-mapping-qualification.yml`.
+- `../rtl/m16/README.md`;
+- `../rtl/m16/SIMULATION_TRANSCRIPT.md`;
+- `../rtl/m16/CLOSURE.md`;
+- `../fpga/m16/frp_m16_fpga_top.sv`;
+- `../fpga/m16/frp_m16_fpga_tb.sv`;
+- `../fpga/m16/SIMULATION_TRANSCRIPT.md`;
+- `../fpga/m16/CLOSURE.md`;
+- `../.github/workflows/frp-m15-implementation-mapping-qualification.yml`;
+- `../.github/workflows/frp-m16-rtl-artifact-boundary.yml`;
+- `../.github/workflows/frp-m16-fpga-preparation.yml`.
+
+Inherited M15 release evidence remains aligned with:
+
+- `../TEST_REPORT_v1_7_0.md`;
+- `../FRP_VALIDATION_INDEX_v1_7_0.md`;
+- `../RELEASE_NOTES_v1_7_0.md`.
 
 Historical thermal evidence remains aligned with:
 
 - `../TEST_REPORT_v0_9_3.md`;
 - `../frp_prototype_v0_9_3_mobile.py`.
 
-## 52. Current Status
+## 53. Current Status
 
 Processor:
 
@@ -1481,19 +1662,19 @@ Current validated stability condition:
 
 `C_minus_P_min > 0.0`
 
-Current executable form:
+Current executable semantic-reference form:
 
 `Ternary Resonant Coherence Processor — Structured Output Prototype`
 
 Current version:
 
-`FRP v1.7.0`
+`FRP v1.8.0`
 
 Current milestone:
 
-`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+`M16 — RTL Core Realization and Execution Semantics Package`
 
-Current executable reference:
+Current executable semantic reference:
 
 `../frp_prototype_v1_7_0.py`
 
@@ -1501,9 +1682,25 @@ Current self-test result:
 
 `41/41 PASS`
 
-Current qualification closure result:
+Inherited M15 qualification closure result:
 
 `PASS`
+
+Current M16 RTL qualification result:
+
+`PASS`
+
+Current M16 RTL closure status:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+Current M16 FPGA preparation qualification result:
+
+`PASS`
+
+Current M16 FPGA preparation closure status:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
 
 Current published validation result:
 
@@ -1513,6 +1710,13 @@ Historical archived ternary-to-binary thermal result:
 
 `distributed_neutral_ternary recorded a 15.69× lower heat_peak than binary_style_forced_switch under the historical v0.9.3 transition benchmark model`
 
-Next planned architecture layer:
+Current release qualification state:
 
-`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
+`FRP v1.8.0 / M16 — PASS`
+
+
+
+
+    
+
+
