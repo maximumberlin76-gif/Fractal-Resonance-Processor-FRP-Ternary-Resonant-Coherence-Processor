@@ -3051,6 +3051,8 @@ When the current architecture layer changes, review:
 - `.github/workflows/frp-m15-implementation-mapping-qualification.yml`;
 - `.github/workflows/frp-m16-rtl-artifact-boundary.yml`;
 - `.github/workflows/frp-m16-fpga-preparation.yml`;
+- `.github/workflows/frp-m16-canonical-core-domain.yml`;
+- `.github/workflows/frp-m16-reserved-cell-cleanup.yml`;
 - `rtl/m16/README.md`;
 - `rtl/m16/ARTIFACTS.md`;
 - `rtl/m16/SIMULATION.md`;
@@ -3071,7 +3073,9 @@ The alignment review checks:
 - M15 foundation workflow path;
 - M16 RTL workflow path;
 - M16 FPGA preparation workflow path;
-- CI workflow badges;
+- M16 canonical core-domain workflow path;
+- M16 reserved-cell cleanup workflow path;
+- CI workflow badges and repository workflow-file count;
 - structured-output and benchmark-matrix schemas;
 - complete resonant computational core;
 - balanced ternary state and retained-result domain;
@@ -3348,13 +3352,21 @@ Current M16 FPGA preparation workflow:
 
 `.github/workflows/frp-m16-fpga-preparation.yml`
 
+Current M16 canonical core-domain workflow:
+
+`.github/workflows/frp-m16-canonical-core-domain.yml`
+
+Current M16 reserved-cell cleanup workflow:
+
+`.github/workflows/frp-m16-reserved-cell-cleanup.yml`
+
 Current CI workflow status badges:
 
-`9`
+`23`
 
 Current repository workflow files:
 
-`22`
+`23`
 
 Current validation result:
 
@@ -3406,8 +3418,3 @@ Current CI role:
 Current release qualification state:
 
 `FRP v1.8.0 / M16 — PASS`
-
-
-
-
-
