@@ -1808,7 +1808,7 @@ Canonical two-bit encoding:
 
 `0 → 2'b00`
 
-`+1 → 2'b01`
+`1 → 2'b01`
 
 Reserved encoding:
 
@@ -1820,7 +1820,7 @@ Canonical integer encoding:
 
 `0 → 0`
 
-`+1 → 1`
+`1 → 1`
 
 Reserved integer code:
 
