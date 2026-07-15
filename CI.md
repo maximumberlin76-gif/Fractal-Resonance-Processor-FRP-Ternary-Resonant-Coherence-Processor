@@ -991,6 +991,133 @@ The repository contains 23 GitHub Actions workflow files.
 | `.github/workflows/frp-m16-canonical-core-domain.yml` | `FRP M16 Canonical Core Domain` | manually dispatched M16 core-domain canonicalization, verification, and commit workflow |
 | `.github/workflows/frp-m16-reserved-cell-cleanup.yml` | `FRP M16 Reserved Cell Cleanup` | manually dispatched RTL identifier cleanup and commit workflow |
 
+## 8. Current M16 Qualification Workflows
+
+The current M16 qualification layer contains:
+
+- `FRP M16 RTL Artifact Boundary`;
+- `FRP M16 FPGA Preparation`.
+
+M15 remains the qualified semantic and implementation-mapping foundation for both M16 qualification workflows.
+
+### 8.1 M16 RTL qualification workflow
+
+Workflow file:
+
+`.github/workflows/frp-m16-rtl-artifact-boundary.yml`
+
+Workflow name:
+
+`FRP M16 RTL Artifact Boundary`
+
+Job name:
+
+`M16 RTL Architecture Qualification`
+
+Trigger:
+
+`workflow_dispatch`
+
+Execution environment:
+
+`ubuntu-latest`
+
+Timeout:
+
+`20 minutes`
+
+Permissions:
+
+`contents: read`
+
+Concurrency group:
+
+`frp-m16-rtl-artifact-boundary-${{ github.ref }}`
+
+Concurrency cancellation policy:
+
+`cancel-in-progress: false`
+
+### 8.2 M16 RTL artifact boundary
+
+The workflow validates exactly ten SystemVerilog files:
+
+1. `rtl/m16/frp_m16_pkg.sv`;
+2. `rtl/m16/frp_m16_scheduler.sv`;
+3. `rtl/m16/frp_m16_request_lanes.sv`;
+4. `rtl/m16/frp_m16_pending_routes.sv`;
+5. `rtl/m16/frp_m16_active_neutral.sv`;
+6. `rtl/m16/frp_m16_capacity_guard.sv`;
+7. `rtl/m16/frp_m16_state_update.sv`;
+8. `rtl/m16/frp_m16_core.sv`;
+9. `rtl/m16/frp_m16_assertions.sv`;
+10. `rtl/m16/frp_m16_tb.sv`.
+
+The workflow validates exactly five RTL documentation files:
+
+1. `rtl/m16/README.md`;
+2. `rtl/m16/ARTIFACTS.md`;
+3. `rtl/m16/SIMULATION.md`;
+4. `rtl/m16/SIMULATION_TRANSCRIPT.md`;
+5. `rtl/m16/CLOSURE.md`.
+
+Required artifact counts:
+
+| Artifact class | Count |
+|---|---:|
+| SystemVerilog artifacts | `10` |
+| RTL documentation artifacts | `5` |
+
+The artifact-boundary stage rejects:
+
+- missing required SystemVerilog files;
+- unexpected SystemVerilog files in `rtl/m16`;
+- missing required RTL documentation files;
+- empty required RTL artifacts.
+
+The workflow also requires the absence of:
+
+- `.github/workflows/frp-m16-verilator-smoke.yml`;
+- `.github/workflows/frp-m16-verilator-clean-smoke.yml`.
+
+### 8.3 M16 RTL workflow step sequence
+
+The M16 RTL qualification workflow executes these named stages:
+
+1. `Checkout repository`;
+2. `Verify M16 artifact boundary`;
+3. `Verify obsolete workflows are absent`;
+4. `Prepare isolated simulation paths`;
+5. `Install Verilator toolchain`;
+6. `Record M16 source hashes`;
+7. `Build integrated M16 RTL testbench`;
+8. `Execute M16 architectural testbench`;
+9. `Validate terminal execution markers`;
+10. `Record qualification result`;
+11. `Verify repository remains unchanged`;
+12. `Upload M16 qualification evidence`;
+13. `Publish qualification summary`.
+
+RTL testbench build command:
+
+    verilator \
+      --sv \
+      --timing \
+      --assert \
+      --binary \
+      --top-module frp_m16_tb \
+      -Irtl/m16 \
+      --Mdir /tmp/frp_m16_obj \
+      rtl/m16/frp_m16_tb.sv
+
+Required executable:
+
+`/tmp/frp_m16_obj/Vfrp_m16_tb`
+
+The workflow records SHA-256 hashes for:
+
+`rtl/m16/*.sv`
+
 ### 8.4 M16 RTL validation surface
 
 The M16 RTL qualification records:
@@ -3418,3 +3545,10 @@ Current CI role:
 Current release qualification state:
 
 `FRP v1.8.0 / M16 — PASS`
+
+
+
+
+
+
+
