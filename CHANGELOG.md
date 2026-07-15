@@ -2,6 +2,528 @@
 
 All notable changes to the Fractal Resonance Processor (FRP) project are documented in this file.
 
+## [v1.8.0] — M16 RTL Core Realization and Execution Semantics Package
+
+### Current Release Layer
+
+- Added the FRP v1.8.0 M16 RTL Core Realization and Execution Semantics Package.
+
+- Preserved M15 as the qualified semantic and implementation-mapping foundation of M16.
+
+- Preserved the executable semantic reference:
+
+  - `frp_prototype_v1_7_0.py`.
+
+- Preserved the balanced ternary retained-state domain:
+
+  - `{-1, 0, 1}`.
+
+- Preserved active neutral state `0` as an executable balancing, damping, transition, and stabilization state.
+
+- Preserved the opposite-polarity transition routes:
+
+  - `-1 → 0 → 1`;
+
+  - `1 → 0 → -1`.
+
+- Preserved the prohibition of direct opposite-polarity retained-state transitions.
+
+- Preserved endogenous thermal state as a processor feedback variable.
+
+- Preserved the relation between Kuramoto-Sakaguchi resonant phase dynamics and balanced ternary retained-state execution.
+
+Binary hardware can model nonlinear dynamics; FRP transfers selected nonlinear dynamic mechanisms into the organization of computation itself.
+
+### Inherited M15 Qualification Foundation
+
+Inherited M15 qualification results:
+
+- `41 / 41 PASS`;
+
+- `10 / 10` deterministic vector files byte-identical;
+
+- `5 / 5` required semantic correlation matches equal to `1.0`;
+
+- `6 / 6` deterministic replay matches equal to `1.0`;
+
+- `actual_direct_events = 0`;
+
+- `reserved_state_events = 0`;
+
+- `queue_overflow_events = 0`;
+
+- `fixed_point_topology_sum_exact = True`;
+
+- `fixed_point_thermal_sum_exact = True`.
+
+Inherited M15 workflow:
+
+- `.github/workflows/frp-m15-implementation-mapping-qualification.yml`.
+
+### Mathematical and Physical Foundations
+
+Added FRP mathematical foundation:
+
+- `docs/mathematical_foundation.md`.
+
+Added FRP physical foundation:
+
+- `docs/physical_foundation.md`.
+
+### M16 RTL Core Artifacts
+
+Added ten integrated SystemVerilog RTL artifacts:
+
+- `rtl/m16/frp_m16_pkg.sv`;
+
+- `rtl/m16/frp_m16_scheduler.sv`;
+
+- `rtl/m16/frp_m16_request_lanes.sv`;
+
+- `rtl/m16/frp_m16_pending_routes.sv`;
+
+- `rtl/m16/frp_m16_active_neutral.sv`;
+
+- `rtl/m16/frp_m16_capacity_guard.sv`;
+
+- `rtl/m16/frp_m16_state_update.sv`;
+
+- `rtl/m16/frp_m16_core.sv`;
+
+- `rtl/m16/frp_m16_assertions.sv`;
+
+- `rtl/m16/frp_m16_tb.sv`.
+
+Added M16 RTL evidence and execution documentation:
+
+- `rtl/m16/README.md`;
+
+- `rtl/m16/ARTIFACTS.md`;
+
+- `rtl/m16/SIMULATION.md`;
+
+- `rtl/m16/SIMULATION_TRANSCRIPT.md`;
+
+- `rtl/m16/CLOSURE.md`.
+
+### M16 Scheduler and Request Execution
+
+Added executable scheduler propagation for:
+
+- `free`;
+
+- `7/1`;
+
+- `1/7`.
+
+Added:
+
+- parameterized retained-state cells;
+
+- deterministic request-lane arbitration;
+
+- qualified `CELLS=8` execution profile;
+
+- qualified `REQUEST_LANES=2` execution profile;
+
+- retained pending-route completion;
+
+- active-neutral first-leg routing;
+
+- transition-capacity enforcement;
+
+- retained-state writeback;
+
+- clean capacity rejection;
+
+- reserved-cell cleanup;
+
+- canonical M16 core-domain validation.
+
+Added maintenance workflows:
+
+- `.github/workflows/frp-m16-canonical-core-domain.yml`;
+
+- `.github/workflows/frp-m16-reserved-cell-cleanup.yml`.
+
+### M16 Integrated Invariant Boundary
+
+Added ten integrated invariant flags:
+
+1. `FRP_INV_STATE_DOMAIN_VALID`;
+2. `FRP_INV_SCHEDULER_COUNTS_VALID`;
+3. `FRP_INV_REQUEST_LANE_ORDER_VALID`;
+4. `FRP_INV_PENDING_POLARITY_VALID`;
+5. `FRP_INV_ACTIVE_NEUTRAL_VALID`;
+6. `FRP_INV_TRANSITION_CAPACITY_VALID`;
+7. `FRP_INV_STATE_UPDATE_VALID`;
+8. `FRP_INV_NO_ACTUAL_DIRECT_EVENTS`;
+9. `FRP_INV_NO_RESERVED_STATE`;
+10. `FRP_INV_NO_QUEUE_OVERFLOW`.
+
+Qualified terminal invariant record:
+
+`1111111111`
+
+Qualified zero-event record:
+
+- `actual_direct_events = 0`;
+
+- `reserved_state_events = 0`;
+
+- `queue_overflow_events = 0`.
+
+### M16 RTL Qualification
+
+Workflow:
+
+- `FRP M16 RTL Artifact Boundary`.
+
+Workflow file:
+
+- `.github/workflows/frp-m16-rtl-artifact-boundary.yml`.
+
+Initial closure record:
+
+| Field | Recorded value |
+|---|---|
+| Workflow run | `#82` |
+| Qualified source commit | `a68a2af` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Status | `M16 RTL EXECUTION LAYER CLOSED` |
+
+Qualification rerun record:
+
+| Field | Recorded value |
+|---|---|
+| Workflow run | `#84` |
+| Qualified source commit | `ede53cf` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Workflow duration | `52s` |
+| Qualification artifact count | `1` |
+| Status | `M16 RTL EXECUTION LAYER CLOSED` |
+
+The RTL qualification includes:
+
+- Verilator parsing;
+
+- module elaboration;
+
+- executable testbench generation;
+
+- architectural simulation;
+
+- assertion execution;
+
+- latch-diagnostic rejection;
+
+- multidriven-diagnostic rejection;
+
+- scheduler validation;
+
+- request-lane arbitration;
+
+- active-neutral routing;
+
+- pending-route completion;
+
+- transition-capacity enforcement;
+
+- retained-state writeback;
+
+- ten invariant flags;
+
+- repository-integrity validation;
+
+- qualification artifact generation.
+
+### M16 FPGA Preparation Artifacts
+
+Added target-independent FPGA integration top:
+
+- `fpga/m16/frp_m16_fpga_top.sv`.
+
+Added executable FPGA integration testbench:
+
+- `fpga/m16/frp_m16_fpga_tb.sv`.
+
+Added FPGA preparation evidence records:
+
+- `fpga/m16/SIMULATION_TRANSCRIPT.md`;
+
+- `fpga/m16/CLOSURE.md`.
+
+Added:
+
+- asynchronous external reset assertion;
+
+- two-stage synchronous reset release;
+
+- `core_ready`;
+
+- execution-input gating before readiness;
+
+- tick gating before readiness;
+
+- counter-clear gating before readiness;
+
+- request-valid gating before readiness;
+
+- scheduler propagation;
+
+- request-interface propagation;
+
+- active-neutral first-leg execution;
+
+- retained pending-route completion;
+
+- all ten invariant flags.
+
+### M16 FPGA Preparation Qualification
+
+Workflow:
+
+- `FRP M16 FPGA Preparation`.
+
+Workflow file:
+
+- `.github/workflows/frp-m16-fpga-preparation.yml`.
+
+Initial closure record:
+
+| Field | Recorded value |
+|---|---|
+| Workflow run | `#1` |
+| Qualified repository commit | `326b69e` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Workflow duration | `1m 7s` |
+| Status | `M16 FPGA PREPARATION LAYER CLOSED` |
+
+Qualification rerun record:
+
+| Field | Recorded value |
+|---|---|
+| Workflow run | `#2` |
+| Qualified repository commit | `ede53cf` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Workflow duration | `36s` |
+| Qualification artifact count | `1` |
+| Status | `M16 FPGA PREPARATION LAYER CLOSED` |
+
+The FPGA preparation qualification includes:
+
+- FPGA integration-top elaboration;
+
+- executable FPGA testbench generation;
+
+- asynchronous reset assertion;
+
+- two-stage synchronous reset release;
+
+- `core_ready` validation;
+
+- execution-input gating;
+
+- scheduler propagation;
+
+- request-interface propagation;
+
+- active-neutral first-leg execution;
+
+- pending-route completion;
+
+- all ten invariant flags;
+
+- `actual_direct_events = 0`;
+
+- `reserved_state_events = 0`;
+
+- `queue_overflow_events = 0`.
+
+### M16 Public Architecture Documents
+
+Added:
+
+- `docs/m16_rtl_core_realization_execution_semantics.md`;
+
+- `docs/m16_scheduler_state_rtl_realization.md`;
+
+- `docs/m16_request_lane_arbitration_module.md`;
+
+- `docs/m16_pending_route_register_module.md`;
+
+- `docs/m16_active_neutral_transition_module.md`;
+
+- `docs/m16_transition_capacity_guard_module.md`;
+
+- `docs/m16_retained_state_update_module.md`;
+
+- `docs/m16_rtl_core_interface_contract.md`;
+
+- `docs/m16_balanced_ternary_state_register_map.md`;
+
+- `docs/m16_invariant_assertion_set.md`;
+
+- `docs/m16_external_simulator_execution_plan.md`;
+
+- `docs/m16_rtl_artifact_boundary_qualification.md`;
+
+- `docs/m16_artifact_boundary_test_stability_policy.md`;
+
+- `docs/m16_m15_vector_replay_compatibility_report.md`;
+
+- `docs/m16_qualification_manifest.md`;
+
+- `docs/m16_qualification_index.md`;
+
+- `docs/m16_public_status_snapshot.md`.
+
+### Historical v0.9.3 Ternary Transition Benchmark
+
+Preserved the historical v0.9.3 transition benchmark contour:
+
+| Architecture | `heat_peak` | `switch_load_peak` | `actual_direct_events` |
+|---|---:|---:|---:|
+| `binary_style_forced_switch` | `0.051000` | `1.000000` | `2052` |
+| `direct_ternary_commit` | `0.051000` | `1.000000` | `2052` |
+| `distributed_neutral_ternary` | `0.003250` | `0.250000` | `0` |
+| `frp_distributed_resonant` | `0.107000` | `0.250000` | `0` |
+
+Recorded heat-peak relation:
+
+`0.051000 / 0.003250 = 15.6923076923`
+
+Recorded numerical representations:
+
+- `15.69× lower heat_peak`;
+
+- `93.63% lower heat_peak`.
+
+Measurement contour:
+
+`FRP v0.9.3 transition benchmark model and defined workload`
+
+The historical v0.9.3 `heat_peak` record remains separate from current architecture-comparison activity-cost and thermal-proxy records.
+
+### Comparative Architecture Tick-Level Record
+
+Preserved canonical result:
+
+- `benchmarks/architecture_comparison/results/reference_comparison_seed_76.json`.
+
+Recorded tick-level execution values:
+
+| Architecture | Completion ticks | Mean latency ticks | Maximum latency ticks | Throughput commands per tick |
+|---|---:|---:|---:|---:|
+| `binary_synchronous_reference` | `288` | `1.0` | `1` | `0.8888888888888888` |
+| `binary_clock_gated_reference` | `288` | `1.0` | `1` | `0.8888888888888888` |
+| `direct_ternary_reference` | `288` | `1.0` | `1` | `0.8888888888888888` |
+| `frp_v1_7_0_quantized_shadow` | `413` | `1.48828125` | `2` | `0.6198547215496368` |
+
+Recorded semantic results for all four architecture profiles:
+
+- `semantic_completion_ratio = 1.0`;
+
+- `semantic_output_match = 1.0`.
+
+### FRP Quantized-Shadow Arithmetic Record
+
+Recorded FRP raw activity totals:
+
+| Event class | Count |
+|---|---:|
+| fixed-point multiplies 32×32 | `518728` |
+| fixed-point accumulates 64 | `296534` |
+| fixed-point adds 32 | `339899` |
+| fixed-point compares 32 | `45430` |
+| lookup-table reads 32 | `172221` |
+
+### Retained-Route Completion and Queue Record
+
+Qualified M16 execution records:
+
+- retained pending-route completion;
+
+- deterministic pending-route priority;
+
+- transition-capacity enforcement;
+
+- clean capacity rejection;
+
+- `actual_direct_events = 0`;
+
+- `reserved_state_events = 0`;
+
+- `queue_overflow_events = 0`.
+
+### Qutrit-Oriented Research Direction
+
+The balanced ternary `{-1, 0, 1}` state domain, active neutral state `0`, and resonant phase dynamics define a future research direction for qutrit-oriented resonant computation.
+
+### Stable Executable and Schemas
+
+Preserved executable semantic reference:
+
+- `frp_prototype_v1_7_0.py`.
+
+Preserved structured-output schema:
+
+- `frp.structured_output.v1.7.0`.
+
+Preserved benchmark-matrix schema:
+
+- `frp.m3.benchmark_matrix.v1.7.0`.
+
+### Release-Facing Files
+
+Updated:
+
+- `README.md`;
+
+- `CI.md`;
+
+- `CHANGELOG.md`;
+
+- `CITATION.cff`.
+
+Added:
+
+- `RELEASE_NOTES_v1_8_0.md`;
+
+- `TEST_REPORT_v1_8_0.md`;
+
+- `FRP_VALIDATION_INDEX_v1_8_0.md`.
+
+Added release architecture image:
+
+- `docs/frp_v1_8_0_m16_architecture-1.gif`.
+
+### Release Status
+
+Current release:
+
+`FRP v1.8.0`
+
+Current milestone:
+
+`M16 — RTL Core Realization and Execution Semantics Package`
+
+Current qualification state:
+
+`FRP v1.8.0 / M16 — PASS`
+
+Current RTL status:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+Current FPGA preparation status:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
+
 ## [v1.7.0] — M15 Implementation Mapping, Domain Interface, and Qualification Closure Package
 
 ### Added
