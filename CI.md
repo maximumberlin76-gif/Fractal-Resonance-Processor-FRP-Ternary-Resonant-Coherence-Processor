@@ -704,7 +704,7 @@ Active neutral state:
 
 Canonical M16 RTL retained-state notation:
 
-`{-1, 0, +1}`
+`{-1, 0, 1}`
 
 Canonical M16 hardware encoding:
 
@@ -712,7 +712,7 @@ Canonical M16 hardware encoding:
 |---|---|---|
 | `-1` | `FRP_TERN_NEG` | `2'b11` |
 | `0` | `FRP_TERN_ZERO` | `2'b00` |
-| `+1` | `FRP_TERN_POS` | `2'b01` |
+| `1` | `FRP_TERN_POS` | `2'b01` |
 | reserved | `FRP_TERN_RESERVED` | `2'b10` |
 
 The active neutral state performs:
@@ -742,9 +742,9 @@ M15 Python opposite-polarity routes:
 
 M16 RTL opposite-polarity routes:
 
-`-1 → 0 → +1`
+`-1 → 0 → 1`
 
-`+1 → 0 → -1`
+`1 → 0 → -1`
 
 Execution relation:
 
