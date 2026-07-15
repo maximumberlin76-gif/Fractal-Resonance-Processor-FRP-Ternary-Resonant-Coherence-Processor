@@ -288,7 +288,7 @@ The global result emerges from nested local and collective relations rather than
 
 The retained processor domain is:
 
-`{-1, 0, +1}`
+`{-1, 0, 1}`
 
 | State | Physical operational role |
 |---|---|
