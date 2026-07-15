@@ -223,11 +223,11 @@ Workflow file:
 
 Qualified workflow run:
 
-`#82`
+`#84`
 
 Qualified source commit:
 
-`a68a2af`
+`ede53cf`
 
 Branch:
 
@@ -296,11 +296,11 @@ Workflow file:
 
 Qualified workflow run:
 
-`#1`
+`#2`
 
 Qualified repository commit:
 
-`326b69e`
+`ede53cf`
 
 Branch:
 
@@ -312,7 +312,7 @@ Result:
 
 Workflow duration:
 
-`1m 7s`
+`36s`
 
 Closed status:
 
@@ -2415,11 +2415,11 @@ Trigger:
 
 Qualified workflow run:
 
-`#82`
+`#84`
 
 Qualified source commit:
 
-`a68a2af`
+`ede53cf`
 
 Branch:
 
@@ -2536,11 +2536,11 @@ Trigger:
 
 Qualified workflow run:
 
-`#1`
+`#2`
 
 Qualified repository commit:
 
-`326b69e`
+`ede53cf`
 
 Branch:
 
@@ -2552,7 +2552,7 @@ Workflow result:
 
 Workflow duration:
 
-`1m 7s`
+`36s`
 
 Qualification evidence artifacts:
 
@@ -3006,11 +3006,11 @@ Workflow file:
 
 Qualified workflow run:
 
-`#82`
+`#84`
 
 Qualified repository commit:
 
-`a68a2af`
+`ede53cf`
 
 Branch:
 
@@ -3098,11 +3098,11 @@ Workflow file:
 
 Qualified workflow run:
 
-`#1`
+`#2`
 
 Qualified repository commit:
 
-`326b69e`
+`ede53cf`
 
 Branch:
 
@@ -3114,7 +3114,7 @@ Workflow result:
 
 Workflow duration:
 
-`1m 7s`
+`36s`
 
 Qualification evidence artifacts:
 
@@ -3588,8 +3588,8 @@ Measurement contour:
 |---|---|
 | Workflow | `FRP M16 RTL Artifact Boundary` |
 | Workflow file | `.github/workflows/frp-m16-rtl-artifact-boundary.yml` |
-| Qualified workflow run | `#82` |
-| Qualified source commit | `a68a2af` |
+| Qualified workflow run | `#84` |
+| Qualified source commit | `ede53cf` |
 | Branch | `main` |
 | Workflow result | `SUCCESS` |
 | Qualification result | `PASS` |
@@ -3630,11 +3630,11 @@ Closed status:
 |---|---|
 | Workflow | `FRP M16 FPGA Preparation` |
 | Workflow file | `.github/workflows/frp-m16-fpga-preparation.yml` |
-| Qualified workflow run | `#1` |
-| Qualified repository commit | `326b69e` |
+| Qualified workflow run | `#2` |
+| Qualified repository commit | `ede53cf` |
 | Branch | `main` |
 | Workflow result | `SUCCESS` |
-| Workflow duration | `1m 7s` |
+| Workflow duration | `36s` |
 | Qualification result | `PASS` |
 
 Recorded terminal values:
@@ -3905,8 +3905,8 @@ Qualification record:
 |---|---|
 | Workflow | `FRP M16 RTL Artifact Boundary` |
 | Workflow file | `.github/workflows/frp-m16-rtl-artifact-boundary.yml` |
-| Workflow run | `#82` |
-| Qualified source commit | `a68a2af` |
+| Workflow run | `#84` |
+| Qualified source commit | `ede53cf` |
 | Branch | `main` |
 | Result | `SUCCESS` |
 | Status | `M16 RTL EXECUTION LAYER CLOSED` |
@@ -3941,11 +3941,11 @@ Qualification record:
 |---|---|
 | Workflow | `FRP M16 FPGA Preparation` |
 | Workflow file | `.github/workflows/frp-m16-fpga-preparation.yml` |
-| Workflow run | `#1` |
-| Qualified repository commit | `326b69e` |
+| Workflow run | `#2` |
+| Qualified repository commit | `ede53cf` |
 | Branch | `main` |
 | Result | `SUCCESS` |
-| Duration | `1m 7s` |
+| Duration | `36s` |
 | Status | `M16 FPGA PREPARATION LAYER CLOSED` |
 
 ### Current Qualification Position
@@ -4179,8 +4179,8 @@ M16 RTL qualification record:
 | Field | Recorded value |
 |---|---|
 | Workflow | `FRP M16 RTL Artifact Boundary` |
-| Workflow run | `#82` |
-| Qualified source commit | `a68a2af` |
+| Workflow run | `#84` |
+| Qualified source commit | `ede53cf` |
 | Result | `SUCCESS` |
 
 M16 FPGA preparation qualification record:
@@ -4188,8 +4188,8 @@ M16 FPGA preparation qualification record:
 | Field | Recorded value |
 |---|---|
 | Workflow | `FRP M16 FPGA Preparation` |
-| Workflow run | `#1` |
-| Qualified repository commit | `326b69e` |
+| Workflow run | `#2` |
+| Qualified repository commit | `ede53cf` |
 | Result | `SUCCESS` |
 
 Current hardware-facing release state:
@@ -4227,8 +4227,8 @@ M16 RTL qualification record:
 | Field | Recorded value |
 |---|---|
 | Workflow | `FRP M16 RTL Artifact Boundary` |
-| Workflow run | `#82` |
-| Qualified source commit | `a68a2af` |
+| Workflow run | `#84` |
+| Qualified source commit | `ede53cf` |
 | Result | `SUCCESS` |
 | Status | `M16 RTL EXECUTION LAYER CLOSED` |
 
@@ -4237,8 +4237,8 @@ M16 FPGA preparation qualification record:
 | Field | Recorded value |
 |---|---|
 | Workflow | `FRP M16 FPGA Preparation` |
-| Workflow run | `#1` |
-| Qualified repository commit | `326b69e` |
+| Workflow run | `#2` |
+| Qualified repository commit | `ede53cf` |
 | Result | `SUCCESS` |
 | Status | `M16 FPGA PREPARATION LAYER CLOSED` |
 
@@ -4442,8 +4442,8 @@ RTL qualification record:
 | Field | Recorded value |
 |---|---|
 | Workflow | `FRP M16 RTL Artifact Boundary` |
-| Workflow run | `#82` |
-| Qualified source commit | `a68a2af` |
+| Workflow run | `#84` |
+| Qualified source commit | `ede53cf` |
 | Result | `SUCCESS` |
 | Status | `M16 RTL EXECUTION LAYER CLOSED` |
 
@@ -4467,8 +4467,8 @@ FPGA preparation qualification record:
 | Field | Recorded value |
 |---|---|
 | Workflow | `FRP M16 FPGA Preparation` |
-| Workflow run | `#1` |
-| Qualified repository commit | `326b69e` |
+| Workflow run | `#2` |
+| Qualified repository commit | `ede53cf` |
 | Result | `SUCCESS` |
 | Status | `M16 FPGA PREPARATION LAYER CLOSED` |
 
@@ -4605,8 +4605,8 @@ M16 RTL qualification:
 |---|---|
 | Workflow | `FRP M16 RTL Artifact Boundary` |
 | Workflow file | `.github/workflows/frp-m16-rtl-artifact-boundary.yml` |
-| Workflow run | `#82` |
-| Qualified source commit | `a68a2af` |
+| Workflow run | `#84` |
+| Qualified source commit | `ede53cf` |
 | Branch | `main` |
 | Result | `SUCCESS` |
 | Qualification result | `PASS` |
@@ -4618,11 +4618,11 @@ M16 FPGA preparation qualification:
 |---|---|
 | Workflow | `FRP M16 FPGA Preparation` |
 | Workflow file | `.github/workflows/frp-m16-fpga-preparation.yml` |
-| Workflow run | `#1` |
-| Qualified repository commit | `326b69e` |
+| Workflow run | `#2` |
+| Qualified repository commit | `ede53cf` |
 | Branch | `main` |
 | Result | `SUCCESS` |
-| Duration | `1m 7s` |
+| Duration | `36s` |
 | Qualification result | `PASS` |
 | Status | `M16 FPGA PREPARATION LAYER CLOSED` |
 

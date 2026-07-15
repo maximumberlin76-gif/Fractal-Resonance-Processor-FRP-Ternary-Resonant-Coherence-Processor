@@ -873,3 +873,18 @@ Final closure status:
 ## Author
 
 Maksym Marnov
+
+## Qualification Rerun Record
+
+| Field | Recorded value |
+|---|---|
+| Workflow | `FRP M16 FPGA Preparation` |
+| Workflow file | `.github/workflows/frp-m16-fpga-preparation.yml` |
+| Trigger | `workflow_dispatch` |
+| Workflow run | `#2` |
+| Qualified repository commit | `ede53cf` |
+| Branch | `main` |
+| Workflow result | `SUCCESS` |
+| Workflow duration | `36s` |
+| Qualification artifact count | `1` |
+| Closure status | `M16 FPGA PREPARATION LAYER CLOSED` |
