@@ -24,7 +24,7 @@
 //       -> retained-state writeback
 //
 // Architecture preserved:
-//   - balanced ternary retained-state domain {-1, 0, +1};
+//   - balanced ternary retained-state domain {-1, 0, 1};
 //   - active neutral state 0 as a computational state;
 //   - mandatory tick-separated routing -1 -> 0 -> +1 and +1 -> 0 -> -1;
 //   - retained pending-route target polarity;

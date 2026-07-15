@@ -185,7 +185,7 @@ Target-independent integration result:
 
 The retained processor-state domain remains:
 
-`{-1, 0, +1}`
+`{-1, 0, 1}`
 
 Canonical encoding:
 

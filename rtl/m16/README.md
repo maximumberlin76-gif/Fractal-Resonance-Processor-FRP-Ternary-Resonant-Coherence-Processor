@@ -44,7 +44,7 @@ Execution chain:
 
 The retained processor-state domain is:
 
-`{-1, 0, +1}`
+`{-1, 0, 1}`
 
 | State | Computational role |
 |---|---|

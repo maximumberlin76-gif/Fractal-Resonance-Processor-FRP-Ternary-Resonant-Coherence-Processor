@@ -17,7 +17,7 @@
 //   qualified M16 retained balanced ternary execution core.
 //
 // Preserved M16 execution architecture:
-//   - canonical balanced ternary encoding {-1, 0, +1};
+//   - canonical balanced ternary encoding {-1, 0, 1};
 //   - active neutral state 0;
 //   - free / 7/1 / 1/7 temporal execution;
 //   - deterministic request-lane arbitration;

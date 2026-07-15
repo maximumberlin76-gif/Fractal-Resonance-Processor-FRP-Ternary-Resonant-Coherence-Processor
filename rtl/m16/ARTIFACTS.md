@@ -66,7 +66,7 @@ The `rtl/m16/` directory contains:
 
 The retained processor-state domain is:
 
-`{-1, 0, +1}`
+`{-1, 0, 1}`
 
 Canonical encoding:
 

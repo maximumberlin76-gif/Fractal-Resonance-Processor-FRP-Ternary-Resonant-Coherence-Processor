@@ -16,7 +16,7 @@
 //   Deterministic request-lane arbitration for the integrated M16 RTL chain.
 //
 // Preserved architecture:
-//   - balanced ternary targets {-1, 0, +1};
+//   - balanced ternary targets {-1, 0, 1};
 //   - active neutral 0 as an executable retained state;
 //   - deterministic ascending request-lane order;
 //   - one accepted request per element_index per tick;

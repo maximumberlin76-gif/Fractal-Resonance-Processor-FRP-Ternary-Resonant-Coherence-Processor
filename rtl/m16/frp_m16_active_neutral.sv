@@ -17,7 +17,7 @@
         candidate for the M16 RTL execution chain.
 
         Architectural contract:
-            - balanced ternary retained states {-1, 0, +1};
+            - balanced ternary retained states {-1, 0, 1};
             - active neutral 0 is an executable computational state;
             - same-state retention is legal and consumes no state change;
             - 0 -> +/-1 is a commit-capable release;

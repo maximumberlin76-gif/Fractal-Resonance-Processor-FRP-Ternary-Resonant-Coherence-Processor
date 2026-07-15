@@ -16,7 +16,7 @@
 //   Verifies the externally visible M16 retained-state execution boundary.
 //
 // Protected architecture:
-//   - canonical balanced ternary domain {-1, 0, +1};
+//   - canonical balanced ternary domain {-1, 0, 1};
 //   - active neutral 0 as an executable retained state;
 //   - forbidden direct -1 <-> +1 retained-state transitions;
 //   - mandatory tick-separated opposite-polarity routing through 0;
