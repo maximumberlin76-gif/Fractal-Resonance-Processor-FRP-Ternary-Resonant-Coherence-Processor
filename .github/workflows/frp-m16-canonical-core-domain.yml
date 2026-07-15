@@ -1,0 +1,243 @@
+name: FRP M16 Canonical Core Domain
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: frp-m16-canonical-core-domain-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  canonicalize-m16-core-domain:
+    name: Canonicalize M16 core domain
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Canonicalize M16 core-domain notation
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          allowed_suffixes = {".md", ".sv", ".yml", ".yaml"}
+          target_files = set()
+
+          for root in (Path("rtl/m16"), Path("fpga/m16")):
+              if not root.is_dir():
+                  raise SystemExit(f"Missing required M16 directory: {root}")
+
+              for path in root.rglob("*"):
+                  if path.is_file() and path.suffix in allowed_suffixes:
+                      target_files.add(path)
+
+          docs_root = Path("docs")
+          if not docs_root.is_dir():
+              raise SystemExit("Missing required documentation directory: docs")
+
+          target_files.update(docs_root.glob("m16_*.md"))
+
+          workflows_root = Path(".github/workflows")
+          if not workflows_root.is_dir():
+              raise SystemExit(
+                  "Missing required workflow directory: .github/workflows"
+              )
+
+          target_files.update(workflows_root.glob("frp-m16-*.yml"))
+          target_files.update(workflows_root.glob("frp-m16-*.yaml"))
+
+          target_files = sorted(
+              path
+              for path in target_files
+              if path.is_file() and path.suffix in allowed_suffixes
+          )
+
+          if not target_files:
+              raise SystemExit("No M16 text files were found.")
+
+          positive_with_sign = bytes([43]) + b"1"
+          noncanonical_domain = b"{-1, 0, " + positive_with_sign + b"}"
+          canonical_domain = b"{-1, 0, 1}"
+
+          changed_files = []
+          replacement_count = 0
+
+          for path in target_files:
+              original = path.read_bytes()
+              replacements = original.count(noncanonical_domain)
+
+              if replacements == 0:
+                  continue
+
+              canonical = original.replace(
+                  noncanonical_domain,
+                  canonical_domain,
+              )
+              path.write_bytes(canonical)
+              changed_files.append((path, replacements))
+              replacement_count += replacements
+
+          remaining = []
+
+          for path in target_files:
+              content = path.read_bytes()
+
+              if noncanonical_domain in content:
+                  remaining.append(
+                      (
+                          path,
+                          content.count(noncanonical_domain),
+                      )
+                  )
+
+          if remaining:
+              for path, count in remaining:
+                  print(f"{path}: {count}")
+
+              raise SystemExit(
+                  "Noncanonical M16 core-domain notation remains."
+              )
+
+          package_path = Path("rtl/m16/frp_m16_pkg.sv")
+
+          if not package_path.is_file():
+              raise SystemExit(
+                  f"Missing required M16 package: {package_path}"
+              )
+
+          package_text = package_path.read_text(encoding="utf-8")
+
+          required_encodings = {
+              "state -1": r"\bFRP_TERN_NEG\s*=\s*2'b11\b",
+              "state 0": r"\bFRP_TERN_ZERO\s*=\s*2'b00\b",
+              "state 1": r"\bFRP_TERN_POS\s*=\s*2'b01\b",
+          }
+
+          for label, pattern in required_encodings.items():
+              if re.search(pattern, package_text) is None:
+                  raise SystemExit(
+                      f"Missing canonical M16 encoding for {label}."
+                  )
+
+          print(f"Checked M16 text files: {len(target_files)}")
+          print(
+              "Canonicalized core-domain records: "
+              f"{replacement_count}"
+          )
+
+          if changed_files:
+              print("Changed files:")
+
+              for path, replacements in changed_files:
+                  print(f"- {path}: {replacements}")
+          else:
+              print(
+                  "All M16 core-domain records are already canonical."
+              )
+
+          print("Canonical M16 core domain: -1 / 0 / 1")
+          PY
+
+      - name: Verify exact change boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+
+          changed_paths = subprocess.run(
+              ["git", "diff", "--name-only"],
+              check=True,
+              capture_output=True,
+              text=True,
+          ).stdout.splitlines()
+
+          unexpected = []
+
+          for raw_path in changed_paths:
+              path = Path(raw_path)
+
+              allowed = (
+                  raw_path.startswith("rtl/m16/")
+                  or raw_path.startswith("fpga/m16/")
+                  or (
+                      path.parent == Path("docs")
+                      and path.name.startswith("m16_")
+                      and path.suffix == ".md"
+                  )
+                  or (
+                      path.parent == Path(".github/workflows")
+                      and path.name.startswith("frp-m16-")
+                      and path.suffix in {".yml", ".yaml"}
+                  )
+              )
+
+              if not allowed:
+                  unexpected.append(raw_path)
+
+          if unexpected:
+              print("Unexpected modified paths:")
+
+              for raw_path in unexpected:
+                  print(f"- {raw_path}")
+
+              raise SystemExit(
+                  "Core-domain normalization changed files outside M16."
+              )
+
+          print(
+              "All modifications are confined to "
+              "M16 core-domain records."
+          )
+          PY
+
+          git diff --check
+
+      - name: Show core-domain diff
+        shell: bash
+        run: |
+          git diff -- \
+            '.github/workflows/frp-m16-*.yml' \
+            '.github/workflows/frp-m16-*.yaml' \
+            'docs/m16_*.md' \
+            rtl/m16 \
+            fpga/m16
+
+      - name: Commit canonical M16 core domain
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet; then
+            echo "No core-domain normalization commit required."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config \
+            user.email \
+            "github-actions[bot]@users.noreply.github.com"
+
+          git add --all -- \
+            .github/workflows \
+            docs \
+            rtl/m16 \
+            fpga/m16
+
+          git diff --cached --check
+          git commit \
+            -m "Normalize M16 core domain notation to -1/0/1"
+          git push origin "HEAD:${{ github.ref_name }}"
