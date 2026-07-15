@@ -1,3 +1,9 @@
+[![Version](https://img.shields.io/badge/version-v1.8.0-blue.svg)](#release-status)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](#quick-start)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
+[![FRP M16 RTL Artifact Boundary](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m16-rtl-artifact-boundary.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m16-rtl-artifact-boundary.yml)
+[![FRP M16 FPGA Preparation](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m16-fpga-preparation.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m16-fpga-preparation.yml)
+
 [![FRP v1.8.0 — M16 — RTL Core Realization and Execution Semantics Package](docs/frp_v1_8_0_m16_architecture-1.gif)](#current-architecture-layer)
 
 # Fractal Resonance Processor (FRP)
