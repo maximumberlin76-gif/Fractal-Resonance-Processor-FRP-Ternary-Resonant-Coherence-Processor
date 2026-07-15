@@ -831,15 +831,30 @@ Qualified FPGA preparation terminal record:
 | `reserved_state_events` | `0` |
 | `queue_overflow_events` | `0` |
 
+
 ## 5. CI Workflow Badge Chain
 
-This `CI.md` file exposes nine GitHub Actions workflow status badges.
+This `CI.md` file exposes 23 GitHub Actions workflow status badges.
 
 | Badge | Workflow file |
 |---|---|
-| `FRP M15 Implementation Mapping and Qualification Closure` | `.github/workflows/frp-m15-implementation-mapping-qualification.yml` |
 | `FRP M16 RTL Artifact Boundary` | `.github/workflows/frp-m16-rtl-artifact-boundary.yml` |
 | `FRP M16 FPGA Preparation` | `.github/workflows/frp-m16-fpga-preparation.yml` |
+| `FRP M16 Canonical Core Domain` | `.github/workflows/frp-m16-canonical-core-domain.yml` |
+| `FRP M16 Reserved Cell Cleanup` | `.github/workflows/frp-m16-reserved-cell-cleanup.yml` |
+| `FRP M15 Implementation Mapping and Qualification Closure` | `.github/workflows/frp-m15-implementation-mapping-qualification.yml` |
+| `FRP M14 Physical Implementation Correlation and Production Qualification` | `.github/workflows/frp-m14-physical-implementation-qualification.yml` |
+| `FRP M13 Production Scaling and Implementation Stabilization` | `.github/workflows/frp-m13-production-scaling-stabilization.yml` |
+| `FRP M12 External Implementation Feedback and Production Iteration` | `.github/workflows/frp-m12-feedback-iteration.yml` |
+| `FRP M11 Production Integration and External Handoff` | `.github/workflows/frp-m11-production-integration-handoff.yml` |
+| `FRP M10 Silicon Production and Tapeout Readiness` | `.github/workflows/frp-m10-silicon-production-tapeout.yml` |
+| `FRP M9 Silicon and Heterogeneous Architecture` | `.github/workflows/frp-m9-silicon-architecture.yml` |
+| `FRP M8 Production Release Package` | `.github/workflows/frp-m8-production-release.yml` |
+| `FRP M7 FPGA Synthesis and Timing Scaffold` | `.github/workflows/frp-m7-fpga-synthesis.yml` |
+| `FRP M6 Formal Verification and Equivalence Scaffold` | `.github/workflows/frp-m6-formal-verification.yml` |
+| `FRP M5 RTL Interface and Assertion Harness` | `.github/workflows/frp-m5-rtl-assertion-harness.yml` |
+| `FRP M4 HDL Trace and Testbench` | `.github/workflows/frp-m4-hdl-trace.yml` |
+| `FRP M3 Benchmark and Signal Map` | `.github/workflows/frp-m3-benchmark-signal-map.yml` |
 | `FRP Self Test` | `.github/workflows/frp-self-test.yml` |
 | `FRP Benchmark Smoke Test` | `.github/workflows/frp-benchmark-smoke.yml` |
 | `FRP Structured Output` | `.github/workflows/frp-structured-output.yml` |
@@ -890,19 +905,43 @@ The supporting comparative role contains:
 
 ### 6.5 Repository maintenance
 
-The repository also contains:
+The repository-maintenance role contains:
 
-`.github/workflows/frp-m16-reserved-cell-cleanup.yml`
+- `.github/workflows/frp-m16-canonical-core-domain.yml`;
+- `.github/workflows/frp-m16-reserved-cell-cleanup.yml`.
 
-Workflow name:
+Canonical core-domain workflow name:
+
+`FRP M16 Canonical Core Domain`
+
+The canonical core-domain workflow has `contents: write` permission and responds to `workflow_dispatch`.
+
+Its defined sequence:
+
+- scans M16 RTL, FPGA, documentation, and workflow text files;
+- replaces the noncanonical M16 core-domain record with `{-1, 0, 1}`;
+- verifies the exact M16 modification boundary;
+- verifies `FRP_TERN_NEG = 2'b11`;
+- verifies `FRP_TERN_ZERO = 2'b00`;
+- verifies `FRP_TERN_POS = 2'b01`;
+- commits and pushes only when a canonicalization change exists.
+
+Reserved-cell cleanup workflow name:
 
 `FRP M16 Reserved Cell Cleanup`
 
-This workflow has `contents: write` permission and performs its defined RTL identifier cleanup and commit sequence when manually dispatched.
+The reserved-cell cleanup workflow has `contents: write` permission and responds to `workflow_dispatch`.
+
+Its defined sequence:
+
+- scans `rtl/m16/*.sv`;
+- replaces the standalone lowercase identifier `cell` with `element_index`;
+- preserves larger identifiers such as `CELLS`, `CELL_INDEX_BITS`, and `request_cell_index`;
+- commits and pushes only when an RTL cleanup change exists.
 
 ## 7. Workflow Inventory
 
-The repository contains 22 GitHub Actions workflow files.
+The repository contains 23 GitHub Actions workflow files.
 
 ### 7.1 Foundational workflows
 
@@ -945,12 +984,12 @@ The repository contains 22 GitHub Actions workflow files.
 | `.github/workflows/frp-hardware-sensitivity-comparison.yml` | `FRP Hardware Sensitivity Comparison` |
 | `.github/workflows/frp-hardware-sensitivity-profile.yml` | `FRP Hardware Sensitivity Profile Qualification` |
 
-### 7.5 Repository-maintenance workflow
+### 7.5 Repository-maintenance workflows
 
 | Workflow file | Workflow name | Role |
 |---|---|---|
+| `.github/workflows/frp-m16-canonical-core-domain.yml` | `FRP M16 Canonical Core Domain` | manually dispatched M16 core-domain canonicalization, verification, and commit workflow |
 | `.github/workflows/frp-m16-reserved-cell-cleanup.yml` | `FRP M16 Reserved Cell Cleanup` | manually dispatched RTL identifier cleanup and commit workflow |
-
 
 ## 8. Current M16 Qualification Layers
 
