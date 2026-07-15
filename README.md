@@ -2,6 +2,10 @@
 
 **Ternary Fractal Resonant Coherence Processor**
 
+**Ternary Resonant Coherence Processor — Structured Output Prototype**
+
+**(Ternary Architecture)**
+
 Fractal Resonance Processor (FRP) is a **Ternary Fractal Resonant Coherence Processor** reference architecture.
 
 FRP combines two inseparable computational layers:
@@ -37,6 +41,66 @@ The two layers perform different computational roles:
 - the balanced ternary domain retains state, target, transition, and result;
 - the active neutral state `0` provides the mandatory intermediate state for opposite-polarity transitions.
 
+## Quick Start
+
+Recommended CI-aligned Python version:
+
+`Python 3.12`
+
+Install the repository dependency:
+
+`python -m pip install -r requirements.txt`
+
+Repository external dependency:
+
+`numpy>=1.26.0`
+
+NumPy supports the historical FRP v0.9.3 and v0.9.4 executable layers.
+
+The M15-qualified FRP v1.7.0 executable semantic reference and Comparative Architecture Benchmark Suite use the Python standard library and repository-local modules.
+
+Run the default processor execution:
+
+`python frp_prototype_v1_7_0.py`
+
+Run the explicit demo mode:
+
+`python frp_prototype_v1_7_0.py --mode demo`
+
+Run structured JSON output:
+
+`python frp_prototype_v1_7_0.py --mode demo --output json`
+
+Run structured JSON output with full trace data:
+
+`python frp_prototype_v1_7_0.py --mode demo --output json --include-trace`
+
+Run the M15-qualified executable semantic reference self-test:
+
+`python frp_prototype_v1_7_0.py --mode self-test --output json`
+
+Run the explicit `free` temporal execution mode:
+
+`python frp_prototype_v1_7_0.py --mode self-test --scheduler free --output json`
+
+Run the explicit `7/1` temporal execution mode:
+
+`python frp_prototype_v1_7_0.py --mode self-test --scheduler 7/1 --output json`
+
+Run the explicit `1/7` temporal execution mode:
+
+`python frp_prototype_v1_7_0.py --mode self-test --scheduler 1/7 --output json`
+
+Generate the M15-qualified executable benchmark matrix:
+
+`python frp_prototype_v1_7_0.py --mode benchmark`
+
+Detailed execution references:
+
+- `USAGE.md`;
+- `REPRODUCIBILITY.md`;
+- `docs/output_schema.md`.
+
 ## Current Architecture Layer
 
 | Field | Current value |
@@ -52,21 +116,39 @@ The two layers perform different computational roles:
 
 FRP v1.8.0 extends the M15-qualified deterministic implementation-mapping boundary into an executable SystemVerilog RTL core and a target-independent FPGA integration layer.
 
+FRP v1.7.0 extends the published M14 floating semantic reference into a deterministic fixed-point hardware-interface domain.
+
+M15 remains the qualified semantic and implementation-mapping foundation of M16.
+
+The M15 layer provides:
+
+- a deterministic fixed-point interface profile;
+- canonical balanced ternary hardware encoding;
+- a stateful quantized hardware shadow;
+- cycle-exact integer reference traces;
+- deterministic RTL comparison vectors;
+- SystemVerilog testbench interface mapping;
+- synthesizable RTL reference-core mapping;
+- RTL assertion correlation;
+- reference RTL equivalence;
+- exact deterministic replay;
+- qualification closure.
+
 The current architecture chain is:
 
-`M14 floating semantic reference → M15 quantized hardware shadow → cycle-exact integer golden trace → deterministic RTL comparison vectors → M15 qualification closure → M16 executable SystemVerilog RTL core → M16 target-independent FPGA integration → FPGA preparation qualification closure`
+`M14 floating semantic reference → M15 quantized hardware shadow → cycle-exact integer golden trace → deterministic RTL comparison vectors → SystemVerilog correlation contract → RTL equivalence and exact replay → M15 qualification closure → M16 executable SystemVerilog RTL core → M16 target-independent FPGA integration → FPGA preparation qualification closure`
 
-The current release preserves the complete M15 evidence foundation:
+M15 qualification evidence:
 
 - `41 / 41 PASS` self-test assertions;
 - `10 / 10` deterministic vector files byte-identical after regeneration;
 - `5 / 5` required semantic correlation matches equal to `1.0`;
 - `6 / 6` exact deterministic replay matches equal to `1.0`;
-- zero actual direct events;
-- zero reserved-state events;
-- zero queue-overflow events;
-- exact fixed-point topology closure;
-- exact fixed-point thermal closure.
+- `actual_direct_events = 0`;
+- `reserved_state_events = 0`;
+- `queue_overflow_events = 0`;
+- `fixed_point_topology_sum_exact = True`;
+- `fixed_point_thermal_sum_exact = True`.
 
 The current M16 layer adds:
 
@@ -133,15 +215,23 @@ Primary preserved invariants:
 
 Workflow:
 
+`FRP M16 RTL Artifact Boundary`
+
+Workflow file:
+
 `.github/workflows/frp-m16-rtl-artifact-boundary.yml`
 
 Qualified workflow run:
 
-`FRP M16 RTL Artifact Boundary #82`
+`#82`
 
 Qualified source commit:
 
 `a68a2af`
+
+Branch:
+
+`main`
 
 Result:
 
@@ -157,9 +247,9 @@ M16 RTL documentation:
 |---|---|
 | `rtl/m16/README.md` | RTL architecture and execution semantics |
 | `rtl/m16/ARTIFACTS.md` | RTL artifact manifest |
-| `rtl/m16/SIMULATION.md` | simulator build and execution procedure |
+| `rtl/m16/SIMULATION.md` | Verilator build and execution procedure |
 | `rtl/m16/SIMULATION_TRANSCRIPT.md` | final executable qualification record |
-| `rtl/m16/CLOSURE.md` | final RTL closure record |
+| `rtl/m16/CLOSURE.md` | final M16 RTL closure record |
 
 M16 RTL source artifacts:
 
@@ -198,19 +288,31 @@ Qualified RTL boundary:
 
 Workflow:
 
+`FRP M16 FPGA Preparation`
+
+Workflow file:
+
 `.github/workflows/frp-m16-fpga-preparation.yml`
 
 Qualified workflow run:
 
-`FRP M16 FPGA Preparation #1`
+`#1`
 
-Qualified source commit:
+Qualified repository commit:
 
 `326b69e`
+
+Branch:
+
+`main`
 
 Result:
 
 `SUCCESS`
+
+Workflow duration:
+
+`1m 7s`
 
 Closed status:
 
@@ -221,7 +323,7 @@ M16 FPGA preparation artifacts:
 | Path | Purpose |
 |---|---|
 | `fpga/m16/frp_m16_fpga_top.sv` | target-independent FPGA integration and synthesis boundary |
-| `fpga/m16/frp_m16_fpga_tb.sv` | executable FPGA integration testbench |
+| `fpga/m16/frp_m16_fpga_tb.sv` | executable FPGA integration qualification boundary |
 | `fpga/m16/SIMULATION_TRANSCRIPT.md` | final FPGA preparation qualification record |
 | `fpga/m16/CLOSURE.md` | final FPGA preparation closure record |
 
@@ -281,68 +383,9 @@ The physical foundation defines:
 - dissipation and thermal feedback as internal processor variables;
 - retained history and path dependence;
 - fractal hierarchical coupling;
-- the transition from linearized binary switching toward nonlinear dynamic ternary computation;
+- Binary hardware can model nonlinear dynamics; FRP transfers selected nonlinear dynamic mechanisms into the organization of computation itself;
 - the physical evidence boundary of the current FRP repository.
 
-## Quick Start
-
-Recommended CI-aligned Python version:
-
-`Python 3.12`
-
-Install the repository dependency:
-
-`python -m pip install -r requirements.txt`
-
-Repository external dependency:
-
-`numpy>=1.26.0`
-
-NumPy supports the historical FRP v0.9.3 and v0.9.4 executable layers.
-
-The M15-qualified FRP v1.7.0 executable semantic reference and Comparative Architecture Benchmark Suite use the Python standard library and repository-local modules.
-
-Run the default processor execution:
-
-`python frp_prototype_v1_7_0.py`
-
-Run the explicit demo mode:
-
-`python frp_prototype_v1_7_0.py --mode demo`
-
-Run structured JSON output:
-
-`python frp_prototype_v1_7_0.py --mode demo --output json`
-
-Run structured JSON output with full trace data:
-
-`python frp_prototype_v1_7_0.py --mode demo --output json --include-trace`
-
-Run the M15-qualified executable semantic reference self-test:
-
-`python frp_prototype_v1_7_0.py --mode self-test --output json`
-
-Run the explicit `free` temporal execution mode:
-
-`python frp_prototype_v1_7_0.py --mode self-test --scheduler free --output json`
-
-Run the explicit `7/1` temporal execution mode:
-
-`python frp_prototype_v1_7_0.py --mode self-test --scheduler 7/1 --output json`
-
-Run the explicit `1/7` temporal execution mode:
-
-`python frp_prototype_v1_7_0.py --mode self-test --scheduler 1/7 --output json`
-
-Generate the M15-qualified executable benchmark matrix:
-
-`python frp_prototype_v1_7_0.py --mode benchmark`
-
-Detailed execution references:
-
-- `USAGE.md`;
-- `REPRODUCIBILITY.md`;
-- `docs/output_schema.md`.
 
 ## Processor Architecture
 
@@ -473,7 +516,7 @@ The canonical two-bit hardware encoding is:
 |---|---|
 | `-1` | `2'b11` |
 | `0` | `2'b00` |
-| `+1` | `2'b01` |
+| `1` | `2'b01` |
 | reserved | `2'b10` |
 
 The valid processor state domain excludes:
@@ -636,28 +679,34 @@ The raw global Kuramoto order parameter is evaluated from:
 
 `R = sqrt(c^2 + s^2)`
 
-The implementation records this phase-order diagnostic under the field:
+The processor records:
 
 `raw_phase_coherence = R`
 
-The field name is retained for output compatibility.
+The current implementation uses field names containing the term `phase_coherence`.
 
-Mathematically:
+Mathematically, these phase-only quantities are phase-order diagnostics.
 
-- `R` measures phase synchronization and global phase order;
-- `R` does not independently establish amplitude coordination;
-- phase synchronization is distinct from phase coherence;
-- `R(t)` is distinct from general endogenous structural coherence `C(t)`.
+They do not independently establish full phase-amplitude coherence.
 
-The Kuramoto-Sakaguchi layer participates directly in:
+`phase synchronization != phase coherence`
+
+`R(t) != C(t)`
+
+`R(t)` measures phase order.
+
+`R(t)` does not independently measure amplitude coordination.
+
+`R(t)` is not the general endogenous structural coherence `C(t)`.
+
+The Kuramoto-Sakaguchi layer is therefore part of the computational core that determines:
 
 - phase evolution;
-- resonant interaction;
-- phase synchronization;
-- multiscale phase-order formation;
-- operational stability support;
-- phase-derived ternary target formation;
-- subsequent retained ternary execution.
+- resonance structure;
+- phase coherence;
+- dynamic stability;
+- phase-derived ternary targets;
+- subsequent retained ternary state.
 
 ### Dyadic Hierarchical Ultrametric Topology
 
@@ -680,10 +729,6 @@ Validated scaling configurations:
 The hierarchy resolves from individual cells through progressively larger dyadic domains:
 
 `individual cell → pair domain → local cluster → supercluster → global cell domain`
-
-The hierarchy preserves one related interaction organization across multiple scales.
-
-The term `fractal` therefore identifies recurring local-to-global coupling structure rather than decorative geometric repetition.
 
 ### Hierarchical Ultrametric Distance
 
@@ -711,8 +756,6 @@ For the sixteen-cell reference domain:
 
 `distance(0,15) = 4`
 
-The distance relation groups cells according to their shared dyadic hierarchy rather than ordinary Euclidean separation.
-
 ### Shell Population
 
 For hierarchy distance `d`:
@@ -726,8 +769,6 @@ Validated shell populations:
 `16 cells → 1, 2, 4, 8`
 
 `32 cells → 1, 2, 4, 8, 16`
-
-The shell population increases with hierarchical distance while the normalized influence of each individual pair decreases.
 
 ### Shell-Normalized Fractal Coupling
 
@@ -785,8 +826,6 @@ Validated marker:
 
 `shell_influence_monotonic = True`
 
-The topology preserves strong local interaction while retaining weaker coupling across progressively larger processor domains.
-
 ### Phase-Coupling and Thermal-Diffusion Topology Separation
 
 FRP preserves two independent hierarchical interaction paths.
@@ -802,7 +841,7 @@ Thermal-diffusion topology:
 The phase-coupling topology controls:
 
 - Kuramoto-Sakaguchi phase interaction;
-- hierarchical phase-order propagation;
+- hierarchical phase-coherence propagation;
 - local coupling dominance;
 - cross-cluster phase influence.
 
@@ -811,13 +850,11 @@ The thermal-diffusion topology controls:
 - local heat propagation;
 - inter-cell thermal diffusion;
 - cross-cluster thermal leakage;
-- hotspot distribution and containment.
+- hotspot containment.
 
 The architecture does not require:
 
 `W_ij = T_ij`
-
-The separation allows resonant interaction and thermal transport to use the same hierarchy while preserving distinct scaling relations.
 
 ### Thermal-Diffusion Topology
 
@@ -863,8 +900,6 @@ Validated thermal-topology markers:
 
 `shell_influence_monotonic = True`
 
-The thermal topology distributes local heat through nested interaction domains without replacing the phase-coupling topology.
-
 ### Cluster-Local Thermal Field
 
 FRP maintains a distributed thermal state for every cell.
@@ -895,10 +930,6 @@ The local heat peak is:
 
 `local_heat_peak = max_i,t(heat_i)`
 
-The global mean and local peak represent different thermal measurements.
-
-The local field preserves spatial and hierarchical thermal differences that would be lost in one global scalar alone.
-
 ### Local Dynamic Power Generation
 
 For each cell `i`:
@@ -907,19 +938,7 @@ For each cell `i`:
 
 The local dynamic-power path is:
 
-`local state transition`
-
-→ `local switching activity`
-
-→ `local frequency-target displacement`
-
-→ `local frequency lag`
-
-→ `local dynamic-power generation`
-
-The generated-power relation connects discrete retained-state activity with delayed resonant dynamics.
-
-The number of abstract arithmetic operations and the resulting thermal load remain separate measurement axes.
+`local state transition → local switching activity → local frequency target displacement → local frequency lag → local dynamic power generation`
 
 ### Hierarchical Thermal Diffusion
 
@@ -933,23 +952,7 @@ The local heat update is:
 
 The thermal path is:
 
-`local generated power`
-
-→ `local heat accumulation`
-
-→ `local thermal dissipation`
-
-→ `hierarchical thermal diffusion`
-
-→ `neighbor-domain heating`
-
-→ `cross-cluster thermal propagation`
-
-Thermal diffusion may be positive or negative for a particular cell depending on the surrounding thermal field.
-
-The ambient boundary prevents the modeled local heat state from falling below:
-
-`ambient_heat`
+`local generated power → local heat accumulation → local thermal dissipation → hierarchical thermal diffusion → neighbor-domain heating → cross-cluster thermal propagation`
 
 ### Local Thermal Overload
 
@@ -967,10 +970,6 @@ The processor retains local thermal telemetry for:
 - inactive-cluster heat mean;
 - remote-cluster heat peak;
 - cross-cluster thermal propagation ratio.
-
-Thermal overload is therefore not evaluated only after the complete processor field is averaged.
-
-Each cell contributes its own local overload state to the subsequent coupling calculation.
 
 ### Factorized Thermal Coupling Degradation
 
@@ -990,7 +989,7 @@ Equivalent relation:
 
 `K_eff(i,j) = coupling_nominal × W_ij × exp(-thermal_coupling_gain × (thermal_overload_i + thermal_overload_j) / 2)`
 
-The complete pair interaction therefore combines:
+The complete pair interaction therefore couples:
 
 - nominal Kuramoto-Sakaguchi interaction strength;
 - hierarchical fractal weight `W_ij`;
@@ -1001,10 +1000,6 @@ The complete pair interaction therefore combines:
 The interaction term is:
 
 `K_eff(i,j) × sin(phase_j - phase_i - gamma_effective_i)`
-
-The thermal state therefore participates directly in the resonant interaction field.
-
-It is not represented only as an external reporting metric.
 
 ### Local Correlated Gamma Drift
 
@@ -1044,17 +1039,7 @@ rather than:
 
 The local gamma path is:
 
-`thermal overload`
-
-→ `correlated gamma-noise state`
-
-→ `local effective Sakaguchi phase shift`
-
-→ `asymmetric local phase interaction`
-
-The gamma-noise state is correlated through time.
-
-The processor therefore retains a dynamic local phase-lag history rather than generating an independent uncorrelated phase shift at every tick.
+`thermal overload → correlated gamma-noise state → local effective Sakaguchi phase shift → asymmetric local phase interaction`
 
 ### Dense Reference Interaction Path
 
@@ -1179,9 +1164,9 @@ The implementation retains the following telemetry field names for output compat
 
 These fields are calculated from phase-only Kuramoto order parameters.
 
-Mathematically, they represent multiscale phase synchronization and phase-order diagnostics.
+Mathematically, these phase-only quantities are phase-order diagnostics.
 
-They do not independently establish complete phase coherence because complete phase coherence includes coordinated phase and amplitude dynamics.
+They do not independently establish full phase-amplitude coherence.
 
 The global Kuramoto order parameter remains:
 
@@ -1253,7 +1238,7 @@ The delay path is:
 
 → `state-dependent frequency target`
 
-→ `switching-dependent frequency-target displacement`
+→ `switching-dependent frequency target displacement`
 
 → `partial internal frequency response`
 
@@ -1263,15 +1248,14 @@ The delay path is:
 
 → `progressive frequency convergence`
 
-The processor does not force the internal frequency state to reach its target instantaneously.
+The processor therefore does not force the internal frequency state to reach its target instantaneously.
 
-The retained frequency lag contributes directly to:
+The lagged frequency state contributes directly to:
 
-- local dynamic-power generation;
-- local thermal accumulation;
+- local dynamic power generation;
+- thermal accumulation;
 - subsequent phase velocity;
-- future phase evolution;
-- tact-by-tact inheritance of unresolved dynamic response.
+- future phase evolution.
 
 Current reference relation:
 
@@ -1280,8 +1264,6 @@ Current reference relation:
 Current delayed update:
 
 `frequency_next_i = frequency_current_i + 0.30 × (frequency_target_i - frequency_current_i)`
-
-The retained frequency state therefore provides a temporal memory layer between discrete ternary execution and continuous resonant phase evolution.
 
 ### Global Thermal Saturation Relation
 
@@ -1311,13 +1293,6 @@ The local heat peak is:
 
 The global thermal relation preserves the aggregate view of the distributed local thermal field.
 
-The aggregate value does not replace the local field.
-
-The processor retains both:
-
-- global thermal telemetry;
-- per-cell and per-cluster thermal state.
-
 Current reference parameters:
 
 | Parameter | Value |
@@ -1329,13 +1304,7 @@ Current reference parameters:
 | `thermal_diffusion_gain` | `0.035` |
 | `thermal_coupling_gain` | `2.50` |
 
-The thermal state participates in the subsequent processor dynamics through:
-
-- coupling degradation;
-- local Sakaguchi phase-lag drift;
-- phase evolution;
-- phase-order formation;
-- operational stability pressure.
+Thermal state participates in endogenous processor feedback.
 
 ### Nonlinear Phase-Order Compression
 
@@ -1406,7 +1375,7 @@ The processor-specific operational coherence-support quantity is derived from:
 
 The current operational relation is:
 
-`C_FRP(t) = 0.82 + 0.34 × effective_coherence + 0.16 × cluster_phase_order_mean + 0.08 × neutral_fraction - 0.10 × mean_frequency_lag`
+`C_FRP(t) = 0.82 + 0.34 × effective_coherence + 0.16 × cluster_coherence_mean + 0.08 × neutral_fraction - 0.10 × mean_frequency_lag`
 
 where:
 
@@ -1420,15 +1389,9 @@ The implementation field remains:
 
 `C`
 
-The notation `C_FRP(t)` identifies its role as a processor-specific engineering projection.
+`operational C_FRP(t) != general C(t)`
 
-The relation does not assert:
-
-`C_FRP(t) = general endogenous structural coherence C(t)`
-
-The general parameter `C(t)` belongs to the wider theory of endogenous structural coherence.
-
-`C_FRP(t)` is the operational support quantity calculated by the current FRP reference architecture.
+`C_FRP` is a processor-specific operational quantity.
 
 ### Operational Destabilizing Load
 
@@ -1461,9 +1424,9 @@ The implementation field remains:
 
 `P`
 
-The notation `P_FRP(t)` identifies it as a processor-specific engineering projection.
+`operational P_FRP(t) != every possible physical P(t)`
 
-The relation does not assert that `P_FRP(t)` represents every possible form of physical destabilizing pressure.
+`P_FRP` is a processor-specific destabilizing-load projection.
 
 ### Operational Stability Margin
 
@@ -1517,11 +1480,9 @@ The validated M15 reference profile preserves:
 
 `minimum Delta_FRP(t) > 0`
 
-This operational processor relation is derived from the wider stability principle:
+The wider stability principle is:
 
 `C(t) > P(t)`
-
-The processor quantities remain explicit reduced engineering projections rather than replacements for the complete theoretical parameters.
 
 ### Hardware-Facing Numeric Profile
 
@@ -2004,8 +1965,6 @@ The replay path is:
 
 → `exact comparison with reference trace`
 
-The replay qualification confirms that the retained quantized state and deterministic execution rules reproduce the same hardware-facing processor trajectory.
-
 ### M15 Qualification Closure
 
 The M15 qualification-closure layer combines:
@@ -2303,7 +2262,7 @@ The RTL documentation boundary contains:
 
 The retained processor-state domain is:
 
-`{-1, 0, +1}`
+`{-1, 0, 1}`
 
 Canonical encoding:
 
@@ -2311,7 +2270,7 @@ Canonical encoding:
 |---|---|
 | `-1` | `2'b11` |
 | `0` | `2'b00` |
-| `+1` | `2'b01` |
+| `1` | `2'b01` |
 | reserved | `2'b10` |
 
 The state `0` remains an active processor state.
@@ -2330,15 +2289,15 @@ It performs:
 
 Opposite-polarity retained-state transitions are excluded:
 
-`-1 → +1`
+`-1 → 1`
 
-`+1 → -1`
+`1 → -1`
 
 The required routes are:
 
-`-1 → 0 → +1`
+`-1 → 0 → 1`
 
-`+1 → 0 → -1`
+`1 → 0 → -1`
 
 For an opposite-polarity request:
 
@@ -2410,8 +2369,6 @@ The capacity relations are:
 Each accepted state-changing route leg consumes transition capacity on its own tick.
 
 Same-state retention consumes no transition capacity.
-
-The capacity guard distributes retained-state change through execution time.
 
 ### M16 Integrated Invariant Boundary
 
@@ -2486,6 +2443,7 @@ The successful qualification includes:
 - syntax-correct architectural assertions;
 - latch-free retained-state writeback;
 - latch-free deterministic request-lane arbitration;
+- multidriven-diagnostic rejection;
 - integrated SystemVerilog parsing;
 - module elaboration;
 - executable Verilator testbench generation;
@@ -2561,15 +2519,6 @@ The executable FPGA integration testbench validates:
 - zero actual direct-transition events;
 - zero reserved-state events;
 - zero queue-overflow events.
-
-The target-independent FPGA integration boundary can be connected to a subsequent target-specific layer containing:
-
-- device clock-generation resources;
-- pin assignments;
-- device constraints;
-- physical timing constraints;
-- target-specific reset sources;
-- board-level input and output routing.
 
 ### M16 FPGA Preparation Qualification Closure
 
@@ -2755,11 +2704,11 @@ The top-level execution record includes:
 - execution summary;
 - validation result.
 
-The trace layer records the processor state tact by tact.
+The trace layer records the processor state tick by tick.
 
-Per-tact trace data includes:
+Per-tick trace data includes:
 
-- tact index;
+- tick index;
 - scheduler state;
 - balanced ternary states;
 - phase states;
@@ -2782,13 +2731,13 @@ Per-tact trace data includes:
 
 The retained-state trace preserves:
 
-`tact N output state → tact N + 1 input state`
+`tick N output state → tick N + 1 input state`
 
 The executable semantic-reference output therefore exposes:
 
 `initial processor state`
 
-→ `tact-by-tact state evolution`
+→ `tick-by-tick state evolution`
 
 → `Kuramoto-Sakaguchi phase dynamics`
 
@@ -2808,7 +2757,7 @@ The executable semantic-reference output therefore exposes:
 
 The execution summary records:
 
-- tacts recorded;
+- ticks recorded;
 - scheduler-state counts;
 - requested direct events;
 - prevented direct events;
@@ -2845,10 +2794,6 @@ Current default M15-qualified executable-reference values include:
 
 `fixed_point_thermal_sum_exact = True`
 
-These values belong to the defined default executable-reference profile.
-
-They are not universal constants of every processor configuration or workload.
-
 ### M16 RTL Execution Telemetry
 
 The M16 RTL core exposes cycle-level architectural telemetry directly through SystemVerilog signals.
@@ -2857,7 +2802,7 @@ The telemetry boundary includes:
 
 - current scheduler state;
 - scheduler-state counters;
-- tacts recorded;
+- ticks recorded;
 - retained balanced ternary state;
 - retained pending-route state;
 - accepted and rejected request lanes;
@@ -2887,8 +2832,6 @@ The integrated invariant vector is:
 
 `1111111111`
 
-The RTL telemetry therefore records the executable retained-state transition boundary independently from the floating phase and thermal trace produced by the Python semantic reference.
-
 Detailed RTL execution evidence is maintained in:
 
 - `rtl/m16/SIMULATION.md`;
@@ -2902,7 +2845,7 @@ The target-independent FPGA integration top propagates the M16 architectural tel
 - external asynchronous reset;
 - synchronized internal reset release;
 - `core_ready`;
-- gated tact enable;
+- gated tick enable;
 - gated counter clear;
 - gated request-valid input;
 - complete retained-state output;
@@ -3232,9 +3175,9 @@ Closed FPGA status:
 
 The complete current release preserves:
 
-`retained_state_i in {-1, 0, +1}`
+`retained_state_i in {-1, 0, 1}`
 
-`pending_route_i in {-1, 0, +1}`
+`pending_route_i in {-1, 0, 1}`
 
 `actual_direct_events = 0`
 
@@ -3256,7 +3199,7 @@ The qualified execution boundary therefore preserves:
 
 - canonical balanced ternary encoding;
 - active neutral state `0`;
-- tact-separated opposite-polarity routing;
+- tick-separated opposite-polarity routing;
 - exact pending-polarity retention;
 - deterministic request order;
 - distributed transition-capacity enforcement;
@@ -4785,6 +4728,22 @@ Historical archived DOI:
 Maksym Marnov (Alchimist)
 
 **Berlin, 8 July 2026**
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
