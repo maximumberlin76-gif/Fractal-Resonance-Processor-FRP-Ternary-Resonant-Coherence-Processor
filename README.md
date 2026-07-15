@@ -6,8 +6,6 @@
 
 **Ternary Resonant Coherence Processor — Structured Output Prototype**
 
-**(Ternary Architecture)**
-
 Fractal Resonance Processor (FRP) is a **Ternary Fractal Resonant Coherence Processor** reference architecture.
 
 FRP combines two inseparable computational layers:
