@@ -2,7 +2,7 @@
 
 ## Status
 
-`ACTIVE`
+`FRP v1.8.0 / M16 — PASS`
 
 ## Version
 
@@ -18,77 +18,101 @@ This document defines the qualification index for the M16 layer of the:
 
 `Ternary Fractal Resonant Coherence Processor`
 
-The index connects the M16 RTL artifact boundary, documentation boundary, retained-state execution semantics, zero-event invariants, M15 inherited qualification base, public status snapshot, artifact-boundary test stability policy, RTL closure report, and remaining external simulator transcript boundary.
+The index connects:
 
-M16 does not introduce a new processor model.
+- the qualified M15 semantic and implementation-mapping foundation;
+- the M16 RTL artifact boundary;
+- the M16 executable architectural simulation boundary;
+- the M16 assertion boundary;
+- the M16 FPGA preparation artifact boundary;
+- the M16 FPGA integration simulation boundary;
+- the retained-state execution semantics;
+- the integrated invariant records;
+- the qualification workflows;
+- the qualification evidence artifacts;
+- the RTL and FPGA closure records.
+
+M16 does not introduce a new Python semantic reference.
+
+The executable Python semantic reference remains:
+
+`frp_prototype_v1_7_0.py`
+
+The structured-output schema remains:
+
+`frp.structured_output.v1.7.0`
+
+The M3 benchmark-matrix schema remains:
+
+`frp.m3.benchmark_matrix.v1.7.0`
 
 M16 realizes the M15-qualified retained-state execution contract as concrete RTL artifacts under:
 
 `rtl/m16/`
 
+The target-independent FPGA preparation boundary is located under:
+
+`fpga/m16/`
+
 ## Current M16 Qualification State
 
-Current M16 artifact-boundary qualification result:
+| Qualification boundary | Current record |
+|---|---|
+| M15 semantic and implementation-mapping foundation | `M15 41/41 PASS` |
+| M16 RTL execution layer | `M16 RTL EXECUTION LAYER CLOSED` |
+| M16 FPGA preparation layer | `M16 FPGA PREPARATION LAYER CLOSED` |
+| M16 RTL workflow result | `SUCCESS` |
+| M16 FPGA preparation workflow result | `SUCCESS` |
+| Current release qualification | `FRP v1.8.0 / M16 — PASS` |
 
-`PASS`
+Current synchronized RTL workflow record:
 
-Current M16 artifact-boundary closure result:
+| Field | Recorded value |
+|---|---|
+| Workflow | `FRP M16 RTL Artifact Boundary` |
+| Workflow file | `.github/workflows/frp-m16-rtl-artifact-boundary.yml` |
+| Workflow run | `#84` |
+| Qualified source commit | `ede53cf` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Duration | `52s` |
+| Qualification artifact count | `1` |
+| Closure status | `M16 RTL EXECUTION LAYER CLOSED` |
 
-`ARTIFACT-BOUNDARY CLOSURE COMPLETE`
+Current synchronized FPGA preparation workflow record:
 
-Qualified workflow:
-
-`FRP M16 RTL Artifact Boundary`
-
-Current workflow result:
-
-`PASS`
-
-Current artifact-boundary test result:
-
-`PASS`
-
-Current public status:
-
-`PUBLIC STATUS SYNCHRONIZED`
-
-Current test stability policy:
-
-`ACTIVE`
-
-Current external simulator transcript status:
-
-`pending external simulator execution`
-
-Current simulator closure status:
-
-`SIMULATOR CLOSURE PENDING`
-
-Current final M16 closure status:
-
-`pending simulator transcript capture`
+| Field | Recorded value |
+|---|---|
+| Workflow | `FRP M16 FPGA Preparation` |
+| Workflow file | `.github/workflows/frp-m16-fpga-preparation.yml` |
+| Workflow run | `#2` |
+| Qualified repository commit | `ede53cf` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Duration | `36s` |
+| Qualification artifact count | `1` |
+| Closure status | `M16 FPGA PREPARATION LAYER CLOSED` |
 
 ## M16 Qualification Documents
 
-| Path | Purpose | Status |
-|---|---|---|
-| `docs/m16_rtl_core_realization_execution_semantics.md` | M16 RTL scope and execution semantics | implemented |
-| `docs/m16_rtl_core_interface_contract.md` | M16 RTL interface contract | implemented |
-| `docs/m16_balanced_ternary_state_register_map.md` | balanced ternary state-register map | implemented |
-| `docs/m16_scheduler_state_rtl_realization.md` | scheduler-state RTL realization | implemented |
-| `docs/m16_request_lane_arbitration_module.md` | request-lane arbitration module semantics | implemented |
-| `docs/m16_pending_route_register_module.md` | pending-route register semantics | implemented |
-| `docs/m16_active_neutral_transition_module.md` | active-neutral transition semantics | implemented |
-| `docs/m16_transition_capacity_guard_module.md` | transition-capacity guard semantics | implemented |
-| `docs/m16_retained_state_update_module.md` | retained-state update semantics | implemented |
-| `docs/m16_invariant_assertion_set.md` | M16 invariant assertion set | implemented |
-| `docs/m16_m15_vector_replay_compatibility_report.md` | M15 vector replay compatibility boundary | implemented |
-| `docs/m16_qualification_manifest.md` | M16 qualification manifest | ACTIVE |
-| `docs/m16_rtl_artifact_boundary_qualification.md` | M16 RTL artifact-boundary PASS report | PASS |
-| `docs/m16_external_simulator_execution_plan.md` | external simulator execution plan | PLANNED |
-| `docs/m16_artifact_boundary_test_stability_policy.md` | artifact-boundary test stability policy | ACTIVE |
-| `docs/m16_public_status_snapshot.md` | public-facing M16 status snapshot | PUBLIC STATUS SYNCHRONIZED |
-| `docs/m16_qualification_index.md` | current M16 qualification index | current file |
+| Path | Indexed purpose |
+|---|---|
+| `docs/m16_rtl_core_realization_execution_semantics.md` | M16 RTL scope and execution semantics |
+| `docs/m16_rtl_core_interface_contract.md` | M16 RTL interface contract |
+| `docs/m16_balanced_ternary_state_register_map.md` | balanced ternary state-register map |
+| `docs/m16_scheduler_state_rtl_realization.md` | scheduler-state RTL realization |
+| `docs/m16_request_lane_arbitration_module.md` | request-lane arbitration semantics |
+| `docs/m16_pending_route_register_module.md` | retained pending-route semantics |
+| `docs/m16_active_neutral_transition_module.md` | active-neutral transition semantics |
+| `docs/m16_transition_capacity_guard_module.md` | transition-capacity guard semantics |
+| `docs/m16_retained_state_update_module.md` | retained-state update semantics |
+| `docs/m16_invariant_assertion_set.md` | M16 invariant assertion set |
+| `docs/m16_m15_vector_replay_compatibility_report.md` | M15-to-M16 compatibility record |
+| `docs/m16_qualification_manifest.md` | M16 qualification manifest |
+| `docs/m16_rtl_artifact_boundary_qualification.md` | M16 RTL artifact-boundary qualification record |
+| `docs/m16_external_simulator_execution_plan.md` | Verilator execution-plan record |
+| `docs/m16_artifact_boundary_test_stability_policy.md` | stable repository-fact test policy |
+| `docs/m16_qualification_index.md` | current M16 qualification index |
 
 ## M16 RTL Artifact Boundary
 
@@ -111,89 +135,326 @@ Qualified RTL source artifacts:
 | `rtl/m16/frp_m16_assertions.sv` | present |
 | `rtl/m16/frp_m16_tb.sv` | present |
 
+RTL source artifact count:
+
+`10`
+
 RTL source artifact inventory result:
 
 `PASS`
 
 Qualified RTL documentation artifacts:
 
-| Path | Status |
-|---|---|
-| `rtl/m16/README.md` | present |
-| `rtl/m16/ARTIFACTS.md` | present |
-| `rtl/m16/SIMULATION.md` | present |
-| `rtl/m16/SIMULATION_TRANSCRIPT.md` | present |
-| `rtl/m16/CLOSURE.md` | ARTIFACT-BOUNDARY CLOSURE COMPLETE |
+| Path | Indexed purpose | Status |
+|---|---|---|
+| `rtl/m16/README.md` | RTL directory and module index | present |
+| `rtl/m16/ARTIFACTS.md` | RTL artifact and interface record | present |
+| `rtl/m16/SIMULATION.md` | executable simulation instructions | present |
+| `rtl/m16/SIMULATION_TRANSCRIPT.md` | qualified simulation transcript | present |
+| `rtl/m16/CLOSURE.md` | RTL execution closure record | present |
+
+RTL documentation artifact count:
+
+`5`
 
 RTL documentation artifact inventory result:
 
 `PASS`
 
-## RTL Closure Report
+## M16 FPGA Preparation Artifact Boundary
 
-The current M16 RTL closure report is defined in:
+Primary FPGA preparation directory:
 
-`rtl/m16/CLOSURE.md`
+`fpga/m16/`
 
-Current RTL closure status:
+Qualified FPGA preparation SystemVerilog artifacts:
 
-`ARTIFACT-BOUNDARY CLOSURE COMPLETE`
+| Path | Indexed purpose | Status |
+|---|---|---|
+| `fpga/m16/frp_m16_fpga_top.sv` | target-independent FPGA integration top | present |
+| `fpga/m16/frp_m16_fpga_tb.sv` | executable FPGA integration testbench | present |
 
-Current simulator closure status:
+FPGA preparation SystemVerilog artifact count:
 
-`SIMULATOR CLOSURE PENDING`
+`2`
 
-The RTL closure report records:
+Qualified FPGA preparation documentation artifacts:
 
-- M16 RTL source artifact inventory `PASS`;
-- M16 RTL documentation artifact inventory `PASS`;
-- M16 documentation artifact inventory `PASS`;
-- M16 repository exposure `PASS`;
-- M16 artifact-boundary workflow `PASS`;
-- M16 artifact-boundary tests `PASS`;
-- M16 public status snapshot `PUBLIC STATUS SYNCHRONIZED`;
-- M16 test stability policy `ACTIVE`;
-- M15 inherited qualification `M15 41/41 PASS`;
-- M16 artifact-boundary closure `ARTIFACT-BOUNDARY CLOSURE COMPLETE`;
-- M16 external simulator execution `pending`;
-- M16 simulator transcript capture `pending`;
-- M16 final simulator closure `SIMULATOR CLOSURE PENDING`.
+| Path | Indexed purpose | Status |
+|---|---|---|
+| `fpga/m16/SIMULATION_TRANSCRIPT.md` | FPGA integration simulation transcript | present |
+| `fpga/m16/CLOSURE.md` | FPGA preparation closure record | present |
+
+FPGA preparation documentation artifact count:
+
+`2`
+
+FPGA preparation artifact inventory result:
+
+`PASS`
+
+Qualified RTL dependencies used by the FPGA preparation workflow:
+
+`9`
+
+FPGA synthesis top:
+
+`frp_m16_fpga_top`
+
+FPGA simulation top:
+
+`frp_m16_fpga_tb`
+
+## M16 RTL Qualification Record
+
+Initial qualified RTL workflow record:
+
+| Field | Recorded value |
+|---|---|
+| Workflow | `FRP M16 RTL Artifact Boundary` |
+| Workflow file | `.github/workflows/frp-m16-rtl-artifact-boundary.yml` |
+| Workflow run | `#82` |
+| Qualified source commit | `a68a2af` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Qualification artifact count | `1` |
+| Closure status | `M16 RTL EXECUTION LAYER CLOSED` |
+
+Synchronized RTL workflow record:
+
+| Field | Recorded value |
+|---|---|
+| Workflow run | `#84` |
+| Qualified source commit | `ede53cf` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Duration | `52s` |
+| Qualification artifact count | `1` |
+| Closure status | `M16 RTL EXECUTION LAYER CLOSED` |
+
+The qualified RTL execution boundary records:
+
+| Qualification item | Result |
+|---|---|
+| exact SystemVerilog artifact inventory | `PASS` |
+| RTL documentation inventory | `PASS` |
+| obsolete workflow absence | `PASS` |
+| SystemVerilog parsing | `PASS` |
+| module elaboration | `PASS` |
+| combinational latch validation | `PASS` |
+| executable testbench generation | `PASS` |
+| architectural simulation | `PASS` |
+| assertion execution | `PASS` |
+| `free` scheduler execution | `PASS` |
+| `7/1` scheduler execution | `PASS` |
+| `1/7` scheduler execution | `PASS` |
+| request-lane arbitration | `PASS` |
+| active-neutral routing | `PASS` |
+| retained pending polarity | `PASS` |
+| pending-route completion | `PASS` |
+| transition-capacity enforcement | `PASS` |
+| retained-state writeback | `PASS` |
+| integrated invariant validation | `PASS` |
+| repository-integrity validation | `PASS` |
+| qualification evidence generation | `PASS` |
+
+Qualified RTL terminal record:
+
+| Field | Recorded value |
+|---|---:|
+| `CELLS` | `8` |
+| `REQUEST_LANES` | `2` |
+| `ticks_recorded` | `16` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+| integrated invariant flags | `1111111111` |
+
+RTL qualification completion marker:
+
+`FRP M16 deterministic RTL testbench completed.`
+
+RTL qualification result:
+
+`PASS`
+
+RTL closure status:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+## M16 FPGA Preparation Qualification Record
+
+Initial qualified FPGA preparation workflow record:
+
+| Field | Recorded value |
+|---|---|
+| Workflow | `FRP M16 FPGA Preparation` |
+| Workflow file | `.github/workflows/frp-m16-fpga-preparation.yml` |
+| Workflow run | `#1` |
+| Qualified repository commit | `326b69e` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Duration | `1m 7s` |
+| Qualification artifact count | `1` |
+| Closure status | `M16 FPGA PREPARATION LAYER CLOSED` |
+
+Synchronized FPGA preparation workflow record:
+
+| Field | Recorded value |
+|---|---|
+| Workflow run | `#2` |
+| Qualified repository commit | `ede53cf` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Duration | `36s` |
+| Qualification artifact count | `1` |
+| Closure status | `M16 FPGA PREPARATION LAYER CLOSED` |
+
+The qualified FPGA preparation boundary records:
+
+| Qualification item | Result |
+|---|---|
+| FPGA SystemVerilog artifact inventory | `PASS` |
+| qualified RTL dependency inventory | `PASS` |
+| FPGA integration-top parsing | `PASS` |
+| FPGA integration-top elaboration | `PASS` |
+| executable FPGA testbench generation | `PASS` |
+| FPGA integration testbench execution | `PASS` |
+| latch-diagnostic rejection | `PASS` |
+| multidriven-diagnostic rejection | `PASS` |
+| asynchronous external reset assertion | `PASS` |
+| two-stage synchronous reset release | `PASS` |
+| `core_ready` generation | `PASS` |
+| tick gating before `core_ready` | `PASS` |
+| counter-clear gating before `core_ready` | `PASS` |
+| request-valid gating before `core_ready` | `PASS` |
+| scheduler propagation | `PASS` |
+| request-interface propagation | `PASS` |
+| active-neutral first-leg execution | `PASS` |
+| retained pending-route completion | `PASS` |
+| all ten invariant flags | `PASS` |
+| repository-integrity validation | `PASS` |
+| qualification evidence generation | `PASS` |
+
+Qualified FPGA preparation terminal record:
+
+| Field | Recorded value |
+|---|---:|
+| `CELLS` | `8` |
+| `REQUEST_LANES` | `2` |
+| reset release stages | `2` |
+| `core_ready` | `1` |
+| `ticks_recorded` | `1` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+| `invariant_flags` | `1111111111` |
+
+FPGA integration completion marker:
+
+`FRP M16 FPGA integration testbench completed.`
+
+FPGA preparation qualification result:
+
+`PASS`
+
+FPGA preparation closure status:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
 
 ## M16 Test and Workflow Boundary
 
-Qualified test file:
+Repository artifact-manifest test:
 
 `tests/test_m16_rtl_artifact_manifest.py`
 
-Qualified workflow:
+The test validates:
+
+- the exact ten-file M16 RTL SystemVerilog artifact set;
+- the five required RTL documentation artifacts;
+- nonempty RTL and documentation artifacts;
+- canonical balanced ternary package symbols;
+- scheduler execution modes;
+- scheduler sequence implementation;
+- deterministic request-lane order;
+- retained pending polarity;
+- active-neutral routing;
+- transition-capacity admission;
+- retained-state update semantics;
+- integrated invariant outputs;
+- simulation command records;
+- zero-event invariant records.
+
+M16 RTL qualification workflow:
 
 `.github/workflows/frp-m16-rtl-artifact-boundary.yml`
 
-Workflow name:
+Workflow trigger:
 
-`FRP M16 RTL Artifact Boundary`
+`workflow_dispatch`
 
-Workflow result:
+RTL testbench build command:
+
+    verilator \
+      --sv \
+      --timing \
+      --assert \
+      --binary \
+      --top-module frp_m16_tb \
+      -Irtl/m16 \
+      --Mdir /tmp/frp_m16_obj \
+      rtl/m16/frp_m16_tb.sv
+
+RTL testbench execution command:
+
+    /tmp/frp_m16_obj/Vfrp_m16_tb
+
+M16 FPGA preparation workflow:
+
+`.github/workflows/frp-m16-fpga-preparation.yml`
+
+Workflow trigger:
+
+`workflow_dispatch`
+
+FPGA integration-top elaboration command:
+
+    verilator \
+      --sv \
+      --lint-only \
+      --top-module frp_m16_fpga_top \
+      -Irtl/m16 \
+      -Ifpga/m16 \
+      fpga/m16/frp_m16_fpga_top.sv
+
+FPGA integration testbench build command:
+
+    verilator \
+      --sv \
+      --timing \
+      --assert \
+      --binary \
+      --top-module frp_m16_fpga_tb \
+      -Irtl/m16 \
+      -Ifpga/m16 \
+      --Mdir /tmp/frp_m16_fpga_obj \
+      fpga/m16/frp_m16_fpga_tb.sv
+
+FPGA integration testbench execution command:
+
+    /tmp/frp_m16_fpga_obj/Vfrp_m16_fpga_tb
+
+The workflows generate qualification evidence under isolated `/tmp` paths.
+
+Repository-local simulator build directories are absent after qualification execution.
+
+Repository source modification during qualification:
+
+`NONE`
+
+Repository-integrity result:
 
 `PASS`
-
-Artifact-boundary test result:
-
-`PASS`
-
-The workflow validates the M16 RTL artifact boundary through:
-
-    python -m pytest tests/test_m16_rtl_artifact_manifest.py -q
-
-The workflow path filters include:
-
-- `rtl/m16/**`;
-- `tests/test_m16_rtl_artifact_manifest.py`;
-- repository exposure files;
-- M16 qualification documents;
-- M16 external simulator execution plan;
-- M16 artifact-boundary test stability policy;
-- M16 public status snapshot.
 
 ## Test Stability Policy
 
@@ -201,74 +462,74 @@ The M16 test stability policy is defined in:
 
 `docs/m16_artifact_boundary_test_stability_policy.md`
 
-Current policy result:
+The policy applies to:
 
-`ACTIVE`
+`tests/test_m16_rtl_artifact_manifest.py`
 
-The policy requires tests to validate stable semantic repository facts.
-
-Tests must not require exact values for:
-
-- GitHub Actions run numbers;
-- current commit hashes;
-- workflow timestamps;
-- workflow duration;
-- UI-only status text;
-- old failed workflow runs.
+The test boundary validates stable repository and architectural facts.
 
 Stable test targets include:
 
-- required file existence;
+- required directory existence;
+- exact required file inventories;
+- nonempty required artifacts;
 - canonical package symbols;
-- RTL module references;
+- canonical balanced ternary encodings;
+- scheduler modes and scheduler-state symbols;
+- RTL module declarations;
+- request-lane ordering terms;
+- active-neutral routing terms;
+- retained pending-route terms;
+- transition-capacity relations;
+- retained-state update terms;
 - assertion invariant terms;
-- simulator command boundary;
-- zero-event invariant declarations;
-- repository documentation exposure;
-- artifact-boundary status terms;
-- external simulator pending status;
-- M15 inherited package digest.
+- simulator command records;
+- completion markers;
+- zero-event invariant declarations.
 
-## Public Status Snapshot
+The tests do not depend on exact values for:
 
-The current public-facing M16 status is recorded in:
-
-`docs/m16_public_status_snapshot.md`
-
-Current public status:
-
-`PUBLIC STATUS SYNCHRONIZED`
-
-The public snapshot synchronizes:
-
-- README badge panel status;
-- GitHub About / Description status;
-- M15 `41 / 41 PASS` qualification evidence;
-- M16 RTL artifact-boundary `PASS`;
-- `rtl/m16/` source artifact presence;
-- external simulator pending boundary;
-- FPGA / synthesis preparation position;
-- DOI public reference.
+- GitHub Actions workflow run numbers;
+- commit hashes;
+- live workflow status;
+- workflow timestamps;
+- workflow durations;
+- user-interface status text;
+- temporary development-status phrases.
 
 ## Preserved Execution Chain
 
-M16 preserves the retained-state execution chain:
+The closed M16 retained-state execution chain is:
 
-`phase-derived ternary target`
+`phase-derived balanced ternary target`
 
-→ `request-lane arbitration`
+→ `temporal scheduler state`
 
-→ `transition-capacity guard`
+→ `pending-route completion priority`
 
-→ `pending-route processing`
+→ `deterministic request-lane arbitration`
 
-→ `active-neutral routing through 0`
+→ `balanced ternary transition classification`
 
-→ `retained balanced ternary state`
+→ `active-neutral transition generation`
+
+→ `distributed transition-capacity admission`
+
+→ `pending-route register update`
+
+→ `retained-state writeback`
+
+→ `architectural telemetry`
+
+→ `integrated invariant evaluation`
+
+Execution-chain qualification result:
+
+`PASS`
 
 ## Preserved Zero-Event Invariants
 
-The M16 qualification boundary preserves:
+The M16 RTL execution boundary records:
 
 `actual_direct_events = 0`
 
@@ -276,24 +537,58 @@ The M16 qualification boundary preserves:
 
 `queue_overflow_events = 0`
 
-These are artifact-boundary invariants and simulation-closure targets.
+The M16 FPGA preparation boundary records:
 
-Zero-event invariant artifact-boundary result:
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+| Invariant record | RTL result | FPGA preparation result |
+|---|---:|---:|
+| `actual_direct_events` | `0` | `0` |
+| `reserved_state_events` | `0` | `0` |
+| `queue_overflow_events` | `0` | `0` |
+
+Zero-event invariant result:
 
 `PASS`
 
 ## Canonical Balanced Ternary Encoding
 
-M16 preserves the canonical balanced ternary encoding:
+M16 preserves the canonical balanced ternary processor-state domain:
 
-| Ternary state | Encoding | Status |
-|---|---|---|
-| `-1` | `2'b11` | valid |
-| `0` | `2'b00` | valid active neutral |
-| `+1` | `2'b01` | valid |
-| reserved | `2'b10` | invalid |
+`{-1, 0, 1}`
 
-Required invariant:
+Canonical hardware encoding:
+
+| Ternary state | Encoding | State classification |
+|---:|---|---|
+| `-1` | `2'b11` | valid negative state |
+| `0` | `2'b00` | valid active neutral state |
+| `1` | `2'b01` | valid positive state |
+| reserved | `2'b10` | invalid processor state |
+
+Package symbols:
+
+| Symbol | Encoding |
+|---|---|
+| `FRP_TERN_NEG` | `2'b11` |
+| `FRP_TERN_ZERO` | `2'b00` |
+| `FRP_TERN_POS` | `2'b01` |
+| `FRP_TERN_RESERVED` | `2'b10` |
+| `FRP_ACTIVE_NEUTRAL` | `FRP_TERN_ZERO` |
+
+Required retained-state invariant:
+
+`state_out ∈ {-1, 0, 1}`
+
+Required pending-route invariant:
+
+`pending_route_out ∈ {-1, 0, 1}`
+
+Required reserved-state counter:
 
 `reserved_state_events = 0`
 
@@ -305,21 +600,32 @@ Balanced ternary encoding result:
 
 M16 preserves three scheduler execution modes:
 
-| Mode | Meaning |
+| Mode | Execution sequence |
 |---|---|
-| `free` | every enabled tick is free / commit-capable |
+| `free` | every enabled tick is free and commit-capable |
 | `7/1` | seven balance ticks followed by one commit tick |
 | `1/7` | one excite tick followed by seven neutralize ticks |
 
-Required inherited scheduler profiles:
+Qualified scheduler profiles:
 
-| Mode | Required profile |
-|---|---|
-| `free` | `16 ticks → free = 16` |
-| `7/1` | `64 ticks → balance = 56, commit = 8` |
-| `1/7` | `16 ticks → excite = 2, neutralize = 14` |
+| Mode | Qualified tick count | Qualified scheduler-state counts |
+|---|---:|---|
+| `free` | `16` | `free = 16` |
+| `7/1` | `64` | `balance = 56`, `commit = 8` |
+| `1/7` | `16` | `excite = 2`, `neutralize = 14` |
 
-Scheduler artifact-boundary result:
+Required scheduler-count relation:
+
+`sum(scheduler_state_counts) = ticks_recorded`
+
+The scheduler counter-clear path preserves:
+
+- retained balanced ternary state;
+- retained pending-route state;
+- scheduler mode;
+- scheduler execution position.
+
+Scheduler qualification result:
 
 `PASS`
 
@@ -337,51 +643,79 @@ Validated inherited profiles:
 | `16` | `4` |
 | `32` | `8` |
 
-Required invariant:
+Qualified M16 RTL profile:
+
+| Parameter | Recorded value |
+|---|---:|
+| `CELLS` | `8` |
+| `REQUEST_LANES` | `2` |
+
+Required admission relation:
 
 `accepted_changes <= REQUEST_LANES`
+
+Required capacity-remaining relation:
+
+`capacity_remaining = REQUEST_LANES - accepted_changes`
+
+Required capacity-exhausted relation:
+
+`capacity_exhausted = (accepted_changes == REQUEST_LANES)`
 
 Required switch-load relation:
 
 `switch_load_numerator = accepted_changes`
 
-Transition-capacity artifact-boundary result:
+Admission order:
+
+1. pending-route completion candidates in ascending cell order;
+2. accepted explicit requests in ascending request-lane order.
+
+Same-state retention consumes no transition capacity.
+
+Each accepted state-changing route leg consumes transition capacity on its execution tick.
+
+Transition-capacity qualification result:
 
 `PASS`
 
 ## Active-Neutral Qualification Boundary
 
-Forbidden direct transitions:
+Active neutral state `0` is an executable balancing, damping, transition, and stabilization state.
 
-`-1 → +1`
+Forbidden direct retained-state transitions:
 
-`+1 → -1`
+`-1 → 1`
 
-Required routed transitions:
+`1 → -1`
 
-`-1 → 0 → +1`
+Required routed retained-state transitions:
 
-`+1 → 0 → -1`
+`-1 → 0 → 1`
 
-Required invariant:
+`1 → 0 → -1`
+
+Each route leg is executed on a separate eligible tick.
+
+Required direct-transition counter:
 
 `actual_direct_events = 0`
 
-Active-neutral artifact-boundary result:
+Active-neutral routing result:
 
 `PASS`
 
 ## Pending-Route Qualification Boundary
 
-Opposite-polarity requests must create retained pending routes.
+Opposite-polarity requests create retained pending routes.
 
-For:
+For the request:
 
-`+1 → -1`
+`1 → -1`
 
-M16 executes:
+the first eligible route leg executes:
 
-`+1 → 0`
+`1 → 0`
 
 and stores:
 
@@ -391,37 +725,150 @@ A later eligible tick completes:
 
 `0 → -1`
 
-For:
+For the request:
 
-`-1 → +1`
+`-1 → 1`
 
-M16 executes:
+the first eligible route leg executes:
 
 `-1 → 0`
 
 and stores:
 
-`pending_route = +1`
+`pending_route = 1`
 
 A later eligible tick completes:
 
-`0 → +1`
+`0 → 1`
 
-Required invariant:
+The retained pending-route boundary records:
+
+- one pending-route slot per processor cell;
+- exact requested polarity retention;
+- pending-route ownership of its cell;
+- pending-route priority over new same-cell requests;
+- pending-route stability across scheduler-ineligible ticks;
+- pending-route stability across transition-capacity deferral;
+- completion only from retained active neutral state `0`;
+- clearing after accepted completion writeback.
+
+Required queue-overflow counter:
 
 `queue_overflow_events = 0`
 
-Pending-route artifact-boundary result:
+Pending-route qualification result:
+
+`PASS`
+
+## Retained-State Writeback Boundary
+
+The retained-state register commits only transitions admitted by the transition-capacity guard.
+
+The writeback boundary records:
+
+- canonical balanced ternary output;
+- same-state retention;
+- active-neutral first-leg writeback;
+- pending-route completion writeback;
+- capacity-mask correlation;
+- zero direct opposite-polarity writeback;
+- zero reserved-state output.
+
+Required retained-state domain:
+
+`state_out ∈ {-1, 0, 1}`
+
+Required direct-transition counter:
+
+`actual_direct_events = 0`
+
+Required reserved-state counter:
+
+`reserved_state_events = 0`
+
+Retained-state writeback qualification result:
+
+`PASS`
+
+## Integrated Invariant Set
+
+The M16 core exposes ten integrated invariant flags.
+
+| Index | Invariant flag |
+|---:|---|
+| `0` | `FRP_INV_STATE_DOMAIN_VALID` |
+| `1` | `FRP_INV_SCHEDULER_COUNTS_VALID` |
+| `2` | `FRP_INV_REQUEST_LANE_ORDER_VALID` |
+| `3` | `FRP_INV_PENDING_POLARITY_VALID` |
+| `4` | `FRP_INV_ACTIVE_NEUTRAL_VALID` |
+| `5` | `FRP_INV_TRANSITION_CAPACITY_VALID` |
+| `6` | `FRP_INV_STATE_UPDATE_VALID` |
+| `7` | `FRP_INV_NO_ACTUAL_DIRECT_EVENTS` |
+| `8` | `FRP_INV_NO_RESERVED_STATE` |
+| `9` | `FRP_INV_NO_QUEUE_OVERFLOW` |
+
+Integrated invariant-vector width:
+
+`FRP_M16_INVARIANT_FLAGS = 10`
+
+Qualified RTL invariant vector:
+
+`1111111111`
+
+Qualified FPGA preparation invariant vector:
+
+`1111111111`
+
+| Invariant flag | RTL result | FPGA preparation result |
+|---|---|---|
+| `FRP_INV_STATE_DOMAIN_VALID` | `PASS` | `PASS` |
+| `FRP_INV_SCHEDULER_COUNTS_VALID` | `PASS` | `PASS` |
+| `FRP_INV_REQUEST_LANE_ORDER_VALID` | `PASS` | `PASS` |
+| `FRP_INV_PENDING_POLARITY_VALID` | `PASS` | `PASS` |
+| `FRP_INV_ACTIVE_NEUTRAL_VALID` | `PASS` | `PASS` |
+| `FRP_INV_TRANSITION_CAPACITY_VALID` | `PASS` | `PASS` |
+| `FRP_INV_STATE_UPDATE_VALID` | `PASS` | `PASS` |
+| `FRP_INV_NO_ACTUAL_DIRECT_EVENTS` | `PASS` | `PASS` |
+| `FRP_INV_NO_RESERVED_STATE` | `PASS` | `PASS` |
+| `FRP_INV_NO_QUEUE_OVERFLOW` | `PASS` | `PASS` |
+
+Integrated invariant qualification result:
 
 `PASS`
 
 ## M15 Inherited Qualification Base
 
-M16 inherits the M15 qualification boundary.
+M16 inherits the qualified M15 semantic and implementation-mapping foundation.
 
-Current inherited status:
+M15 workflow:
 
-`M15 41/41 PASS`
+`FRP M15 Implementation Mapping and Qualification Closure`
+
+M15 workflow file:
+
+`.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+
+M15 qualified workflow record:
+
+`FRP M15 Implementation Mapping and Qualification Closure #1 — PASS`
+
+M15 qualification evidence:
+
+| Qualification record | Result |
+|---|---:|
+| self-test assertions | `41 / 41 PASS` |
+| deterministic vector files | `10 / 10 byte-identical` |
+| required semantic correlation matches | `5 / 5 = 1.0` |
+| deterministic replay matches | `6 / 6 = 1.0` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+| `fixed_point_topology_sum_exact` | `True` |
+| `fixed_point_thermal_sum_exact` | `True` |
+
+Validated M15 package digest:
+
+`703dd4b56f4b34289a2c5bc5521ad4ddc3113bdec8c38238c3244c69cb4d58df`
 
 M15 established:
 
@@ -429,25 +876,21 @@ M15 established:
 - canonical balanced ternary hardware encoding;
 - stateful quantized hardware-shadow execution;
 - cycle-exact integer golden traces;
-- deterministic RTL comparison vector package;
+- deterministic RTL comparison vectors;
 - SystemVerilog testbench interface mapping;
 - synthesizable RTL reference-core mapping;
 - RTL assertion correlation;
 - reference RTL equivalence;
 - exact deterministic replay;
-- qualification closure.
+- semantic and implementation-mapping qualification closure.
 
-Validated M15 package digest:
-
-`703dd4b56f4b34289a2c5bc5521ad4ddc3113bdec8c38238c3244c69cb4d58df`
-
-M15 inheritance result:
+M15 inherited qualification result:
 
 `PASS`
 
 ## M15 to M16 Compatibility Chain
 
-Compatibility chain:
+The indexed compatibility chain is:
 
 `M15 quantized hardware shadow`
 
@@ -455,25 +898,47 @@ Compatibility chain:
 
 → `M15 deterministic RTL comparison vectors`
 
-→ `M16 RTL core`
+→ `M15 SystemVerilog interface mapping`
+
+→ `M16 temporal scheduler`
+
+→ `M16 request-lane arbitration`
+
+→ `M16 active-neutral routing`
+
+→ `M16 retained pending polarity`
+
+→ `M16 transition-capacity admission`
+
+→ `M16 retained-state writeback`
 
 → `M16 assertion layer`
 
-→ `M16 simulation transcript`
+→ `M16 executable RTL qualification`
 
-→ `M16 qualification closure`
+The M15 semantic reference remains:
 
-Replay target:
+`frp_prototype_v1_7_0.py`
 
-`deterministic boundary equivalence`
+The M16 RTL implementation boundary is:
 
-The replay target is not approximate behavioral similarity.
+`rtl/m16/frp_m16_core.sv`
 
-Compatibility-chain artifact-boundary result:
+The M16 RTL assertion boundary is:
+
+`rtl/m16/frp_m16_assertions.sv`
+
+The M16 executable RTL testbench is:
+
+`rtl/m16/frp_m16_tb.sv`
+
+The M16 FPGA integration boundary is:
+
+`fpga/m16/frp_m16_fpga_top.sv`
+
+M15-to-M16 compatibility record:
 
 `PASS`
-
-Runtime replay confirmation remains part of the external simulator closure boundary.
 
 ## External Simulator Boundary
 
@@ -481,27 +946,39 @@ Simulation instructions are defined in:
 
 `rtl/m16/SIMULATION.md`
 
-Transcript template is defined in:
+The qualified RTL simulation transcript is defined in:
 
 `rtl/m16/SIMULATION_TRANSCRIPT.md`
 
-Execution plan is defined in:
+The simulator execution-plan record is defined in:
 
 `docs/m16_external_simulator_execution_plan.md`
 
-Required command shape:
+Qualified simulator:
 
-    verilator --sv --timing --assert --binary -Irtl/m16 rtl/m16/frp_m16_tb.sv
+`Verilator`
 
-Required run command:
+Qualified RTL testbench build command:
 
-    ./obj_dir/Vfrp_m16_tb
+    verilator \
+      --sv \
+      --timing \
+      --assert \
+      --binary \
+      --top-module frp_m16_tb \
+      -Irtl/m16 \
+      --Mdir /tmp/frp_m16_obj \
+      rtl/m16/frp_m16_tb.sv
+
+Qualified RTL testbench execution command:
+
+    /tmp/frp_m16_obj/Vfrp_m16_tb
 
 Required completion marker:
 
-    FRP M16 deterministic RTL testbench completed.
+`FRP M16 deterministic RTL testbench completed.`
 
-Required final counters:
+Qualified terminal counters:
 
 `actual_direct_events = 0`
 
@@ -509,56 +986,191 @@ Required final counters:
 
 `queue_overflow_events = 0`
 
-Current external simulator status:
+Qualified integrated invariant vector:
 
-`pending external simulator execution`
+`1111111111`
 
-Current simulator closure status:
+External simulator workflow record:
 
-`SIMULATOR CLOSURE PENDING`
+| Field | Recorded value |
+|---|---|
+| Workflow | `FRP M16 RTL Artifact Boundary` |
+| Workflow run | `#84` |
+| Qualified source commit | `ede53cf` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Qualification result | `PASS` |
+| Closure status | `M16 RTL EXECUTION LAYER CLOSED` |
 
 External simulator boundary result:
 
-`SIMULATOR CLOSURE PENDING`
+`PASS`
+
+## FPGA Integration Boundary
+
+The M16 FPGA integration boundary is target-independent.
+
+FPGA integration top:
+
+`fpga/m16/frp_m16_fpga_top.sv`
+
+FPGA integration testbench:
+
+`fpga/m16/frp_m16_fpga_tb.sv`
+
+The FPGA integration boundary records:
+
+- asynchronous external reset assertion;
+- two-stage synchronous reset release;
+- `core_ready` generation;
+- execution-input blocking before `core_ready`;
+- tick propagation after `core_ready`;
+- counter-clear propagation after `core_ready`;
+- request-valid propagation after `core_ready`;
+- scheduler propagation;
+- request-interface propagation;
+- active-neutral first-leg execution;
+- retained pending-route completion;
+- all ten integrated invariant flags;
+- zero actual direct-transition events;
+- zero reserved-state events;
+- zero queue-overflow events.
+
+Qualified execution-input gating relations:
+
+`tick_enable_core = tick_enable && core_ready`
+
+`clear_counters_core = clear_counters && core_ready`
+
+`request_valid_core = request_valid & {REQUEST_LANES{core_ready}}`
+
+Qualified FPGA integration completion marker:
+
+`FRP M16 FPGA integration testbench completed.`
+
+FPGA preparation workflow record:
+
+| Field | Recorded value |
+|---|---|
+| Workflow | `FRP M16 FPGA Preparation` |
+| Workflow run | `#2` |
+| Qualified repository commit | `ede53cf` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Qualification result | `PASS` |
+| Closure status | `M16 FPGA PREPARATION LAYER CLOSED` |
+
+FPGA integration qualification result:
+
+`PASS`
+
+## Qualification Evidence Index
+
+M16 RTL qualification evidence artifact:
+
+`frp-m16-rtl-qualification-${{ github.run_number }}`
+
+The RTL qualification evidence artifact contains:
+
+- toolchain record;
+- SystemVerilog source hashes;
+- Verilator build log;
+- architectural execution log;
+- qualification result record.
+
+M16 FPGA preparation qualification evidence artifact:
+
+`frp-m16-fpga-preparation-${{ github.run_number }}`
+
+The FPGA preparation qualification evidence artifact contains:
+
+- toolchain record;
+- RTL and FPGA source hashes;
+- FPGA integration-top lint log;
+- FPGA integration-testbench build log;
+- FPGA integration-testbench execution log;
+- FPGA preparation qualification record.
+
+Workflow evidence retention:
+
+`30 days`
+
+RTL qualification evidence result:
+
+`PASS`
+
+FPGA preparation qualification evidence result:
+
+`PASS`
 
 ## Current Qualification Result
 
-| Boundary | Result |
+| Qualification boundary | Result |
 |---|---|
-| M16 documentation package | implemented |
-| M16 RTL source artifact inventory | PASS |
-| M16 RTL documentation artifact inventory | PASS |
-| M16 repository exposure | PASS |
-| M16 artifact-boundary workflow | PASS |
-| M16 artifact-boundary tests | PASS |
-| M16 test stability policy | ACTIVE |
-| M16 public status snapshot | PUBLIC STATUS SYNCHRONIZED |
-| M16 RTL closure report | ARTIFACT-BOUNDARY CLOSURE COMPLETE |
-| M15 inherited qualification | M15 41/41 PASS |
-| M16 external simulator execution | pending |
-| M16 simulator transcript capture | pending |
-| M16 final simulator closure | SIMULATOR CLOSURE PENDING |
+| M15 semantic and implementation-mapping foundation | `41 / 41 PASS` |
+| M15 deterministic vector regeneration | `10 / 10 byte-identical` |
+| M15 semantic correlation | `5 / 5 = 1.0` |
+| M15 deterministic replay | `6 / 6 = 1.0` |
+| M16 RTL source artifact inventory | `PASS` |
+| M16 RTL documentation artifact inventory | `PASS` |
+| M16 SystemVerilog parsing and elaboration | `PASS` |
+| M16 executable RTL testbench | `PASS` |
+| M16 architectural simulation | `PASS` |
+| M16 assertion execution | `PASS` |
+| M16 scheduler execution | `PASS` |
+| M16 request-lane arbitration | `PASS` |
+| M16 active-neutral routing | `PASS` |
+| M16 retained pending polarity | `PASS` |
+| M16 transition-capacity enforcement | `PASS` |
+| M16 retained-state writeback | `PASS` |
+| M16 integrated invariant set | `PASS` |
+| M16 RTL zero-event counters | `PASS` |
+| M16 RTL repository integrity | `PASS` |
+| M16 RTL qualification evidence | `PASS` |
+| M16 RTL execution layer | `M16 RTL EXECUTION LAYER CLOSED` |
+| M16 FPGA preparation artifact inventory | `PASS` |
+| M16 FPGA integration-top elaboration | `PASS` |
+| M16 FPGA integration-testbench execution | `PASS` |
+| M16 reset and `core_ready` boundary | `PASS` |
+| M16 FPGA execution-input gating | `PASS` |
+| M16 FPGA scheduler and request propagation | `PASS` |
+| M16 FPGA active-neutral route execution | `PASS` |
+| M16 FPGA pending-route completion | `PASS` |
+| M16 FPGA integrated invariant set | `PASS` |
+| M16 FPGA zero-event counters | `PASS` |
+| M16 FPGA repository integrity | `PASS` |
+| M16 FPGA qualification evidence | `PASS` |
+| M16 FPGA preparation layer | `M16 FPGA PREPARATION LAYER CLOSED` |
 
-## Closure Direction
+## Qualification Closure
 
-M16 final simulator closure requires:
+Current release:
 
-- artifact-boundary workflow PASS;
-- external simulator execution;
-- simulator transcript capture;
-- assertion-layer PASS;
-- final zero-event counter confirmation;
-- simulation transcript update;
-- closure report update;
-- final M16 qualification closure document.
+`FRP v1.8.0`
 
-Current artifact state:
+Current milestone:
 
-`ARTIFACT-BOUNDARY CLOSURE COMPLETE`
+`M16 — RTL Core Realization and Execution Semantics Package`
 
-Remaining simulator state:
+Current executable semantic reference:
 
-`SIMULATOR CLOSURE PENDING`
+`frp_prototype_v1_7_0.py`
+
+Current inherited semantic and implementation-mapping foundation:
+
+`M15 41/41 PASS`
+
+Current RTL closure status:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+Current FPGA preparation closure status:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
+
+Current qualification state:
+
+`FRP v1.8.0 / M16 — PASS`
 
 ## Author
 
