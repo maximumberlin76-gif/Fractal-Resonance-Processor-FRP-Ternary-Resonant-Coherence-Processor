@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned architecture layer.
+`M16 RTL EXECUTION LAYER CLOSED`
 
 ## Version
 
@@ -14,48 +14,65 @@ Planned architecture layer.
 
 ## Purpose
 
-This document defines the first concrete RTL-facing interface contract for the M16 core realization layer.
-
-M16 does not introduce a new semantic processor model.
-
-M16 realizes the M15-qualified execution contract in an explicit RTL core interface.
-
-The interface must preserve:
-
-- balanced ternary retained-state semantics;
-- canonical two-bit ternary encoding;
-- explicit `free`, `7/1`, and `1/7` temporal execution modes;
-- deterministic request-lane ordering;
-- transition-capacity enforcement;
-- pending neutral-route semantics;
-- mandatory active-neutral routing through state `0`;
-- M15-compatible event counters;
-- M15-compatible invariant flags;
-- deterministic comparison against M15 cycle-exact integer golden traces.
-
-## Core Identity
-
-The M16 RTL core realizes the execution semantics of the:
+This document defines the qualified RTL-facing interface contract for the M16 core realization layer of the:
 
 `Ternary Fractal Resonant Coherence Processor`
 
-The computational chain preserved by the interface is:
+M16 does not introduce a new Python semantic reference.
 
-`phase-derived ternary target`
+The executable semantic reference remains:
 
-→ `request-lane evaluation`
+`frp_prototype_v1_7_0.py`
 
-→ `transition-capacity boundary`
+The M16 interface realizes the M15-qualified retained-state execution contract through:
 
-→ `pending-route processing`
+- canonical balanced ternary encoding;
+- internally retained processor state;
+- internally retained pending-route state;
+- explicit `free`, `7/1`, and `1/7` scheduler modes;
+- deterministic request-lane ordering;
+- active-neutral routing through state `0`;
+- transition-capacity enforcement;
+- retained-state writeback;
+- architectural event counters;
+- ten integrated invariant flags;
+- executable SystemVerilog qualification.
 
-→ `active-neutral routing through 0`
+Primary integrated RTL core:
 
-→ `retained balanced ternary state`
+`rtl/m16/frp_m16_core.sv`
 
-The RTL core interface does not replace the upstream resonant computation layer.
+## Core Identity
 
-The upstream M15 quantized reference remains responsible for:
+The M16 RTL core realizes the retained-state execution semantics of the:
+
+`Ternary Fractal Resonant Coherence Processor`
+
+The closed execution chain is:
+
+`phase-derived balanced ternary target`
+
+→ `temporal scheduler state`
+
+→ `pending-route completion priority`
+
+→ `deterministic request-lane arbitration`
+
+→ `balanced ternary transition classification`
+
+→ `active-neutral transition generation`
+
+→ `distributed transition-capacity admission`
+
+→ `pending-route register update`
+
+→ `retained-state writeback`
+
+→ `architectural telemetry`
+
+→ `integrated invariant evaluation`
+
+The upstream M15 quantized semantic reference remains responsible for:
 
 - phase words;
 - frequency state;
@@ -68,180 +85,438 @@ The upstream M15 quantized reference remains responsible for:
 - `C_minus_P`;
 - phase-derived ternary targets.
 
-The M16 core consumes the ternary target and retained execution state and realizes the deterministic retained-state transition semantics.
+The M16 RTL core consumes the phase-derived ternary target vector and explicit request-lane inputs.
 
-## Canonical Ternary Encoding
+The M16 RTL core owns the retained balanced ternary processor state and retained pending-route state.
 
-The canonical RTL encoding is:
+## Qualified Interface Record
 
-| Ternary state | Encoding |
+Qualified workflow:
+
+`FRP M16 RTL Artifact Boundary`
+
+Workflow file:
+
+`.github/workflows/frp-m16-rtl-artifact-boundary.yml`
+
+Current qualified workflow record:
+
+| Field | Recorded value |
 |---|---|
-| `-1` | `2'b11` |
-| `0` | `2'b00` |
-| `+1` | `2'b01` |
-| reserved | `2'b10` |
+| Workflow run | `#84` |
+| Qualified source commit | `ede53cf` |
+| Branch | `main` |
+| Workflow result | `SUCCESS` |
+| Workflow duration | `52s` |
+| Qualification artifact count | `1` |
+| Qualification result | `PASS` |
+| Closure status | `M16 RTL EXECUTION LAYER CLOSED` |
 
-The reserved encoding is invalid.
+Qualified core configuration:
 
-Required invariant:
+| Parameter | Recorded value |
+|---|---:|
+| `CELLS` | `8` |
+| `STATE_BITS` | `2` |
+| `REQUEST_LANES` | `2` |
+| `CELL_INDEX_BITS` | `3` |
+| `COUNTER_BITS` | `32` |
+
+Qualified terminal record:
+
+| Field | Recorded value |
+|---|---:|
+| `ticks_recorded_q` | `16` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+| `invariant_flags` | `1111111111` |
+
+Interface qualification result:
+
+`PASS`
+
+## Canonical Balanced Ternary Encoding
+
+The canonical retained processor-state domain is:
+
+`{-1, 0, 1}`
+
+Canonical hardware encoding:
+
+| Ternary state | Encoding | Package symbol |
+|---:|---|---|
+| `-1` | `2'b11` | `FRP_TERN_NEG` |
+| `0` | `2'b00` | `FRP_TERN_ZERO` |
+| `1` | `2'b01` | `FRP_TERN_POS` |
+| reserved | `2'b10` | `FRP_TERN_RESERVED` |
+
+Retained-state aliases:
+
+| Alias | Package value |
+|---|---|
+| `FRP_STATE_NEG` | `FRP_TERN_NEG` |
+| `FRP_STATE_ZERO` | `FRP_TERN_ZERO` |
+| `FRP_STATE_POS` | `FRP_TERN_POS` |
+| `FRP_STATE_RESERVED` | `FRP_TERN_RESERVED` |
+
+Active neutral encoding:
+
+`FRP_ACTIVE_NEUTRAL = FRP_STATE_ZERO`
+
+Required state-domain relation:
+
+`state_out[cell] ∈ {-1, 0, 1}`
+
+Required pending-route relation:
+
+`pending_route_out[cell] ∈ {-1, 0, 1}`
+
+Required reserved-state counter:
 
 `reserved_state_events = 0`
 
+Canonical encoding qualification result:
+
+`PASS`
+
 ## Parameter Set
 
-The initial M16 core interface is parameterized by:
+The integrated M16 core declares:
 
-| Parameter | Meaning |
-|---|---|
-| `CELLS` | number of processor cells |
-| `STATE_BITS` | ternary state encoding width per cell |
-| `REQUEST_LANES` | maximum accepted state-change lanes per tick |
-| `SCHEDULER_BITS` | scheduler-state encoding width |
-| `COUNTER_BITS` | event-counter width |
+| Parameter | Default or derived value | Meaning |
+|---|---|---|
+| `CELLS` | `FRP_M16_DEFAULT_CELLS` | number of retained processor cells |
+| `STATE_BITS` | `FRP_M16_STATE_BITS` | encoding width per ternary state |
+| `REQUEST_LANES` | `frp_calc_request_lanes(CELLS)` | request-lane and transition-capacity count |
+| `CELL_INDEX_BITS` | `(CELLS <= 1) ? 1 : $clog2(CELLS)` | packed cell-index width per request lane |
+| `COUNTER_BITS` | `FRP_M16_COUNTER_BITS` | architectural counter width |
 
-Required relation:
+Package constants:
 
-`STATE_BITS = 2`
+| Constant | Value |
+|---|---:|
+| `FRP_M16_DEFAULT_CELLS` | `16` |
+| `FRP_M16_STATE_BITS` | `2` |
+| `FRP_M16_COUNTER_BITS` | `32` |
+| `FRP_M16_TRANSITION_FRACTION_NUM` | `1` |
+| `FRP_M16_TRANSITION_FRACTION_DEN` | `4` |
+| `FRP_M16_SCHED_MODE_BITS` | `2` |
+| `FRP_M16_SCHED_BITS` | `3` |
+| `FRP_M16_PERIOD_TICKS` | `8` |
+| `FRP_M16_INVARIANT_FLAGS` | `10` |
 
-Required transition relation:
+Required transition-capacity relation:
 
-`REQUEST_LANES = max(1, round(CELLS × transition_fraction))`
+`REQUEST_LANES = max(1, round(CELLS × 0.25))`
 
-Inherited default:
+Validated profiles:
 
-`transition_fraction = 0.25`
-
-Validated inherited profiles:
-
-| Cells | Request lanes | Packed state width |
-|---|---:|---:|
+| Cells | Request lanes | Packed retained-state width |
+|---:|---:|---:|
 | `8` | `2` | `16 bits` |
 | `16` | `4` | `32 bits` |
 | `32` | `8` | `64 bits` |
 
-Packed state width:
+Derived packed-vector widths:
 
-`PACKED_STATE_BITS = CELLS × STATE_BITS`
+| Vector | Width |
+|---|---|
+| `target_q` | `CELLS × STATE_BITS` |
+| `state_out` | `CELLS × STATE_BITS` |
+| `pending_route_out` | `CELLS × STATE_BITS` |
+| `request_valid` | `REQUEST_LANES` |
+| `request_cell_index` | `REQUEST_LANES × CELL_INDEX_BITS` |
+| `request_target` | `REQUEST_LANES × STATE_BITS` |
+| `request_accept` | `REQUEST_LANES` |
+| `request_reject` | `REQUEST_LANES` |
+| `accepted_cell_mask` | `CELLS` |
+| `neutral_routed_cell_mask` | `CELLS` |
+| `accepted_change_mask` | `CELLS` |
+| `invariant_flags` | `FRP_M16_INVARIANT_FLAGS` |
+
+Parameter-boundary qualification result:
+
+`PASS`
+
+## Public Core Port Summary
+
+The public `frp_m16_core` interface contains:
+
+### Control inputs
+
+| Signal | Direction | Width or type |
+|---|---|---|
+| `clk` | input | `logic` |
+| `rst_n` | input | `logic` |
+| `tick_enable` | input | `logic` |
+| `clear_counters` | input | `logic` |
+
+### Scheduler input
+
+| Signal | Direction | Width or type |
+|---|---|---|
+| `scheduler_mode` | input | `frp_m16_scheduler_mode_e` |
+
+### Request-lane inputs
+
+| Signal | Direction | Width |
+|---|---|---:|
+| `request_valid` | input | `REQUEST_LANES` |
+| `request_cell_index` | input | `REQUEST_LANES × CELL_INDEX_BITS` |
+| `request_target` | input | `REQUEST_LANES × STATE_BITS` |
+
+### Phase-derived target input
+
+| Signal | Direction | Width |
+|---|---|---:|
+| `target_q` | input | `CELLS × STATE_BITS` |
+
+### Retained execution outputs
+
+| Signal | Direction | Width |
+|---|---|---:|
+| `state_out` | output | `CELLS × STATE_BITS` |
+| `pending_route_out` | output | `CELLS × STATE_BITS` |
+
+### Scheduler outputs
+
+| Signal | Direction | Width or type |
+|---|---|---|
+| `scheduler_mode_q` | output | `frp_m16_scheduler_mode_e` |
+| `scheduler_state_q` | output | `frp_m16_scheduler_state_e` |
+| `ticks_recorded_q` | output | `COUNTER_BITS` |
+| `scheduler_count_free_q` | output | `COUNTER_BITS` |
+| `scheduler_count_balance_q` | output | `COUNTER_BITS` |
+| `scheduler_count_commit_q` | output | `COUNTER_BITS` |
+| `scheduler_count_excite_q` | output | `COUNTER_BITS` |
+| `scheduler_count_neutralize_q` | output | `COUNTER_BITS` |
+
+### Request disposition outputs
+
+| Signal | Direction | Width |
+|---|---|---:|
+| `request_accept` | output | `REQUEST_LANES` |
+| `request_reject` | output | `REQUEST_LANES` |
+
+### Cell-mask outputs
+
+| Signal | Direction | Width |
+|---|---|---:|
+| `accepted_cell_mask` | output | `CELLS` |
+| `neutral_routed_cell_mask` | output | `CELLS` |
+| `accepted_change_mask` | output | `CELLS` |
+
+### Capacity outputs
+
+| Signal | Direction | Width |
+|---|---|---:|
+| `accepted_changes` | output | `COUNTER_BITS` |
+| `capacity_remaining` | output | `COUNTER_BITS` |
+| `capacity_exhausted` | output | `1` |
+| `switch_load_numerator` | output | `COUNTER_BITS` |
+
+### Event-counter outputs
+
+| Signal | Direction | Width |
+|---|---|---:|
+| `requested_direct_events` | output | `COUNTER_BITS` |
+| `prevented_direct_events` | output | `COUNTER_BITS` |
+| `neutral_routed_events` | output | `COUNTER_BITS` |
+| `actual_direct_events` | output | `COUNTER_BITS` |
+| `reserved_state_events` | output | `COUNTER_BITS` |
+| `queue_overflow_events` | output | `COUNTER_BITS` |
+
+### Integrated invariant output
+
+| Signal | Direction | Width |
+|---|---|---:|
+| `invariant_flags` | output | `FRP_M16_INVARIANT_FLAGS` |
 
 ## Clock and Reset Interface
 
-The M16 RTL core uses a synchronous tick interface.
+The M16 core uses:
 
-Required control signals:
+- positive-edge sequential state updates;
+- asynchronous active-low reset assertion.
 
-| Signal | Direction | Meaning |
-|---|---|---|
-| `clk` | input | processor clock |
-| `rst_n` | input | active-low reset |
-| `tick_enable` | input | enables one processor tick |
-| `clear_counters` | input | clears event counters without changing retained state |
+Control signals:
 
-Reset behavior:
+| Signal | Meaning |
+|---|---|
+| `clk` | processor clock |
+| `rst_n` | asynchronous active-low core reset |
+| `tick_enable` | enables retained execution for one processor tick |
+| `clear_counters` | clears the scheduler counter bank |
 
-- retained ternary state initializes to `0`;
-- pending-route state initializes to `0`;
-- counters initialize to `0`;
-- invariant flags initialize to valid non-error state;
-- no reserved ternary encoding is emitted after reset.
+Reset values:
 
-Required reset invariant:
+| Retained quantity | Reset value |
+|---|---|
+| retained processor state | `0` for every cell |
+| retained pending route | `0` for every cell |
+| scheduler mode | `FRP_MODE_FREE` |
+| scheduler state | `FRP_SCHED_FREE` |
+| scheduler tick index | `0` |
+| scheduler period index | `0` |
+| `ticks_recorded_q` | `0` |
+| all scheduler-state counters | `0` |
 
-`all retained states = 0`
+Required reset relations:
 
-`all pending routes = 0`
+`state_out = 0`
+
+`pending_route_out = 0`
+
+`ticks_recorded_q = 0`
 
 `reserved_state_events = 0`
 
-## Scheduler Mode Interface
+The `clear_counters` input clears:
 
-M16 preserves three explicit scheduler modes:
+- `ticks_recorded_q`;
+- `scheduler_count_free_q`;
+- `scheduler_count_balance_q`;
+- `scheduler_count_commit_q`;
+- `scheduler_count_excite_q`;
+- `scheduler_count_neutralize_q`.
 
-- `free`;
-- `7/1`;
-- `1/7`.
+The `clear_counters` input preserves:
 
-Scheduler input signal:
+- retained processor state;
+- retained pending-route state;
+- scheduler tick index;
+- scheduler period index;
+- scheduler mode;
+- scheduler-state progression.
 
-| Signal | Direction | Meaning |
+Clock and reset qualification result:
+
+`PASS`
+
+## Scheduler Mode and State Interface
+
+Scheduler mode input:
+
+| Signal | Type | Meaning |
 |---|---|---|
-| `scheduler_mode` | input | selected temporal execution mode |
+| `scheduler_mode` | `frp_m16_scheduler_mode_e` | selected temporal execution mode |
 
-Scheduler output signals:
+Scheduler mode encodings:
 
-| Signal | Direction | Meaning |
+| Mode | Encoding |
+|---|---|
+| `FRP_MODE_FREE` | `2'b00` |
+| `FRP_MODE_7_1` | `2'b01` |
+| `FRP_MODE_1_7` | `2'b10` |
+| `FRP_MODE_RESERVED` | `2'b11` |
+
+Scheduler-state output:
+
+| Signal | Type | Meaning |
 |---|---|---|
-| `scheduler_state` | output | current tick scheduler state |
-| `scheduler_count_free` | output | free tick counter |
-| `scheduler_count_balance` | output | balance tick counter |
-| `scheduler_count_commit` | output | commit tick counter |
-| `scheduler_count_excite` | output | excite tick counter |
-| `scheduler_count_neutralize` | output | neutralize tick counter |
+| `scheduler_mode_q` | `frp_m16_scheduler_mode_e` | registered scheduler mode |
+| `scheduler_state_q` | `frp_m16_scheduler_state_e` | scheduler state used by the execution chain |
 
-Required scheduler relations:
+Scheduler-state encodings:
 
-For `free`:
+| Scheduler state | Encoding |
+|---|---|
+| `FRP_SCHED_FREE` | `3'b000` |
+| `FRP_SCHED_BALANCE` | `3'b001` |
+| `FRP_SCHED_COMMIT` | `3'b010` |
+| `FRP_SCHED_EXCITE` | `3'b011` |
+| `FRP_SCHED_NEUTRALIZE` | `3'b100` |
+| `FRP_SCHED_INVALID` | `3'b111` |
 
-`scheduler_state = free`
+Public scheduler counters:
 
-For `7/1`:
+- `ticks_recorded_q`;
+- `scheduler_count_free_q`;
+- `scheduler_count_balance_q`;
+- `scheduler_count_commit_q`;
+- `scheduler_count_excite_q`;
+- `scheduler_count_neutralize_q`.
 
-`scheduler_state = commit`, when `(tick_index + 1) mod 8 = 0`
+Required scheduler relation:
 
-`scheduler_state = balance`, otherwise.
+`sum(scheduler_state_counts) = ticks_recorded_q`
 
-For `1/7`:
+Qualified scheduler profiles:
 
-`scheduler_state = excite`, when `tick_index mod 8 = 0`
+| Mode | Qualified relation |
+|---|---|
+| `free` | `16 ticks → free = 16` |
+| `7/1` | `64 ticks → balance = 56, commit = 8` |
+| `1/7` | `16 ticks → excite = 2, neutralize = 14` |
 
-`scheduler_state = neutralize`, otherwise.
+Scheduler interface qualification result:
 
-Required invariant:
+`PASS`
 
-`sum(scheduler_counts) = ticks_recorded`
+## Request-Lane Input Interface
 
-## Retained State Interface
+Request-lane inputs:
 
-Input retained state:
+| Signal | Width | Meaning |
+|---|---:|---|
+| `request_valid` | `REQUEST_LANES` | per-lane request-valid flags |
+| `request_cell_index` | `REQUEST_LANES × CELL_INDEX_BITS` | packed cell index for each request lane |
+| `request_target` | `REQUEST_LANES × STATE_BITS` | packed ternary target for each request lane |
 
-| Signal | Direction | Meaning |
-|---|---|---|
-| `state_in` | input | packed retained ternary state at tick start |
+Per-lane packing relations:
 
-Output retained state:
+`request_valid[lane]`
 
-| Signal | Direction | Meaning |
-|---|---|---|
-| `state_out` | output | packed retained ternary state after tick execution |
+`request_cell_index[(lane × CELL_INDEX_BITS) +: CELL_INDEX_BITS]`
 
-State packing relation:
+`request_target[(lane × STATE_BITS) +: STATE_BITS]`
 
-`state[cell] = state_vector[(2 × cell) +: 2]`
+Request lanes are evaluated in deterministic ascending lane order.
 
-Valid state encodings:
+Request validation includes:
 
-`2'b11`
+- tick-enable state;
+- cell-index range;
+- canonical target encoding;
+- duplicate-cell rejection;
+- retained pending-route ownership;
+- scheduler eligibility;
+- transition classification;
+- transition-capacity admission.
 
-`2'b00`
+Public request disposition outputs:
 
-`2'b01`
+| Signal | Width | Meaning |
+|---|---:|---|
+| `request_accept` | `REQUEST_LANES` | accepted request flags after capacity admission |
+| `request_reject` | `REQUEST_LANES` | combined request rejection flags |
 
-Invalid state encoding:
+Required request disposition relation:
 
-`2'b10`
+`request_accept & request_reject = 0`
 
-Required invariant:
+Required lane-order invariant:
 
-`state_out` must never contain `2'b10`.
+`FRP_INV_REQUEST_LANE_ORDER_VALID = 1`
 
-## Target State Interface
+Request-lane interface qualification result:
 
-Input target state:
+`PASS`
 
-| Signal | Direction | Meaning |
-|---|---|---|
-| `target_in` | input | packed phase-derived ternary target state |
+## Phase-Derived Target Interface
 
-The target is generated upstream by the resonant computation layer.
+Full target-vector input:
+
+| Signal | Width | Meaning |
+|---|---:|---|
+| `target_q` | `CELLS × STATE_BITS` | packed phase-derived balanced ternary target vector |
+
+Per-cell packing relation:
+
+`target_q[(cell × STATE_BITS) +: STATE_BITS]`
+
+The target vector is generated upstream by the resonant computation layer.
 
 M16 does not redefine the target-generation rule.
 
@@ -253,192 +528,175 @@ Inherited M15 target rule:
 
 `target_i = 0`, otherwise.
 
-The M16 interface treats `target_in` as the deterministic input target vector for the tick.
+Required target-domain relation:
 
-## Pending Route Interface
+`target_q[cell] ∈ {-1, 0, 1}`
 
-Input pending-route state:
+The full `target_q` vector participates in target-domain validation.
 
-| Signal | Direction | Meaning |
-|---|---|---|
-| `pending_route_in` | input | packed pending route at tick start |
+The per-lane `request_target` vector supplies the explicit requested target associated with each valid request lane.
 
-Output pending-route state:
+Phase-derived target interface qualification result:
 
-| Signal | Direction | Meaning |
-|---|---|---|
-| `pending_route_out` | output | packed pending route after tick execution |
+`PASS`
 
-Pending-route encoding uses the same ternary encoding as retained state.
+## Retained State and Pending Route Output Interface
 
-Meaning:
+The M16 core owns retained processor state internally.
 
-- `0` means no pending opposite-polarity target;
-- `-1` means target `-1` is retained for later completion;
-- `+1` means target `+1` is retained for later completion.
+Public retained-state output:
 
-Required pending-route invariant:
+| Signal | Width | Meaning |
+|---|---:|---|
+| `state_out` | `CELLS × STATE_BITS` | packed retained balanced ternary processor state |
 
-`pending routes preserve requested target polarity`
+Per-cell retained-state relation:
 
-## Request-Lane Interface
+`state_out[(cell × STATE_BITS) +: STATE_BITS]`
 
-Request-lane inputs:
+Required retained-state domain:
 
-| Signal | Direction | Meaning |
-|---|---|---|
-| `request_valid[REQUEST_LANES-1:0]` | input | request lane valid flags |
-| `request_cell_index[REQUEST_LANES]` | input | requested cell index per lane |
-| `request_target[REQUEST_LANES]` | input | requested ternary target per lane |
+`state_out[cell] ∈ {-1, 0, 1}`
 
-Request-lane outputs:
+The M16 core owns retained pending-route state internally.
 
-| Signal | Direction | Meaning |
-|---|---|---|
-| `request_accept[REQUEST_LANES-1:0]` | output | accepted request flags |
-| `request_neutralized[REQUEST_LANES-1:0]` | output | opposite-polarity request routed through `0` |
-| `request_rejected[REQUEST_LANES-1:0]` | output | request rejected by boundary or invalidity |
+Public pending-route output:
 
-Request lanes are processed in deterministic ascending lane order.
+| Signal | Width | Meaning |
+|---|---:|---|
+| `pending_route_out` | `CELLS × STATE_BITS` | packed retained pending polarity for each processor cell |
 
-Required relation:
+Per-cell pending-route relation:
+
+`pending_route_out[(cell × STATE_BITS) +: STATE_BITS]`
+
+Pending-route meanings:
+
+| Ternary value | Meaning |
+|---:|---|
+| `0` | no retained opposite-polarity route |
+| `-1` | retained target polarity `-1` |
+| `1` | retained target polarity `1` |
+
+Required pending-route domain:
+
+`pending_route_out[cell] ∈ {-1, 0, 1}`
+
+Required retained pending-polarity invariant:
+
+`FRP_INV_PENDING_POLARITY_VALID = 1`
+
+Retained-state and pending-route interface qualification result:
+
+`PASS`
+
+## Public Arbitration and Capacity Interface
+
+Public request disposition outputs:
+
+| Signal | Width | Meaning |
+|---|---:|---|
+| `request_accept` | `REQUEST_LANES` | request lanes accepted after transition-capacity admission |
+| `request_reject` | `REQUEST_LANES` | combined request-lane and capacity rejection flags |
+
+Public cell-mask outputs:
+
+| Signal | Width | Meaning |
+|---|---:|---|
+| `accepted_cell_mask` | `CELLS` | accepted explicit-request cells after capacity admission |
+| `neutral_routed_cell_mask` | `CELLS` | accepted cells executing an active-neutral route leg |
+| `accepted_change_mask` | `CELLS` | admitted retained-state changes |
+
+Public transition-capacity outputs:
+
+| Signal | Width | Meaning |
+|---|---:|---|
+| `accepted_changes` | `COUNTER_BITS` | number of admitted retained-state changes |
+| `capacity_remaining` | `COUNTER_BITS` | unused transition capacity for the tick |
+| `capacity_exhausted` | `1` | transition-capacity exhaustion flag |
+| `switch_load_numerator` | `COUNTER_BITS` | accepted-change numerator used by the switch-load relation |
+
+Public output assignments:
+
+`request_accept = request_accept_capacity`
+
+`request_reject = request_reject_lane | request_reject_capacity`
+
+`accepted_cell_mask = request_accepted_cell_mask & capacity_accept_mask`
+
+`neutral_routed_cell_mask = transition_neutral_routed_mask & capacity_accept_mask`
+
+`accepted_change_mask = capacity_accepted_change_mask`
+
+`accepted_changes = capacity_accepted_changes`
+
+`switch_load_numerator = capacity_switch_load_numerator`
+
+Required request disposition relation:
+
+`request_accept & request_reject = 0`
+
+Required capacity-bound relation:
 
 `accepted_changes <= REQUEST_LANES`
 
-## Transition Semantics
+Required capacity-remaining relation:
 
-If:
+`capacity_remaining = REQUEST_LANES - accepted_changes`
 
-`state_i = target_i`
+Required capacity-exhausted relation:
 
-then:
+`capacity_exhausted = (accepted_changes == REQUEST_LANES)`
 
-`state_out_i = state_i`
+Required switch-load relation:
 
-No change is counted.
+`switch_load_numerator = accepted_changes`
 
-If:
+Admission priority:
 
-`state_i = 0`
+1. pending-route completion candidates in ascending cell order;
+2. accepted explicit requests in ascending request-lane order.
 
-and:
+Same-state retention consumes no transition capacity.
 
-`target_i = -1 or +1`
+Each accepted state-changing route leg consumes transition capacity on its execution tick.
 
-then the eligible transition is:
+Arbitration and capacity interface qualification result:
 
-`0 → target_i`
+`PASS`
 
-If:
+## Event Telemetry Interface
 
-`state_i = -1`
+The public M16 core exposes the following event telemetry outputs:
 
-and:
+| Signal | Width | Meaning |
+|---|---:|---|
+| `requested_direct_events` | `COUNTER_BITS` | requested opposite-polarity transitions |
+| `prevented_direct_events` | `COUNTER_BITS` | requested direct transitions prevented by active-neutral routing |
+| `neutral_routed_events` | `COUNTER_BITS` | transitions routed through active neutral state `0` |
+| `actual_direct_events` | `COUNTER_BITS` | direct opposite-polarity transitions committed at retained-state writeback |
+| `reserved_state_events` | `COUNTER_BITS` | reserved ternary encodings detected across the execution chain |
+| `queue_overflow_events` | `COUNTER_BITS` | retained pending-route overflow events |
 
-`target_i = 0`
+Canonical public event sources:
 
-then:
+`requested_direct_events = transition_requested_direct_events`
 
-`-1 → 0`
+`prevented_direct_events = transition_prevented_direct_events`
 
-If:
+`neutral_routed_events = transition_neutral_routed_events`
 
-`state_i = +1`
+`actual_direct_events = state_actual_direct_events`
 
-and:
+`reserved_state_events = reserved_transition_events + pending_reserved_events + state_reserved_state_events`
 
-`target_i = 0`
+`queue_overflow_events = pending_queue_overflow_events`
 
-then:
+Required event relations:
 
-`+1 → 0`
+`prevented_direct_events >= requested_direct_events`
 
-If:
-
-`state_i = -1`
-
-and:
-
-`target_i = +1`
-
-then direct transition is forbidden.
-
-The tick must execute:
-
-`-1 → 0`
-
-and retain:
-
-`pending_route_i = +1`
-
-If:
-
-`state_i = +1`
-
-and:
-
-`target_i = -1`
-
-then direct transition is forbidden.
-
-The tick must execute:
-
-`+1 → 0`
-
-and retain:
-
-`pending_route_i = -1`
-
-Required invariant:
-
-`actual_direct_events = 0`
-
-## Pending Route Completion
-
-If:
-
-`state_i = 0`
-
-and:
-
-`pending_route_i = -1 or +1`
-
-then a later eligible tick may execute:
-
-`0 → pending_route_i`
-
-and clear:
-
-`pending_route_i = 0`
-
-Completion is subject to:
-
-- scheduler eligibility;
-- transition-capacity boundary;
-- deterministic lane order.
-
-Required final qualification target:
-
-`pending_route_count_final = 0`
-
-## Event Counter Interface
-
-M16 exposes M15-compatible event counters.
-
-Required counters:
-
-| Counter | Meaning |
-|---|---|
-| `ticks_recorded` | executed tick count |
-| `requested_direct_events` | requested direct opposite-polarity events |
-| `prevented_direct_events` | direct opposite-polarity requests prevented |
-| `neutral_routed_events` | requests routed through active neutral `0` |
-| `actual_direct_events` | actual direct opposite-polarity executions |
-| `reserved_state_events` | invalid reserved-state observations |
-| `queue_overflow_events` | pending-route capacity failures |
-| `accepted_change_events` | accepted retained-state changes |
-
-Required relations:
+`neutral_routed_events >= prevented_direct_events`
 
 `actual_direct_events = 0`
 
@@ -446,74 +704,623 @@ Required relations:
 
 `queue_overflow_events = 0`
 
-`prevented_direct_events >= requested_direct_events`
+Qualified terminal event record:
 
-`neutral_routed_events >= prevented_direct_events`
+| Event output | Recorded value |
+|---|---:|
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
 
-## Invariant Flag Interface
+Event telemetry interface qualification result:
 
-M16 exposes invariant flags for RTL assertion correlation.
+`PASS`
 
-Required flags:
+## Integrated Invariant Flag Interface
 
-| Flag | Required value |
+Public invariant output:
+
+| Signal | Width |
+|---|---:|
+| `invariant_flags` | `FRP_M16_INVARIANT_FLAGS` |
+
+Invariant-vector width:
+
+`FRP_M16_INVARIANT_FLAGS = 10`
+
+Invariant indexes:
+
+| Index | Invariant flag |
+|---:|---|
+| `0` | `FRP_INV_STATE_DOMAIN_VALID` |
+| `1` | `FRP_INV_SCHEDULER_COUNTS_VALID` |
+| `2` | `FRP_INV_REQUEST_LANE_ORDER_VALID` |
+| `3` | `FRP_INV_PENDING_POLARITY_VALID` |
+| `4` | `FRP_INV_ACTIVE_NEUTRAL_VALID` |
+| `5` | `FRP_INV_TRANSITION_CAPACITY_VALID` |
+| `6` | `FRP_INV_STATE_UPDATE_VALID` |
+| `7` | `FRP_INV_NO_ACTUAL_DIRECT_EVENTS` |
+| `8` | `FRP_INV_NO_RESERVED_STATE` |
+| `9` | `FRP_INV_NO_QUEUE_OVERFLOW` |
+
+The integrated core computes:
+
+`FRP_INV_STATE_DOMAIN_VALID`
+
+from:
+
+- request-cell domain validity;
+- request-target domain validity;
+- transition domain validity;
+- transition output domain validity;
+- pending-route domain validity;
+- retained-state domain validity;
+- retained-state output domain validity.
+
+The integrated core computes:
+
+`FRP_INV_SCHEDULER_COUNTS_VALID`
+
+from:
+
+- scheduler mode and state validity;
+- scheduler counter consistency.
+
+The integrated core computes:
+
+`FRP_INV_REQUEST_LANE_ORDER_VALID`
+
+from:
+
+- deterministic lane ordering;
+- request-cell domain validity;
+- request-target domain validity;
+- duplicate-cell protection;
+- scheduler gating;
+- transition-capacity validity;
+- active-neutral routing validity.
+
+The integrated core computes:
+
+`FRP_INV_PENDING_POLARITY_VALID`
+
+from:
+
+- pending-route domain validity;
+- exact pending-polarity retention;
+- completion only from state `0`;
+- non-overwrite behavior;
+- transition-capacity validity;
+- deterministic pending-route replay;
+- absence of reserved pending-route state.
+
+The integrated core computes:
+
+`FRP_INV_ACTIVE_NEUTRAL_VALID`
+
+from:
+
+- request active-neutral routing;
+- active-neutral transition generation;
+- pending completion from state `0`;
+- deterministic transition replay;
+- active-neutral capacity admission;
+- active-neutral writeback;
+- pending-completion writeback;
+- zero actual direct transitions.
+
+The integrated core computes:
+
+`FRP_INV_TRANSITION_CAPACITY_VALID`
+
+from:
+
+- request transition-capacity validity;
+- transition-stage capacity validity;
+- capacity-guard validity;
+- accepted-change limit;
+- capacity-remaining relation;
+- capacity-exhaustion relation;
+- same-state capacity relation;
+- pending-route capacity relation;
+- active-neutral capacity relation;
+- switch-load bound;
+- capacity-to-writeback correlation.
+
+The integrated core computes:
+
+`FRP_INV_STATE_UPDATE_VALID`
+
+from:
+
+- retained-state update validity;
+- retained-state domain validity;
+- retained-state output validity;
+- capacity-qualified writeback;
+- same-state hold validity;
+- active-neutral writeback validity;
+- pending-completion writeback validity;
+- absence of reserved-state output;
+- absence of direct opposite-polarity writeback.
+
+The final three flags require:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+Qualified integrated invariant vector:
+
+`1111111111`
+
+Integrated invariant interface qualification result:
+
+`PASS`
+
+## Transition Semantics
+
+For a same-state request:
+
+`state_i = request_target_i`
+
+the retained result is:
+
+`state_out_i = state_i`
+
+No retained-state change is admitted.
+
+For a neutral-to-nonzero request:
+
+`state_i = 0`
+
+and:
+
+`request_target_i ∈ {-1, 1}`
+
+the eligible transition is:
+
+`0 → request_target_i`
+
+For a nonzero-to-neutral request:
+
+`state_i ∈ {-1, 1}`
+
+and:
+
+`request_target_i = 0`
+
+the eligible transition is:
+
+`state_i → 0`
+
+For the opposite-polarity request:
+
+`state_i = -1`
+
+and:
+
+`request_target_i = 1`
+
+direct retained-state writeback is forbidden.
+
+The first eligible route leg is:
+
+`-1 → 0`
+
+The exact requested polarity is retained as:
+
+`pending_route_i = 1`
+
+For the opposite-polarity request:
+
+`state_i = 1`
+
+and:
+
+`request_target_i = -1`
+
+direct retained-state writeback is forbidden.
+
+The first eligible route leg is:
+
+`1 → 0`
+
+The exact requested polarity is retained as:
+
+`pending_route_i = -1`
+
+Required routed sequences:
+
+`-1 → 0 → 1`
+
+`1 → 0 → -1`
+
+Required direct-transition relation:
+
+`actual_direct_events = 0`
+
+Transition-semantics qualification result:
+
+`PASS`
+
+## Pending Route Completion
+
+Each retained processor cell contains one pending-route slot.
+
+A pending-route slot records:
+
+- no pending route as `0`;
+- retained target polarity `-1`;
+- retained target polarity `1`.
+
+Pending-route completion has priority over new explicit requests for the same cell.
+
+If:
+
+`state_i = 0`
+
+and:
+
+`pending_route_i ∈ {-1, 1}`
+
+and the scheduler permits completion,
+
+and transition capacity is available,
+
+then the eligible completion is:
+
+`0 → pending_route_i`
+
+After accepted completion:
+
+`pending_route_i = 0`
+
+Pending-route state is retained across:
+
+- scheduler-ineligible ticks;
+- transition-capacity deferral;
+- disabled ticks.
+
+Required pending-route relations:
+
+`pending completion starts from state 0`
+
+`pending completion preserves retained target polarity`
+
+`pending route clears after accepted completion`
+
+`queue_overflow_events = 0`
+
+Pending-route completion qualification result:
+
+`PASS`
+
+## Retained Execution Tick Order
+
+For each enabled processor tick, the integrated execution order is:
+
+1. use the registered scheduler state;
+2. identify pending-route completion candidates;
+3. evaluate explicit request lanes in ascending lane order;
+4. classify retained-state and requested-target relations;
+5. generate active-neutral route candidates;
+6. apply distributed transition-capacity admission;
+7. update retained pending-route state;
+8. commit capacity-qualified retained-state writeback;
+9. expose architectural event telemetry;
+10. evaluate the ten integrated invariant flags.
+
+Pending-route completion candidates are admitted before new explicit requests.
+
+Only capacity-qualified state-changing candidates reach retained-state writeback.
+
+Retained execution tick-order qualification result:
+
+`PASS`
+
+## Scheduler Execution Relations
+
+The public scheduler mode input selects:
+
+- `FRP_MODE_FREE`;
+- `FRP_MODE_7_1`;
+- `FRP_MODE_1_7`.
+
+For `FRP_MODE_FREE`:
+
+`scheduler_state_q = FRP_SCHED_FREE`
+
+For `FRP_MODE_7_1`:
+
+- seven balance ticks use `FRP_SCHED_BALANCE`;
+- one commit tick uses `FRP_SCHED_COMMIT`.
+
+For `FRP_MODE_1_7`:
+
+- one excite tick uses `FRP_SCHED_EXCITE`;
+- seven neutralize ticks use `FRP_SCHED_NEUTRALIZE`.
+
+Qualified scheduler records:
+
+| Mode | Ticks | Recorded scheduler counts |
+|---|---:|---|
+| `free` | `16` | `free = 16` |
+| `7/1` | `64` | `balance = 56`, `commit = 8` |
+| `1/7` | `16` | `excite = 2`, `neutralize = 14` |
+
+Required scheduler counter relation:
+
+`sum(scheduler_state_counts) = ticks_recorded_q`
+
+Scheduler execution qualification result:
+
+`PASS`
+
+## Assertion Correlation Boundary
+
+Assertion module:
+
+`rtl/m16/frp_m16_assertions.sv`
+
+Executable testbench:
+
+`rtl/m16/frp_m16_tb.sv`
+
+The assertion module is connected to the public M16 core interface and internal architectural observation signals by the executable testbench.
+
+Assertion coverage includes:
+
+- reset-state behavior;
+- tick-disabled retained-state hold;
+- tick-disabled pending-route hold;
+- scheduler mode validity;
+- scheduler-state validity;
+- scheduler counter consistency;
+- clear-counter behavior;
+- canonical retained-state encoding;
+- canonical pending-route encoding;
+- deterministic request-lane order;
+- request acceptance and rejection separation;
+- pending-route polarity retention;
+- pending-route completion from state `0`;
+- active-neutral route execution;
+- transition-capacity enforcement;
+- retained-state writeback;
+- zero actual direct-transition events;
+- zero reserved-state events;
+- zero queue-overflow events;
+- all ten integrated invariant flags.
+
+Assertion execution result:
+
+`PASS`
+
+## M15 RTL Comparison Boundary
+
+M16 inherits the qualified M15 semantic and implementation-mapping foundation.
+
+M15 executable semantic reference:
+
+`frp_prototype_v1_7_0.py`
+
+M15 qualification record:
+
+| Qualification record | Result |
+|---|---:|
+| self-test assertions | `41 / 41 PASS` |
+| deterministic vector files | `10 / 10 byte-identical` |
+| required semantic correlation matches | `5 / 5 = 1.0` |
+| deterministic replay matches | `6 / 6 = 1.0` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+| `fixed_point_topology_sum_exact` | `True` |
+| `fixed_point_thermal_sum_exact` | `True` |
+
+Validated M15 package digest:
+
+`703dd4b56f4b34289a2c5bc5521ad4ddc3113bdec8c38238c3244c69cb4d58df`
+
+The M15-to-M16 interface comparison boundary contains:
+
+### Driven execution inputs
+
+- `rst_n`;
+- `tick_enable`;
+- `clear_counters`;
+- `scheduler_mode`;
+- `request_valid`;
+- `request_cell_index`;
+- `request_target`;
+- `target_q`.
+
+### Internally retained M16 execution state
+
+- retained balanced ternary processor state;
+- retained pending-route state;
+- scheduler mode and state;
+- scheduler tick and period indexes;
+- scheduler counter bank.
+
+### Compared execution outputs
+
+- `state_out`;
+- `pending_route_out`;
+- `scheduler_mode_q`;
+- `scheduler_state_q`;
+- `ticks_recorded_q`;
+- scheduler-state counters;
+- `request_accept`;
+- `request_reject`;
+- accepted and neutral-routed cell masks;
+- transition-capacity outputs;
+- event telemetry outputs;
+- `invariant_flags`.
+
+M15-to-M16 compatibility document:
+
+`docs/m16_m15_vector_replay_compatibility_report.md`
+
+Replay target:
+
+`deterministic boundary equivalence`
+
+The replay target is not approximate behavioral similarity.
+
+M15-to-M16 interface compatibility result:
+
+`PASS`
+
+## FPGA Integration Interface
+
+Target-independent FPGA integration top:
+
+`fpga/m16/frp_m16_fpga_top.sv`
+
+The FPGA integration top instantiates:
+
+`frp_m16_core`
+
+with the same parameter and public execution interface.
+
+External reset input:
+
+`rst_n_async`
+
+The integration top implements:
+
+- asynchronous external reset assertion;
+- two-stage synchronous reset release;
+- `core_ready` generation;
+- tick gating before `core_ready`;
+- counter-clear gating before `core_ready`;
+- request-valid gating before `core_ready`.
+
+Qualified integration relations:
+
+`core_ready = rst_n_core`
+
+`tick_enable_core = tick_enable && core_ready`
+
+`clear_counters_core = clear_counters && core_ready`
+
+`request_valid_core = request_valid & {REQUEST_LANES{core_ready}}`
+
+The FPGA integration top passes the following signals directly to the M16 core after readiness qualification:
+
+- `scheduler_mode`;
+- `request_cell_index`;
+- `request_target`;
+- `target_q`.
+
+The integration top exposes the M16 core outputs:
+
+- retained processor state;
+- retained pending-route state;
+- scheduler mode and state;
+- scheduler counters;
+- request acceptance and rejection;
+- cell masks;
+- transition-capacity telemetry;
+- event telemetry;
+- integrated invariant flags.
+
+Qualified FPGA preparation record:
+
+| Field | Recorded value |
 |---|---|
-| `valid_state_domain` | `True` |
-| `no_reserved_state` | `True` |
-| `no_actual_direct_events` | `True` |
-| `no_queue_overflow` | `True` |
-| `transition_capacity_valid` | `True` |
-| `pending_route_polarity_valid` | `True` |
-| `scheduler_counts_valid` | `True` |
+| Workflow | `FRP M16 FPGA Preparation` |
+| Workflow file | `.github/workflows/frp-m16-fpga-preparation.yml` |
+| Workflow run | `#2` |
+| Qualified repository commit | `ede53cf` |
+| Branch | `main` |
+| Workflow result | `SUCCESS` |
+| Workflow duration | `36s` |
+| Qualification artifact count | `1` |
+| Qualification result | `PASS` |
+| Closure status | `M16 FPGA PREPARATION LAYER CLOSED` |
 
-These flags must correlate with the assertion harness and M15 vector replay expectations.
+FPGA integration interface result:
 
-## RTL Comparison Boundary
-
-The M16 core must compare against the M15 vector package at the following boundary:
-
-`state_in`
-
-`target_in`
-
-`pending_route_in`
-
-`scheduler_mode`
-
-`tick_index`
-
-`request lanes`
-
-→ `M16 RTL tick execution`
-
-→ `state_out`
-
-`pending_route_out`
-
-`event counters`
-
-`invariant flags`
-
-The expected output source is the M15 cycle-exact integer golden trace.
+`PASS`
 
 ## M16 Interface Closure Criteria
 
-The M16 interface contract is valid only if it preserves:
+The M16 core interface preserves:
 
-- canonical ternary encoding;
-- zero reserved states;
-- explicit scheduler execution semantics;
+- canonical balanced ternary encoding;
+- retained processor-state ownership;
+- retained pending-route ownership;
+- asynchronous active-low core reset;
+- explicit scheduler-mode input;
+- registered scheduler mode and state outputs;
 - deterministic request-lane order;
-- transition-capacity boundary;
+- canonical request-target validation;
+- transition-capacity admission;
 - mandatory active-neutral routing;
-- pending-route retention;
+- pending-route completion priority;
+- retained-state writeback;
+- scheduler counter telemetry;
+- architectural event telemetry;
 - zero direct opposite-polarity execution;
-- M15-compatible event counters;
-- M15-compatible invariant flags;
-- replay compatibility with M15 vector packages.
+- zero reserved-state events;
+- zero queue-overflow events;
+- ten integrated invariant flags;
+- assertion correlation;
+- M15 interface compatibility;
+- target-independent FPGA integration.
 
-## Next Step
+## Interface Qualification Result
 
-The next M16 file should define the first module-level design document:
+| Interface boundary | Result |
+|---|---|
+| canonical ternary encoding | `PASS` |
+| parameter relations | `PASS` |
+| clock and reset interface | `PASS` |
+| scheduler input and output interface | `PASS` |
+| request-lane input interface | `PASS` |
+| phase-derived target interface | `PASS` |
+| retained-state output interface | `PASS` |
+| pending-route output interface | `PASS` |
+| request disposition interface | `PASS` |
+| cell-mask interface | `PASS` |
+| transition-capacity interface | `PASS` |
+| event telemetry interface | `PASS` |
+| integrated invariant interface | `PASS` |
+| transition semantics | `PASS` |
+| pending-route completion | `PASS` |
+| retained execution tick order | `PASS` |
+| assertion correlation | `PASS` |
+| M15 interface compatibility | `PASS` |
+| FPGA integration interface | `PASS` |
+| M16 RTL core interface contract | `PASS` |
 
-`docs/m16_balanced_ternary_state_register_map.md`
+Qualified RTL workflow:
+
+`FRP M16 RTL Artifact Boundary #84`
+
+Qualified RTL source commit:
+
+`ede53cf`
+
+RTL workflow result:
+
+`SUCCESS`
+
+RTL closure status:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+FPGA preparation status:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
+
+Current release qualification:
+
+`FRP v1.8.0 / M16 — PASS`
+
+## Author
+
+Maksym Marnov
