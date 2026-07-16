@@ -1,48 +1,62 @@
 # Example Scenarios — Fractal Resonance Processor (FRP)
 
-**Ternary Resonant Coherence Processor — Structured Output Prototype**
+**Ternary Fractal Resonant Coherence Processor**
 
-This directory provides executable example scenarios for the Fractal Resonance Processor (FRP) and connects each scenario to the current validated processor reference.
+This directory provides executable example scenarios for the Fractal Resonance Processor (FRP) and connects each scenario to the current validated processor reference and the current RTL execution layer.
 
-FRP is a ternary resonant coherence processor.
+FRP is a ternary fractal resonant coherence processor.
 
 Current version:
 
-`FRP v1.7.0`
+`FRP v1.8.0`
 
 Current milestone:
 
-`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+`M16 — RTL Core Realization and Execution Semantics Package`
 
-Current executable reference:
+Current executable semantic reference:
 
 `../frp_prototype_v1_7_0.py`
+
+The executable semantic reference remains attached to the M15-qualified Python layer and is inherited by M16.
 
 Current structured-output schema:
 
 `frp.structured_output.v1.7.0`
 
-Current M15 benchmark-matrix schema:
+Current benchmark-matrix schema:
 
 `frp.m3.benchmark_matrix.v1.7.0`
 
-Current architecture document:
+Current M16 architecture document:
+
+`../docs/m16_rtl_core_realization_execution_semantics.md`
+
+Inherited M15 architecture document:
 
 `../docs/m15_implementation_mapping_domain_interface_qualification_closure.md`
 
 Current test report:
 
-`../TEST_REPORT_v1_7_0.md`
+`../TEST_REPORT_v1_8_0.md`
 
 Current validation index:
 
-`../FRP_VALIDATION_INDEX_v1_7_0.md`
+`../FRP_VALIDATION_INDEX_v1_8_0.md`
 
 Current release notes:
 
-`../RELEASE_NOTES_v1_7_0.md`
+`../RELEASE_NOTES_v1_8_0.md`
 
-Current primary qualification workflow:
+Current M16 RTL qualification workflow:
+
+`../.github/workflows/frp-m16-rtl-artifact-boundary.yml`
+
+Current M16 FPGA preparation workflow:
+
+`../.github/workflows/frp-m16-fpga-preparation.yml`
+
+Inherited M15 qualification workflow:
 
 `../.github/workflows/frp-m15-implementation-mapping-qualification.yml`
 
@@ -50,7 +64,7 @@ Current published validation result:
 
 `PASS`
 
-Current validated M15 self-test result:
+Inherited validated M15 self-test result:
 
 `41/41 PASS`
 
