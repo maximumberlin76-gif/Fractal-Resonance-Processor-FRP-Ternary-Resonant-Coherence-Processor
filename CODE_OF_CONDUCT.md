@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-The Fractal Resonance Processor (FRP) project is a public research, implementation-mapping, verification, benchmark, and documentation repository.
+The Fractal Resonance Processor (FRP) project is a public research, executable semantic reference, implementation-mapping, SystemVerilog RTL execution, target-independent FPGA preparation, verification, benchmark, and documentation repository.
 
 This code of conduct defines the expected standard for participation in issues, pull requests, discussions, and repository collaboration.
 
@@ -47,23 +47,55 @@ Claims about FRP behavior should be grounded in:
 
 Current project state:
 
-`FRP v1.7.0`
+`FRP v1.8.0`
 
 Current milestone:
 
-`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+`M16 — RTL Core Realization and Execution Semantics Package`
 
-Current executable reference:
+Current executable semantic reference:
 
 `frp_prototype_v1_7_0.py`
+
+Current structured-output schema:
+
+`frp.structured_output.v1.7.0`
+
+Current M15 benchmark-matrix schema:
+
+`frp.m3.benchmark_matrix.v1.7.0`
 
 Current published validation result:
 
 `PASS`
 
-Current validated M15 self-test result:
+Inherited M15 self-test result:
 
 `41/41 PASS`
+
+Current M16 RTL qualification:
+
+| Field | Recorded value |
+|---|---|
+| Workflow | `FRP M16 RTL Artifact Boundary` |
+| Workflow file | `.github/workflows/frp-m16-rtl-artifact-boundary.yml` |
+| Workflow run | `#84` |
+| Qualified source commit | `ede53cf` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Status | `M16 RTL EXECUTION LAYER CLOSED` |
+
+Current M16 FPGA preparation qualification:
+
+| Field | Recorded value |
+|---|---|
+| Workflow | `FRP M16 FPGA Preparation` |
+| Workflow file | `.github/workflows/frp-m16-fpga-preparation.yml` |
+| Workflow run | `#2` |
+| Qualified repository commit | `ede53cf` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Status | `M16 FPGA PREPARATION LAYER CLOSED` |
 
 ## 5. Repository Scope
 
@@ -78,6 +110,9 @@ The repository may include:
 - verification and qualification records
 - implementation-mapping artifacts
 - hardware-facing interface and correlation documents
+- SystemVerilog RTL execution artifacts
+- target-independent FPGA preparation artifacts
+- mathematical and physical foundation documents
 - historical release records
 
 The public repository excludes:
@@ -112,12 +147,25 @@ Sensitive issues should be reported privately first, with reasonable review time
 
 This code of conduct is aligned with:
 
-- `FRP v1.7.0`
-- `M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+- `FRP v1.8.0`
+- `M16 — RTL Core Realization and Execution Semantics Package`
+- the M15-qualified semantic and implementation-mapping foundation
+- `frp_prototype_v1_7_0.py`
+- `frp.structured_output.v1.7.0`
+- `frp.m3.benchmark_matrix.v1.7.0`
 - `README.md`
 - `CONTRIBUTING.md`
 - `SECURITY.md`
 - `docs/limitations.md`
-- `TEST_REPORT_v1_7_0.md`
-- `FRP_VALIDATION_INDEX_v1_7_0.md`
-- `RELEASE_NOTES_v1_7_0.md`
+- `docs/mathematical_foundation.md`
+- `docs/physical_foundation.md`
+- `docs/m15_implementation_mapping_domain_interface_qualification_closure.md`
+- `docs/m16_rtl_core_realization_execution_semantics.md`
+- `TEST_REPORT_v1_8_0.md`
+- `FRP_VALIDATION_INDEX_v1_8_0.md`
+- `RELEASE_NOTES_v1_8_0.md`
+- `rtl/m16/CLOSURE.md`
+- `fpga/m16/CLOSURE.md`
+- `.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+- `.github/workflows/frp-m16-rtl-artifact-boundary.yml`
+- `.github/workflows/frp-m16-fpga-preparation.yml`
