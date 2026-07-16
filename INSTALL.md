@@ -4,7 +4,7 @@
 
 ## Installation
 
-This document defines the installation, first-run, validation, and deterministic reproduction path for the current Fractal Resonance Processor (FRP) release layer.
+This document defines the installation, first-run, validation, and deterministic reproduction path for the current Fractal Resonance Processor (FRP) release layer, including the M15-qualified executable semantic reference, the M16 integrated SystemVerilog RTL execution layer, and the M16 target-independent FPGA preparation layer.
 
 FRP is a ternary resonant coherence processor.
 
@@ -78,6 +78,26 @@ The processor combines:
 
 `retained coherent ternary state`
 
+↓
+
+`M15 deterministic implementation mapping and qualification closure`
+
+↓
+
+`M16 integrated SystemVerilog RTL execution`
+
+↓
+
+`M16 executable architectural testbench and invariant evaluation`
+
+↓
+
+`M16 target-independent FPGA integration, reset synchronization, readiness, and execution-input gating`
+
+↓
+
+`M16 RTL and FPGA preparation qualification closure`
+
 The balanced ternary domain is:
 
 `{-1, 0, 1}`
@@ -100,49 +120,90 @@ Validated kernel invariant:
 
 Current version:
 
-`FRP v1.7.0`
+`FRP v1.8.0`
 
 Current milestone:
 
-`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+`M16 — RTL Core Realization and Execution Semantics Package`
 
-Main executable reference file:
+Main executable semantic reference file:
 
 `frp_prototype_v1_7_0.py`
 
-Current architecture document:
+Current structured-output schema:
+
+`frp.structured_output.v1.7.0`
+
+Inherited M15 architecture document:
 
 `docs/m15_implementation_mapping_domain_interface_qualification_closure.md`
 
+Current M16 architecture document:
+
+`docs/m16_rtl_core_realization_execution_semantics.md`
+
+Mathematical foundation:
+
+`docs/mathematical_foundation.md`
+
+Physical foundation:
+
+`docs/physical_foundation.md`
+
 Current test report:
 
-`TEST_REPORT_v1_7_0.md`
+`TEST_REPORT_v1_8_0.md`
 
 Current validation index:
 
-`FRP_VALIDATION_INDEX_v1_7_0.md`
+`FRP_VALIDATION_INDEX_v1_8_0.md`
 
 Current release notes:
 
-`RELEASE_NOTES_v1_7_0.md`
+`RELEASE_NOTES_v1_8_0.md`
 
-Current primary qualification workflow:
+Inherited M15 qualification workflow:
 
 `.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+
+Current M16 RTL qualification workflow:
+
+`.github/workflows/frp-m16-rtl-artifact-boundary.yml`
+
+Current M16 FPGA preparation workflow:
+
+`.github/workflows/frp-m16-fpga-preparation.yml`
 
 Current published validation status:
 
 `PASS`
 
-Current validated self-test result:
+Inherited validated M15 self-test result:
 
 `41/41 PASS`
 
+Current M16 RTL status:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+Current M16 FPGA preparation status:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
+
 ## 1. Processor Identity and Computational Core
 
-FRP v1.7.0 is the current executable structured-output prototype and reference architecture of the processor.
+FRP v1.8.0 is the current RTL execution and FPGA preparation release layer of the processor.
+
+The M15-qualified executable semantic reference remains:
+
+`frp_prototype_v1_7_0.py`
 
 The word `prototype` identifies the executable reference form.
+
+The current M16 execution forms are:
+
+- the integrated SystemVerilog RTL core and executable architectural testbench under `rtl/m16/`;
+- the target-independent FPGA integration top and executable integration testbench under `fpga/m16/`.
 
 The processor computational core contains two inseparable domains.
 
@@ -183,13 +244,13 @@ The ternary layer provides the state, target, transition, and retained-result do
 
 Together these domains form the complete FRP computational mechanism.
 
-## 2. What the Current Executable Runs
+## 2. What the Executable Semantic Reference and M16 Execution Layers Run
 
-The current executable reference is:
+The M15-qualified executable semantic reference is:
 
 `frp_prototype_v1_7_0.py`
 
-The default execution path performs the following sequence on every tick:
+The default Python semantic execution path performs the following sequence on every tick:
 
 `scheduler state selection`
 
@@ -273,7 +334,63 @@ Across successive ticks, this execution produces the complete computational rela
 
 `retained ternary state`
 
-This is the current processor execution path that the installation commands below prepare and run.
+This is the M15-qualified Python semantic execution path that the installation commands below prepare and run.
+
+The current M16 RTL execution path performs:
+
+`scheduler-state propagation`
+
+↓
+
+`request-lane arbitration`
+
+↓
+
+`pending-route eligibility evaluation`
+
+↓
+
+`active-neutral first-leg evaluation`
+
+↓
+
+`transition-capacity enforcement`
+
+↓
+
+`retained-state and pending-route writeback`
+
+↓
+
+`counter and telemetry update`
+
+↓
+
+`ten integrated invariant-flag evaluations`
+
+The M16 FPGA preparation path adds:
+
+`asynchronous external reset assertion`
+
+↓
+
+`two-stage synchronous reset release`
+
+↓
+
+`core_ready generation`
+
+↓
+
+`tick, counter-clear, and request-valid gating before readiness`
+
+↓
+
+`scheduler and request-interface propagation`
+
+↓
+
+`M16 RTL core execution through the target-independent FPGA integration boundary`
 
 ## 3. Kuramoto-Sakaguchi Resonant Phase Layer
 
@@ -471,7 +588,7 @@ The effective local gamma is derived from the nominal phase lag plus a thermal a
 
 The resulting local gamma enters the Kuramoto-Sakaguchi phase interaction.
 
-The current M15 hardware-facing path also externalizes deterministic gamma-noise targets into the verification stimulus stream.
+The M15-qualified hardware-facing path also externalizes deterministic gamma-noise targets into the verification stimulus stream.
 
 Validated verification fields include:
 
@@ -494,7 +611,7 @@ The compression factor decreases under increasing:
 
 This nonlinear layer preserves a bounded effective coherence response under increasing coupled load.
 
-It is part of the current v1.7.0 processor behavior.
+It is part of the M15-qualified v1.7.0 executable semantic reference behavior.
 
 ## 10. Dynamic Stability
 
@@ -615,7 +732,9 @@ Required tools:
 
 - Python;
 - pip;
-- Git when cloning the repository.
+- Git when cloning the repository;
+- Verilator for M16 RTL and FPGA preparation execution;
+- g++ for generated executable SystemVerilog testbenches.
 
 The current dependency file is:
 
@@ -625,13 +744,15 @@ Repository external dependency:
 
 `numpy>=1.26.0`
 
-NumPy is used by the historical FRP v0.9.3 and v0.9.4 executable layers. The current FRP v1.7.0 executable and Comparative Architecture Benchmark Suite use the Python standard library and repository-local modules.
+NumPy is used by the historical FRP v0.9.3 and v0.9.4 executable layers. The M15-qualified FRP v1.7.0 executable semantic reference and Comparative Architecture Benchmark Suite use the Python standard library and repository-local modules. The M16 RTL and FPGA preparation paths use Verilator and g++.
 
 Check the local tools:
 
     python --version
     python -m pip --version
     git --version
+    verilator --version
+    g++ --version
 
 On systems where the interpreter command is:
 
@@ -649,13 +770,21 @@ Enter the repository directory:
 
     cd Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor
 
-Confirm that the current executable reference exists:
+Confirm that the executable semantic reference exists:
 
     python -c "from pathlib import Path; p=Path('frp_prototype_v1_7_0.py'); print(p, p.exists())"
 
 Required result:
 
 `frp_prototype_v1_7_0.py True`
+
+Confirm that the current M16 source boundaries exist:
+
+    python -c "from pathlib import Path; paths=[Path('rtl/m16/frp_m16_tb.sv'), Path('fpga/m16/frp_m16_fpga_top.sv'), Path('fpga/m16/frp_m16_fpga_tb.sv')]; print([(str(p), p.exists()) for p in paths])"
+
+Required result:
+
+`all three paths report True`
 
 When using a downloaded archive instead of Git, unpack the complete archive and run the remaining commands from the repository root.
 
@@ -687,7 +816,7 @@ After activation, verify:
 
     python --version
 
-## 17. Install Dependencies
+## 17. Install Dependencies and the M16 Toolchain
 
 Upgrade pip:
 
@@ -705,7 +834,19 @@ The installed version must satisfy:
 
 `numpy>=1.26.0`
 
-## 18. Compile Gate
+The M16 GitHub Actions workflows install the CI-aligned SystemVerilog toolchain with:
+
+    sudo apt-get update
+    sudo apt-get install --yes verilator g++
+
+Verify the installed M16 toolchain:
+
+    verilator --version
+    g++ --version
+
+Local M16 execution requires both commands to complete with exit status `0`.
+
+## 18. Python Compile and M16 Toolchain Gates
 
 Run:
 
@@ -716,6 +857,17 @@ Required result:
 `PASS`
 
 A successful compile gate completes with exit status `0`.
+
+Run the M16 toolchain gates:
+
+    verilator --version
+    g++ --version
+
+Required result:
+
+`PASS`
+
+Each toolchain gate completes with exit status `0`.
 
 ## 19. Inspect the Current Command Interface
 
@@ -757,9 +909,9 @@ The current interface includes:
 - `--export-qualification-closure-manifest`;
 - `--export-benchmark-matrix`.
 
-## 20. First Processor Run
+## 20. M15 Executable Semantic Reference First Run
 
-Run the current executable reference:
+Run the M15-qualified executable semantic reference:
 
     python frp_prototype_v1_7_0.py --mode demo
 
@@ -789,9 +941,9 @@ Default 64-tick scheduler counts:
 
 `commit = 8`
 
-## 21. What the First Run Demonstrates
+## 21. What the M15 First Run Executes
 
-The first run executes the current coupled processor path:
+The first run executes the M15-qualified coupled processor path:
 
 `phase and frequency state`
 
@@ -845,7 +997,7 @@ The first run executes the current coupled processor path:
 
 The first run therefore exercises both the resonant computational mechanism and the balanced ternary state-retention mechanism.
 
-## 22. Structured JSON First Run
+## 22. M15 Structured JSON First Run
 
 Run:
 
@@ -891,7 +1043,7 @@ Required default summary invariants:
 - `switch_load_peak <= 0.25`;
 - `C_minus_P_min > 0.0`.
 
-## 23. Full Trace Output
+## 23. M15 Full Trace Output
 
 Run:
 
@@ -913,7 +1065,7 @@ The default configuration records:
 
 Use full trace output when exact tick-by-tick or cell-by-cell inspection is required.
 
-## 24. Standard Self-Test
+## 24. M15 Standard Self-Test
 
 Run:
 
@@ -933,7 +1085,7 @@ Current validated result:
 
 `41/41 PASS`
 
-## 25. Full Scheduler Self-Test Matrix
+## 25. M15 Full Scheduler Self-Test Matrix
 
 Run the default profile:
 
@@ -961,9 +1113,9 @@ All 41 checks must be:
 
 `True`
 
-## 26. Scheduler Layer
+## 26. M15 Scheduler Layer
 
-The current executable preserves three scheduler modes.
+The M15-qualified executable semantic reference preserves three scheduler modes.
 
 | Scheduler | 16-tick validated profile |
 |---|---|
@@ -979,7 +1131,7 @@ Validated default 64-tick 7/1 profile:
 
 The scheduler contributes directly to the resonant phase layer.
 
-The current executable also applies scheduler-dependent phase push during phase evolution.
+The M15-qualified executable semantic reference also applies scheduler-dependent phase push during phase evolution.
 
 ## 27. Cell-Count Rule
 
@@ -1036,7 +1188,7 @@ The resonant phase-coherence core remains upstream of the ternary target, transi
 
 ## 29. M15 Hardware-Facing Numeric Profile
 
-Current primary numeric representations:
+M15-qualified primary numeric representations:
 
 | Domain | Representation |
 |---|---|
@@ -1218,9 +1370,147 @@ Every scaling run must preserve:
 - exact fixed-point topology sum;
 - exact fixed-point thermal sum.
 
-## 35. Installation Acceptance Criteria
+## 35. M16 RTL Installation Verification
 
-The current processor installation is ready when:
+The M16 RTL source boundary contains ten SystemVerilog files under:
+
+`rtl/m16/`
+
+Prepare an isolated build directory:
+
+    rm -rf /tmp/frp_m16_obj
+    rm -f /tmp/frp_m16_build.log
+    rm -f /tmp/frp_m16_execution.log
+    mkdir -p /tmp/frp_m16_obj
+
+Build the integrated M16 RTL testbench:
+
+    verilator --sv --timing --assert --binary \
+      --top-module frp_m16_tb \
+      -Irtl/m16 \
+      --Mdir /tmp/frp_m16_obj \
+      rtl/m16/frp_m16_tb.sv \
+      2>&1 | tee /tmp/frp_m16_build.log
+
+Check the generated executable:
+
+    test -x /tmp/frp_m16_obj/Vfrp_m16_tb
+
+Run the executable architectural testbench:
+
+    /tmp/frp_m16_obj/Vfrp_m16_tb \
+      2>&1 | tee /tmp/frp_m16_execution.log
+
+Required terminal output:
+
+`FRP M16 deterministic RTL testbench completed.`
+
+`CELLS=8 REQUEST_LANES=2`
+
+`ticks_recorded=16`
+
+`actual_direct_events=0`
+
+`reserved_state_events=0`
+
+`queue_overflow_events=0`
+
+The executable RTL testbench validates:
+
+- scheduler modes `free`, `7/1`, and `1/7`;
+- request-lane arbitration;
+- active-neutral first-leg execution;
+- retained pending-route completion;
+- transition-capacity saturation;
+- retained-state writeback;
+- counter clearing with retained state preserved;
+- SystemVerilog assertion execution;
+- all ten integrated invariant flags.
+
+## 36. M16 FPGA Preparation Installation Verification
+
+The M16 FPGA preparation source boundary contains:
+
+- `fpga/m16/frp_m16_fpga_top.sv`;
+- `fpga/m16/frp_m16_fpga_tb.sv`.
+
+Prepare an isolated FPGA integration build directory:
+
+    rm -rf /tmp/frp_m16_fpga_obj
+    rm -f /tmp/frp_m16_fpga_top_lint.log
+    rm -f /tmp/frp_m16_fpga_build.log
+    rm -f /tmp/frp_m16_fpga_execution.log
+    mkdir -p /tmp/frp_m16_fpga_obj
+
+Elaborate the target-independent FPGA integration top:
+
+    verilator --sv --lint-only \
+      --top-module frp_m16_fpga_top \
+      -Irtl/m16 \
+      -Ifpga/m16 \
+      fpga/m16/frp_m16_fpga_top.sv \
+      2>&1 | tee /tmp/frp_m16_fpga_top_lint.log
+
+Build the executable FPGA integration testbench:
+
+    verilator --sv --timing --assert --binary \
+      --top-module frp_m16_fpga_tb \
+      -Irtl/m16 \
+      -Ifpga/m16 \
+      --Mdir /tmp/frp_m16_fpga_obj \
+      fpga/m16/frp_m16_fpga_tb.sv \
+      2>&1 | tee /tmp/frp_m16_fpga_build.log
+
+Check the generated executable:
+
+    test -x /tmp/frp_m16_fpga_obj/Vfrp_m16_fpga_tb
+
+Reject latch and multidriven diagnostics:
+
+    ! grep -E '%Warning-(LATCH|MULTIDRIVEN)' \
+      /tmp/frp_m16_fpga_top_lint.log \
+      /tmp/frp_m16_fpga_build.log
+
+Run the executable FPGA integration testbench:
+
+    /tmp/frp_m16_fpga_obj/Vfrp_m16_fpga_tb \
+      2>&1 | tee /tmp/frp_m16_fpga_execution.log
+
+Required terminal output:
+
+`FRP M16 FPGA integration testbench completed.`
+
+`CELLS=8 REQUEST_LANES=2`
+
+`core_ready=1`
+
+`ticks_recorded=1`
+
+`actual_direct_events=0`
+
+`reserved_state_events=0`
+
+`queue_overflow_events=0`
+
+`invariant_flags=1111111111`
+
+The executable FPGA integration testbench validates:
+
+- asynchronous external reset assertion;
+- two-stage synchronous reset release;
+- `core_ready` generation;
+- tick, counter-clear, and request-valid gating before readiness;
+- scheduler propagation;
+- request-interface propagation;
+- active-neutral first-leg execution;
+- retained pending-route completion;
+- transition-capacity enforcement;
+- retained-state writeback;
+- all ten integrated invariant flags.
+
+## 37. Installation Acceptance Criteria
+
+The current FRP v1.8.0 installation is ready when:
 
 - the repository has been cloned or unpacked completely;
 - `frp_prototype_v1_7_0.py` exists;
@@ -1237,17 +1527,36 @@ The current processor installation is ready when:
 - the standard self-test reports `41/41 PASS`;
 - all scheduler-specific self-tests report `41/41 PASS`;
 - the benchmark matrix reports the five expected rows;
-- the qualification closure manifest reports `PASS`.
+- the qualification closure manifest reports `PASS`;
+- Verilator is installed and reports its version;
+- g++ is installed and reports its version;
+- the ten-file M16 RTL source boundary is present;
+- the M16 RTL executable testbench builds and runs;
+- SystemVerilog assertions pass;
+- all ten integrated M16 invariant flags remain asserted;
+- the M16 RTL terminal record reports `ticks_recorded = 16`;
+- the M16 RTL terminal record reports all three zero-event counters as `0`;
+- the two-file M16 FPGA preparation source boundary is present;
+- the nine required M16 RTL dependencies are present;
+- FPGA integration-top elaboration passes;
+- the FPGA integration executable testbench builds and runs;
+- latch and multidriven diagnostics remain absent;
+- asynchronous reset assertion and two-stage synchronous reset release execute;
+- `core_ready = 1` after reset release;
+- execution inputs remain gated before readiness;
+- the FPGA terminal record reports `ticks_recorded = 1`;
+- the FPGA terminal record reports all three zero-event counters as `0`;
+- the FPGA terminal record reports `invariant_flags = 1111111111`.
 
 For complete deterministic vector reproduction, also require byte-identical equality between independently generated vector directories.
 
 ### Published GitHub Actions validation evidence
 
-The root `README.md` exposes 18 active validation badges for the published FRP workflow chain.
+The current `CI.md` exposes 23 GitHub Actions workflow status badges.
 
-The repository contains 19 GitHub Actions workflow files.
+The repository contains 23 GitHub Actions workflow files.
 
-The current release evidence recorded in `TEST_REPORT_v1_7_0.md` and `RELEASE_NOTES_v1_7_0.md` includes:
+The inherited M15 release evidence recorded in `TEST_REPORT_v1_7_0.md` and `RELEASE_NOTES_v1_7_0.md` includes:
 
 - validated release commit `5fd9a4f`;
 - `FRP Structured Output #113 — PASS`;
@@ -1255,15 +1564,28 @@ The current release evidence recorded in `TEST_REPORT_v1_7_0.md` and `RELEASE_NO
 - `FRP Self Test #154 — PASS`;
 - `FRP Benchmark Smoke Test #152 — PASS`.
 
-The current published M15 result is:
+The inherited published M15 result is:
 
 `PASS`
 
-The current validated M15 self-test result is:
+The inherited validated M15 self-test result is:
 
 `41/41 PASS`
 
-## 36. Saving Output
+The current M16 release evidence recorded in `TEST_REPORT_v1_8_0.md`, `FRP_VALIDATION_INDEX_v1_8_0.md`, and `RELEASE_NOTES_v1_8_0.md` includes:
+
+| Layer | Workflow run | Qualified commit | Result | Artifact count | Status |
+|---|---:|---|---|---:|---|
+| M16 RTL initial closure | `#82` | `a68a2af` | `SUCCESS` | `1` | `M16 RTL EXECUTION LAYER CLOSED` |
+| M16 RTL qualification rerun | `#84` | `ede53cf` | `SUCCESS` | `1` | `M16 RTL EXECUTION LAYER CLOSED` |
+| M16 FPGA preparation initial closure | `#1` | `326b69e` | `SUCCESS` | `1` | `M16 FPGA PREPARATION LAYER CLOSED` |
+| M16 FPGA preparation qualification rerun | `#2` | `ede53cf` | `SUCCESS` | `1` | `M16 FPGA PREPARATION LAYER CLOSED` |
+
+The current published M16 result is:
+
+`PASS`
+
+## 38. Saving M15 Semantic and Mapping Output
 
 Save the default structured demo:
 
@@ -1285,7 +1607,7 @@ Save the qualification closure manifest:
 
     python frp_prototype_v1_7_0.py --export-qualification-closure-manifest > frp-v1.7.0-qualification-closure.json
 
-## 37. Running Through the Virtual-Environment Interpreter
+## 39. Running Through the Virtual-Environment Interpreter
 
 Direct interpreter invocation provides the complete virtual-environment execution path.
 
@@ -1305,7 +1627,7 @@ Use:
     .venv\Scripts\python.exe -m py_compile frp_prototype_v1_7_0.py
     .venv\Scripts\python.exe frp_prototype_v1_7_0.py --mode self-test --output json
 
-## 38. Updating an Existing Clone
+## 40. Updating an Existing Clone
 
 Enter the repository directory:
 
@@ -1327,11 +1649,20 @@ Re-run the compile gate:
 
     python -m py_compile frp_prototype_v1_7_0.py
 
-Re-run the current self-test:
+Re-run the M15-qualified self-test:
 
     python frp_prototype_v1_7_0.py --mode self-test --output json
 
-## 39. Troubleshooting
+Re-check the M16 toolchain:
+
+    verilator --version
+    g++ --version
+
+Re-run the M16 RTL installation verification from Section 35.
+
+Re-run the M16 FPGA preparation installation verification from Section 36.
+
+## 41. Troubleshooting
 
 ### Python command resolution
 
@@ -1357,9 +1688,25 @@ Then verify:
 
     python -c "import numpy; print(numpy.__version__)"
 
+### Verilator command resolution
+
+Check:
+
+    verilator --version
+
+The M16 RTL and FPGA preparation commands require the `verilator` command to resolve successfully.
+
+### g++ command resolution
+
+Check:
+
+    g++ --version
+
+The executable M16 SystemVerilog testbench builds require the `g++` command to resolve successfully.
+
 ### Virtual-environment interpreter path
 
-Use the virtual-environment interpreter directly as shown in Section 37.
+Use the virtual-environment interpreter directly as shown in Section 39.
 
 ### PowerShell blocks activation
 
@@ -1394,15 +1741,52 @@ Record:
     git status --short
     python --version
     python -m pip freeze
+    verilator --version
+    g++ --version
 
 Then compare the local source revision and environment with:
 
+- `TEST_REPORT_v1_8_0.md`;
+- `FRP_VALIDATION_INDEX_v1_8_0.md`;
 - `TEST_REPORT_v1_7_0.md`;
 - `FRP_VALIDATION_INDEX_v1_7_0.md`;
 - `REPRODUCIBILITY.md`;
 - `CI.md`.
 
-## 40. Complete Current Technical Chain
+### M16 RTL build or execution diagnosis
+
+Check:
+
+- Verilator version;
+- g++ version;
+- `rtl/m16/` source completeness;
+- top module `frp_m16_tb`;
+- include path `rtl/m16`;
+- `/tmp/frp_m16_build.log`;
+- `/tmp/frp_m16_execution.log`;
+- generated executable `/tmp/frp_m16_obj/Vfrp_m16_tb`;
+- SystemVerilog assertion results;
+- terminal zero-event counters.
+
+### M16 FPGA preparation diagnosis
+
+Check:
+
+- Verilator version;
+- g++ version;
+- `fpga/m16/` source completeness;
+- required `rtl/m16/` dependencies;
+- top module `frp_m16_fpga_top`;
+- testbench module `frp_m16_fpga_tb`;
+- `/tmp/frp_m16_fpga_top_lint.log`;
+- `/tmp/frp_m16_fpga_build.log`;
+- `/tmp/frp_m16_fpga_execution.log`;
+- latch and multidriven diagnostics;
+- `core_ready` terminal state;
+- terminal zero-event counters;
+- integrated invariant flags.
+
+## 42. Complete Current Technical Chain
 
 The repository preserves the processor architecture and qualification chain:
 
@@ -1554,13 +1938,61 @@ The repository preserves the processor architecture and qualification chain:
 
 ↓
 
-`qualification closure`
+`M15 qualification closure`
+
+↓
+
+`M16 integrated SystemVerilog scheduler execution`
+
+↓
+
+`M16 deterministic request-lane arbitration`
+
+↓
+
+`M16 active-neutral routing and retained pending-route completion`
+
+↓
+
+`M16 transition-capacity enforcement and retained-state writeback`
+
+↓
+
+`M16 executable architectural testbench and SystemVerilog assertions`
+
+↓
+
+`M16 ten-flag integrated invariant evaluation`
+
+↓
+
+`M16 RTL execution qualification closure`
+
+↓
+
+`M16 target-independent FPGA integration top`
+
+↓
+
+`M16 asynchronous reset assertion and two-stage synchronous reset release`
+
+↓
+
+`M16 core_ready and execution-input gating`
+
+↓
+
+`M16 executable FPGA integration testbench`
+
+↓
+
+`M16 FPGA preparation qualification closure`
 
 The resonant computational core remains the processor mechanism throughout this chain.
 
 The balanced ternary domain remains the state and retained-result domain throughout this chain.
 
-## 41. Current File Alignment
+## 43. Current File Alignment
 
 This installation path is aligned with:
 
@@ -1570,15 +2002,59 @@ This installation path is aligned with:
 - `USAGE.md`;
 - `REPRODUCIBILITY.md`;
 - `CI.md`;
+- `TEST_REPORT_v1_8_0.md`;
+- `FRP_VALIDATION_INDEX_v1_8_0.md`;
+- `RELEASE_NOTES_v1_8_0.md`;
 - `TEST_REPORT_v1_7_0.md`;
 - `FRP_VALIDATION_INDEX_v1_7_0.md`;
 - `RELEASE_NOTES_v1_7_0.md`;
+- `docs/mathematical_foundation.md`;
+- `docs/physical_foundation.md`;
 - `docs/m15_implementation_mapping_domain_interface_qualification_closure.md`;
-- `.github/workflows/frp-m15-implementation-mapping-qualification.yml`.
+- `docs/m16_rtl_core_realization_execution_semantics.md`;
+- `docs/m16_rtl_core_interface_contract.md`;
+- `docs/m16_scheduler_state_rtl_realization.md`;
+- `docs/m16_request_lane_arbitration_module.md`;
+- `docs/m16_pending_route_register_module.md`;
+- `docs/m16_active_neutral_transition_module.md`;
+- `docs/m16_transition_capacity_guard_module.md`;
+- `docs/m16_retained_state_update_module.md`;
+- `docs/m16_invariant_assertion_set.md`;
+- `docs/m16_external_simulator_execution_plan.md`;
+- `docs/m16_m15_vector_replay_compatibility_report.md`;
+- `docs/m16_rtl_artifact_boundary_qualification.md`;
+- `docs/m16_artifact_boundary_test_stability_policy.md`;
+- `docs/m16_qualification_manifest.md`;
+- `docs/m16_qualification_index.md`;
+- `docs/m16_public_status_snapshot.md`;
+- `rtl/m16/README.md`;
+- `rtl/m16/ARTIFACTS.md`;
+- `rtl/m16/SIMULATION.md`;
+- `rtl/m16/SIMULATION_TRANSCRIPT.md`;
+- `rtl/m16/CLOSURE.md`;
+- `rtl/m16/frp_m16_pkg.sv`;
+- `rtl/m16/frp_m16_scheduler.sv`;
+- `rtl/m16/frp_m16_request_lanes.sv`;
+- `rtl/m16/frp_m16_pending_routes.sv`;
+- `rtl/m16/frp_m16_active_neutral.sv`;
+- `rtl/m16/frp_m16_capacity_guard.sv`;
+- `rtl/m16/frp_m16_state_update.sv`;
+- `rtl/m16/frp_m16_core.sv`;
+- `rtl/m16/frp_m16_assertions.sv`;
+- `rtl/m16/frp_m16_tb.sv`;
+- `fpga/m16/frp_m16_fpga_top.sv`;
+- `fpga/m16/frp_m16_fpga_tb.sv`;
+- `fpga/m16/SIMULATION_TRANSCRIPT.md`;
+- `fpga/m16/CLOSURE.md`;
+- `.github/workflows/frp-m15-implementation-mapping-qualification.yml`;
+- `.github/workflows/frp-m16-rtl-artifact-boundary.yml`;
+- `.github/workflows/frp-m16-fpga-preparation.yml`;
+- `.github/workflows/frp-m16-canonical-core-domain.yml`;
+- `.github/workflows/frp-m16-reserved-cell-cleanup.yml`.
 
 Historical executable files and historical release records remain bound to their corresponding release layers.
 
-## 42. Current Status
+## 44. Current Status
 
 Processor:
 
@@ -1600,37 +2076,86 @@ Active neutral state:
 
 `0`
 
-Current executable form:
+Current Python executable semantic-reference form:
 
 `Ternary Resonant Coherence Processor — Structured Output Prototype`
 
 Current version:
 
-`FRP v1.7.0`
+`FRP v1.8.0`
 
 Current milestone:
 
-`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+`M16 — RTL Core Realization and Execution Semantics Package`
 
-Current executable reference:
+Current Python executable semantic reference:
 
 `frp_prototype_v1_7_0.py`
+
+Current structured-output schema:
+
+`frp.structured_output.v1.7.0`
+
+Current benchmark-matrix schema:
+
+`frp.m3.benchmark_matrix.v1.7.0`
 
 Current published validation result:
 
 `PASS`
 
-Current validated self-test result:
+Inherited M15 validated self-test result:
 
 `41/41 PASS`
 
-Current primary qualification workflow:
+Inherited M15 qualification workflow:
 
 `.github/workflows/frp-m15-implementation-mapping-qualification.yml`
 
-Next planned architecture layer:
+Current M16 RTL execution layer:
 
-`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
+| Qualification record | Value |
+|---|---|
+| Workflow | `.github/workflows/frp-m16-rtl-artifact-boundary.yml` |
+| Workflow run | `#84` |
+| Qualified source commit | `ede53cf` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Artifact count | `1` |
+| Status | `M16 RTL EXECUTION LAYER CLOSED` |
+
+Current M16 FPGA preparation layer:
+
+| Qualification record | Value |
+|---|---|
+| Workflow | `.github/workflows/frp-m16-fpga-preparation.yml` |
+| Workflow run | `#2` |
+| Qualified repository commit | `ede53cf` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Artifact count | `1` |
+| Status | `M16 FPGA PREPARATION LAYER CLOSED` |
+
+Current terminal invariant records:
+
+| Record | Value |
+|---|---:|
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+| RTL invariant flags | `1111111111` |
+| FPGA invariant flags | `1111111111` |
+
+Current mathematical foundation:
+
+`docs/mathematical_foundation.md`
+
+Current physical foundation:
+
+`docs/physical_foundation.md`
+
+
+
 
 
 
