@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned architecture layer.
+`QUALIFIED`
 
 ## Version
 
@@ -12,613 +12,899 @@ Planned architecture layer.
 
 `M16 — RTL Core Realization and Execution Semantics Package`
 
+## Processor
+
+`FRP — Ternary Fractal Resonant Coherence Processor`
+
 ## Purpose
 
-This document defines the M16 compatibility report structure for replaying the M15 deterministic vector package against the M16 RTL core realization layer.
+This document records the compatibility boundary between the qualified M15 deterministic implementation-mapping package and the qualified M16 RTL execution layer.
 
-The report preserves the M15-qualified execution semantics of the:
+M15 provides:
 
-`Ternary Fractal Resonant Coherence Processor`
+- the quantized hardware shadow model;
+- the cycle-exact integer reference trace;
+- the deterministic RTL comparison-vector package;
+- the SystemVerilog testbench interface map;
+- the synthesizable RTL reference-core map;
+- the RTL assertion correlation harness;
+- the reference RTL equivalence report;
+- the qualification closure manifest.
 
-M16 does not introduce a new processor model.
+M16 provides:
 
-M16 must replay the M15 deterministic execution contract through an explicit RTL-oriented core boundary.
+- the executable SystemVerilog retained-state core;
+- deterministic scheduler execution;
+- deterministic request-lane arbitration;
+- retained pending-route execution;
+- active-neutral transition routing;
+- transition-capacity enforcement;
+- retained-state writeback;
+- executable architectural assertions;
+- target-independent FPGA integration qualification.
 
-## Replay Boundary
+The executable Python semantic reference remains:
 
-The M16 replay boundary compares the M16 RTL core realization against the M15 deterministic reference package.
+`frp_prototype_v1_7_0.py`
 
-The replay boundary covers:
+## Qualification Evidence Boundary
 
-- scheduler-state replay;
-- request-lane replay;
-- pending-route replay;
-- active-neutral transition replay;
-- transition-capacity replay;
-- retained-state update replay;
-- event-counter replay;
-- invariant-flag replay;
-- assertion-status replay;
-- final qualification compatibility.
+The compatibility record contains three qualified evidence layers.
 
-The replay boundary does not recompute:
+| Evidence layer | Workflow | Qualified result |
+|---|---|:---:|
+| M15 deterministic implementation mapping and replay | `FRP M15 Implementation Mapping and Qualification Closure` | `PASS` |
+| M16 executable RTL realization | `FRP M16 RTL Artifact Boundary` | `PASS` |
+| M16 target-independent FPGA integration | `FRP M16 FPGA Preparation` | `PASS` |
 
-- Kuramoto-Sakaguchi phase coupling;
-- phase words;
-- thermal state;
-- gamma drift;
-- coherence compression;
-- `C(t)`;
-- `P(t)`;
-- phase-derived ternary target generation.
+The M15 workflow performs:
 
-Those upstream values are inherited as deterministic M15 vector inputs.
+- deterministic artifact generation;
+- two-package vector generation;
+- byte-identical vector-directory comparison;
+- schema validation;
+- semantic correlation validation;
+- exact quantized-shadow deterministic replay validation;
+- qualification-closure validation.
 
-## Compatibility Position
+The M16 RTL workflow performs:
 
-M16 is compatible with M15 only if the RTL core realization preserves the M15 execution contract exactly at the retained-state boundary.
+- SystemVerilog parsing;
+- module elaboration;
+- executable testbench generation;
+- deterministic architectural simulation;
+- assertion execution;
+- terminal marker validation;
+- repository-integrity validation.
 
-The required compatibility chain is:
+The M16 FPGA preparation workflow performs:
 
-`M15 quantized hardware shadow`
+- FPGA integration-top elaboration;
+- executable FPGA testbench generation;
+- reset-control qualification;
+- execution-input gating qualification;
+- scheduler and request-interface propagation;
+- active-neutral first-leg execution;
+- retained pending-route completion;
+- all ten integrated invariant checks.
 
-→ `M15 cycle-exact integer golden trace`
+## Compatibility Chain
+
+The qualified compatibility chain is:
+
+`M15 floating semantic reference`
+
+→ `M15 quantized hardware shadow`
+
+→ `M15 cycle-exact integer trace`
 
 → `M15 deterministic RTL comparison vectors`
 
-→ `M16 RTL core replay`
+→ `M15 exact deterministic replay record`
 
-→ `M16 invariant assertion set`
+→ `M16 executable RTL execution boundary`
 
-→ `M16 qualification closure`
+→ `M16 architectural assertion boundary`
 
-The M16 replay target is not approximate behavioral similarity.
+→ `M16 target-independent FPGA preparation boundary`
 
-The replay target is deterministic boundary equivalence.
+M15 remains the qualified semantic and implementation-mapping foundation.
 
-## M15 Reference Sources
+M16 realizes the qualified retained-state execution contract as an executable RTL and FPGA preparation layer.
 
-The M16 replay report is grounded in the M15 artifact chain:
+## Compatibility Scope
 
-- deterministic fixed-point interface mapping;
-- canonical balanced ternary hardware encoding;
-- stateful quantized hardware-shadow execution;
-- cycle-exact integer golden trace;
-- deterministic RTL comparison vector package;
-- SystemVerilog testbench interface mapping;
-- synthesizable RTL reference-core mapping;
-- RTL assertion correlation;
-- reference RTL equivalence;
-- exact deterministic replay;
-- qualification closure.
+The M15-to-M16 compatibility boundary covers:
 
-Validated M15 package digest:
+- canonical balanced ternary encoding;
+- active neutral state `0`;
+- scheduler modes and scheduler-state counts;
+- request-lane profiles;
+- deterministic request ordering;
+- tick-separated opposite-polarity routing;
+- retained pending-route polarity;
+- pending completion only from `0`;
+- transition-capacity enforcement;
+- retained-state writeback;
+- direct-transition event relations;
+- reserved-state event relations;
+- queue-overflow event relations;
+- integrated invariant relations;
+- executable assertion results.
 
-`703dd4b56f4b34289a2c5bc5521ad4ddc3113bdec8c38238c3244c69cb4d58df`
+The phase, thermal, gamma, topology, coherence, `C(t)`, and `P(t)` domains remain part of the qualified M15 semantic and implementation-mapping package.
 
-## Core Identity Preserved
+The M16 RTL core consumes phase-derived balanced ternary targets at its execution interface.
 
-The replay report protects the FRP execution chain:
+## Canonical Balanced Ternary Compatibility
 
-`phase-derived ternary target`
+The M15 and M16 retained processor-state domain is:
 
-→ `request-lane arbitration`
+`{-1, 0, 1}`
 
-→ `transition-capacity guard`
+The canonical hardware encoding is:
 
-→ `pending-route processing`
+| Retained state | Encoding | Compatibility relation |
+|---:|:---:|---|
+| `-1` | `2'b11` | identical M15 and M16 negative-state encoding |
+| `0` | `2'b00` | identical M15 and M16 active-neutral encoding |
+| `1` | `2'b01` | identical M15 and M16 positive-state encoding |
+| reserved | `2'b10` | invalid retained-state encoding |
 
-→ `active-neutral routing through 0`
+Required routed transitions are:
 
-→ `retained balanced ternary state`
+`-1 → 0 → 1`
 
-Required global replay invariant:
+`1 → 0 → -1`
+
+Forbidden direct retained-state transitions are:
+
+`-1 → 1`
+
+`1 → -1`
+
+Qualified global relations:
 
 `actual_direct_events = 0`
 
-Required state-domain replay invariant:
-
 `reserved_state_events = 0`
-
-Required queue replay invariant:
 
 `queue_overflow_events = 0`
 
-## Canonical Replay Encoding
+## M15 Qualification Source
 
-M16 replay preserves the M15 canonical two-bit ternary encoding:
+Workflow:
 
-| Ternary state | Encoding |
+`FRP M15 Implementation Mapping and Qualification Closure`
+
+Workflow file:
+
+`.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+
+Qualified workflow run:
+
+`#1`
+
+Python version used by the workflow:
+
+`3.12`
+
+Executable reference:
+
+`frp_prototype_v1_7_0.py`
+
+M15 milestone identifier:
+
+`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+
+## M15 Qualification Record
+
+| Qualification relation | Result |
+|---|---:|
+| self-test checks | `41 / 41 PASS` |
+| deterministic vector files byte-identical | `10 / 10` |
+| required semantic correlation matches equal to `1.0` | `5 / 5` |
+| deterministic replay matches equal to `1.0` | `6 / 6` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+| `fixed_point_topology_sum_exact` | `True` |
+| `fixed_point_thermal_sum_exact` | `True` |
+
+M15 qualification status:
+
+`PASS`
+
+## M15 Structured Schema Boundary
+
+The structured output schema remains:
+
+`frp.structured_output.v1.7.0`
+
+The benchmark-matrix schema remains:
+
+`frp.m3.benchmark_matrix.v1.7.0`
+
+The M15 implementation-mapping schemas are:
+
+| Artifact layer | Schema |
 |---|---|
-| `-1` | `2'b11` |
-| `0` | `2'b00` |
-| `+1` | `2'b01` |
-| reserved | `2'b10` |
+| fixed-point interface profile | `frp.m15.fixed_point_interface_profile.v1.7.0` |
+| balanced ternary hardware encoding map | `frp.m15.balanced_ternary_hardware_encoding_map.v1.7.0` |
+| quantized reference shadow model | `frp.m15.quantized_reference_shadow_model.v1.7.0` |
+| cycle-exact reference trace | `frp.m15.cycle_exact_reference_trace.v1.7.0` |
+| RTL comparison vector package | `frp.m15.rtl_comparison_vector_package.v1.7.0` |
+| SystemVerilog testbench interface map | `frp.m15.systemverilog_testbench_interface_map.v1.7.0` |
+| synthesizable RTL reference core | `frp.m15.synthesizable_rtl_reference_core.v1.7.0` |
+| RTL assertion correlation harness | `frp.m15.rtl_assertion_correlation_harness.v1.7.0` |
+| reference RTL equivalence report | `frp.m15.reference_rtl_equivalence_report.v1.7.0` |
+| qualification closure manifest | `frp.m15.qualification_closure_manifest.v1.7.0` |
 
-The reserved encoding is invalid.
+## M15 Hardware-Facing Interface Profile
 
-Required replay invariant:
+The qualified M15 SystemVerilog interface map records:
 
-`reserved_state_events = 0`
+| Parameter | Value |
+|---|---:|
+| `NUM_CELLS` | `16` |
+| `HIERARCHY_DEPTH` | `4` |
+| `REQUEST_LANES` | `4` |
+| `CELL_ID_WIDTH` | `4` |
+| `STATE_VECTOR_WIDTH` | `32` |
+| `SCALAR_WIDTH` | `32` |
+| `PHASE_WIDTH` | `32` |
 
-## Replay Profiles
+The verification stimulus interface includes:
 
-M16 must preserve the inherited M15 validated profile set:
+`gamma_noise_target_q`
 
-| Cells | Request lanes | Packed state width |
-|---:|---:|---:|
-| `8` | `2` | `16 bits` |
-| `16` | `4` | `32 bits` |
-| `32` | `8` | `64 bits` |
+The qualified scaling profiles are:
 
-Required relation:
+| Cells | Hierarchy depth | Request lanes | Packed state width |
+|---:|---:|---:|---:|
+| `8` | `3` | `2` | `16 bits` |
+| `16` | `4` | `4` | `32 bits` |
+| `32` | `5` | `8` | `64 bits` |
 
-`REQUEST_LANES = max(1, round(CELLS × transition_fraction))`
+The request-lane relation is:
 
-Inherited transition boundary:
+`REQUEST_LANES = max_changes`
+
+The inherited transition fraction is:
 
 `transition_fraction = 0.25`
 
-Required bound:
+## M15 Deterministic Vector Package
 
-`accepted_changes <= REQUEST_LANES`
+Vector-package schema:
 
-## Scheduler Replay Targets
+`frp.m15.rtl_comparison_vector_package.v1.7.0`
 
-M16 must replay the three M15 execution modes:
+The M15 workflow generates two independent vector directories:
 
-| Mode | Required replay profile |
+- `artifacts/m15/vectors_a`;
+- `artifacts/m15/vectors_b`.
+
+The workflow compares the directories with:
+
+`diff -qr artifacts/m15/vectors_a artifacts/m15/vectors_b`
+
+Qualified comparison result:
+
+`10 / 10 deterministic vector files byte-identical`
+
+The deterministic vector package contains:
+
+| Vector file | Package role |
 |---|---|
-| `free` | `16 ticks → free = 16` |
-| `7/1` | `64 ticks → balance = 56, commit = 8` |
-| `1/7` | `16 ticks → excite = 2, neutralize = 14` |
-
-Required scheduler relation:
-
-`scheduler_count_free + scheduler_count_balance + scheduler_count_commit + scheduler_count_excite + scheduler_count_neutralize = ticks_recorded`
-
-Required replay flag:
-
-`scheduler_counts_valid = True`
-
-## Replay Input Set
-
-The M16 replay input set is the deterministic input boundary inherited from M15.
-
-Required replay inputs:
-
-| Input | Meaning |
-|---|---|
-| `tick_index` | deterministic tick index |
-| `tick_enable` | tick execution enable |
-| `scheduler_mode` | selected execution mode |
-| `scheduler_state_expected` | expected scheduler state from M15 |
-| `state_q` | retained ternary state at tick start |
-| `target_q` | phase-derived ternary target vector |
-| `pending_route_q` | retained pending-route vector |
-| `request_valid` | request-lane valid flags |
-| `request_cell_index` | requested cell index per lane |
-| `request_target` | requested ternary target per lane |
-| `REQUEST_LANES` | transition-capacity lane count |
-| `CELLS` | processor-cell count |
-
-The replay input set must be sufficient to reproduce one deterministic M16 tick.
-
-## Replay Output Set
-
-The M16 replay output set is the deterministic output boundary compared against M15.
-
-Required replay outputs:
-
-| Output | Meaning |
-|---|---|
-| `scheduler_state` | actual M16 scheduler state |
-| `scheduler counters` | emitted M16 scheduler counters |
-| `request_accept` | accepted request lanes |
-| `request_reject` | rejected request lanes |
-| `accepted_cell_mask` | accepted cells for tick |
-| `neutral_routed_mask` | cells routed through active neutral `0` |
-| `pending_route_d` | next pending-route state |
-| `state_d` | next retained state |
-| `state_out` | committed retained state |
-| `accepted_change_mask` | retained-state changes accepted |
-| `accepted_changes` | number of accepted retained-state changes |
-| `capacity_remaining` | unused capacity for tick |
-| `capacity_exhausted` | capacity exhaustion flag |
-| `event counter deltas` | tick-level counter deltas |
-| `invariant flags` | compact invariant status |
-| `assertion status` | assertion pass/fail status |
-
-## Replay Comparison Classes
-
-M16 compatibility is evaluated through the following comparison classes:
-
-1. scheduler replay;
-2. request-lane replay;
-3. pending-route replay;
-4. active-neutral transition replay;
-5. transition-capacity replay;
-6. retained-state replay;
-7. event-counter replay;
-8. invariant-flag replay;
-9. assertion-status replay;
-10. final digest replay.
-
-Each comparison class must pass independently.
-
-## Scheduler Replay Comparison
-
-Scheduler replay compares:
-
-`M15 scheduler state`
-
-against:
-
-`M16 scheduler state`
-
-Required comparisons:
-
-| Field | Required result |
-|---|---|
-| `scheduler_state` | exact match |
-| `scheduler_count_free` | exact match |
-| `scheduler_count_balance` | exact match |
-| `scheduler_count_commit` | exact match |
-| `scheduler_count_excite` | exact match |
-| `scheduler_count_neutralize` | exact match |
-| `ticks_recorded` | exact match |
-| `scheduler_counts_valid` | exact match |
-
-Required replay result:
-
-`PASS`
-
-## Request-Lane Replay Comparison
-
-Request-lane replay compares deterministic arbitration outputs.
-
-Required comparisons:
-
-| Field | Required result |
-|---|---|
-| `request_accept` | exact match |
-| `request_reject` | exact match |
-| `request_reject_invalid_cell` | exact match |
-| `request_reject_invalid_target` | exact match |
-| `request_reject_duplicate_cell` | exact match |
-| `request_reject_scheduler` | exact match |
-| `request_reject_capacity` | exact match |
-| `accepted_cell_mask` | exact match |
-| `rejected_cell_mask` | exact match |
-| `neutral_routed_cell_mask` | exact match |
-
-Required replay result:
-
-`PASS`
-
-## Pending-Route Replay Comparison
-
-Pending-route replay compares retained pending-route evolution.
-
-Required comparisons:
-
-| Field | Required result |
-|---|---|
-| `pending_route_q` | exact input match |
-| `pending_route_d` | exact output match |
-| `pending_created_mask` | exact match |
-| `pending_completed_mask` | exact match |
-| `pending_retained_mask` | exact match |
-| `pending_blocked_mask` | exact match |
-| `pending_reserved_mask` | exact match |
-
-Required replay result:
-
-`PASS`
-
-Required invariant:
-
-`pending routes preserve requested target polarity`
-
-## Active-Neutral Replay Comparison
-
-Active-neutral replay compares legal ternary transition behavior.
-
-Required comparisons:
-
-| Field | Required result |
-|---|---|
-| `same_state_mask` | exact match |
-| `zero_to_nonzero_mask` | exact match |
-| `nonzero_to_zero_mask` | exact match |
-| `opposite_polarity_mask` | exact match |
-| `neutral_routed_mask` | exact match |
-| `pending_completion_mask` | exact match |
-| `actual_direct_mask` | exact match |
-| `reserved_transition_mask` | exact match |
-
-Required replay result:
-
-`PASS`
-
-Required invariant:
-
-`actual_direct_events = 0`
-
-## Transition-Capacity Replay Comparison
-
-Transition-capacity replay compares capacity admission and rejection.
-
-Required comparisons:
-
-| Field | Required result |
-|---|---|
-| `request_accept_capacity` | exact match |
-| `request_reject_capacity` | exact match |
-| `capacity_accept_mask` | exact match |
-| `capacity_reject_mask` | exact match |
-| `accepted_change_mask` | exact match |
-| `accepted_changes` | exact match |
-| `capacity_remaining` | exact match |
-| `capacity_exhausted` | exact match |
-| `switch_load_numerator` | exact match |
-
-Required replay result:
-
-`PASS`
-
-Required invariant:
-
-`accepted_changes <= REQUEST_LANES`
-
-## Retained-State Replay Comparison
-
-Retained-state replay compares final state writeback.
-
-Required comparisons:
-
-| Field | Required result |
-|---|---|
-| `state_q` | exact input match |
-| `state_candidate_d` | exact candidate match |
-| `state_d` | exact output match |
-| `state_out` | exact committed-state match |
-| `state_write_enable_mask` | exact match |
-| `state_hold_mask` | exact match |
-| `state_reserved_mask` | exact match |
-| `accepted_changes` | exact match |
-
-Required replay result:
-
-`PASS`
-
-Required invariant:
-
-`state_out` contains no `2'b10`
-
-## Event-Counter Replay Comparison
-
-Event-counter replay compares tick-level deltas and cumulative totals.
-
-Required counters:
-
-| Counter | Required result |
-|---|---|
-| `ticks_recorded` | exact match |
-| `requested_direct_events` | exact match |
-| `prevented_direct_events` | exact match |
-| `neutral_routed_events` | exact match |
-| `actual_direct_events` | exact match |
-| `reserved_state_events` | exact match |
-| `queue_overflow_events` | exact match |
-| `accepted_change_events` | exact match |
-| `pending_created_events` | exact match |
-| `pending_completed_events` | exact match |
-| `capacity_reject_events` | exact match |
-
-Required replay result:
-
-`PASS`
-
-Required event-counter invariants:
-
-`actual_direct_events = 0`
-
-`reserved_state_events = 0`
-
-`queue_overflow_events = 0`
-
-`prevented_direct_events >= requested_direct_events`
-
-`neutral_routed_events >= prevented_direct_events`
-
-## Invariant-Flag Replay Comparison
-
-Invariant-flag replay compares compact M16 flags against M15 replay expectations.
-
-Required flags:
-
-| Flag | Required value |
-|---|---|
-| `state_domain_valid` | `True` |
-| `scheduler_counts_valid` | `True` |
-| `request_lane_order_valid` | `True` |
-| `pending_polarity_valid` | `True` |
-| `active_neutral_routing_valid` | `True` |
-| `transition_capacity_valid` | `True` |
-| `state_update_valid` | `True` |
-| `no_actual_direct_events` | `True` |
-| `no_reserved_state` | `True` |
-| `no_queue_overflow` | `True` |
-
-Required replay result:
-
-`PASS`
-
-## Assertion-Status Replay Comparison
-
-Assertion-status replay compares module-level and core-level assertion outcomes.
-
-Required assertion groups:
-
-| Assertion group | Required status |
-|---|---|
-| state-domain assertions | `PASS` |
-| reset assertions | `PASS` |
-| tick-enable assertions | `PASS` |
-| scheduler assertions | `PASS` |
-| request-lane assertions | `PASS` |
-| pending-route assertions | `PASS` |
-| active-neutral transition assertions | `PASS` |
-| transition-capacity assertions | `PASS` |
-| retained-state update assertions | `PASS` |
-| event-counter assertions | `PASS` |
-| invariant-flag assertions | `PASS` |
-| M15 vector replay assertions | `PASS` |
-
-Required replay result:
-
-`PASS`
-
-## Digest Replay Boundary
-
-The M16 replay report should preserve deterministic digest generation for replay artifacts.
-
-Digest inputs should include:
-
-- replay input vectors;
-- replay output vectors;
-- event-counter deltas;
-- invariant flags;
-- assertion statuses;
-- replay summary manifest.
-
-Required digest property:
-
-`same replay inputs → same digest`
-
-Required replay result:
-
-`PASS`
-
-The M15 package digest remains:
+| `frp_m15_kernel_vectors.vec` | kernel comparison vectors |
+| `frp_m15_pending_routes.trace` | pending-route trace |
+| `frp_m15_scheduler_free_vectors.vec` | `free` scheduler vectors |
+| `frp_m15_scheduler_7_1_vectors.vec` | `7/1` scheduler vectors |
+| `frp_m15_scheduler_1_7_vectors.vec` | `1/7` scheduler vectors |
+| `frp_m15_full_correlation_vectors.vec` | full correlation vectors |
+| `frp_m15_cell_trace.vec` | per-cell trace |
+| `frp_m15_reference_preload.json` | deterministic reference preload |
+| `frp_m15_trig_lut_q30.vec` | quantized trigonometric lookup table |
+| `frp_m15_sha256_manifest.json` | vector-package SHA-256 manifest |
+
+Manifest file count:
+
+`10`
+
+The workflow validates:
+
+- exactly ten files in each generated package;
+- presence of `frp_m15_sha256_manifest.json`;
+- SHA-256 equality for every manifest-bound file;
+- byte-identical equality between package A and package B.
+
+Deterministic package digest:
 
 `703dd4b56f4b34289a2c5bc5521ad4ddc3113bdec8c38238c3244c69cb4d58df`
 
-A future M16 digest should be generated only after concrete M16 replay artifacts exist.
+## M15 Reference-to-RTL Equivalence Record
 
-## Replay Failure Classification
+Reference-equivalence schema:
 
-A replay mismatch must be classified by module boundary.
+`frp.m15.reference_rtl_equivalence_report.v1.7.0`
 
-Required failure categories:
+The qualified M15 report contains two comparison levels:
 
-| Failure category | Meaning |
-|---|---|
-| `scheduler_mismatch` | scheduler state or counter mismatch |
-| `request_lane_mismatch` | arbitration output mismatch |
-| `pending_route_mismatch` | pending-route state mismatch |
-| `active_neutral_mismatch` | transition mask or route mismatch |
-| `capacity_mismatch` | capacity admission or count mismatch |
-| `retained_state_mismatch` | final retained-state mismatch |
-| `counter_mismatch` | event-counter mismatch |
-| `invariant_flag_mismatch` | invariant flag mismatch |
-| `assertion_status_mismatch` | assertion pass/fail mismatch |
-| `digest_mismatch` | deterministic digest mismatch |
+1. floating semantic reference to quantized hardware shadow correlation;
+2. exact quantized-shadow deterministic replay.
 
-Every failure must map to one boundary.
+## Floating Reference to Quantized Shadow Correlation
 
-Unclassified replay mismatch is not allowed.
+The required semantic correlation fields are:
 
-## Replay Pass Criteria
+| Correlation field | Recorded value |
+|---|---:|
+| `state_sequence_match` | `1.0` |
+| `scheduler_sequence_match` | `1.0` |
+| `neutral_route_sequence_match` | `1.0` |
+| `C_minus_P_sign_match` | `1.0` |
+| `boundary_order_match` | `1.0` |
 
-A replay comparison passes only when:
+Qualified semantic correlation result:
 
-- scheduler replay matches exactly;
-- request-lane replay matches exactly;
-- pending-route replay matches exactly;
-- active-neutral transition replay matches exactly;
-- transition-capacity replay matches exactly;
-- retained-state replay matches exactly;
-- event-counter replay matches exactly;
-- invariant-flag replay matches exactly;
-- assertion-status replay passes;
-- deterministic digest generation is stable.
+`5 / 5 required semantic correlation matches = 1.0`
 
-Required final replay status:
+## Numeric Correlation Bounds
+
+The M15 workflow validates bounded numeric correlation between the floating semantic reference and quantized hardware shadow.
+
+| Field | Recorded maximum error | Required maximum |
+|---|---:|---:|
+| phase | `0.010957534368146086` | `0.02` |
+| frequency | `0.000022803546471550362` | `0.0001` |
+| heat | `0.00004701887369061575` | `0.001` |
+| gamma | `0.0` | `0.000001` |
+| coherence | `0.002228678310501553` | `0.01` |
+| `C` | `0.0007545911459079235` | `0.01` |
+| `P` | `0.000014974864477032557` | `0.001` |
+| `C_minus_P` | `0.0007535557740776522` | `0.01` |
+
+Numeric correlation result:
 
 `PASS`
 
-## Required M16 Replay Invariants
+## M15 Cycle-Exact Reference Trace
 
-The M16 M15 vector replay compatibility layer is valid only if:
+Cycle-exact trace schema:
 
-M16 consumes the M15 deterministic vector boundary without semantic reinterpretation.
+`frp.m15.cycle_exact_reference_trace.v1.7.0`
 
-M16 scheduler profiles match M15 references.
+Trace row count:
 
-M16 request-lane arbitration matches M15 references.
+`64`
 
-M16 pending-route evolution matches M15 references.
+The workflow validates:
 
-M16 active-neutral routing matches M15 references.
+- exactly `64` trace rows;
+- `16` gamma-noise target values in every trace row;
+- `reserved_state_events = 0` in every trace row;
+- `actual_direct_events = 0` in every trace row.
 
-M16 transition-capacity behavior matches M15 references.
+The exported cycle-exact trace summary records:
 
-M16 retained-state output matches M15 references.
+| Field | Recorded value |
+|---|---:|
+| `cells` | `16` |
+| `hierarchy_depth` | `4` |
+| `request_lanes` | `4` |
+| `ticks_recorded` | `64` |
+| scheduler | `7/1` |
+| balance ticks | `56` |
+| commit ticks | `8` |
+| `scheduler_counts_valid` | `True` |
+| `transition_fraction` | `0.25` |
+| `switch_load_peak` | `0.25` |
+| `requested_direct_events` | `9` |
+| `prevented_direct_events` | `14` |
+| `neutral_routed_events` | `14` |
+| `neutralized_conflicts` | `14` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+| `pending_route_count_final` | `0` |
+| `balanced_ternary_state_domain` | `True` |
+| `fixed_point_topology_sum_exact` | `True` |
+| `fixed_point_thermal_sum_exact` | `True` |
 
-M16 event counters match M15 references.
+Cycle-exact trace qualification result:
 
-M16 invariant flags match M15 expectations.
+`PASS`
 
-M16 assertions pass at module and core level.
+## M15 Assertion Correlation Harness
 
-Direct opposite-polarity execution remains zero.
+Assertion-harness schema:
 
-Reserved state events remain zero.
+`frp.m15.rtl_assertion_correlation_harness.v1.7.0`
 
-Queue overflow events remain zero.
+Assertion count:
 
-M15 vector replay remains deterministic.
+`13`
 
-## Compatibility Report Table
+Exact comparison rule:
 
-The M16 replay report should emit the following summary table:
+`actual integer field == expected integer field`
 
-| Replay group | Status | Required result |
+The qualified M15 assertion contract contains:
+
+1. `valid balanced ternary encoding`;
+2. `reserved-state exclusion`;
+3. `direct polarity transition exclusion`;
+4. `active neutral route insertion`;
+5. `target application after ready tick`;
+6. `actual_direct_events = 0`;
+7. `transition-limit enforcement`;
+8. `scheduler sequence`;
+9. `scheduler count consistency`;
+10. `phase topology fixed-point normalization`;
+11. `thermal topology fixed-point normalization`;
+12. `deterministic trace tick count`;
+13. `exact cycle-output match`.
+
+M15 assertion correlation result:
+
+`PASS`
+
+## M15 Exact Deterministic Replay Record
+
+The exact deterministic replay section of the reference-equivalence report records:
+
+| Replay field | Recorded value |
+|---|---:|
+| `shadow_replay_state_match` | `1.0` |
+| `shadow_replay_scheduler_match` | `1.0` |
+| `shadow_replay_pending_route_match` | `1.0` |
+| `shadow_replay_counter_match` | `1.0` |
+| `shadow_replay_trace_match` | `1.0` |
+| `shadow_replay_cell_trace_match` | `1.0` |
+
+Qualified deterministic replay result:
+
+`6 / 6 deterministic replay matches = 1.0`
+
+Reference trace digest:
+
+`06be197a6f7620796daad6420091e21392295cb0e182b394da2d9990324415be`
+
+Cell trace digest:
+
+`ba7d5f5a5f45d1c6808a0d4c7d7f612916bb2e2c4d33faf5e182810d704ad544`
+
+Deterministic replay qualification result:
+
+`PASS`
+
+## M15 Qualification Closure Manifest
+
+Qualification-closure schema:
+
+`frp.m15.qualification_closure_manifest.v1.7.0`
+
+The closure manifest records:
+
+- status `PASS`;
+- all closure checks equal to `True`;
+- exactly ten M15 artifact layers.
+
+Qualification closure result:
+
+`PASS`
+
+## M16 RTL Compatibility Boundary
+
+The qualified M16 RTL execution boundary is located under:
+
+`rtl/m16/`
+
+The compatibility-relevant RTL artifacts are:
+
+| M16 artifact | Compatibility function |
+|---|---|
+| `frp_m16_pkg.sv` | canonical ternary encoding, scheduler types, transition classes, and invariant indexes |
+| `frp_m16_scheduler.sv` | `free`, `7/1`, and `1/7` scheduler execution |
+| `frp_m16_request_lanes.sv` | deterministic ascending request-lane arbitration |
+| `frp_m16_pending_routes.sv` | retained pending-polarity creation, retention, completion, and clearing |
+| `frp_m16_active_neutral.sv` | active-neutral transition generation |
+| `frp_m16_capacity_guard.sv` | transition-capacity admission |
+| `frp_m16_state_update.sv` | retained balanced ternary writeback |
+| `frp_m16_core.sv` | integrated execution, telemetry, and invariant aggregation |
+| `frp_m16_assertions.sv` | executable architectural assertions |
+| `frp_m16_tb.sv` | deterministic architectural qualification testbench |
+
+Qualified M16 testbench profile:
+
+| Parameter | Value |
+|---|---:|
+| `CELLS` | `8` |
+| `STATE_BITS` | `2` |
+| `REQUEST_LANES` | `2` |
+| `COUNTER_BITS` | `32` |
+
+This profile is included in the qualified M15 scaling set:
+
+`8 cells → 2 request lanes → 16-bit packed retained-state bank`
+
+## Scheduler Compatibility Record
+
+The M15 and M16 qualification records contain the following scheduler profiles:
+
+| Scheduler mode | Qualified execution relation | M16 result |
+|---|---|:---:|
+| `free` | `16 ticks → free = 16` | `PASS` |
+| `7/1` | `64 ticks → balance = 56, commit = 8` | `PASS` |
+| `1/7` | `16 ticks → excite = 2, neutralize = 14` | `PASS` |
+
+Required count relation:
+
+`scheduler_count_free + scheduler_count_balance + scheduler_count_commit + scheduler_count_excite + scheduler_count_neutralize = ticks_recorded`
+
+M16 scheduler-count assertion result:
+
+`PASS`
+
+## Retained-State Execution Compatibility Record
+
+| Execution relation | M15 qualified contract | M16 executable result |
+|---|:---:|:---:|
+| retained-state domain is `{-1, 0, 1}` | `PASS` | `PASS` |
+| active neutral state is `0` | `PASS` | `PASS` |
+| reserved encoding `2'b10` is excluded | `PASS` | `PASS` |
+| direct `-1 → 1` writeback is forbidden | `PASS` | `PASS` |
+| direct `1 → -1` writeback is forbidden | `PASS` | `PASS` |
+| `-1 → 0 → 1` uses separate eligible ticks | `PASS` | `PASS` |
+| `1 → 0 → -1` uses separate eligible ticks | `PASS` | `PASS` |
+| pending target polarity is retained | `PASS` | `PASS` |
+| pending completion starts from retained state `0` | `PASS` | `PASS` |
+| capacity rejection preserves retained state | `PASS` | `PASS` |
+| capacity rejection preserves pending route | `PASS` | `PASS` |
+| accepted changes remain within request-lane capacity | `PASS` | `PASS` |
+| switch-load numerator equals accepted changes | `PASS` | `PASS` |
+| actual direct events remain zero | `PASS` | `PASS` |
+| reserved-state events remain zero | `PASS` | `PASS` |
+| queue-overflow events remain zero | `PASS` | `PASS` |
+
+## Interface and Evidence Correlation
+
+| Compatibility class | M15 evidence | M16 executable evidence |
 |---|---|---|
-| scheduler replay | pending until M16 artifact generation | `PASS` |
-| request-lane replay | pending until M16 artifact generation | `PASS` |
-| pending-route replay | pending until M16 artifact generation | `PASS` |
-| active-neutral replay | pending until M16 artifact generation | `PASS` |
-| transition-capacity replay | pending until M16 artifact generation | `PASS` |
-| retained-state replay | pending until M16 artifact generation | `PASS` |
-| event-counter replay | pending until M16 artifact generation | `PASS` |
-| invariant-flag replay | pending until M16 artifact generation | `PASS` |
-| assertion-status replay | pending until M16 artifact generation | `PASS` |
-| final deterministic replay | pending until M16 artifact generation | `PASS` |
+| state encoding | balanced ternary hardware encoding map | `frp_m16_pkg.sv` domain helpers and state constants |
+| scheduler | cycle-exact trace and scheduler vector files | scheduler module, testbench sequences, and counter assertions |
+| request lanes | SystemVerilog interface map and kernel vectors | deterministic request-lane module and capacity assertions |
+| pending routes | pending-route trace and cell trace | retained pending-route module and temporal assertions |
+| active neutral | state and neutral-route sequence correlation | transition module, state-update module, and route assertions |
+| capacity | request-lane profile and transition-limit assertion | capacity guard, accepted-change count, and switch-load assertions |
+| retained state | state replay match and full correlation vectors | state-update module and retained-state assertions |
+| event counters | counter replay match | public M16 event totals and zero-event assertions |
+| invariant status | qualification closure checks | ten integrated invariant flags |
+| deterministic execution | trace and cell-trace digests | deterministic RTL terminal markers and source-hash record |
 
-## Closure Criteria
+Compatibility correlation result:
 
-The M16 M15 vector replay compatibility report can be considered ready when it defines:
+`PASS`
 
-- replay input boundary;
-- replay output boundary;
-- scheduler replay comparison;
-- request-lane replay comparison;
-- pending-route replay comparison;
-- active-neutral replay comparison;
-- transition-capacity replay comparison;
-- retained-state replay comparison;
-- event-counter replay comparison;
-- invariant-flag replay comparison;
-- assertion-status replay comparison;
-- digest replay boundary;
-- replay failure classification;
-- final pass criteria.
+## M16 RTL Qualification Record
 
-## Next Step
+Workflow:
 
-The next M16 file should define the qualification manifest:
+`FRP M16 RTL Artifact Boundary`
 
-`docs/m16_qualification_manifest.md`
+Workflow file:
+
+`.github/workflows/frp-m16-rtl-artifact-boundary.yml`
+
+Trigger:
+
+`workflow_dispatch`
+
+### Initial Closure Record
+
+| Field | Value |
+|---|---|
+| workflow run | `#82` |
+| repository commit | `a68a2af` |
+| branch | `main` |
+| workflow result | `SUCCESS` |
+| qualification artifact count | `1` |
+| qualification result | `PASS` |
+
+### Synchronized Qualification Record
+
+| Field | Value |
+|---|---|
+| workflow run | `#84` |
+| qualified source commit | `ede53cf` |
+| branch | `main` |
+| workflow result | `SUCCESS` |
+| duration | `52s` |
+| qualification artifact count | `1` |
+
+RTL closure status:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+## M16 RTL Execution Qualification
+
+The RTL workflow qualifies:
+
+- ten SystemVerilog artifacts;
+- five RTL documentation artifacts;
+- Verilator SystemVerilog parsing;
+- module elaboration;
+- executable testbench generation;
+- deterministic architectural simulation;
+- architectural assertion execution;
+- terminal marker validation;
+- source-hash generation;
+- repository-integrity validation;
+- qualification evidence generation.
+
+Top-level simulation module:
+
+`frp_m16_tb`
+
+Integrated execution core:
+
+`frp_m16_core`
+
+Assertion module:
+
+`frp_m16_assertions`
+
+RTL execution result:
+
+`PASS`
+
+## M16 RTL Scheduler Record
+
+| Scheduler mode | Executed ticks | Recorded state counts | Result |
+|---|---:|---|:---:|
+| `free` | `16` | `free = 16` | `PASS` |
+| `7/1` | `64` | `balance = 56, commit = 8` | `PASS` |
+| `1/7` | `16` | `excite = 2, neutralize = 14` | `PASS` |
+
+Scheduler counter-clear behavior:
+
+`PASS`
+
+Scheduler count-sum relation:
+
+`PASS`
+
+## M16 RTL Active-Neutral and Pending-Route Record
+
+| Qualified relation | Result |
+|---|:---:|
+| active neutral `0` executes as the intermediate retained state | `PASS` |
+| direct `-1 → 1` retained-state writeback is absent | `PASS` |
+| direct `1 → -1` retained-state writeback is absent | `PASS` |
+| `-1 → 0 → 1` executes on separate eligible ticks | `PASS` |
+| `1 → 0 → -1` executes on separate eligible ticks | `PASS` |
+| exact requested polarity is retained | `PASS` |
+| pending-route cell ownership is retained | `PASS` |
+| same-cell pending overwrite is prevented | `PASS` |
+| scheduler deferral preserves the pending route | `PASS` |
+| capacity deferral preserves the pending route | `PASS` |
+| completion requires retained state `0` | `PASS` |
+| accepted completion clears the pending route | `PASS` |
+| pending-route overflow is absent | `PASS` |
+
+## M16 RTL Request and Capacity Record
+
+Deterministic arbitration order:
+
+`lane 0 → lane 1 → ... → lane REQUEST_LANES - 1`
+
+| Qualified relation | Result |
+|---|:---:|
+| canonical request-target validation | `PASS` |
+| valid cell-index enforcement | `PASS` |
+| one accepted request per cell per tick | `PASS` |
+| earlier accepted-lane ownership | `PASS` |
+| pending-route ownership priority | `PASS` |
+| scheduler transition eligibility | `PASS` |
+| acceptance and rejection separation | `PASS` |
+| bounded accepted changes | `PASS` |
+| `capacity_remaining = REQUEST_LANES - accepted_changes` | `PASS` |
+| `capacity_exhausted = (accepted_changes = REQUEST_LANES)` | `PASS` |
+| `switch_load_numerator = accepted_changes` | `PASS` |
+| same-state retention consumes no capacity | `PASS` |
+| each route leg consumes capacity on its own tick | `PASS` |
+
+Qualified eight-cell capacity event:
+
+| Signal | Recorded value |
+|---|---:|
+| `accepted_changes` | `2` |
+| `capacity_remaining` | `0` |
+| `capacity_exhausted` | `1` |
+| `switch_load_numerator` | `2` |
+
+## M16 RTL Retained-State and Assertion Record
+
+| Qualified relation | Result |
+|---|:---:|
+| reset initializes retained state to `0` | `PASS` |
+| disabled ticks retain state | `PASS` |
+| state-changing writeback requires capacity | `PASS` |
+| same-state retention consumes no capacity | `PASS` |
+| opposite polarity commits the first leg through `0` | `PASS` |
+| pending completion commits from `0` | `PASS` |
+| capacity rejection preserves retained state | `PASS` |
+| reserved encoding is not committed | `PASS` |
+| direct opposite-polarity writeback is absent | `PASS` |
+| retained-state domain assertion | `PASS` |
+| pending-route domain assertion | `PASS` |
+| state-change authorization assertion | `PASS` |
+| active-neutral first-leg assertion | `PASS` |
+| retained pending-polarity assertion | `PASS` |
+| pending-route deferral assertion | `PASS` |
+| scheduler-state counter assertions | `PASS` |
+| transition-capacity assertions | `PASS` |
+| integrated invariant assertions | `PASS` |
+
+## M16 RTL Integrated Invariant Record
+
+| Invariant | Result |
+|---|:---:|
+| `FRP_INV_STATE_DOMAIN_VALID` | `PASS` |
+| `FRP_INV_SCHEDULER_COUNTS_VALID` | `PASS` |
+| `FRP_INV_REQUEST_LANE_ORDER_VALID` | `PASS` |
+| `FRP_INV_PENDING_POLARITY_VALID` | `PASS` |
+| `FRP_INV_ACTIVE_NEUTRAL_VALID` | `PASS` |
+| `FRP_INV_TRANSITION_CAPACITY_VALID` | `PASS` |
+| `FRP_INV_STATE_UPDATE_VALID` | `PASS` |
+| `FRP_INV_NO_ACTUAL_DIRECT_EVENTS` | `PASS` |
+| `FRP_INV_NO_RESERVED_STATE` | `PASS` |
+| `FRP_INV_NO_QUEUE_OVERFLOW` | `PASS` |
+
+## M16 RTL Terminal Evidence
+
+Terminal marker:
+
+`FRP M16 deterministic RTL testbench completed.`
+
+| Terminal relation | Recorded value |
+|---|---:|
+| `CELLS` | `8` |
+| `REQUEST_LANES` | `2` |
+| `ticks_recorded` | `16` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+
+Terminal marker validation:
+
+`PASS`
+
+## M16 FPGA Preparation Qualification Record
+
+Workflow:
+
+`FRP M16 FPGA Preparation`
+
+Workflow file:
+
+`.github/workflows/frp-m16-fpga-preparation.yml`
+
+### Initial Closure Record
+
+| Field | Value |
+|---|---|
+| workflow run | `#1` |
+| qualified repository commit | `326b69e` |
+| branch | `main` |
+| workflow result | `SUCCESS` |
+| duration | `1m 7s` |
+| qualification artifact count | `1` |
+| qualification result | `PASS` |
+
+### Synchronized Qualification Record
+
+| Field | Value |
+|---|---|
+| workflow run | `#2` |
+| qualified repository commit | `ede53cf` |
+| branch | `main` |
+| workflow result | `SUCCESS` |
+| duration | `36s` |
+| qualification artifact count | `1` |
+
+FPGA preparation closure status:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
+
+## M16 FPGA Compatibility Record
+
+| Qualified relation | Result |
+|---|:---:|
+| FPGA integration-top elaboration | `PASS` |
+| executable FPGA testbench generation | `PASS` |
+| asynchronous external reset assertion | `PASS` |
+| two-stage synchronous reset release | `PASS` |
+| `core_ready` generation | `PASS` |
+| tick gating before readiness | `PASS` |
+| counter-clear gating before readiness | `PASS` |
+| request-valid gating before readiness | `PASS` |
+| scheduler-mode propagation | `PASS` |
+| request-interface propagation | `PASS` |
+| active-neutral first-leg execution | `PASS` |
+| retained pending-route completion | `PASS` |
+| all ten invariant flags | `PASS` |
+
+FPGA terminal evidence:
+
+| Terminal relation | Recorded value |
+|---|---:|
+| `CELLS` | `8` |
+| `REQUEST_LANES` | `2` |
+| `core_ready` | `1` |
+| `ticks_recorded` | `1` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+| `invariant_flags` | `1111111111` |
+
+The FPGA preparation qualification is target-independent.
+
+## Workflow Evidence Correlation
+
+| Workflow layer | Generated evidence |
+|---|---|
+| M15 qualification | structured outputs, ten implementation-mapping exports, two deterministic vector directories, scaling outputs, schema checks, equivalence checks, and closure manifest |
+| M16 RTL qualification | SystemVerilog source hashes, Verilator build log, architectural execution log, and qualification result record |
+| M16 FPGA preparation | FPGA and RTL source hashes, top-elaboration log, testbench build log, execution log, and qualification result record |
+
+The M15 deterministic vector comparison is recorded by the M15 workflow.
+
+The M16 executable RTL and FPGA preparation results are recorded by the two M16 workflows.
+
+## Final Compatibility Record
+
+| Compatibility boundary | Result |
+|---|:---:|
+| canonical balanced ternary encoding | `PASS` |
+| active neutral state `0` | `PASS` |
+| scheduler profile correlation | `PASS` |
+| request-lane profile correlation | `PASS` |
+| deterministic request ordering | `PASS` |
+| retained pending-route polarity | `PASS` |
+| tick-separated opposite-polarity routing | `PASS` |
+| transition-capacity correlation | `PASS` |
+| retained-state writeback correlation | `PASS` |
+| direct-event zero relation | `PASS` |
+| reserved-state zero relation | `PASS` |
+| queue-overflow zero relation | `PASS` |
+| integrated invariant correlation | `PASS` |
+| executable assertion correlation | `PASS` |
+| M15 deterministic vector integrity | `PASS` |
+| M15 exact deterministic replay | `PASS` |
+| M16 RTL execution qualification | `PASS` |
+| M16 FPGA preparation qualification | `PASS` |
+
+Final compatibility status:
+
+`PASS`
+
+## Qualification State
+
+M15 qualification state:
+
+`PASS`
+
+M16 RTL execution-layer state:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+M16 FPGA preparation-layer state:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
+
+## Author
+
+Maksym Marnov
+
