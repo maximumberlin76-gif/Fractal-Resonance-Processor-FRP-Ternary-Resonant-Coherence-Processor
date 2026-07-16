@@ -78,17 +78,22 @@ The `examples/` directory provides copyable execution scenarios for:
 - active-neutral route observation;
 - scheduler variation;
 - 8-cell, 16-cell, and 32-cell scaling;
-- current self-test qualification;
-- current five-row M15 benchmark export;
-- ten M15 artifact exports;
+- inherited 41-check M15 self-test qualification;
+- inherited five-row M15 benchmark export;
+- inherited ten-artifact M15 export chain;
 - deterministic RTL vector generation;
-- semantic correlation;
-- exact quantized replay;
-- qualification closure.
+- M15 semantic correlation;
+- M15 exact quantized replay;
+- M15 qualification closure;
+- M16 RTL core realization;
+- M16 execution-semantics inspection;
+- M16 invariant assertion correlation;
+- M16 artifact-boundary qualification;
+- M16 FPGA preparation.
 
-The example chain is:
+The current example chain is:
 
-`current executable`
+`M15-qualified executable semantic reference`
 
 ↓
 
@@ -100,11 +105,11 @@ The example chain is:
 
 ↓
 
-`self-test qualification`
+`inherited self-test qualification`
 
 ↓
 
-`implementation-mapping exports`
+`inherited implementation-mapping exports`
 
 ↓
 
@@ -112,11 +117,31 @@ The example chain is:
 
 ↓
 
-`reference equivalence`
+`M15 reference equivalence`
 
 ↓
 
-`qualification closure`
+`M15 qualification closure`
+
+↓
+
+`M16 synthesizable RTL realization`
+
+↓
+
+`M16 execution-semantics verification`
+
+↓
+
+`M16 invariant assertion set`
+
+↓
+
+`M16 RTL artifact-boundary qualification`
+
+↓
+
+`M16 FPGA preparation`
 
 ## 2. Directory Contents
 
