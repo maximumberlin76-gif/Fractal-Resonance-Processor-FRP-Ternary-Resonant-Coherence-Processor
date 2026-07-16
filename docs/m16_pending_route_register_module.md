@@ -2,7 +2,15 @@
 
 ## Status
 
-Planned architecture layer.
+Qualified RTL execution artifact.
+
+Qualification result:
+
+`PASS`
+
+Closure state:
+
+`M16 RTL EXECUTION LAYER CLOSED`
 
 ## Version
 
@@ -14,683 +22,1557 @@ Planned architecture layer.
 
 ## Purpose
 
-This document defines the pending-route register module for the M16 RTL core realization layer.
+This document records the implemented pending-route register module for the M16 RTL core realization layer.
 
-The pending-route register module preserves the M15-qualified active-neutral routing semantics of the:
+The implemented artifact is:
+
+`rtl/m16/frp_m16_pending_routes.sv`
+
+The module is:
+
+`frp_m16_pending_routes`
+
+The pending-route register layer preserves the M15-qualified active-neutral execution semantics of the:
 
 `Ternary Fractal Resonant Coherence Processor`
 
-M16 does not introduce a new processor model.
+M16 does not introduce a new Python semantic reference.
 
-M16 realizes the retained opposite-polarity transition contract in an explicit RTL-oriented pending-route register structure.
+The executable semantic reference remains:
 
-## Pending Route Boundary
+`frp_prototype_v1_7_0.py`
 
-The pending-route register module controls the retained continuation state for opposite-polarity requests that cannot be executed directly.
+The M16 module retains the requested target polarity of every capacity-approved opposite-polarity request while the retained ternary state executes the mandatory active-neutral route.
 
-It covers:
+## Implemented Artifact Boundary
 
-- pending-route storage;
+The pending-route module implements:
+
+- one retained pending-route slot per cell;
+- canonical balanced ternary pending-route encoding;
+- asynchronous active-low reset;
+- tick-qualified register update;
 - pending-route creation;
+- pending-route retention;
 - pending-route completion;
 - pending-route clearing;
 - pending-route polarity preservation;
-- pending-route reserved-state detection;
-- interaction with request-lane arbitration;
-- interaction with scheduler-state eligibility;
-- interaction with transition-capacity enforcement;
-- event-counter source generation;
-- invariant flag generation;
-- assertion correlation;
-- M15 vector replay compatibility.
+- completion priority over new same-cell route creation;
+- non-overwrite validation;
+- scheduler and capacity deferral;
+- reserved-state detection;
+- queue-overflow detection;
+- deterministic ascending request-lane processing;
+- per-evaluation masks;
+- per-evaluation event telemetry;
+- invariant outputs.
 
-The pending-route register module does not compute:
+The module does not compute:
 
+- Kuramoto-Sakaguchi phase coupling;
 - phase words;
-- Kuramoto-Sakaguchi coupling;
 - thermal state;
 - gamma drift;
 - coherence compression;
 - `C(t)`;
 - `P(t)`;
-- phase-derived ternary targets.
+- phase-derived ternary targets;
+- scheduler-state decoding;
+- request-lane acceptance;
+- transition-capacity admission;
+- retained-state candidate generation;
+- retained-state writeback.
+
+The surrounding integrated M16 core supplies the scheduler-qualified and capacity-approved control inputs.
+
+## Integrated Execution Position
+
+The integrated pending-route execution path is:
+
+`retained state and retained pending-route state`
+
+→ `pending-completion candidate derivation`
+
+→ `active-neutral candidate generation`
+
+→ `transition-capacity admission`
+
+→ `pending-route next-state generation`
+
+→ `pending-route register update`
+
+→ `retained-state writeback`
+
+For opposite-polarity explicit requests, the path is:
+
+`request-lane arbitration`
+
+→ `active-neutral first-leg candidate`
+
+→ `transition-capacity admission`
+
+→ `pending-route creation`
+
+→ `retained state 0`
+
+For retained pending completion, the path is:
+
+`retained state 0 and retained pending target`
+
+→ `commit-capable scheduler state`
+
+→ `pending-completion candidate`
+
+→ `transition-capacity admission`
+
+→ `pending-route clearing`
+
+→ `retained target writeback`
+
+The integrated files are:
+
+- `rtl/m16/frp_m16_pkg.sv`;
+- `rtl/m16/frp_m16_scheduler.sv`;
+- `rtl/m16/frp_m16_request_lanes.sv`;
+- `rtl/m16/frp_m16_active_neutral.sv`;
+- `rtl/m16/frp_m16_capacity_guard.sv`;
+- `rtl/m16/frp_m16_pending_routes.sv`;
+- `rtl/m16/frp_m16_state_update.sv`;
+- `rtl/m16/frp_m16_core.sv`.
 
 ## Core Identity Preserved
 
-The pending-route register module preserves the required FRP route sequence:
+The pending-route register module preserves:
 
-`-1 → 0 → +1`
+- the balanced ternary retained-state domain `{-1, 0, 1}`;
+- active neutral state `0`;
+- the retained target polarity of an interrupted opposite-polarity route;
+- tick-separated opposite-polarity execution;
+- one retained pending-route slot per cell;
+- pending completion only from retained state `0`;
+- pending completion priority over new same-cell requests;
+- retained polarity during scheduler deferral;
+- retained polarity during capacity deferral;
+- zero direct opposite-polarity retained-state execution;
+- zero reserved-state emission;
+- zero queue overflow in qualified execution.
 
-and:
+The required routed sequences are:
 
-`+1 → 0 → -1`
+`-1 → 0 → 1`
 
-The module prevents direct retained-state execution of:
+`1 → 0 → -1`
 
-`-1 → +1`
+Direct retained-state transitions between `-1` and `1` remain forbidden.
 
-and:
-
-`+1 → -1`
-
-Required invariant:
+Required integrated relation:
 
 `actual_direct_events = 0`
 
 ## Canonical Pending-Route Encoding
 
-Pending routes use the same canonical two-bit ternary encoding as retained state:
+The pending-route register uses the canonical two-bit balanced ternary encoding imported from:
 
-| Pending route | Encoding | Meaning |
-|---|---|---|
-| `-1` | `2'b11` | retained target is `-1` |
-| `0` | `2'b00` | no pending route |
-| `+1` | `2'b01` | retained target is `+1` |
-| reserved | `2'b10` | invalid pending route |
+`rtl/m16/frp_m16_pkg.sv`
 
-The reserved encoding is invalid.
+| Pending-route value | SystemVerilog symbol | Encoding | Meaning |
+|---|---|---|---|
+| `-1` | `FRP_TERN_NEG` | `2'b11` | retained completion target is `-1` |
+| `0` | `FRP_TERN_ZERO` | `2'b00` | no pending route |
+| `1` | `FRP_TERN_POS` | `2'b01` | retained completion target is `1` |
+| reserved | `FRP_TERN_RESERVED` | `2'b10` | invalid pending-route value |
 
-Required invariant:
+The shared state constants are:
 
-`pending_route_reserved_events = 0`
+- `FRP_STATE_NEG`;
+- `FRP_STATE_ZERO`;
+- `FRP_STATE_POS`;
+- `FRP_STATE_RESERVED`.
 
-## Register Set
+The active-neutral value is:
 
-The pending-route module uses:
+`FRP_ACTIVE_NEUTRAL = FRP_STATE_ZERO`
 
-| Register | Width | Meaning |
-|---|---:|---|
-| `pending_route_q` | `CELLS × STATE_BITS` | retained pending-route state |
-| `pending_route_d` | `CELLS × STATE_BITS` | next pending-route state |
-| `pending_created_mask` | `CELLS` | pending routes created during the tick |
-| `pending_completed_mask` | `CELLS` | pending routes completed during the tick |
-| `pending_cleared_mask` | `CELLS` | pending routes cleared during the tick |
-| `pending_reserved_mask` | `CELLS` | cells containing reserved pending encoding |
+Required relations:
 
-Required relation:
+`pending_reserved_events = 0`
+
+`reserved_state_events = 0`
+
+## Module Parameterization
+
+The module parameters are:
+
+| Parameter | Definition |
+|---|---|
+| `CELLS` | number of retained balanced ternary cells |
+| `STATE_BITS` | packed width of one ternary value |
+| `REQUEST_LANES` | number of explicit request lanes |
+| `CELL_INDEX_BITS` | packed cell-index width |
+| `COUNTER_BITS` | event-counter width |
+
+Default parameter sources are:
+
+| Parameter | Default source |
+|---|---|
+| `CELLS` | `frp_m16_pkg::FRP_M16_DEFAULT_CELLS` |
+| `STATE_BITS` | `frp_m16_pkg::FRP_M16_STATE_BITS` |
+| `REQUEST_LANES` | `frp_m16_pkg::frp_calc_request_lanes(CELLS)` |
+| `CELL_INDEX_BITS` | `(CELLS <= 1) ? 1 : $clog2(CELLS)` |
+| `COUNTER_BITS` | `frp_m16_pkg::FRP_M16_COUNTER_BITS` |
+
+Required state width:
 
 `STATE_BITS = 2`
 
+The qualified architectural simulation profile is:
+
+| Parameter | Value |
+|---|---:|
+| `CELLS` | `8` |
+| `REQUEST_LANES` | `2` |
+
+## Module Inputs
+
+The pending-route module consumes:
+
+| Signal | Width | Function |
+|---|---:|---|
+| `clk` | `1` | sequential register clock |
+| `rst_n` | `1` | asynchronous active-low reset |
+| `tick_enable` | `1` | enables pending-route register update |
+| `state_q` | `CELLS × STATE_BITS` | retained balanced ternary state before writeback |
+| `request_accept` | `REQUEST_LANES` | capacity-approved explicit request lanes |
+| `request_neutralized` | `REQUEST_LANES` | accepted opposite-polarity request classification |
+| `request_cell_index` | `REQUEST_LANES × CELL_INDEX_BITS` | requested cell index for each lane |
+| `request_target` | `REQUEST_LANES × STATE_BITS` | requested balanced ternary target for each lane |
+| `pending_completion_accept_mask` | `CELLS` | capacity-approved retained pending completions |
+
+Within `frp_m16_core`, the connected explicit-request acceptance signal is:
+
+`request_accept_capacity`
+
+The connected pending-completion acceptance mask is:
+
+`capacity_accept_mask & pending_completion_candidate`
+
+A new route is created only when both are asserted for the same explicit request lane:
+
+`request_accept[lane]`
+
+and:
+
+`request_neutralized[lane]`
+
+## Retained Register
+
+The retained pending-route register is:
+
+`pending_route_q`
+
+Its width is:
+
+`CELLS × STATE_BITS`
+
+Each cell owns one two-bit pending-route slot.
+
+The combinational next-state value is:
+
+`pending_route_next`
+
+The public next-state output is:
+
+`pending_route_d`
+
+The assignment is:
+
+`pending_route_d = pending_route_next`
+
+At the beginning of combinational evaluation:
+
+`pending_route_next = pending_route_q`
+
+Every route therefore remains retained unless a qualified creation or qualified completion changes its cell slot.
+
+## Pending-Route Mask Outputs
+
+The module emits:
+
+| Signal | Width | Function |
+|---|---:|---|
+| `pending_active_mask` | `CELLS` | cells with a retained nonzero pending target |
+| `pending_created_mask` | `CELLS` | cells receiving a new pending target |
+| `pending_completed_mask` | `CELLS` | cells with an accepted pending completion |
+| `pending_cleared_mask` | `CELLS` | cells cleared after accepted completion |
+| `pending_retained_mask` | `CELLS` | active routes retained during the current evaluation |
+| `pending_blocked_mask` | `CELLS` | cells whose route operation is retained or blocked |
+| `pending_reserved_mask` | `CELLS` | cells containing a reserved pending-route encoding |
+| `pending_overflow_mask` | `CELLS` | cells receiving an invalid overwrite or duplicate creation attempt |
+
+The masks are combinational outputs derived from:
+
+- current retained pending-route state;
+- capacity-approved completion inputs;
+- capacity-approved explicit request inputs;
+- route-creation validation;
+- route-completion validation.
+
+## Pending-Route Telemetry Outputs
+
+The module emits:
+
+| Signal | Function |
+|---|---|
+| `pending_active_count` | number of current retained nonzero pending routes |
+| `pending_created_events` | new pending routes created during the current evaluation |
+| `pending_completed_events` | pending routes completed during the current evaluation |
+| `pending_cleared_events` | pending-route slots cleared during the current evaluation |
+| `pending_retained_events` | active routes retained during an enabled tick |
+| `pending_reserved_events` | current retained reserved pending-route values |
+| `neutral_routed_events` | capacity-approved neutral-routed explicit requests presented to the module |
+| `prevented_direct_events` | capacity-approved opposite-polarity direct transitions prevented |
+| `queue_overflow_events` | invalid pending-route overwrite or duplicate-creation attempts |
+| `actual_direct_events` | direct opposite-polarity executions at this module boundary |
+
+These telemetry values are combinational per-evaluation outputs.
+
+The integrated core uses the pending-route sources for:
+
+- reserved-state aggregation;
+- queue-overflow aggregation;
+- integrated invariant generation.
+
+The public direct-event counters are sourced from the active-neutral transition stage.
+
+## Pending-Route Invariant Outputs
+
+The module emits:
+
+- `pending_domain_valid`;
+- `pending_polarity_valid`;
+- `pending_completion_from_zero_valid`;
+- `pending_non_overwrite_valid`;
+- `pending_capacity_valid`;
+- `pending_replay_deterministic`;
+- `no_pending_reserved_state`;
+- `no_queue_overflow`;
+- `no_actual_direct_events`.
+
+These outputs feed the integrated pending-route invariant flag:
+
+`FRP_INV_PENDING_POLARITY_VALID`
+
+They also participate in the integrated flags for:
+
+- active-neutral routing;
+- transition capacity;
+- no actual direct events;
+- no reserved state;
+- no queue overflow.
+
 ## Reset Behavior
 
-On reset:
+The pending-route register uses:
 
-`pending_route_q = all 0`
+`always_ff @(posedge clk or negedge rst_n)`
 
-This means:
+When:
 
-`no pending routes exist after reset`
+`rst_n = 0`
 
-Required reset invariants:
+the module assigns:
 
-`all pending routes = 0`
+`pending_route_q = 0`
 
-`pending_route_reserved_events = 0`
+Every pending-route slot is initialized to:
+
+`FRP_STATE_ZERO`
+
+The reset state means:
+
+`no retained pending routes`
+
+Required reset relations:
+
+`pending_route_out = 0`
+
+`pending_active_count = 0`
+
+`pending_reserved_events = 0`
 
 `actual_direct_events = 0`
 
 `queue_overflow_events = 0`
 
-## Pending Route Meaning
+The reset boundary is checked by the executable M16 assertion layer and deterministic testbench.
 
-A pending route stores the retained target polarity of an opposite-polarity request that has already been neutralized through `0`.
+## Tick-Qualified Register Update
 
-If:
+When:
 
-`pending_route_q_i = 0`
-
-then cell `i` has no retained opposite-polarity continuation.
-
-If:
-
-`pending_route_q_i = -1`
-
-then cell `i` must complete toward `-1` on a later eligible tick.
-
-If:
-
-`pending_route_q_i = +1`
-
-then cell `i` must complete toward `+1` on a later eligible tick.
-
-Required invariant:
-
-`pending routes preserve requested target polarity`
-
-## Pending Route Creation
-
-A pending route is created only by an accepted opposite-polarity request.
-
-If:
-
-`state_q_i = -1`
+`rst_n = 1`
 
 and:
 
-`request_target_i = +1`
+`tick_enable = 1`
 
-then direct execution is forbidden.
+the register commits:
 
-The tick action is:
+`pending_route_q <= pending_route_d`
 
-`state_d_i = 0`
+When:
 
-and:
-
-`pending_route_d_i = +1`
-
-If:
-
-`state_q_i = +1`
+`rst_n = 1`
 
 and:
 
-`request_target_i = -1`
+`tick_enable = 0`
 
-then direct execution is forbidden.
-
-The tick action is:
-
-`state_d_i = 0`
-
-and:
-
-`pending_route_d_i = -1`
+the register retains its current value.
 
 Required relation:
 
-`pending_route_d_i = request_target_i`
+`tick_enable = 0 → pending_route_q remains stable`
 
-for an accepted opposite-polarity request.
+The pending-route register does not consume:
 
-## Pending Route Completion
+`clear_counters`
 
-A pending route may complete only when the retained state is active neutral `0`.
+Clearing the scheduler counter bank does not clear or modify retained pending routes.
 
-If:
+## Pending Route Meaning
 
-`state_q_i = 0`
-
-and:
-
-`pending_route_q_i = -1`
-
-then the eligible completion is:
-
-`0 → -1`
-
-and:
-
-`pending_route_d_i = 0`
+A pending route stores the exact requested target polarity of an opposite-polarity request whose first legal leg was admitted through active neutral `0`.
 
 If:
 
-`state_q_i = 0`
+`pending_route_q[cell] = 0`
 
-and:
-
-`pending_route_q_i = +1`
-
-then the eligible completion is:
-
-`0 → +1`
-
-and:
-
-`pending_route_d_i = 0`
-
-Completion remains subject to:
-
-- scheduler eligibility;
-- request-lane arbitration;
-- transition-capacity boundary;
-- deterministic lane order.
-
-## Forbidden Completion
-
-A pending route must not complete when the retained state is not `0`.
-
-Forbidden examples:
-
-`state_q_i = -1` and `pending_route_q_i = +1`
-
-`state_q_i = +1` and `pending_route_q_i = -1`
-
-The module must first preserve or restore the active-neutral boundary.
-
-Required invariant:
-
-`pending completion starts from 0`
-
-## Pending Route Priority
-
-Pending-route completion has priority over new same-cell requests.
-
-For a cell `i`, if:
-
-`pending_route_q_i != 0`
-
-and:
-
-`state_q_i = 0`
-
-then the pending route is evaluated before a new request for the same cell.
-
-A new same-cell request may be rejected or deferred.
-
-Required invariant:
-
-`retained pending route is not overwritten by a new request`
-
-## Pending Route Non-Overwrite Rule
-
-A valid pending route must not be overwritten by a different target polarity before completion.
+then the cell has no retained opposite-polarity continuation.
 
 If:
 
-`pending_route_q_i = +1`
+`pending_route_q[cell] = -1`
 
-then a new same-cell request must not replace it with:
+then the retained completion target is:
 
 `-1`
 
 If:
 
-`pending_route_q_i = -1`
+`pending_route_q[cell] = 1`
 
-then a new same-cell request must not replace it with:
+then the retained completion target is:
 
-`+1`
+`1`
 
-Required invariant:
-
-`pending route polarity remains stable until completion or reset`
-
-## Pending Route Clearing
-
-A pending route may be cleared only by:
-
-- reset;
-- successful pending-route completion;
-- explicit counter-safe diagnostic clear, if separately defined by a higher-level test mode.
-
-Normal processor execution clears a pending route only after completion.
+A valid active pending route is always nonzero.
 
 Required relation:
 
-`pending_completed_mask_i = 1 → pending_route_d_i = 0`
+`active pending route ∈ {-1, 1}`
 
-## Interaction With Request-Lane Arbitration
+## Current Pending-Route Scan
 
-The request-lane arbitration module provides:
+At the start of combinational evaluation, the module scans every cell in ascending cell-index order.
 
-| Signal | Meaning |
-|---|---|
-| `request_accept` | accepted request lane |
-| `request_cell_index` | requested cell index |
-| `request_target` | requested ternary target |
-| `request_neutralized` | accepted opposite-polarity request routed through `0` |
-| `accepted_cell_mask` | accepted cells for this tick |
+For each current `pending_route_q` value:
 
-The pending-route module consumes these signals to create pending routes for accepted opposite-polarity requests.
+- a reserved encoding sets `pending_reserved_mask`;
+- a reserved encoding increments `pending_reserved_events`;
+- a reserved encoding clears `pending_domain_valid`;
+- a reserved encoding clears `no_pending_reserved_state`;
+- a valid nonzero value sets `pending_active_mask`;
+- a valid nonzero value increments `pending_active_count`;
+- a valid zero value represents an unoccupied pending-route slot.
 
-Required invariant:
+The scan does not modify the retained route.
 
-`pending route creation requires accepted request`
+## Pending Route Creation
 
-## Interaction With Scheduler State
+A new pending route is created only for a capacity-approved opposite-polarity request whose first leg is classified for active-neutral routing.
 
-Scheduler state may gate pending-route completion.
+For each explicit request lane, the route-creation condition is:
 
-The scheduler must not erase pending-route polarity.
+`tick_enable = 1`
 
-Pending-route completion may be eligible in:
+and:
 
-- `free`;
-- `commit`;
-- `excite`;
+`request_accept[lane] = 1`
 
-Pending-route retention may occur in:
+and:
 
-- `balance`;
-- `neutralize`;
-- any tick where completion is not eligible.
+`request_neutralized[lane] = 1`
 
-Required invariant:
+The module then validates:
 
-`scheduler state does not modify pending polarity directly`
+- requested cell index is less than `CELLS`;
+- current retained state belongs to `{-1, 0, 1}`;
+- current retained state is nonzero;
+- requested target belongs to `{-1, 0, 1}`;
+- requested target is nonzero;
+- current retained state and requested target have opposite polarity;
+- current pending-route slot is valid;
+- current pending-route slot is `0`;
+- no accepted completion owns the cell;
+- no earlier request lane has claimed route creation for the cell.
 
-## Interaction With Transition Capacity
+For a valid creation:
 
-Pending-route completion counts as a retained-state change.
+`pending_route_d[cell] = request_target[lane]`
 
-Therefore it contributes to:
+The module sets:
 
-`accepted_changes`
+`creation_claimed_mask[cell] = 1`
 
-Required bound:
+`pending_created_mask[cell] = 1`
 
-`accepted_changes <= REQUEST_LANES`
+and increments:
 
-If transition capacity is exhausted, pending completion must be deferred without losing pending-route polarity.
+`pending_created_events`
 
-Required invariant:
+Route-creation requests are processed in deterministic ascending request-lane order.
 
-`capacity rejection does not clear pending route`
+## Negative-to-Positive Route Creation
 
-## Interaction With Active Neutral Routing
+For:
 
-The pending-route module is the retained continuation layer of active-neutral routing.
+`state_q[cell] = -1`
 
-For an opposite-polarity request:
+and:
 
-`state_q_i × request_target_i = -1`
+`request_target[lane] = 1`
 
-the route is split into two legal transitions:
+the first admitted retained-state leg is:
 
-First eligible tick:
+`-1 → 0`
 
-`state_q_i → 0`
+The pending-route next state is:
 
-with:
+`pending_route_d[cell] = 1`
 
-`pending_route_d_i = request_target_i`
+After the qualified clock boundary:
 
-Later eligible tick:
+- retained state is `0`;
+- retained pending target is `1`.
 
-`0 → pending_route_q_i`
+The later completion leg is:
 
-with:
+`0 → 1`
 
-`pending_route_d_i = 0`
+## Positive-to-Negative Route Creation
 
-Required invariant:
+For:
 
-`opposite-polarity transition is tick-separated`
+`state_q[cell] = 1`
 
-## Reserved Pending-Route Detection
+and:
 
-The module detects reserved pending-route encoding:
+`request_target[lane] = -1`
 
-`2'b10`
+the first admitted retained-state leg is:
 
-Detection signals:
+`1 → 0`
 
-| Signal | Width | Meaning |
-|---|---:|---|
-| `pending_reserved_mask` | `CELLS` | one bit per cell with reserved pending encoding |
-| `pending_reserved_any` | `1` | high when any pending route is reserved |
+The pending-route next state is:
 
-Required relation:
+`pending_route_d[cell] = -1`
 
-`pending_reserved_any = OR(pending_reserved_mask)`
+After the qualified clock boundary:
 
-Required invariant:
+- retained state is `0`;
+- retained pending target is `-1`.
 
-`pending_reserved_any = 0`
+The later completion leg is:
 
-## Pending Route Counter Sources
+`0 → -1`
 
-The pending-route module provides counter sources for:
+## Invalid Route-Creation Conditions
 
-| Counter source | Meaning |
-|---|---|
-| `pending_created_events` | newly created pending routes |
-| `pending_completed_events` | completed pending routes |
-| `pending_cleared_events` | cleared pending routes |
-| `pending_retained_events` | pending routes retained without completion |
-| `pending_reserved_events` | reserved pending-route encoding observations |
-| `neutral_routed_events` | opposite-polarity requests routed through `0` |
-| `prevented_direct_events` | direct opposite-polarity executions prevented |
-| `actual_direct_events` | direct opposite-polarity executions detected |
+A route-creation input with an invalid cell index clears:
 
-Required relations:
+- `pending_domain_valid`;
+- `pending_replay_deterministic`.
 
-`neutral_routed_events >= pending_created_events`
+A route-creation input with an invalid polarity relation clears:
 
-`prevented_direct_events >= pending_created_events`
+- `pending_polarity_valid`;
+- `pending_replay_deterministic`.
 
-`actual_direct_events = 0`
+A route-creation input is blocked when:
 
-`pending_reserved_events = 0`
+- the pending-route slot is already active;
+- an accepted completion owns the cell;
+- an earlier request lane already claimed route creation for the cell.
 
-## Pending Route Masks
+For a blocked overwrite or duplicate creation, the module sets:
 
-The module exposes:
+`pending_blocked_mask[cell] = 1`
 
-| Mask | Width | Meaning |
-|---|---:|---|
-| `pending_active_mask` | `CELLS` | cells with pending route |
-| `pending_created_mask` | `CELLS` | cells creating pending route this tick |
-| `pending_completed_mask` | `CELLS` | cells completing pending route this tick |
-| `pending_retained_mask` | `CELLS` | cells retaining pending route this tick |
-| `pending_blocked_mask` | `CELLS` | cells blocked by scheduler or capacity |
-| `pending_reserved_mask` | `CELLS` | cells with invalid pending encoding |
+`pending_overflow_mask[cell] = 1`
 
-Required relation:
+and increments:
 
-`pending_active_count = popcount(pending_active_mask)`
+`queue_overflow_events`
 
-## Pending Route Completion Target
+It also clears:
 
-The completion target is always:
+- `pending_non_overwrite_valid`;
+- `pending_replay_deterministic`.
 
-`pending_route_q_i`
-
-not a newly supplied request target.
-
-This preserves the original requested polarity of the opposite-polarity request.
-
-Required invariant:
-
-`completion target equals retained pending route`
-
-## Pending Route Determinism
-
-For the same input sequence:
-
-`state_q`
-
-`request_target`
-
-`pending_route_q`
-
-`scheduler_state`
-
-`request_lane_order`
-
-`transition_capacity`
-
-the module must produce the same:
-
-`pending_route_d`
-
-`pending_created_mask`
-
-`pending_completed_mask`
-
-`pending_retained_mask`
-
-`pending counter deltas`
-
-Required invariant:
-
-`pending route replay is deterministic`
-
-## Queue Overflow Semantics
-
-The M16 pending-route module uses one retained pending-route slot per cell.
-
-A queue overflow would occur only if the design attempted to store more than one pending target for the same cell without completing the existing pending route.
-
-M16 must avoid this by rejecting or deferring new same-cell requests when a pending route already exists.
-
-Required invariant:
+Qualified execution records:
 
 `queue_overflow_events = 0`
 
-## Pending Route Safety Rule
+## Pending Route Completion
 
-The pending-route module must never convert a retained pending route into a direct opposite-polarity state jump.
+Pending completion candidates are derived in:
 
-Forbidden:
+`rtl/m16/frp_m16_core.sv`
 
-`state_q_i = -1`
+A cell becomes a pending-completion candidate when:
 
-`pending_route_q_i = +1`
+- `tick_enable = 1`;
+- retained state is `0`;
+- retained pending target is nonzero;
+- scheduler state is commit-capable.
 
-directly producing:
+Commit-capable scheduler states are:
 
-`state_d_i = +1`
+- `FREE`;
+- `COMMIT`;
+- `EXCITE`.
 
-Forbidden:
+The transition-capacity guard evaluates pending completion candidates before new explicit request lanes.
 
-`state_q_i = +1`
+The pending-route module receives only capacity-approved completion cells through:
 
-`pending_route_q_i = -1`
+`pending_completion_accept_mask`
 
-directly producing:
+For each accepted completion, the module validates:
 
-`state_d_i = -1`
+- retained state belongs to `{-1, 0, 1}`;
+- retained state is `0`;
+- pending-route value belongs to `{-1, 0, 1}`;
+- pending-route value is nonzero.
 
-Required invariant:
+For a legal accepted completion:
 
-`pending completion requires state_q_i = 0`
+`pending_route_d[cell] = 0`
 
-## Invariant Flags
+The module sets:
 
-The pending-route module exposes:
+`pending_completed_mask[cell] = 1`
 
-| Flag | Required value |
+`pending_cleared_mask[cell] = 1`
+
+and increments:
+
+`pending_completed_events`
+
+`pending_cleared_events`
+
+The retained-state update layer writes the previously retained pending target into the cell state.
+
+## Deferred Pending Route
+
+When a valid nonzero pending route does not receive an accepted legal completion, the module retains the route.
+
+It sets:
+
+`pending_retained_mask[cell] = 1`
+
+`pending_blocked_mask[cell] = 1`
+
+During an enabled tick, it increments:
+
+`pending_retained_events`
+
+Scheduler ineligibility does not modify the retained pending target.
+
+Capacity deferral does not modify the retained pending target.
+
+A pending route remains active until:
+
+- accepted legal completion; or
+- asynchronous reset.
+
+## Forbidden Completion
+
+Pending completion is legal only when:
+
+`state_q[cell] = 0`
+
+and:
+
+`pending_route_q[cell] ∈ {-1, 1}`
+
+A completion request from retained state `-1` or `1` is invalid.
+
+A completion request without an active nonzero pending route is invalid.
+
+If an accepted completion input is not legal, the module clears:
+
+- `pending_completion_from_zero_valid`;
+- `pending_capacity_valid`;
+- `pending_replay_deterministic`.
+
+Required relation:
+
+`pending completion starts from retained state 0`
+
+## Pending Route Priority
+
+Capacity-approved pending completions are processed before new route creation.
+
+For each cell, an accepted completion sets:
+
+`pending_completed_mask[cell] = 1`
+
+A new route-creation request for the same cell during the same evaluation is blocked by:
+
+`completion_owns_cell`
+
+The request-lane arbitration stage also rejects new explicit requests targeting a cell with a retained nonzero pending route.
+
+The transition-capacity guard evaluates:
+
+1. pending completion candidates in ascending cell-index order;
+2. explicit request candidates in ascending request-lane order.
+
+Required relation:
+
+`retained pending-route ownership precedes new same-cell request ownership`
+
+## Pending Route Non-Overwrite Rule
+
+A retained nonzero pending route may change only when its accepted completion clears the slot to `0`.
+
+For every cell, the next-state validation checks:
+
+- current pending route is nonzero;
+- the route is not marked completed;
+- next pending route equals current pending route.
+
+If an active route changes without accepted completion, the module clears:
+
+- `pending_non_overwrite_valid`;
+- `pending_polarity_valid`.
+
+A newly created route must produce a nonzero next pending-route value.
+
+If a created route does not produce a nonzero next value, the module clears:
+
+`pending_polarity_valid`
+
+Required relation:
+
+`pending route polarity remains stable until accepted completion or reset`
+
+## Pending Route Clearing
+
+A retained pending route is cleared only by:
+
+- asynchronous active-low reset; or
+- capacity-approved legal pending completion.
+
+For a legal accepted completion:
+
+`pending_route_d[cell] = 0`
+
+The module sets:
+
+`pending_completed_mask[cell] = 1`
+
+and:
+
+`pending_cleared_mask[cell] = 1`
+
+The corresponding event relation is:
+
+`pending_completed_events = pending_cleared_events`
+
+The mask relation is:
+
+`pending_completed_mask = pending_cleared_mask`
+
+The pending-route module has no `clear_counters` input.
+
+Clearing the scheduler counter bank does not clear:
+
+- `pending_route_q`;
+- `pending_active_mask`;
+- retained pending target polarity.
+
+## Interaction With Request-Lane Arbitration
+
+The request-lane arbitration artifact is:
+
+`rtl/m16/frp_m16_request_lanes.sv`
+
+It provides:
+
+| Signal | Pending-route function |
 |---|---|
-| `pending_domain_valid` | `True` |
-| `pending_polarity_valid` | `True` |
-| `pending_completion_from_zero_valid` | `True` |
-| `pending_non_overwrite_valid` | `True` |
-| `pending_capacity_valid` | `True` |
-| `pending_replay_deterministic` | `True` |
-| `no_pending_reserved_state` | `True` |
-| `no_queue_overflow` | `True` |
-| `no_actual_direct_events` | `True` |
+| `request_accept` | pre-capacity explicit request acceptance |
+| `request_cell_index` | cell selected by each explicit lane |
+| `request_target` | balanced ternary target selected by each explicit lane |
+| `request_neutralized` | opposite-polarity request assigned to active-neutral routing |
+| `request_reject_pending_busy` | new explicit request rejected because a pending route owns the cell |
 
-These flags must correlate with the M16 assertion set and M15 vector replay expectations.
+The transition-capacity guard converts pre-capacity request acceptance into:
 
-## Assertion Support
+`request_accept_capacity`
 
-The M16 pending-route register module supports the following assertion layer:
+The pending-route module receives:
 
-| Assertion | Required condition |
-|---|---|
-| `assert_no_reserved_pending_q` | `pending_route_q` contains no `2'b10` |
-| `assert_no_reserved_pending_d` | `pending_route_d` contains no `2'b10` |
-| `assert_pending_created_from_opposite_request` | pending creation follows accepted opposite-polarity request |
-| `assert_pending_target_preserved` | pending route equals original requested polarity |
-| `assert_pending_completion_from_zero` | pending completion starts from state `0` |
-| `assert_pending_cleared_after_completion` | completed route clears pending register |
-| `assert_pending_not_overwritten` | existing pending route is not replaced by another polarity |
-| `assert_no_pending_queue_overflow` | one pending route per cell is never exceeded |
-| `assert_pending_capacity_guard` | pending completion respects `REQUEST_LANES` |
-| `assert_no_direct_completion_jump` | pending route never creates direct opposite-polarity jump |
+`request_accept = request_accept_capacity`
 
-## M15 Vector Replay Boundary
+A new route is created only when the same lane has:
 
-The pending-route module must replay against the M15 deterministic vector package.
+`request_accept_capacity = 1`
 
-Comparison inputs:
+and:
 
-`state_q`
+`request_neutralized = 1`
 
-`target_q`
+A new explicit request targeting a cell with:
 
-`pending_route_q`
+`pending_route_q[cell] != 0`
 
-`request_accept`
+is rejected before route creation.
 
-`request_cell_index`
+Required relation:
 
-`request_target`
+`pending route creation requires capacity-approved request acceptance`
 
-`request_neutralized`
+## Interaction With Scheduler State
 
-`scheduler_state`
+The pending-route module does not decode scheduler state directly.
 
-`accepted_changes`
+Scheduler-qualified completion candidates are derived in:
 
-`REQUEST_LANES`
+`rtl/m16/frp_m16_core.sv`
 
-Comparison outputs:
+A completion candidate requires:
 
-`pending_route_d`
+- `tick_enable = 1`;
+- retained state equal to `0`;
+- retained pending target different from `0`;
+- commit-capable registered scheduler state.
 
-`pending_created_mask`
+Commit-capable scheduler states are:
 
-`pending_completed_mask`
+- `FREE`;
+- `COMMIT`;
+- `EXCITE`.
 
-`pending_retained_mask`
+During:
 
-`pending_blocked_mask`
+- `BALANCE`;
+- `NEUTRALIZE`;
+
+a retained pending target remains stored.
+
+A retained route also remains stored on any tick where completion does not receive transition capacity.
+
+Required relation:
+
+`scheduler deferral does not modify pending-route polarity`
+
+## Interaction With Transition Capacity
+
+The transition-capacity artifact is:
+
+`rtl/m16/frp_m16_capacity_guard.sv`
+
+Pending completion is evaluated before explicit request lanes.
+
+A valid pending completion consumes one transition-capacity slot.
+
+The accepted completion contributes to:
+
+- `capacity_accept_mask`;
+- `accepted_change_mask`;
+- `accepted_changes`;
+- `capacity_accept_events`;
+- `accepted_change_events`.
+
+The capacity relations are:
+
+`accepted_changes <= REQUEST_LANES`
+
+`capacity_remaining = REQUEST_LANES - accepted_changes`
+
+`capacity_exhausted = (accepted_changes == REQUEST_LANES)`
+
+`switch_load_numerator = accepted_changes`
+
+The pending-route module receives:
+
+`pending_completion_accept_mask = capacity_accept_mask & pending_completion_candidate`
+
+If a completion candidate does not receive capacity:
+
+- `pending_completed_mask[cell] = 0`;
+- `pending_cleared_mask[cell] = 0`;
+- `pending_route_d[cell] = pending_route_q[cell]`.
+
+Required relation:
+
+`capacity deferral does not clear the pending route`
+
+## Interaction With Active-Neutral Routing
+
+The active-neutral transition artifact is:
+
+`rtl/m16/frp_m16_active_neutral.sv`
+
+For an opposite-polarity request, the first admitted leg is:
+
+`-1 → 0`
+
+or:
+
+`1 → 0`
+
+The pending-route module stores:
+
+`pending_route_d[cell] = request_target[lane]`
+
+The later admitted completion leg is:
+
+`0 → pending_route_q[cell]`
+
+The pending-route module then clears:
+
+`pending_route_d[cell] = 0`
+
+The complete tick-separated routes are:
+
+`-1 → 0 → 1`
+
+`1 → 0 → -1`
+
+Each route leg receives independent scheduler and transition-capacity qualification.
+
+## Pending Route Completion Target
+
+The completion target is the retained value:
+
+`pending_route_q[cell]`
+
+The completion target is not taken from a new explicit request lane.
+
+The active-neutral transition module selects the retained pending target when:
+
+- retained state is `0`;
+- pending completion is enabled;
+- pending target is nonzero;
+- scheduler state is commit-capable.
+
+Required relation:
+
+`completion target = retained pending-route target`
+
+## Reserved Pending-Route Detection
+
+The reserved pending-route encoding is:
+
+`2'b10`
+
+The module detects a reserved current value through:
 
 `pending_reserved_mask`
 
-`pending counter deltas`
+and:
 
-`invariant flags`
+`pending_reserved_events`
 
-Expected source:
+A reserved current value clears:
 
-`M15 cycle-exact integer golden trace`
+`pending_domain_valid`
 
-## Required M16 Pending-Route Invariants
+and:
 
-The M16 pending-route register module is valid only if:
+`no_pending_reserved_state`
 
-Pending routes use canonical ternary encoding.
+The module also validates every next pending-route value.
 
-Reserved pending-route encoding is never valid.
+A reserved next value:
 
-Pending routes initialize to `0`.
+- sets `pending_reserved_mask`;
+- clears `pending_domain_valid`;
+- clears `no_pending_reserved_state`.
 
-Pending routes are created only by accepted opposite-polarity requests.
+The integrated reserved-state count includes:
 
-Pending routes preserve requested target polarity.
+`pending_reserved_events`
 
-Pending routes complete only from active neutral state `0`.
+Qualified execution records:
 
-Pending completion clears the pending route.
+`pending_reserved_events = 0`
 
-Existing pending routes are not overwritten before completion.
+`reserved_state_events = 0`
 
-Capacity rejection does not clear pending routes.
+## Pending-Route Counter Relations
 
-Scheduler gating does not erase pending-route polarity.
+The current active-route relation is:
 
-Queue overflow events remain zero.
+`pending_active_count = popcount(pending_active_mask)`
 
-Direct opposite-polarity execution remains zero.
+For accepted neutral-routed inputs:
 
-M15 vector replay remains deterministic.
+`neutral_routed_events >= pending_created_events`
 
-## Closure Criteria
+and:
 
-This pending-route register module can be considered M16-ready when it supports:
+`prevented_direct_events >= pending_created_events`
 
-- reset to no pending routes;
-- canonical pending-route encoding;
-- reserved pending-route detection;
-- pending-route creation;
-- pending-route completion;
-- pending-route clearing;
-- pending-route non-overwrite protection;
-- scheduler-gated retention;
-- transition-capacity guarding;
-- queue-overflow prevention;
-- event-counter source generation;
-- invariant flag generation;
-- assertion correlation;
-- M15 vector replay compatibility.
+For completion capacity:
 
-## Next Step
+`pending_completed_events <= REQUEST_LANES`
 
-The next M16 file should define the active-neutral transition module:
+For qualified execution:
 
-`docs/m16_active_neutral_transition_module.md`
+`pending_created_events` records route creation.
+
+`pending_completed_events` records accepted completion.
+
+`pending_cleared_events` records accepted completion clearing.
+
+`pending_retained_events` records active-route retention during enabled ticks.
+
+`pending_reserved_events` records current reserved pending values.
+
+`queue_overflow_events` records blocked overwrite or duplicate-creation attempts.
+
+`actual_direct_events` remains zero at the pending-route module boundary.
+
+## Pending-Route Mask Relations
+
+The module records:
+
+| Mask | Recorded condition |
+|---|---|
+| `pending_active_mask` | current retained pending value is nonzero |
+| `pending_created_mask` | a capacity-approved opposite-polarity request creates a route |
+| `pending_completed_mask` | a capacity-approved legal completion executes |
+| `pending_cleared_mask` | an accepted completion clears the route |
+| `pending_retained_mask` | an active route remains stored |
+| `pending_blocked_mask` | an active route is retained or a new creation is blocked |
+| `pending_reserved_mask` | a current or next pending value is reserved |
+| `pending_overflow_mask` | an overwrite or duplicate-creation attempt is detected |
+
+Required relations:
+
+`pending_completed_mask = pending_cleared_mask`
+
+`pending_created_mask & pending_overflow_mask = 0`
+
+`pending_completed_mask & pending_retained_mask = 0`
+
+## Pending Route Determinism
+
+The combinational next-state base is always:
+
+`pending_route_next = pending_route_q`
+
+Completion processing uses deterministic ascending cell-index order:
+
+`cell 0 → cell 1 → ... → cell CELLS - 1`
+
+Route creation uses deterministic ascending request-lane order:
+
+`lane 0 → lane 1 → ... → lane REQUEST_LANES - 1`
+
+Completion processing precedes route creation.
+
+The first accepted route-creation lane claims its cell through:
+
+`creation_claimed_mask`
+
+The next-state validation scans every cell in ascending cell-index order.
+
+For the same inputs and parameters, the module produces the same:
+
+- `pending_route_d`;
+- creation mask;
+- completion mask;
+- clearing mask;
+- retention mask;
+- blocked mask;
+- reserved mask;
+- overflow mask;
+- event telemetry;
+- invariant outputs.
+
+The implemented replay-valid signal is:
+
+`pending_replay_deterministic`
+
+It is cleared by:
+
+- invalid route-creation cell index;
+- invalid opposite-polarity route relation;
+- overwrite or duplicate-creation attempt;
+- illegal completion request;
+- completion request without an active route.
+
+## Queue Overflow Semantics
+
+The pending-route structure provides:
+
+`one retained pending-route slot per cell`
+
+A queue-overflow event is generated when a capacity-approved neutral-routed request attempts route creation and:
+
+- the cell already contains an active pending route;
+- accepted completion owns the same cell;
+- an earlier lane already claimed creation for the same cell.
+
+The module then sets:
+
+`pending_blocked_mask[cell] = 1`
+
+`pending_overflow_mask[cell] = 1`
+
+and increments:
+
+`queue_overflow_events`
+
+It also clears:
+
+- `pending_non_overwrite_valid`;
+- `pending_replay_deterministic`.
+
+The request-lane pending-busy guard and capacity ownership order prevent these conditions during qualified execution.
+
+Qualified result:
+
+`queue_overflow_events = 0`
+
+## Pending Route Safety Relations
+
+The pending-route module records the following relations:
+
+- every retained pending value belongs to `{-1, 0, 1}`;
+- every active pending route is nonzero;
+- every created route retains the exact requested opposite polarity;
+- every accepted completion starts from retained state `0`;
+- every accepted completion uses the retained pending target;
+- every accepted completion clears its route;
+- every deferred route retains its polarity;
+- no active route is overwritten before completion;
+- no route completion creates a direct transition between `-1` and `1`;
+- no reserved pending value is emitted;
+- no queue-overflow event occurs in qualified execution.
+
+Required integrated values:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+## Pending-Route Invariant Relations
+
+The module calculates:
+
+`no_queue_overflow = (queue_overflow_events == 0)`
+
+and:
+
+`no_actual_direct_events = (actual_direct_events == 0)`
+
+The domain relation is:
+
+`pending_domain_valid = pending_domain_valid && no_pending_reserved_state`
+
+The polarity relation includes:
+
+`neutral_routed_events >= pending_created_events`
+
+and:
+
+`prevented_direct_events >= pending_created_events`
+
+The capacity relation includes:
+
+`pending_completed_events <= REQUEST_LANES`
+
+The non-overwrite relation requires an active route to remain unchanged unless its accepted completion clears it.
+
+The completion relation requires:
+
+`retained state = 0`
+
+and:
+
+`active pending route = 1`
+
+before clearing.
+
+## Integrated Pending-Route Invariant Flag
+
+The integrated pending-route flag is:
+
+`FRP_INV_PENDING_POLARITY_VALID`
+
+It is assembled from:
+
+```systemverilog
+pending_domain_valid
+&& pending_polarity_valid
+&& pending_completion_from_zero_valid
+&& pending_non_overwrite_valid
+&& pending_capacity_valid
+&& pending_replay_deterministic
+&& no_pending_reserved_state
+```
+
+Pending-route outputs also participate in:
+
+- `FRP_INV_STATE_DOMAIN_VALID`;
+- `FRP_INV_ACTIVE_NEUTRAL_VALID`;
+- `FRP_INV_TRANSITION_CAPACITY_VALID`;
+- `FRP_INV_STATE_UPDATE_VALID`;
+- `FRP_INV_NO_ACTUAL_DIRECT_EVENTS`;
+- `FRP_INV_NO_RESERVED_STATE`;
+- `FRP_INV_NO_QUEUE_OVERFLOW`.
+
+The qualified integrated invariant vector is:
+
+`1111111111`
+
+## Assertion Support
+
+The bound assertion artifact is:
+
+`rtl/m16/frp_m16_assertions.sv`
+
+The pending-route assertion relations are:
+
+| Assertion boundary | Required relation |
+|---|---|
+| reset | `pending_route_out = 0` |
+| pending-route domain | every cell belongs to `{-1, 0, 1}` |
+| disabled tick | pending-route value remains stable |
+| deferred route | active pending target remains stable without accepted change |
+| active-neutral first leg | retained state becomes `0` and pending target remains nonzero |
+| retained polarity | pending target is opposite to the prior retained state |
+| completion source | completion starts from retained state `0` |
+| completion target | retained state receives the prior pending target |
+| completion clearing | pending route becomes `0` |
+| nonzero-state guard | route does not complete from nonzero retained state |
+| direct-transition guard | retained state does not cross directly between `-1` and `1` |
+| pending invariant flag | `FRP_INV_PENDING_POLARITY_VALID = 1` |
+| no-overflow flag | `FRP_INV_NO_QUEUE_OVERFLOW = 1` |
+
+## Deterministic RTL Testbench Record
+
+The executable testbench is:
+
+`rtl/m16/frp_m16_tb.sv`
+
+The qualified parameter profile is:
+
+| Parameter | Value |
+|---|---:|
+| `CELLS` | `8` |
+| `STATE_BITS` | `2` |
+| `REQUEST_LANES` | `2` |
+
+The free-mode sequence executes both routed directions:
+
+`1 → 0 → -1`
+
+and:
+
+`-1 → 0 → 1`
+
+For each direction, the testbench records:
+
+- active-neutral first-leg execution;
+- exact requested pending polarity;
+- retained state `0` between route legs;
+- completion from `0`;
+- pending-route clearing after completion.
+
+The `7/1` sequence records:
+
+- first route leg during `BALANCE`;
+- retained pending polarity through following `BALANCE` ticks;
+- completion during `COMMIT`.
+
+The `1/7` sequence records:
+
+- first route leg during `NEUTRALIZE`;
+- retained pending polarity through following `NEUTRALIZE` ticks;
+- completion during `EXCITE`.
+
+## Pending-Route Qualification Record
+
+| Pending-route relation | Result |
+|---|---|
+| one retained route slot per cell | `PASS` |
+| exact requested polarity retained | `PASS` |
+| pending route owns its cell | `PASS` |
+| same-cell overwrite prevented | `PASS` |
+| scheduler deferral preserves route | `PASS` |
+| transition-capacity deferral preserves route | `PASS` |
+| completion requires retained state `0` | `PASS` |
+| accepted completion clears route | `PASS` |
+| pending-route overflow absent | `PASS` |
+
+The active-neutral routing record is:
+
+| Routing relation | Result |
+|---|---|
+| active neutral `0` executed as intermediate state | `PASS` |
+| direct `-1 → 1` absent | `PASS` |
+| direct `1 → -1` absent | `PASS` |
+| `-1 → 0 → 1` executed | `PASS` |
+| `1 → 0 → -1` executed | `PASS` |
+| requested opposite polarity retained | `PASS` |
+| pending completion executed only from `0` | `PASS` |
+| pending route cleared after completion | `PASS` |
+
+## M15 Semantic Foundation
+
+M15 remains the qualified semantic and implementation-mapping foundation for M16.
+
+The M15 qualification record is:
+
+| Qualification relation | Result |
+|---|---:|
+| qualification checks | `41 / 41 PASS` |
+| deterministic vector files | `10 / 10 byte-identical` |
+| required semantic correlation matches | `5 / 5 = 1.0` |
+| deterministic replay matches | `6 / 6 = 1.0` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+| `fixed_point_topology_sum_exact` | `True` |
+| `fixed_point_thermal_sum_exact` | `True` |
+
+The M16 pending-route implementation retains:
+
+- M15 balanced ternary state encoding;
+- active-neutral routing through `0`;
+- retained opposite-polarity target;
+- tick-separated route completion;
+- scheduler-qualified completion;
+- transition-capacity qualification;
+- deterministic route ownership;
+- zero direct-event execution;
+- zero reserved-state emission;
+- zero queue overflow.
+
+## RTL Workflow Record
+
+Workflow:
+
+`FRP M16 RTL Artifact Boundary`
+
+Workflow file:
+
+`.github/workflows/frp-m16-rtl-artifact-boundary.yml`
+
+Initial closed workflow record:
+
+| Field | Value |
+|---|---|
+| Run | `#82` |
+| Source commit | `a68a2af` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Artifact count | `1` |
+
+Synchronized workflow record:
+
+| Field | Value |
+|---|---|
+| Run | `#84` |
+| Repository commit | `ede53cf` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Duration | `52s` |
+| Artifact count | `1` |
+
+Pending-route qualification result:
+
+`PASS`
+
+RTL closure state:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+## FPGA Integration Qualification Record
+
+The target-independent FPGA integration top is:
+
+`fpga/m16/frp_m16_fpga_top.sv`
+
+The executable FPGA integration testbench is:
+
+`fpga/m16/frp_m16_fpga_tb.sv`
+
+The FPGA testbench executes:
+
+`0 → 1`
+
+then:
+
+`1 → 0`
+
+with retained:
+
+`pending_route = -1`
+
+and then:
+
+`0 → -1`
+
+After the first routed leg:
+
+- retained state is `0`;
+- retained pending target is `-1`.
+
+After completion:
+
+- retained state is `-1`;
+- retained pending target is `0`.
+
+The synchronized FPGA preparation record is:
+
+| Field | Value |
+|---|---|
+| Workflow | `FRP M16 FPGA Preparation` |
+| Workflow file | `.github/workflows/frp-m16-fpga-preparation.yml` |
+| Run | `#2` |
+| Repository commit | `ede53cf` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Duration | `36s` |
+| Artifact count | `1` |
+
+FPGA preparation qualification records:
+
+- asynchronous external reset assertion;
+- two-stage synchronous reset release;
+- `core_ready`;
+- execution-input gating before readiness;
+- request-interface propagation;
+- active-neutral first-leg execution;
+- retained pending-route completion;
+- all ten invariant flags equal to `1`;
+- `actual_direct_events = 0`;
+- `reserved_state_events = 0`;
+- `queue_overflow_events = 0`.
+
+FPGA preparation closure state:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
+
+## Terminal Qualification Record
+
+The deterministic RTL testbench terminal output is:
+
+```text
+FRP M16 deterministic RTL testbench completed.
+CELLS=8 REQUEST_LANES=2
+ticks_recorded=16
+actual_direct_events=0
+reserved_state_events=0
+queue_overflow_events=0
+```
+
+Recorded terminal relations:
+
+| Relation | Value |
+|---|---:|
+| `CELLS` | `8` |
+| `REQUEST_LANES` | `2` |
+| final `ticks_recorded` | `16` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+
+Terminal marker validation:
+
+`PASS`
+
+## Qualification Closure
+
+The implemented pending-route artifact records:
+
+- canonical balanced ternary pending-route encoding;
+- one retained route slot per cell;
+- asynchronous reset to zero;
+- tick-qualified route retention;
+- capacity-approved route creation;
+- exact requested polarity retention;
+- scheduler-qualified completion;
+- capacity-approved completion;
+- completion priority;
+- same-cell non-overwrite enforcement;
+- completion only from active neutral state `0`;
+- accepted-completion clearing;
+- scheduler-deferral retention;
+- capacity-deferral retention;
+- reserved-state detection;
+- queue-overflow detection;
+- deterministic cell and request-lane order;
+- invariant generation;
+- assertion execution;
+- executable deterministic testbench coverage;
+- FPGA integration propagation;
+- repository-integrity validation;
+- qualification artifact generation.
+
+Final pending-route result:
+
+`PASS`
+
+Final event values:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+Final RTL closure state:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+## Related M16 Artifacts
+
+- `rtl/m16/frp_m16_pkg.sv`;
+- `rtl/m16/frp_m16_scheduler.sv`;
+- `rtl/m16/frp_m16_request_lanes.sv`;
+- `rtl/m16/frp_m16_pending_routes.sv`;
+- `rtl/m16/frp_m16_active_neutral.sv`;
+- `rtl/m16/frp_m16_capacity_guard.sv`;
+- `rtl/m16/frp_m16_state_update.sv`;
+- `rtl/m16/frp_m16_core.sv`;
+- `rtl/m16/frp_m16_assertions.sv`;
+- `rtl/m16/frp_m16_tb.sv`;
+- `rtl/m16/SIMULATION_TRANSCRIPT.md`;
+- `rtl/m16/CLOSURE.md`;
+- `fpga/m16/frp_m16_fpga_top.sv`;
+- `fpga/m16/frp_m16_fpga_tb.sv`;
+- `fpga/m16/SIMULATION_TRANSCRIPT.md`;
+- `fpga/m16/CLOSURE.md`;
+- `docs/m16_request_lane_arbitration_module.md`;
+- `docs/m16_active_neutral_transition_module.md`;
+- `docs/m16_transition_capacity_guard_module.md`;
+- `docs/m16_retained_state_update_module.md`;
+- `docs/m16_invariant_assertion_set.md`;
+- `docs/m16_m15_vector_replay_compatibility_report.md`.
+
+## Author
+
+Maksym Marnov
