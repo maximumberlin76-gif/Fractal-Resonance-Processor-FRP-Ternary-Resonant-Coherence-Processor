@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned architecture layer.
+`QUALIFIED`
 
 ## Version
 
@@ -12,663 +12,768 @@ Planned architecture layer.
 
 `M16 — RTL Core Realization and Execution Semantics Package`
 
+## Processor
+
+`FRP — Ternary Fractal Resonant Coherence Processor`
+
+## Qualified RTL Artifact
+
+`rtl/m16/frp_m16_state_update.sv`
+
 ## Purpose
 
-This document defines the retained-state update module for the M16 RTL core realization layer.
+This document records the qualified retained-state update module of the M16 RTL core realization layer.
 
-The retained-state update module commits the next balanced ternary state after scheduler gating, request-lane arbitration, pending-route processing, active-neutral transition classification, and transition-capacity guarding.
+The module owns the retained balanced ternary register bank and performs the final tick-level writeback after:
 
-The module preserves the M15-qualified retained-state execution semantics of the:
+- scheduler propagation;
+- request-lane arbitration;
+- pending-route processing;
+- active-neutral transition generation;
+- transition-capacity admission.
 
-`Ternary Fractal Resonant Coherence Processor`
+The module implements the M15-qualified retained-state execution semantics in SystemVerilog.
 
-M16 does not introduce a new processor model.
+The executable Python semantic reference remains:
 
-M16 realizes the already-qualified M15 retained-state transition contract in an explicit RTL-oriented state-update module.
+`frp_prototype_v1_7_0.py`
 
-## State Update Boundary
+## Module Boundary
 
-The retained-state update module controls the final tick-level writeback into the retained ternary state register bank.
+SystemVerilog module:
 
-It covers:
+`frp_m16_state_update`
 
-- retained-state writeback;
-- reset initialization;
-- tick-enable hold behavior;
-- canonical ternary state-domain preservation;
-- capacity-approved next-state selection;
-- active-neutral transition preservation;
-- pending-route completion integration;
-- direct opposite-polarity prevention;
-- accepted-change mask generation;
-- retained-state output comparison;
-- event-counter source generation;
-- invariant flag generation;
-- assertion correlation;
-- M15 vector replay compatibility.
+The module contains:
 
-The module does not compute:
+- the retained register `state_q`;
+- the combinational next-state bank `state_next`;
+- the public next-state output `state_d`;
+- the public retained-state output `state_out`;
+- per-cell write, hold, reset, and reserved-state masks;
+- accepted-change and writeback event counts;
+- active-neutral and pending-completion commit counts;
+- state-domain, capacity, route, and direct-transition validity outputs.
+
+The module does not calculate:
 
 - phase words;
-- Kuramoto-Sakaguchi coupling;
+- Kuramoto-Sakaguchi interaction;
+- phase-derived ternary targets;
 - thermal state;
 - gamma drift;
 - coherence compression;
 - `C(t)`;
-- `P(t)`;
-- phase-derived ternary target generation.
+- `P(t)`.
 
-## Core Identity Preserved
+## Canonical Retained-State Domain
 
-The retained-state update module preserves the FRP state law:
+The retained processor-state domain is:
 
-`retained state at tick start`
+`{-1, 0, 1}`
 
-→ `legal transition classification`
+The canonical two-bit encoding is:
 
-→ `active-neutral routing`
+| Retained state | Encoding | State relation |
+|---:|:---:|---|
+| `-1` | `2'b11` | canonical negative retained state |
+| `0` | `2'b00` | active neutral retained state |
+| `1` | `2'b01` | canonical positive retained state |
+| reserved | `2'b10` | invalid retained-state encoding |
 
-→ `capacity-approved state update`
+The state `0` is an executable balancing, damping, transition, and stabilization state.
 
-→ `retained state at tick end`
+Required retained-state routes are:
 
-Forbidden direct retained-state transitions remain forbidden:
+`-1 → 0 → 1`
 
-`-1 → +1`
+`1 → 0 → -1`
 
-`+1 → -1`
+Forbidden direct retained-state transitions are:
 
-Required routed sequences remain:
+`-1 → 1`
 
-`-1 → 0 → +1`
+`1 → -1`
 
-`+1 → 0 → -1`
+## Parameter Boundary
 
-Required invariant:
-
-`actual_direct_events = 0`
-
-## Canonical Ternary Encoding
-
-The module uses the inherited canonical two-bit ternary encoding:
-
-| Ternary state | Encoding | Meaning |
+| Parameter | Default source | Function |
 |---|---|---|
-| `-1` | `2'b11` | negative retained polarity |
-| `0` | `2'b00` | active neutral state |
-| `+1` | `2'b01` | positive retained polarity |
-| reserved | `2'b10` | invalid retained state |
+| `CELLS` | `FRP_M16_DEFAULT_CELLS` | number of retained processor cells |
+| `STATE_BITS` | `FRP_M16_STATE_BITS` | state width per cell |
+| `REQUEST_LANES` | `frp_calc_request_lanes(CELLS)` | maximum accepted state changes per tick |
+| `COUNTER_BITS` | `FRP_M16_COUNTER_BITS` | telemetry-counter width |
 
-The reserved encoding is invalid.
-
-Required invariant:
-
-`reserved_state_events = 0`
-
-## State Register Relation
-
-For `CELLS` processor cells:
+Required state-width relation:
 
 `STATE_BITS = 2`
 
-`PACKED_STATE_BITS = CELLS × STATE_BITS`
+Qualified testbench profile:
 
-For cell `i`:
+`CELLS = 8`
 
-`state_i = state_vector[(2 × i) +: 2]`
-
-Cell `0` occupies the least significant two-bit field.
-
-Cell `CELLS - 1` occupies the most significant two-bit field.
+`REQUEST_LANES = 2`
 
 ## Module Inputs
 
-The retained-state update module consumes:
-
-| Signal | Width | Meaning |
+| Input | Width | Function |
 |---|---:|---|
 | `clk` | `1` | processor clock |
-| `rst_n` | `1` | active-low reset |
-| `tick_enable` | `1` | enables one processor tick |
-| `state_q` | `CELLS × STATE_BITS` | retained state at tick start |
-| `state_candidate_d` | `CELLS × STATE_BITS` | legal candidate next state before final writeback |
-| `capacity_accept_mask` | `CELLS` | cells approved by transition-capacity guard |
-| `accepted_change_mask` | `CELLS` | state-changing cells approved for this tick |
-| `neutral_routed_mask` | `CELLS` | cells routed through active neutral `0` |
-| `pending_completion_mask` | `CELLS` | cells completing pending route |
-| `reserved_transition_mask` | `CELLS` | cells blocked by reserved transition detection |
-| `actual_direct_mask` | `CELLS` | cells with detected direct opposite-polarity transition |
-| `scheduler_state` | scheduler-state width | current scheduler state |
+| `rst_n` | `1` | asynchronous active-low reset |
+| `tick_enable` | `1` | retained-state tick enable |
+| `scheduler_state` | scheduler-state width | current qualified scheduler state |
+| `state_candidate_d` | `CELLS × STATE_BITS` | candidate retained-state bank |
+| `capacity_accept_mask` | `CELLS` | transition-capacity admission mask |
+| `accepted_change_candidate_mask` | `CELLS` | state-changing candidate mask |
+| `neutral_routed_mask` | `CELLS` | active-neutral first-leg classification mask |
+| `pending_completion_mask` | `CELLS` | retained pending-route completion mask |
+| `reserved_transition_mask` | `CELLS` | reserved-transition detection mask |
+| `actual_direct_mask` | `CELLS` | direct opposite-polarity candidate mask |
 
-Required relation:
-
-`state_candidate_d` must already be generated by the active-neutral transition module and filtered by the transition-capacity guard.
+`state_q` is owned by the state-update module and is not supplied as an input.
 
 ## Module Outputs
 
-The retained-state update module emits:
+### Retained-State Outputs
 
-| Signal | Width | Meaning |
+| Output | Width | Function |
 |---|---:|---|
-| `state_d` | `CELLS × STATE_BITS` | final next retained state |
-| `state_out` | `CELLS × STATE_BITS` | committed retained state after tick |
-| `state_write_enable_mask` | `CELLS` | cells written during this tick |
-| `state_hold_mask` | `CELLS` | cells held without change |
-| `state_reset_mask` | `CELLS` | cells initialized to active neutral `0` |
-| `state_reserved_mask` | `CELLS` | cells containing reserved retained-state encoding |
-| `state_domain_valid` | `1` | retained-state domain invariant flag |
-| `state_update_valid` | `1` | state-update invariant flag |
+| `state_q` | `CELLS × STATE_BITS` | retained balanced ternary register bank |
+| `state_d` | `CELLS × STATE_BITS` | combinational next-state bank |
+| `state_out` | `CELLS × STATE_BITS` | public retained-state bank |
 
-Required invariant:
+The output assignments are:
 
-`state_out` must never contain `2'b10`.
-
-## Reset Behavior
-
-On reset:
-
-`state_out = all 0`
-
-This means every retained cell initializes to the active neutral state:
-
-`0`
-
-Required reset invariants:
-
-`all retained states = 0`
-
-`state_reserved_mask = 0`
-
-`actual_direct_events = 0`
-
-`reserved_state_events = 0`
-
-`state_domain_valid = True`
-
-## Tick-Enable Hold Behavior
-
-If:
-
-`tick_enable = 0`
-
-then:
-
-`state_d = state_q`
+`state_d = state_next`
 
 `state_out = state_q`
 
-`state_write_enable_mask = 0`
+### Per-Cell Masks
+
+| Output | Width | Function |
+|---|---:|---|
+| `state_write_enable_mask` | `CELLS` | final state-changing writeback mask |
+| `state_hold_mask` | `CELLS` | final unchanged-state mask |
+| `state_reset_mask` | `CELLS` | asynchronous reset initialization mask |
+| `state_reserved_mask` | `CELLS` | invalid current, candidate, transition, or final-state mask |
+
+### Telemetry Outputs
+
+| Output | Width | Function |
+|---|---:|---|
+| `accepted_changes` | `COUNTER_BITS` | final number of changed retained cells |
+| `switch_load_numerator` | `COUNTER_BITS` | switch-load numerator |
+| `state_write_events` | `COUNTER_BITS` | final retained-state write count |
+| `state_hold_events` | `COUNTER_BITS` | final retained-state hold count |
+| `state_reset_events` | `COUNTER_BITS` | reset-initialized cell count |
+| `accepted_change_events` | `COUNTER_BITS` | final accepted-change count |
+| `neutral_routed_commit_events` | `COUNTER_BITS` | committed active-neutral first legs |
+| `pending_completion_commit_events` | `COUNTER_BITS` | committed pending-route completions |
+| `reserved_state_events` | `COUNTER_BITS` | invalid state or reserved-transition observations |
+| `actual_direct_events` | `COUNTER_BITS` | direct opposite-polarity retained-state writebacks |
+
+### Validity Outputs
+
+| Output | Required value |
+|---|:---:|
+| `state_domain_valid` | `1` |
+| `state_output_domain_valid` | `1` |
+| `state_update_valid` | `1` |
+| `state_write_capacity_valid` | `1` |
+| `same_state_hold_valid` | `1` |
+| `active_neutral_writeback_valid` | `1` |
+| `pending_completion_writeback_valid` | `1` |
+| `no_reserved_state_output` | `1` |
+| `no_actual_direct_events` | `1` |
+
+## Retained Register Execution
+
+The retained register is updated by:
+
+`always_ff @(posedge clk or negedge rst_n)`
+
+The sequential relation is:
+
+| Condition | Retained-register action |
+|---|---|
+| `rst_n = 0` | `state_q = 0` for every cell |
+| `rst_n = 1` and `tick_enable = 1` | `state_q = state_d` |
+| `rst_n = 1` and `tick_enable = 0` | `state_q` retains its previous value |
+
+## Asynchronous Reset
+
+Asynchronous reset sets the complete retained-state bank to active neutral `0`.
+
+While reset is asserted, the combinational state-update boundary records:
+
+`state_next = 0`
+
+`state_reset_mask = all cells`
+
+`state_reset_events = CELLS`
+
+The qualified reset relation is:
+
+`state_out = 0`
+
+## Tick-Disabled Retention
+
+The combinational default is:
+
+`state_next = state_q`
+
+When `tick_enable = 0`, no candidate is committed.
+
+The sequential retained bank does not write while `tick_enable = 0`.
+
+The assertion relation is:
+
+`tick_enable = 0 → state_out remains stable`
+
+The integrated execution outputs also require:
+
+`request_accept = 0`
+
+`accepted_cell_mask = 0`
 
 `accepted_change_mask = 0`
 
-No retained-state update occurs.
+`accepted_changes = 0`
 
-Required invariant:
+## Per-Cell Pre-Write Evaluation
 
-`tick_enable = 0 → retained state unchanged`
+For each cell `i`, the module evaluates:
 
-## Writeback Rule
+`current_valid_i = frp_is_valid_ternary(state_q_i)`
 
-For each cell `i`, the retained-state update rule is:
+`candidate_valid_i = frp_is_valid_ternary(state_candidate_d_i)`
 
-If reset is active:
+`state_changes_i = (state_q_i != state_candidate_d_i)`
 
-`state_d_i = 0`
+`direct_candidate_i = actual_direct_mask_i OR frp_is_opposite_polarity(state_q_i, state_candidate_d_i)`
 
-Else if tick execution is disabled:
-
-`state_d_i = state_q_i`
-
-Else if the candidate transition is rejected or blocked:
-
-`state_d_i = state_q_i`
-
-Else if the candidate transition is capacity-approved:
-
-`state_d_i = state_candidate_d_i`
-
-Else:
-
-`state_d_i = state_q_i`
-
-Required relation:
-
-`state_write_enable_mask_i = 1`
-
-only when:
-
-`state_d_i != state_q_i`
-
-## Capacity-Approved Update
-
-A retained-state update may be committed only when:
-
-`capacity_accept_mask_i = 1`
-
-or when the transition is same-state retention and does not require capacity.
-
-State-changing transitions require capacity approval.
-
-Required invariant:
-
-`state-changing writeback requires capacity approval`
-
-## Same-State Retention
-
-If:
-
-`state_candidate_d_i = state_q_i`
-
-then:
-
-`state_d_i = state_q_i`
-
-No writeback event is counted as a retained-state change.
-
-Same-state retention does not consume transition capacity.
-
-Required invariant:
-
-`same-state retention does not increase accepted_changes`
-
-## Active-Neutral Routed Update
-
-If an opposite-polarity request is accepted, the retained-state update module commits only the neutral leg of the route.
-
-For:
-
-`-1 → +1`
-
-the current tick may commit only:
-
-`-1 → 0`
-
-For:
-
-`+1 → -1`
-
-the current tick may commit only:
-
-`+1 → 0`
-
-The final target polarity is retained by the pending-route module.
-
-Required invariant:
-
-`opposite-polarity writeback terminates in 0`
-
-## Pending-Completion Update
-
-If:
-
-`pending_completion_mask_i = 1`
-
-then the retained-state update module may commit:
-
-`0 → pending_route_q_i`
-
-only when:
-
-- `state_q_i = 0`;
-- pending route is valid;
-- scheduler state permits completion;
-- transition capacity accepts the completion.
-
-Required invariant:
-
-`pending completion starts from 0`
+The opposite-polarity function is evaluated only for canonical current and candidate states.
 
 ## Reserved-State Guard
 
-The retained-state update module must never commit reserved encoding:
+The per-cell reserved-state condition is asserted when any of the following is true:
 
-`2'b10`
+- the current retained state is not canonical;
+- the candidate retained state is not canonical;
+- `reserved_transition_mask_i = 1`.
 
-If:
+For an observed reserved-state condition:
 
-`state_candidate_d_i = 2'b10`
+`state_reserved_mask_i = 1`
 
-then the candidate is invalid and must not be committed.
+`reserved_state_events = reserved_state_events + 1`
 
-Required behavior:
+`state_domain_valid = 0`
 
-`state_d_i = state_q_i`
+`writeback_contract_valid = 0`
 
-or a higher-level safe neutral recovery path if explicitly defined by a future diagnostic layer.
+A final noncanonical `state_next_i` also clears:
 
-Current M16 qualified path requires:
+`state_output_domain_valid`
+
+`no_reserved_state_output`
+
+Qualified terminal relation:
 
 `reserved_state_events = 0`
 
 ## Direct-Transition Guard
 
-The module must detect and prevent direct opposite-polarity writeback.
+A direct opposite-polarity candidate clears the per-cell metadata legality relation and the writeback-contract validity relation.
 
-Forbidden writebacks:
+The final state bank is scanned independently for an executed direct opposite-polarity transition.
 
-`state_q_i = -1` and `state_d_i = +1`
+For each final direct transition:
 
-`state_q_i = +1` and `state_d_i = -1`
+`actual_direct_events = actual_direct_events + 1`
 
-Required invariant:
+`no_actual_direct_events = 0`
 
-`actual_direct_events = 0`
+`writeback_contract_valid = 0`
 
-If a direct opposite-polarity candidate is detected, it must not be committed.
-
-## Scheduler Interaction
-
-The scheduler provides temporal eligibility.
-
-The retained-state update module must preserve legal update rules in every scheduler state.
-
-No scheduler state may authorize:
-
-`-1 → +1`
-
-or:
-
-`+1 → -1`
-
-Required invariant:
-
-`scheduler state cannot authorize direct opposite-polarity writeback`
-
-## Free-State Update Behavior
-
-In `free` scheduler state, capacity-approved legal updates may include:
-
-- pending-route completion;
-- `0 → ±1`;
-- `±1 → 0`;
-- active-neutral routing through `0`.
-
-Required invariant:
-
-`accepted_changes <= REQUEST_LANES`
-
-## Balance-State Update Behavior
-
-In `balance` scheduler state, capacity-approved legal updates may include:
-
-- same-state retention;
-- `±1 → 0`;
-- active-neutral routing through `0`.
-
-Commit release remains deferred to commit-capable states.
-
-Required invariant:
+Qualified terminal relation:
 
 `actual_direct_events = 0`
 
-## Commit-State Update Behavior
+## Route-Metadata Exclusivity
 
-In `commit` scheduler state, capacity-approved legal updates may include:
+For one cell and one tick, these masks cannot both be asserted:
 
-- pending-route completion;
-- `0 → ±1`;
-- retained-state commit transition.
+`neutral_routed_mask_i`
 
-Required invariant:
+`pending_completion_mask_i`
 
-`accepted_changes <= REQUEST_LANES`
+If both are asserted, the module clears:
 
-## Excite-State Update Behavior
+- `active_neutral_writeback_valid`;
+- `pending_completion_writeback_valid`;
+- the cell metadata legality relation;
+- the writeback-contract validity relation.
 
-In `excite` scheduler state, capacity-approved legal updates may include:
+## Same-State Relation
 
-- `0 → ±1`;
-- pending-route completion when eligible;
-- excitation-state retained update.
-
-Required invariant:
-
-`switch_load_peak <= transition_fraction`
-
-## Neutralize-State Update Behavior
-
-In `neutralize` scheduler state, capacity-approved legal updates may include:
-
-- `±1 → 0`;
-- active-neutral routing through `0`;
-- same-state retention.
-
-Required invariant:
-
-`actual_direct_events = 0`
-
-## State Write Enable Mask
-
-The state write-enable mask is:
-
-`state_write_enable_mask_i = 1`
-
-when:
-
-`state_d_i != state_q_i`
-
-and the transition is legal, capacity-approved, and tick-enabled.
+If `accepted_change_candidate_mask_i = 1`, the candidate must change retained state.
 
 Required relation:
 
-`state_write_enable_count = popcount(state_write_enable_mask)`
+`accepted_change_candidate_mask_i = 1 → state_candidate_d_i != state_q_i`
 
-Required bound:
+A same-state cell is represented by `state_hold_mask_i`, not by `state_write_enable_mask_i`.
 
-`state_write_enable_count <= REQUEST_LANES`
+The final masks satisfy:
 
-## State Hold Mask
+`state_write_enable_mask AND state_hold_mask = 0`
 
-The state hold mask is:
+Outside reset, every cell is classified as write or hold.
 
-`state_hold_mask_i = 1`
+During reset, every cell is classified by `state_reset_mask`.
 
-when:
+The complete mask relation is:
 
-`state_d_i = state_q_i`
+`state_write_enable_mask OR state_hold_mask OR state_reset_mask = all cells`
 
-or when a candidate transition is rejected.
+## Scheduler Legality
 
-Reasons for hold include:
+Valid scheduler states are:
 
-- same-state retention;
-- tick disabled;
-- scheduler ineligibility;
-- capacity rejection;
-- invalid reserved candidate;
-- rejected request;
-- pending-route deferral.
+- `FRP_SCHED_FREE`;
+- `FRP_SCHED_BALANCE`;
+- `FRP_SCHED_COMMIT`;
+- `FRP_SCHED_EXCITE`;
+- `FRP_SCHED_NEUTRALIZE`.
 
-Required invariant:
+Commit-capable scheduler states are:
 
-`held cells preserve prior retained state`
+- `FRP_SCHED_FREE`;
+- `FRP_SCHED_COMMIT`;
+- `FRP_SCHED_EXCITE`.
 
-## Accepted Change Relation
+Neutralize-capable scheduler states are:
 
-A retained-state change occurs only when:
+- `FRP_SCHED_FREE`;
+- `FRP_SCHED_BALANCE`;
+- `FRP_SCHED_NEUTRALIZE`.
 
-`state_d_i != state_q_i`
+The state-update legality table is:
 
-The accepted-change relation is:
-
-`accepted_changes = popcount(state_write_enable_mask)`
-
-Required bound:
-
-`accepted_changes <= REQUEST_LANES`
-
-## Switch Load Relation
-
-The retained-state update module emits the state-update numerator for switch-load calculation:
-
-`switch_load_numerator = accepted_changes`
-
-The inherited relation is:
-
-`switch_load = accepted_changes / CELLS`
-
-Required bound:
-
-`switch_load_peak <= transition_fraction`
-
-## Event Counter Sources
-
-The retained-state update module provides counter sources for:
-
-| Counter source | Meaning |
+| Candidate relation | Required scheduler capability |
 |---|---|
-| `state_write_events` | retained-state writebacks |
-| `state_hold_events` | retained-state holds |
-| `state_reset_events` | reset-to-neutral events |
-| `accepted_change_events` | committed retained-state changes |
-| `neutral_routed_commit_events` | routed writes terminating in `0` |
-| `pending_completion_commit_events` | pending completions committed |
-| `reserved_state_events` | reserved retained-state observations |
-| `actual_direct_events` | direct opposite-polarity writebacks detected |
+| active-neutral first leg, nonzero to `0` | neutralize-capable |
+| pending-route completion, `0` to nonzero | commit-capable |
+| ordinary `0` to nonzero | commit-capable |
+| ordinary nonzero to `0` | neutralize-capable |
 
-Required inherited relations:
+Any other state-changing relation is scheduler-illegal at the retained-state writeback boundary.
 
-`actual_direct_events = 0`
+## Active-Neutral First-Leg Writeback
 
-`reserved_state_events = 0`
+For `neutral_routed_mask_i = 1`, the required relation is:
 
-`accepted_change_events <= REQUEST_LANES per tick`
+`state_q_i is nonzero`
 
-## State-Domain Invariant Flags
+`state_candidate_d_i = 0`
 
-The retained-state update module exposes:
+`scheduler_state is neutralize-capable`
 
-| Flag | Required value |
-|---|---|
-| `state_domain_valid` | `True` |
-| `state_output_domain_valid` | `True` |
-| `state_update_valid` | `True` |
-| `state_write_capacity_valid` | `True` |
-| `same_state_hold_valid` | `True` |
-| `active_neutral_writeback_valid` | `True` |
-| `pending_completion_writeback_valid` | `True` |
-| `no_reserved_state_output` | `True` |
-| `no_actual_direct_events` | `True` |
+The committed first leg is:
 
-These flags must correlate with the M16 assertion set and M15 vector replay expectations.
+`-1 → 0`
 
-## Assertion Support
+or:
 
-The M16 retained-state update module supports the following assertion layer:
+`1 → 0`
 
-| Assertion | Required condition |
-|---|---|
-| `assert_reset_to_neutral` | reset initializes all cells to `0` |
-| `assert_tick_disable_holds_state` | tick disabled preserves `state_q` |
-| `assert_no_reserved_state_output` | `state_d` and `state_out` contain no `2'b10` |
-| `assert_writeback_requires_capacity` | state-changing writeback requires capacity approval |
-| `assert_same_state_no_write_event` | same-state retention does not count as state change |
-| `assert_no_direct_negative_to_positive_writeback` | no `-1 → +1` writeback |
-| `assert_no_direct_positive_to_negative_writeback` | no `+1 → -1` writeback |
-| `assert_neutral_routed_writeback_to_zero` | routed opposite request writes `0` |
-| `assert_pending_completion_from_zero` | pending completion starts from `0` |
-| `assert_state_write_count_within_lanes` | write count does not exceed `REQUEST_LANES` |
+When the final writeback satisfies this relation:
 
-## M15 Vector Replay Boundary
+`neutral_routed_commit_events = neutral_routed_commit_events + 1`
 
-The retained-state update module must replay against the M15 deterministic vector package.
+## Pending-Completion Writeback
 
-Comparison inputs:
+For `pending_completion_mask_i = 1`, the required relation is:
 
-`state_q`
+`state_q_i = 0`
 
-`state_candidate_d`
+`state_candidate_d_i is nonzero`
 
-`capacity_accept_mask`
+`scheduler_state is commit-capable`
 
-`accepted_change_mask`
+The committed completion is:
 
-`neutral_routed_mask`
+`0 → -1`
 
-`pending_completion_mask`
+or:
 
-`reserved_transition_mask`
+`0 → 1`
 
-`actual_direct_mask`
+When the final writeback satisfies this relation:
 
-`scheduler_state`
+`pending_completion_commit_events = pending_completion_commit_events + 1`
+
+## Commit-Authorization Relation
+
+For each cell `i`, writeback is allowed only when every term below is true:
 
 `tick_enable`
 
-Comparison outputs:
+`current_valid_i`
 
-`state_d`
+`candidate_valid_i`
 
-`state_out`
+`state_changes_i`
 
-`state_write_enable_mask`
+`capacity_accept_mask_i`
 
-`state_hold_mask`
+`accepted_change_candidate_mask_i`
 
-`state_reserved_mask`
+`NOT reserved_transition_mask_i`
 
-`accepted_changes`
+`NOT direct_candidate_i`
 
-`switch_load_numerator`
+`scheduler_legal_i`
 
-`counter deltas`
+`metadata_legal_i`
 
-`invariant flags`
+The complete Boolean relation is:
 
-Expected source:
+`commit_allowed_i = tick_enable AND current_valid_i AND candidate_valid_i AND state_changes_i AND capacity_accept_mask_i AND accepted_change_candidate_mask_i AND NOT reserved_transition_mask_i AND NOT direct_candidate_i AND scheduler_legal_i AND metadata_legal_i`
 
-`M15 cycle-exact integer golden trace`
+If `commit_allowed_i = 1`:
 
-## Required M16 Retained-State Invariants
+`state_next_i = state_candidate_d_i`
 
-The M16 retained-state update module is valid only if:
+If `commit_allowed_i = 0`:
 
-Reset initializes all retained states to active neutral `0`.
+`state_next_i = state_q_i`
 
-Tick-disabled cycles preserve retained state.
+## Capacity Correlation
 
-Retained-state output uses only canonical ternary encodings.
+Every final retained-state change must be included in both:
 
-Reserved state `2'b10` is never emitted.
+`capacity_accept_mask`
 
-State-changing writeback requires capacity approval.
+`accepted_change_candidate_mask`
 
-Accepted changes never exceed `REQUEST_LANES`.
+The module checks:
 
-Same-state retention does not consume capacity.
+`accepted_changes <= REQUEST_LANES`
 
-Active-neutral routed writeback terminates in `0`.
+`state_write_enable_mask AND NOT capacity_accept_mask = 0`
 
-Pending-route completion starts from `0`.
+`state_write_enable_mask AND NOT accepted_change_candidate_mask = 0`
 
-Direct opposite-polarity writeback remains zero.
+The integrated core additionally requires:
 
-Switch load remains bounded by `transition_fraction`.
+`capacity_accepted_changes = state_update_accepted_changes`
 
-M15 vector replay remains deterministic.
+`capacity_accepted_change_mask = state_write_enable_mask`
 
-## Closure Criteria
+`capacity_switch_load_numerator = state_update_switch_load_numerator`
 
-This retained-state update module can be considered M16-ready when it supports:
+## Final Write and Hold Classification
 
-- reset-to-neutral retained-state initialization;
-- tick-enable state hold behavior;
-- canonical retained-state output domain;
-- capacity-approved state writeback;
-- same-state retention;
-- active-neutral routed writeback;
-- pending-route completion writeback;
-- direct-transition writeback prevention;
-- reserved-state output prevention;
-- state write-enable mask generation;
-- state hold mask generation;
-- event-counter source generation;
-- invariant flag generation;
-- assertion correlation;
-- M15 vector replay compatibility.
+For each cell:
 
-## Next Step
+`final_state_changed_i = (state_q_i != state_next_i)`
 
-The next M16 file should define the invariant assertion set:
+If `final_state_changed_i = 1`:
 
-`docs/m16_invariant_assertion_set.md`
+`state_write_enable_mask_i = 1`
+
+`accepted_changes = accepted_changes + 1`
+
+`state_write_events = state_write_events + 1`
+
+`accepted_change_events = accepted_change_events + 1`
+
+If `final_state_changed_i = 0`:
+
+`state_hold_mask_i = 1`
+
+`state_hold_events = state_hold_events + 1`
+
+## Telemetry Equalities
+
+The state-update module establishes:
+
+`accepted_changes = state_write_events`
+
+`accepted_changes = accepted_change_events`
+
+`accepted_changes = popcount(state_write_enable_mask)`
+
+`switch_load_numerator = accepted_changes`
+
+The public core sources are:
+
+`accepted_change_mask = capacity_accepted_change_mask`
+
+`accepted_changes = capacity_accepted_changes`
+
+`switch_load_numerator = capacity_switch_load_numerator`
+
+Actual retained execution is sourced from the state-update boundary:
+
+`actual_direct_events = state_actual_direct_events`
+
+## State-Update Validity Relation
+
+The module combines its preliminary state-domain result with:
+
+`final state_domain_valid = preliminary state_domain_valid AND state_output_domain_valid AND no_reserved_state_output`
+
+The final state-update validity relation is the conjunction of:
+
+- `writeback_contract_valid`;
+- a valid scheduler state;
+- `state_domain_valid`;
+- `state_write_capacity_valid`;
+- `same_state_hold_valid`;
+- `active_neutral_writeback_valid`;
+- `pending_completion_writeback_valid`;
+- `no_reserved_state_output`;
+- `no_actual_direct_events`.
+
+Required result:
+
+`state_update_valid = 1`
+
+## Integrated Invariant Correlation
+
+The state-update module contributes directly to:
+
+- `FRP_INV_STATE_DOMAIN_VALID`;
+- `FRP_INV_ACTIVE_NEUTRAL_VALID`;
+- `FRP_INV_TRANSITION_CAPACITY_VALID`;
+- `FRP_INV_STATE_UPDATE_VALID`;
+- `FRP_INV_NO_ACTUAL_DIRECT_EVENTS`;
+- `FRP_INV_NO_RESERVED_STATE`.
+
+The integrated M16 invariant vector contains ten flags:
+
+| Index | Invariant |
+|---:|---|
+| `0` | `FRP_INV_STATE_DOMAIN_VALID` |
+| `1` | `FRP_INV_SCHEDULER_COUNTS_VALID` |
+| `2` | `FRP_INV_REQUEST_LANE_ORDER_VALID` |
+| `3` | `FRP_INV_PENDING_POLARITY_VALID` |
+| `4` | `FRP_INV_ACTIVE_NEUTRAL_VALID` |
+| `5` | `FRP_INV_TRANSITION_CAPACITY_VALID` |
+| `6` | `FRP_INV_STATE_UPDATE_VALID` |
+| `7` | `FRP_INV_NO_ACTUAL_DIRECT_EVENTS` |
+| `8` | `FRP_INV_NO_RESERVED_STATE` |
+| `9` | `FRP_INV_NO_QUEUE_OVERFLOW` |
+
+Qualified FPGA terminal vector:
+
+`invariant_flags = 1111111111`
+
+## Assertion Correlation
+
+The integrated assertion layer verifies the following retained-state relations:
+
+| Assertion relation | Qualified result |
+|---|:---:|
+| `state_out` contains only canonical ternary encodings | `PASS` |
+| retained state remains stable while `tick_enable = 0` | `PASS` |
+| a cell without `accepted_change_mask` remains stable | `PASS` |
+| direct opposite-polarity retained-state transitions are absent | `PASS` |
+| an accepted active-neutral route writes `0` and retains the requested pending polarity | `PASS` |
+| a deferred pending route remains stable | `PASS` |
+| an accepted pending completion executes from `0` and clears the route | `PASS` |
+| `popcount(accepted_change_mask) = accepted_changes` | `PASS` |
+| `accepted_changes <= REQUEST_LANES` | `PASS` |
+| `switch_load_numerator = accepted_changes` | `PASS` |
+| `actual_direct_events = 0` | `PASS` |
+| `reserved_state_events = 0` | `PASS` |
+| `FRP_INV_STATE_UPDATE_VALID = 1` | `PASS` |
+
+## M15 Semantic Foundation
+
+M15 remains the qualified semantic and implementation-mapping foundation of the M16 retained-state update module.
+
+The M15 qualification record is:
+
+| Qualification relation | Result |
+|---|---:|
+| implementation-mapping qualification | `41 / 41 PASS` |
+| deterministic vector files byte-identical | `10 / 10` |
+| required semantic correlation matches equal to `1.0` | `5 / 5` |
+| deterministic replay matches equal to `1.0` | `6 / 6` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+| `fixed_point_topology_sum_exact` | `True` |
+| `fixed_point_thermal_sum_exact` | `True` |
+
+M15 qualification package digest:
+
+`703dd4b56f4b34289a2c5bc5521ad4ddc3113bdec8c38238c3244c69cb4d58df`
+
+M15 workflow:
+
+`.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+
+Qualified M15 workflow run:
+
+`#1`
+
+## M16 RTL Qualification
+
+Workflow:
+
+`FRP M16 RTL Artifact Boundary`
+
+Workflow file:
+
+`.github/workflows/frp-m16-rtl-artifact-boundary.yml`
+
+Initial closure record:
+
+| Field | Value |
+|---|---|
+| workflow run | `#82` |
+| repository commit | `a68a2af` |
+| branch | `main` |
+| result | `SUCCESS` |
+| qualification artifact count | `1` |
+
+Synchronized qualification record:
+
+| Field | Value |
+|---|---|
+| workflow run | `#84` |
+| repository commit | `ede53cf` |
+| branch | `main` |
+| result | `SUCCESS` |
+| duration | `52s` |
+| qualification artifact count | `1` |
+
+Closure status:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+Qualified retained-state writeback relations:
+
+| Relation | Result |
+|---|:---:|
+| reset initializes active neutral state | `PASS` |
+| disabled ticks retain state | `PASS` |
+| state-changing writeback requires capacity | `PASS` |
+| same-state retention consumes no capacity | `PASS` |
+| opposite polarity commits the first leg through `0` | `PASS` |
+| pending completion commits from `0` | `PASS` |
+| capacity rejection preserves retained state | `PASS` |
+| reserved encoding is not committed | `PASS` |
+| direct opposite-polarity writeback is absent | `PASS` |
+| combinational writeback has no inferred latch diagnostic | `PASS` |
+
+RTL terminal record:
+
+| Field | Value |
+|---|---:|
+| `CELLS` | `8` |
+| `REQUEST_LANES` | `2` |
+| `ticks_recorded` | `16` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+
+## M16 FPGA Preparation Qualification
+
+Workflow:
+
+`FRP M16 FPGA Preparation`
+
+Workflow file:
+
+`.github/workflows/frp-m16-fpga-preparation.yml`
+
+Initial closure record:
+
+| Field | Value |
+|---|---|
+| workflow run | `#1` |
+| repository commit | `326b69e` |
+| branch | `main` |
+| result | `SUCCESS` |
+| duration | `1m 7s` |
+| qualification artifact count | `1` |
+
+Synchronized qualification record:
+
+| Field | Value |
+|---|---|
+| workflow run | `#2` |
+| repository commit | `ede53cf` |
+| branch | `main` |
+| result | `SUCCESS` |
+| duration | `36s` |
+| qualification artifact count | `1` |
+
+Closure status:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
+
+The FPGA qualification propagates the retained-state update module through:
+
+- asynchronous external reset assertion;
+- two-stage synchronous reset release;
+- `core_ready` generation;
+- execution-input gating before readiness;
+- scheduler-mode propagation;
+- request-interface propagation;
+- active-neutral first-leg execution;
+- retained pending-route completion;
+- all ten invariant flags.
+
+FPGA terminal record:
+
+| Field | Value |
+|---|---:|
+| `CELLS` | `8` |
+| `REQUEST_LANES` | `2` |
+| `core_ready` | `1` |
+| `ticks_recorded` | `1` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+| `invariant_flags` | `1111111111` |
+
+The FPGA preparation qualification is target-independent.
+
+## Qualified Source Correlation
+
+| Source | Recorded function |
+|---|---|
+| `rtl/m16/frp_m16_pkg.sv` | canonical ternary domain, scheduler states, helper functions, and invariant indexes |
+| `rtl/m16/frp_m16_active_neutral.sv` | active-neutral candidate generation |
+| `rtl/m16/frp_m16_capacity_guard.sv` | transition-capacity admission |
+| `rtl/m16/frp_m16_state_update.sv` | retained-state register and final writeback |
+| `rtl/m16/frp_m16_core.sv` | integrated telemetry and invariant aggregation |
+| `rtl/m16/frp_m16_assertions.sv` | retained-state and integrated invariant assertions |
+| `rtl/m16/frp_m16_tb.sv` | executable RTL qualification |
+| `fpga/m16/frp_m16_fpga_top.sv` | target-independent FPGA integration top |
+| `fpga/m16/frp_m16_fpga_tb.sv` | executable FPGA preparation qualification |
+
+## Qualification State
+
+The retained-state update module qualification state is:
+
+`PASS`
+
+The M16 RTL execution-layer state is:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+The M16 FPGA preparation-layer state is:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
+
+## Author
+
+Maksym Marnov
