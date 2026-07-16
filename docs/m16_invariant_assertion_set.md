@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned architecture layer.
+`QUALIFIED`
 
 ## Version
 
@@ -12,1265 +12,1516 @@ Planned architecture layer.
 
 `M16 — RTL Core Realization and Execution Semantics Package`
 
+## Processor
+
+`FRP — Ternary Fractal Resonant Coherence Processor`
+
+## Qualified RTL Artifact
+
+`rtl/m16/frp_m16_assertions.sv`
+
 ## Purpose
 
-This document defines the M16 invariant assertion set for the RTL core realization layer.
+This document records the executable invariant assertion set for the M16 RTL core realization and FPGA preparation layers.
 
-The assertion set preserves the M15-qualified execution semantics of the:
+The assertion module observes the externally visible retained-state execution boundary and checks:
 
-`Ternary Fractal Resonant Coherence Processor`
+- canonical balanced ternary state and pending-route domains;
+- reset initialization;
+- tick-disabled state and pending-route retention;
+- accepted-change authorization;
+- active-neutral routing;
+- pending-route retention and completion;
+- scheduler-mode and scheduler-counter relations;
+- request acceptance and rejection separation;
+- transition-capacity relations;
+- global zero-event relations;
+- all ten integrated invariant flags.
 
-M16 does not introduce a new processor model.
+M15 remains the qualified semantic and implementation-mapping foundation of these M16 RTL assertions.
 
-M16 converts the already-qualified M15 semantic invariants into an RTL-facing assertion structure for module-level and core-level verification.
+The executable Python semantic reference remains:
 
-## Assertion Boundary
+`frp_prototype_v1_7_0.py`
 
-The M16 assertion set covers:
+## Assertion Execution Boundary
 
-- canonical balanced ternary state-domain assertions;
-- scheduler-state assertions;
-- request-lane arbitration assertions;
-- pending-route assertions;
-- active-neutral transition assertions;
-- transition-capacity assertions;
-- retained-state update assertions;
-- event-counter relation assertions;
-- invariant-flag correlation assertions;
-- M15 vector replay assertions;
-- M16 closure assertions.
+SystemVerilog assertion module:
 
-The assertion set does not compute:
+`frp_m16_assertions`
 
-- phase words;
-- Kuramoto-Sakaguchi coupling;
-- thermal state;
-- gamma drift;
-- coherence compression;
-- `C(t)`;
-- `P(t)`;
-- phase-derived ternary targets.
+The module is included and instantiated by:
 
-The assertion set verifies that the RTL core preserves the M15-qualified retained-state execution contract.
+- `rtl/m16/frp_m16_tb.sv`;
+- `fpga/m16/frp_m16_fpga_tb.sv`.
 
-## Core Identity Preserved
+The RTL testbench supplies:
 
-The assertion set protects the FRP execution chain:
+- `rst_n` as the assertion reset boundary;
+- the core `tick_enable` input;
+- the core `clear_counters` input;
+- all observed core outputs and counters.
 
-`phase-derived ternary target`
+The FPGA testbench supplies:
 
-→ `request-lane arbitration`
+- `core_ready` as the assertion reset boundary;
+- `tick_enable_qualified` as the assertion tick input;
+- `clear_counters_qualified` as the assertion counter-clear input;
+- all observed core outputs and counters.
 
-→ `transition-capacity guard`
+The assertion module is compiled and executed with Verilator assertion support.
 
-→ `pending-route processing`
+RTL build option:
 
-→ `active-neutral routing through 0`
+`--assert`
 
-→ `retained balanced ternary state`
+FPGA testbench build option:
 
-Required global invariant:
+`--assert`
 
-`actual_direct_events = 0`
+## Assertion Parameters
 
-Required global state-domain invariant:
+| Parameter | Default source | Function |
+|---|---|---|
+| `CELLS` | `FRP_M16_DEFAULT_CELLS` | number of retained processor cells |
+| `STATE_BITS` | `FRP_M16_STATE_BITS` | retained-state width per cell |
+| `REQUEST_LANES` | `frp_calc_request_lanes(CELLS)` | request-lane and transition-capacity limit |
+| `COUNTER_BITS` | `FRP_M16_COUNTER_BITS` | observed counter width |
 
-`reserved_state_events = 0`
+Qualified testbench parameter relation:
 
-Required global queue invariant:
+`CELLS = 8`
 
-`queue_overflow_events = 0`
+`STATE_BITS = 2`
 
-## Assertion Layers
+`REQUEST_LANES = 2`
 
-The M16 assertion set is organized into the following layers:
+`COUNTER_BITS = 32`
 
-1. state-domain assertions;
-2. scheduler assertions;
-3. request-lane assertions;
-4. pending-route assertions;
-5. active-neutral transition assertions;
-6. transition-capacity assertions;
-7. retained-state update assertions;
-8. event-counter assertions;
-9. invariant-flag assertions;
-10. M15 vector replay assertions;
-11. M16 closure assertions.
+## Assertion Inputs
 
-Each layer may be implemented as SystemVerilog assertions, simulation checks, trace validators, or deterministic replay checks.
+### Clock, Reset, and Execution Inputs
 
-## Canonical Ternary Encoding Assertions
+| Input | Width | Function |
+|---|---:|---|
+| `clk` | `1` | assertion sampling clock |
+| `rst_n` | `1` | active-low assertion reset boundary |
+| `tick_enable` | `1` | observed execution-tick enable |
+| `clear_counters` | `1` | observed scheduler-counter clear |
 
-M16 preserves the canonical two-bit ternary encoding:
+### Scheduler Inputs
 
-| Ternary state | Encoding |
+| Input | Width | Function |
+|---|---:|---|
+| `scheduler_mode_q` | scheduler-mode width | retained scheduler mode |
+| `scheduler_state_q` | scheduler-state width | current scheduler state |
+| `ticks_recorded_q` | `COUNTER_BITS` | recorded execution ticks |
+| `scheduler_count_free_q` | `COUNTER_BITS` | recorded `free` ticks |
+| `scheduler_count_balance_q` | `COUNTER_BITS` | recorded `balance` ticks |
+| `scheduler_count_commit_q` | `COUNTER_BITS` | recorded `commit` ticks |
+| `scheduler_count_excite_q` | `COUNTER_BITS` | recorded `excite` ticks |
+| `scheduler_count_neutralize_q` | `COUNTER_BITS` | recorded `neutralize` ticks |
+
+### State and Route Inputs
+
+| Input | Width | Function |
+|---|---:|---|
+| `state_out` | `CELLS × STATE_BITS` | retained balanced ternary state bank |
+| `pending_route_out` | `CELLS × STATE_BITS` | retained pending-route polarity bank |
+
+### Request and Capacity Inputs
+
+| Input | Width | Function |
+|---|---:|---|
+| `request_accept` | `REQUEST_LANES` | accepted request-lane vector |
+| `request_reject` | `REQUEST_LANES` | rejected request-lane vector |
+| `accepted_cell_mask` | `CELLS` | accepted cell mask |
+| `neutral_routed_cell_mask` | `CELLS` | accepted active-neutral route mask |
+| `accepted_change_mask` | `CELLS` | accepted retained-state change mask |
+| `accepted_changes` | `COUNTER_BITS` | accepted retained-state change count |
+| `capacity_remaining` | `COUNTER_BITS` | remaining tick-local transition capacity |
+| `capacity_exhausted` | `1` | transition-capacity exhaustion flag |
+| `switch_load_numerator` | `COUNTER_BITS` | accepted-change switch-load numerator |
+
+### Event and Invariant Inputs
+
+| Input | Width | Function |
+|---|---:|---|
+| `requested_direct_events` | `COUNTER_BITS` | requested opposite-polarity events |
+| `prevented_direct_events` | `COUNTER_BITS` | prevented opposite-polarity direct events |
+| `neutral_routed_events` | `COUNTER_BITS` | active-neutral routed events |
+| `actual_direct_events` | `COUNTER_BITS` | executed direct opposite-polarity events |
+| `reserved_state_events` | `COUNTER_BITS` | reserved-state events |
+| `queue_overflow_events` | `COUNTER_BITS` | pending-route queue-overflow events |
+| `invariant_flags` | `FRP_M16_INVARIANT_FLAGS` | integrated invariant vector |
+
+## Assertion Clock and Temporal Operators
+
+The default assertion clock is:
+
+`@(posedge clk)`
+
+Clocked assertion checks outside the reset and coverage sections use:
+
+`disable iff (!rst_n)`
+
+The implemented assertion relations use:
+
+| Operator | Recorded use |
 |---|---|
-| `-1` | `2'b11` |
-| `0` | `2'b00` |
-| `+1` | `2'b01` |
-| reserved | `2'b10` |
+| `|->` | overlapped implication at the current sampled edge |
+| `|=>` | non-overlapped implication at the next sampled edge |
+| `$past(...)` | prior sampled retained state or pending-route value |
+| `$stable(...)` | unchanged sampled value |
+| `$countones(...)` | population count for accepted masks |
 
-The reserved encoding is invalid.
+## Canonical Balanced Ternary Domain
 
-### `assert_state_q_domain`
+The retained processor-state domain is:
 
-Condition:
+`{-1, 0, 1}`
 
-`state_q_i != 2'b10`
+The canonical two-bit encoding is:
 
-for every cell `i`.
+| Retained state | Encoding | State relation |
+|---:|:---:|---|
+| `-1` | `2'b11` | canonical negative retained state |
+| `0` | `2'b00` | active neutral retained state |
+| `1` | `2'b01` | canonical positive retained state |
+| reserved | `2'b10` | invalid retained-state encoding |
 
-Required result:
+Required opposite-polarity routes are:
 
-`PASS`
+`-1 → 0 → 1`
 
-### `assert_state_d_domain`
+`1 → 0 → -1`
 
-Condition:
+Forbidden direct retained-state transitions are:
 
-`state_d_i != 2'b10`
+`-1 → 1`
 
-for every cell `i`.
+`1 → -1`
 
-Required result:
+The state `0` is an executable balancing, damping, transition, and stabilization state.
 
-`PASS`
+## Static Request-Lane Profile Assertions
 
-### `assert_state_out_domain`
+The assertion module evaluates three static parameter relations during initialization.
 
-Condition:
+| Cell profile | Required request lanes | Failure action |
+|---:|---:|---|
+| `CELLS = 8` | `REQUEST_LANES = 2` | `$fatal(1, ...)` |
+| `CELLS = 16` | `REQUEST_LANES = 4` | `$fatal(1, ...)` |
+| `CELLS = 32` | `REQUEST_LANES = 8` | `$fatal(1, ...)` |
 
-`state_out_i != 2'b10`
+The qualified RTL and FPGA testbench profile satisfies:
 
-for every cell `i`.
+`8 cells → 2 request lanes`
 
-Required result:
-
-`PASS`
-
-### `assert_target_domain`
-
-Condition:
-
-`target_q_i != 2'b10`
-
-for every cell `i` during qualified replay.
-
-Required result:
+Qualification result:
 
 `PASS`
-
-### `assert_pending_route_domain`
-
-Condition:
-
-`pending_route_q_i != 2'b10`
-
-and:
-
-`pending_route_d_i != 2'b10`
-
-for every cell `i`.
-
-Required result:
-
-`PASS`
-
-### Required state-domain relation
-
-`reserved_state_events = 0`
 
 ## Reset Assertions
 
-Reset establishes the active-neutral baseline.
+The reset properties are sampled on the default positive-edge assertion clock.
 
-### `assert_reset_state_to_neutral`
+### Active-Neutral State and Pending-Route Reset
 
-When reset is active:
+Antecedent:
 
-`state_out_i = 0`
+`rst_n = 0`
 
-for every cell `i`.
+Required current-edge relation:
 
-Required result:
+`state_out = 0`
 
-`PASS`
+and:
 
-### `assert_reset_pending_to_zero`
+`pending_route_out = 0`
 
-When reset is active:
+Failure message:
 
-`pending_route_q_i = 0`
+`FRP M16 assertion failed: reset did not establish active-neutral retained state`
 
-for every cell `i`.
-
-Required result:
+Qualification result:
 
 `PASS`
 
-### `assert_reset_counters_to_zero`
+### Scheduler-Counter Reset
 
-When reset is active:
+Antecedent:
 
-`ticks_recorded = 0`
+`rst_n = 0`
 
-`scheduler counters = 0`
+Required current-edge relations:
 
-`event counters = 0`
+`ticks_recorded_q = 0`
 
-Required result:
+`scheduler_count_free_q = 0`
+
+`scheduler_count_balance_q = 0`
+
+`scheduler_count_commit_q = 0`
+
+`scheduler_count_excite_q = 0`
+
+`scheduler_count_neutralize_q = 0`
+
+Failure message:
+
+`FRP M16 assertion failed: reset did not clear scheduler counters`
+
+Qualification result:
 
 `PASS`
 
-### `assert_reset_no_reserved_state`
+## Per-Cell Retained-State and Pending-Route Assertions
 
-After reset:
+The assertion module generates the following property set for every cell index from `0` through `CELLS - 1`.
 
-`reserved_state_events = 0`
+For cell `i`:
 
-Required result:
+`CELL_LSB = i × STATE_BITS`
+
+### Retained-State Domain
+
+Required relation:
+
+`frp_is_valid_ternary(state_out_i) = 1`
+
+Failure message:
+
+`FRP M16 assertion failed: state_out contains reserved ternary encoding`
+
+Qualification result:
 
 `PASS`
 
-## Tick-Enable Assertions
+### Pending-Route Domain
 
-Tick execution advances only when:
+Required relation:
+
+`frp_is_valid_ternary(pending_route_out_i) = 1`
+
+Failure message:
+
+`FRP M16 assertion failed: pending_route_out contains reserved encoding`
+
+Qualification result:
+
+`PASS`
+
+### Tick-Disabled Retained-State Stability
+
+Antecedent:
+
+`tick_enable = 0`
+
+Required next-edge relation:
+
+`state_out_i remains stable`
+
+Failure message:
+
+`FRP M16 assertion failed: retained state changed while tick_enable was low`
+
+Qualification result:
+
+`PASS`
+
+### Tick-Disabled Pending-Route Stability
+
+Antecedent:
+
+`tick_enable = 0`
+
+Required next-edge relation:
+
+`pending_route_out_i remains stable`
+
+Failure message:
+
+`FRP M16 assertion failed: pending route changed while tick_enable was low`
+
+Qualification result:
+
+`PASS`
+
+### Accepted-Change Authorization
+
+Antecedent:
+
+`tick_enable = 1 AND accepted_change_mask_i = 0`
+
+Required next-edge relation:
+
+`state_out_i remains stable`
+
+Failure message:
+
+`FRP M16 assertion failed: state changed without accepted_change_mask`
+
+Qualification result:
+
+`PASS`
+
+### Direct Opposite-Polarity Exclusion
+
+Antecedent:
 
 `tick_enable = 1`
 
-### `assert_tick_disable_holds_state`
+Required next-edge relation:
 
-When:
+`frp_is_opposite_polarity(previous state_out_i, current state_out_i) = 0`
 
-`tick_enable = 0`
+This property excludes:
 
-then:
+`-1 → 1`
 
-`state_d = state_q`
+and:
 
-Required result:
+`1 → -1`
 
-`PASS`
+Failure message:
 
-### `assert_tick_disable_no_accepted_changes`
+`FRP M16 assertion failed: direct opposite-polarity retained-state transition`
 
-When:
-
-`tick_enable = 0`
-
-then:
-
-`accepted_changes = 0`
-
-Required result:
+Qualification result:
 
 `PASS`
 
-### `assert_tick_disable_scheduler_hold`
+### Active-Neutral First-Leg Execution
 
-When:
+Antecedent:
 
-`tick_enable = 0`
+`tick_enable = 1`
 
-then scheduler counters do not advance.
+`neutral_routed_cell_mask_i = 1`
 
-Required result:
+`accepted_change_mask_i = 1`
+
+Required next-edge relations:
+
+`state_out_i = 0`
+
+`pending_route_out_i is nonzero`
+
+`pending_route_out_i is opposite in polarity to the previous state_out_i`
+
+Failure message:
+
+`FRP M16 assertion failed: opposite-polarity request did not route through active neutral with retained pending polarity`
+
+Qualification result:
 
 `PASS`
 
-### `assert_tick_disable_no_pending_clear`
+### Deferred Pending-Route Retention
 
-When:
+Antecedent:
 
-`tick_enable = 0`
+`tick_enable = 1`
 
-then pending routes are not cleared by execution.
+`pending_route_out_i is nonzero`
 
-Required result:
+`accepted_change_mask_i = 0`
+
+Required next-edge relation:
+
+`pending_route_out_i remains stable`
+
+Failure message:
+
+`FRP M16 assertion failed: deferred pending route was cleared or overwritten`
+
+Qualification result:
+
+`PASS`
+
+### Pending-Route Completion
+
+Antecedent:
+
+`tick_enable = 1`
+
+`state_out_i = 0`
+
+`pending_route_out_i is nonzero`
+
+`accepted_change_mask_i = 1`
+
+`neutral_routed_cell_mask_i = 0`
+
+Required next-edge relations:
+
+`state_out_i = previous pending_route_out_i`
+
+`pending_route_out_i = 0`
+
+Failure message:
+
+`FRP M16 assertion failed: pending completion did not execute 0 to retained target`
+
+Qualification result:
+
+`PASS`
+
+### Pending Completion Only From Active Neutral
+
+Antecedent:
+
+`tick_enable = 1`
+
+`state_out_i is nonzero`
+
+`pending_route_out_i is nonzero`
+
+Required next-edge relation:
+
+`pending_route_out_i remains stable`
+
+Failure message:
+
+`FRP M16 assertion failed: pending route completed from nonzero retained state`
+
+Qualification result:
 
 `PASS`
 
 ## Scheduler Assertions
 
-M16 preserves three execution modes:
+The assertion module observes the retained scheduler mode, current scheduler state, total tick count, and five scheduler-state counters.
 
-- `free`;
-- `7/1`;
-- `1/7`.
+The scheduler-count sum is:
 
-### `assert_valid_scheduler_mode`
+`scheduler_count_sum = scheduler_count_free_q + scheduler_count_balance_q + scheduler_count_commit_q + scheduler_count_excite_q + scheduler_count_neutralize_q`
 
-Condition:
-
-`scheduler_mode != reserved`
-
-Required result:
-
-`PASS`
-
-### `assert_valid_scheduler_state`
-
-Condition:
-
-`scheduler_state` is one of:
-
-- `free`;
-- `balance`;
-- `commit`;
-- `excite`;
-- `neutralize`.
-
-Required result:
-
-`PASS`
-
-### `assert_onehot_scheduler_enable`
-
-Exactly one scheduler-state enable is active per valid enabled tick.
+### Scheduler-Mode Domain
 
 Required relation:
 
-`popcount(scheduler_state_enable_vector) = 1`
+`frp_is_valid_scheduler_mode(scheduler_mode_q) = 1`
 
-Required result:
+Failure message:
 
-`PASS`
+`FRP M16 assertion failed: invalid scheduler mode`
 
-### `assert_free_mode_profile`
-
-For a run entirely in `free` mode:
-
-`free_count = ticks_recorded`
-
-Required inherited profile:
-
-`16 ticks → free = 16`
-
-Required result:
+Qualification result:
 
 `PASS`
 
-### `assert_7_1_mode_profile`
-
-For a run entirely in `7/1` mode:
-
-`commit_count = floor(ticks_recorded / 8)`
-
-`balance_count = ticks_recorded - commit_count`
-
-Required inherited profile:
-
-`64 ticks → balance = 56, commit = 8`
-
-Required result:
-
-`PASS`
-
-### `assert_1_7_mode_profile`
-
-For a run entirely in `1/7` mode:
-
-`excite_count = floor((ticks_recorded + 7) / 8)`
-
-`neutralize_count = ticks_recorded - excite_count`
-
-Required inherited profile:
-
-`16 ticks → excite = 2, neutralize = 14`
-
-Required result:
-
-`PASS`
-
-### `assert_scheduler_counts_sum`
+### Scheduler-State Domain
 
 Required relation:
 
-`scheduler_count_free + scheduler_count_balance + scheduler_count_commit + scheduler_count_excite + scheduler_count_neutralize = ticks_recorded`
+`frp_scheduler_state_is_valid(scheduler_state_q) = 1`
 
-Required result:
+Valid scheduler states are:
+
+- `FRP_SCHED_FREE`;
+- `FRP_SCHED_BALANCE`;
+- `FRP_SCHED_COMMIT`;
+- `FRP_SCHED_EXCITE`;
+- `FRP_SCHED_NEUTRALIZE`.
+
+Failure message:
+
+`FRP M16 assertion failed: invalid scheduler state`
+
+Qualification result:
 
 `PASS`
 
-### `assert_scheduler_no_direct_transition_authority`
+### Scheduler-Counter Sum
 
-No scheduler state may authorize:
+Required relation:
 
-`-1 → +1`
+`scheduler_count_sum = ticks_recorded_q`
+
+Failure message:
+
+`FRP M16 assertion failed: scheduler counters do not sum to ticks_recorded`
+
+Qualification result:
+
+`PASS`
+
+### Free-Mode State Relation
+
+Antecedent:
+
+`scheduler_mode_q = FRP_MODE_FREE`
+
+Required current-edge relation:
+
+`scheduler_state_q = FRP_SCHED_FREE`
+
+Failure message:
+
+`FRP M16 assertion failed: free mode emitted non-free scheduler state`
+
+Qualification result:
+
+`PASS`
+
+### 7/1-Mode State Relation
+
+Antecedent:
+
+`scheduler_mode_q = FRP_MODE_7_1`
+
+Required current-edge relation:
+
+`scheduler_state_q = FRP_SCHED_BALANCE`
 
 or:
 
-`+1 → -1`
+`scheduler_state_q = FRP_SCHED_COMMIT`
 
-Required result:
+Failure message:
 
-`PASS`
+`FRP M16 assertion failed: 7/1 mode emitted invalid scheduler state`
 
-## Request-Lane Arbitration Assertions
-
-Request lanes are deterministic execution-control inputs.
-
-### `assert_request_lane_order`
-
-Request lanes are evaluated in ascending order:
-
-`0 → REQUEST_LANES - 1`
-
-Required result:
+Qualification result:
 
 `PASS`
 
-### `assert_request_cell_index_valid`
+### 1/7-Mode State Relation
 
-Every accepted request uses:
+Antecedent:
 
-`request_cell_index < CELLS`
+`scheduler_mode_q = FRP_MODE_1_7`
 
-Required result:
+Required current-edge relation:
 
-`PASS`
+`scheduler_state_q = FRP_SCHED_EXCITE`
 
-### `assert_request_target_valid`
+or:
 
-Every accepted request target is one of:
+`scheduler_state_q = FRP_SCHED_NEUTRALIZE`
 
-`2'b11`
+Failure message:
 
-`2'b00`
+`FRP M16 assertion failed: 1/7 mode emitted invalid scheduler state`
 
-`2'b01`
-
-Required result:
+Qualification result:
 
 `PASS`
 
-### `assert_request_target_not_reserved`
+### Scheduler-Counter Hold
 
-No accepted request target may be:
-
-`2'b10`
-
-Required result:
-
-`PASS`
-
-### `assert_one_accepted_request_per_cell`
-
-At most one request may be accepted for a cell during one tick.
-
-Required relation:
-
-`accepted_cell_mask_i <= 1`
-
-Required result:
-
-`PASS`
-
-### `assert_duplicate_cell_rejection`
-
-If two valid request lanes target the same cell, only the lowest-numbered lane may be accepted.
-
-Later same-cell lanes must be rejected.
-
-Required result:
-
-`PASS`
-
-### `assert_no_request_accept_on_tick_disable`
-
-When:
+Antecedent:
 
 `tick_enable = 0`
 
-then:
+`clear_counters = 0`
+
+Required next-edge relations:
+
+`ticks_recorded_q remains stable`
+
+`scheduler_count_free_q remains stable`
+
+`scheduler_count_balance_q remains stable`
+
+`scheduler_count_commit_q remains stable`
+
+`scheduler_count_excite_q remains stable`
+
+`scheduler_count_neutralize_q remains stable`
+
+Failure message:
+
+`FRP M16 assertion failed: scheduler counters changed without tick or clear`
+
+Qualification result:
+
+`PASS`
+
+### Counter Clear Without Tick
+
+Antecedent:
+
+`clear_counters = 1`
+
+`tick_enable = 0`
+
+Required next-edge relations:
+
+`ticks_recorded_q = 0`
+
+`scheduler_count_free_q = 0`
+
+`scheduler_count_balance_q = 0`
+
+`scheduler_count_commit_q = 0`
+
+`scheduler_count_excite_q = 0`
+
+`scheduler_count_neutralize_q = 0`
+
+Failure message:
+
+`FRP M16 assertion failed: clear_counters did not clear the scheduler counter bank`
+
+Qualification result:
+
+`PASS`
+
+### Counter Clear With Tick
+
+Antecedent:
+
+`clear_counters = 1`
+
+`tick_enable = 1`
+
+Required next-edge relations:
+
+`ticks_recorded_q = 1`
+
+`scheduler_count_sum = 1`
+
+Failure message:
+
+`FRP M16 assertion failed: clear-plus-tick did not record exactly one scheduler event`
+
+Qualification result:
+
+`PASS`
+
+## Request-Lane and Transition-Capacity Assertions
+
+The assertion module observes final request acceptance, request rejection, accepted cells, active-neutral routes, retained-state changes, and transition-capacity telemetry.
+
+The counter-width request-lane limit is:
+
+`REQUEST_LANE_LIMIT = REQUEST_LANES`
+
+### Request Acceptance and Rejection Separation
+
+Required relation:
+
+`request_accept AND request_reject = 0`
+
+No request lane may be accepted and rejected in the same sampled cycle.
+
+Failure message:
+
+`FRP M16 assertion failed: request lane accepted and rejected simultaneously`
+
+Qualification result:
+
+`PASS`
+
+### Tick-Disabled Execution Gating
+
+Antecedent:
+
+`tick_enable = 0`
+
+Required current-edge relations:
 
 `request_accept = 0`
 
-Required result:
+`accepted_cell_mask = 0`
+
+`accepted_change_mask = 0`
+
+`accepted_changes = 0`
+
+Failure message:
+
+`FRP M16 assertion failed: execution was accepted while tick_enable was low`
+
+Qualification result:
 
 `PASS`
 
-### `assert_scheduler_gate_applied`
-
-A request may be accepted only when its transition class is eligible under the current scheduler state.
-
-Required result:
-
-`PASS`
-
-## Pending-Route Assertions
-
-Pending routes preserve the deferred target polarity of an opposite-polarity request.
-
-### `assert_pending_created_from_opposite_request`
-
-A pending route may be created only when an accepted request is opposite-polarity.
-
-Required condition:
-
-`state_q_i × request_target_i = -1`
-
-Required result:
-
-`PASS`
-
-### `assert_pending_target_preserved`
-
-When a pending route is created:
-
-`pending_route_d_i = request_target_i`
-
-Required result:
-
-`PASS`
-
-### `assert_pending_completion_from_zero`
-
-A pending route may complete only when:
-
-`state_q_i = 0`
-
-Required result:
-
-`PASS`
-
-### `assert_pending_completion_uses_pending_target`
-
-Pending completion target must equal:
-
-`pending_route_q_i`
-
-not a new request target.
-
-Required result:
-
-`PASS`
-
-### `assert_pending_cleared_after_completion`
-
-After successful completion:
-
-`pending_route_d_i = 0`
-
-Required result:
-
-`PASS`
-
-### `assert_pending_not_overwritten`
-
-An existing pending route must not be overwritten by a different polarity before completion.
-
-Required result:
-
-`PASS`
-
-### `assert_pending_capacity_guard`
-
-If capacity rejects pending completion, the pending route remains retained.
+### Accepted-Cell Request-Lane Bound
 
 Required relation:
 
-`capacity reject → pending_route_d_i = pending_route_q_i`
+`popcount(accepted_cell_mask) <= REQUEST_LANES`
 
-Required result:
+Failure message:
+
+`FRP M16 assertion failed: accepted_cell_mask exceeds request-lane boundary`
+
+Qualification result:
 
 `PASS`
 
-### `assert_no_pending_queue_overflow`
-
-One cell may not hold more than one pending route.
+### Accepted-Change Mask and Count Correlation
 
 Required relation:
 
-`queue_overflow_events = 0`
+`popcount(accepted_change_mask) = accepted_changes`
 
-Required result:
+Failure message:
 
-`PASS`
+`FRP M16 assertion failed: accepted_change_mask does not match accepted_changes`
 
-### `assert_pending_domain_valid`
-
-Pending-route encoding must never use:
-
-`2'b10`
-
-Required result:
+Qualification result:
 
 `PASS`
 
-## Active-Neutral Transition Assertions
-
-Active neutral `0` is a functional routing state.
-
-### `assert_no_direct_negative_to_positive`
-
-Forbidden transition:
-
-`-1 → +1`
+### Active-Neutral Route and Accepted-Cell Correlation
 
 Required relation:
 
-`not(state_q_i = -1 and state_d_i = +1)`
+`neutral_routed_cell_mask AND NOT accepted_cell_mask = 0`
 
-Required result:
+Every recorded active-neutral route belongs to the accepted-cell mask.
+
+Failure message:
+
+`FRP M16 assertion failed: neutral route exists outside accepted-element_index mask`
+
+Qualification result:
 
 `PASS`
 
-### `assert_no_direct_positive_to_negative`
-
-Forbidden transition:
-
-`+1 → -1`
+### Active-Neutral Route and Accepted-Change Correlation
 
 Required relation:
 
-`not(state_q_i = +1 and state_d_i = -1)`
+`neutral_routed_cell_mask AND NOT accepted_change_mask = 0`
 
-Required result:
+Every recorded active-neutral route belongs to the accepted retained-state change mask.
 
-`PASS`
+Failure message:
 
-### `assert_opposite_request_routes_to_zero`
+`FRP M16 assertion failed: neutral route exists without an accepted state change`
 
-For accepted opposite-polarity request:
-
-`state_d_i = 0`
-
-Required result:
+Qualification result:
 
 `PASS`
 
-### `assert_negative_to_positive_route_sequence`
-
-Required route:
-
-`-1 → 0 → +1`
-
-Direct route:
-
-`-1 → +1`
-
-must remain impossible.
-
-Required result:
-
-`PASS`
-
-### `assert_positive_to_negative_route_sequence`
-
-Required route:
-
-`+1 → 0 → -1`
-
-Direct route:
-
-`+1 → -1`
-
-must remain impossible.
-
-Required result:
-
-`PASS`
-
-### `assert_zero_to_nonzero_starts_from_zero`
-
-For transition:
-
-`0 → ±1`
-
-the previous retained state must be:
-
-`0`
-
-Required result:
-
-`PASS`
-
-### `assert_nonzero_to_zero_terminates_in_zero`
-
-For transition:
-
-`±1 → 0`
-
-the next retained state must be:
-
-`0`
-
-Required result:
-
-`PASS`
-
-### `assert_pending_completion_not_direct_jump`
-
-A pending route must not complete from a nonzero retained state.
-
-Required result:
-
-`PASS`
-
-## Transition-Capacity Assertions
-
-M16 preserves:
-
-`transition_fraction = 0.25`
-
-and:
-
-`REQUEST_LANES = max(1, round(CELLS × transition_fraction))`
-
-### `assert_request_lanes_profile_8`
-
-For:
-
-`CELLS = 8`
-
-required:
-
-`REQUEST_LANES = 2`
-
-Required result:
-
-`PASS`
-
-### `assert_request_lanes_profile_16`
-
-For:
-
-`CELLS = 16`
-
-required:
-
-`REQUEST_LANES = 4`
-
-Required result:
-
-`PASS`
-
-### `assert_request_lanes_profile_32`
-
-For:
-
-`CELLS = 32`
-
-required:
-
-`REQUEST_LANES = 8`
-
-Required result:
-
-`PASS`
-
-### `assert_accepted_changes_within_lanes`
+### Accepted-Change Capacity Bound
 
 Required relation:
 
-`accepted_changes <= REQUEST_LANES`
+`accepted_changes <= REQUEST_LANE_LIMIT`
 
-Required result:
+For the qualified eight-cell profile:
+
+`accepted_changes <= 2`
+
+Failure message:
+
+`FRP M16 assertion failed: accepted_changes exceeds REQUEST_LANES`
+
+Qualification result:
 
 `PASS`
 
-### `assert_capacity_remaining_valid`
+### Capacity-Remaining Relation
 
 Required relation:
 
-`capacity_remaining = REQUEST_LANES - accepted_changes`
+`capacity_remaining = REQUEST_LANE_LIMIT - accepted_changes`
 
-Required result:
+Failure message:
+
+`FRP M16 assertion failed: capacity_remaining relation mismatch`
+
+Qualification result:
 
 `PASS`
 
-### `assert_capacity_remaining_nonnegative`
+### Capacity-Exhausted Relation
 
 Required relation:
 
-`capacity_remaining >= 0`
+`capacity_exhausted = (accepted_changes = REQUEST_LANE_LIMIT)`
 
-Required result:
+Failure message:
+
+`FRP M16 assertion failed: capacity_exhausted relation mismatch`
+
+Qualification result:
 
 `PASS`
 
-### `assert_capacity_exhausted_equivalence`
+### Switch-Load Numerator Relation
 
 Required relation:
 
-`capacity_exhausted = (accepted_changes == REQUEST_LANES)`
+`switch_load_numerator = accepted_changes`
 
-Required result:
+Failure message:
 
-`PASS`
+`FRP M16 assertion failed: switch_load_numerator must equal accepted_changes`
 
-### `assert_same_state_no_capacity_use`
-
-Same-state retention must not increase:
-
-`accepted_changes`
-
-Required result:
+Qualification result:
 
 `PASS`
 
-### `assert_capacity_reject_preserves_state`
+## Event and Global Zero-Event Assertions
 
-A capacity-rejected transition must not corrupt retained state.
+The event assertions operate on the public event totals emitted by `frp_m16_core`.
 
-Required result:
-
-`PASS`
-
-### `assert_capacity_reject_preserves_pending`
-
-A capacity-rejected pending completion must not clear pending route.
-
-Required result:
-
-`PASS`
-
-### `assert_capacity_exhaustion_no_direct_transition`
-
-Capacity exhaustion cannot authorize:
-
-`-1 → +1`
-
-or:
-
-`+1 → -1`
-
-Required result:
-
-`PASS`
-
-### `assert_switch_load_bound`
-
-Required relation:
-
-`switch_load = accepted_changes / CELLS`
-
-Required bound:
-
-`switch_load <= transition_fraction`
-
-Required result:
-
-`PASS`
-
-## Retained-State Update Assertions
-
-The retained-state update layer commits only legal, capacity-approved transitions.
-
-### `assert_writeback_requires_capacity`
-
-A state-changing writeback requires capacity approval.
-
-Required result:
-
-`PASS`
-
-### `assert_state_write_count_within_lanes`
-
-Required relation:
-
-`state_write_enable_count <= REQUEST_LANES`
-
-Required result:
-
-`PASS`
-
-### `assert_state_write_mask_matches_change`
-
-Required relation:
-
-`state_write_enable_mask_i = 1`
-
-only when:
-
-`state_d_i != state_q_i`
-
-Required result:
-
-`PASS`
-
-### `assert_state_hold_mask_valid`
-
-If a cell is held:
-
-`state_d_i = state_q_i`
-
-Required result:
-
-`PASS`
-
-### `assert_reserved_candidate_not_committed`
-
-A candidate state equal to:
-
-`2'b10`
-
-must not be committed.
-
-Required result:
-
-`PASS`
-
-### `assert_neutral_routed_writeback_to_zero`
-
-For active-neutral routed opposite-polarity request:
-
-`state_d_i = 0`
-
-Required result:
-
-`PASS`
-
-### `assert_pending_completion_writeback_from_zero`
-
-For pending completion:
-
-`state_q_i = 0`
-
-Required result:
-
-`PASS`
-
-### `assert_state_output_not_reserved`
-
-Output retained state must never contain:
-
-`2'b10`
-
-Required result:
-
-`PASS`
-
-## Event-Counter Assertions
-
-Event counters must remain consistent with the execution trace.
-
-### `assert_actual_direct_events_zero`
+### Actual Direct Events
 
 Required relation:
 
 `actual_direct_events = 0`
 
-Required result:
+The core sources actual execution from the retained-state writeback boundary.
+
+Failure message:
+
+`FRP M16 assertion failed: actual_direct_events must remain zero`
+
+Qualification result:
 
 `PASS`
 
-### `assert_reserved_state_events_zero`
+### Reserved-State Events
 
 Required relation:
 
 `reserved_state_events = 0`
 
-Required result:
+Failure message:
+
+`FRP M16 assertion failed: reserved_state_events must remain zero`
+
+Qualification result:
 
 `PASS`
 
-### `assert_queue_overflow_events_zero`
+### Queue-Overflow Events
 
 Required relation:
 
 `queue_overflow_events = 0`
 
-Required result:
+Failure message:
+
+`FRP M16 assertion failed: queue_overflow_events must remain zero`
+
+Qualification result:
 
 `PASS`
 
-### `assert_prevented_direct_events_relation`
+### Requested and Prevented Direct-Event Relation
 
 Required relation:
 
 `prevented_direct_events >= requested_direct_events`
 
-Required result:
+Failure message:
+
+`FRP M16 assertion failed: requested direct event was not prevented`
+
+Qualification result:
 
 `PASS`
 
-### `assert_neutral_routed_events_relation`
+### Prevented and Active-Neutral Routed-Event Relation
 
 Required relation:
 
 `neutral_routed_events >= prevented_direct_events`
 
-Required result:
+Failure message:
+
+`FRP M16 assertion failed: prevented direct event was not neutral-routed`
+
+Qualification result:
 
 `PASS`
 
-### `assert_accepted_change_events_relation`
+## Integrated Invariant-Flag Assertions
 
-Required relation:
+The M16 core exposes an invariant vector with ten indexed flags.
 
-`accepted_change_events = sum(accepted_changes per tick)`
+Invariant count:
 
-Required result:
+`FRP_M16_INVARIANT_FLAGS = 10`
 
-`PASS`
+| Index | Invariant flag | Required value |
+|---:|---|:---:|
+| `0` | `FRP_INV_STATE_DOMAIN_VALID` | `1` |
+| `1` | `FRP_INV_SCHEDULER_COUNTS_VALID` | `1` |
+| `2` | `FRP_INV_REQUEST_LANE_ORDER_VALID` | `1` |
+| `3` | `FRP_INV_PENDING_POLARITY_VALID` | `1` |
+| `4` | `FRP_INV_ACTIVE_NEUTRAL_VALID` | `1` |
+| `5` | `FRP_INV_TRANSITION_CAPACITY_VALID` | `1` |
+| `6` | `FRP_INV_STATE_UPDATE_VALID` | `1` |
+| `7` | `FRP_INV_NO_ACTUAL_DIRECT_EVENTS` | `1` |
+| `8` | `FRP_INV_NO_RESERVED_STATE` | `1` |
+| `9` | `FRP_INV_NO_QUEUE_OVERFLOW` | `1` |
 
-### `assert_pending_created_relation`
+Each indexed flag is asserted independently by `frp_m16_assertions` while `rst_n = 1`.
 
-Pending-created events must correspond to accepted opposite-polarity requests.
+## Core Invariant Aggregation
 
-Required result:
+The invariant vector is assembled by `frp_m16_core` from module-local validity relations and public event totals.
 
-`PASS`
+### State-Domain Invariant
 
-### `assert_pending_completed_relation`
+`FRP_INV_STATE_DOMAIN_VALID` is the conjunction of:
 
-Pending-completed events must correspond to completions from active neutral `0`.
-
-Required result:
-
-`PASS`
-
-## Invariant-Flag Assertions
-
-Invariant flags are the compact replay-facing form of assertion status.
-
-### `assert_state_domain_flag`
-
-Required value:
-
-`state_domain_valid = True`
-
-Required result:
-
-`PASS`
-
-### `assert_scheduler_counts_flag`
-
-Required value:
-
-`scheduler_counts_valid = True`
+- `request_cell_domain_valid`;
+- `request_target_domain_valid`;
+- `transition_domain_valid`;
+- `transition_state_output_domain_valid`;
+- `pending_domain_valid`;
+- `state_domain_valid`;
+- `state_output_domain_valid`.
 
 Required result:
 
-`PASS`
+`FRP_INV_STATE_DOMAIN_VALID = 1`
 
-### `assert_request_lane_order_flag`
+### Scheduler-Count Invariant
 
-Required value:
+`FRP_INV_SCHEDULER_COUNTS_VALID` is the conjunction of:
 
-`request_lane_order_valid = True`
-
-Required result:
-
-`PASS`
-
-### `assert_pending_polarity_flag`
-
-Required value:
-
-`pending_polarity_valid = True`
+- `scheduler_valid`;
+- `scheduler_counts_valid`.
 
 Required result:
 
-`PASS`
+`FRP_INV_SCHEDULER_COUNTS_VALID = 1`
 
-### `assert_active_neutral_flag`
+### Request-Lane Order Invariant
 
-Required value:
+`FRP_INV_REQUEST_LANE_ORDER_VALID` is the conjunction of:
 
-`active_neutral_routing_valid = True`
-
-Required result:
-
-`PASS`
-
-### `assert_transition_capacity_flag`
-
-Required value:
-
-`transition_capacity_valid = True`
+- `request_lane_order_valid`;
+- `request_cell_domain_valid`;
+- `request_target_domain_valid`;
+- `duplicate_cell_guard_valid`;
+- `request_scheduler_gate_valid`;
+- `request_transition_capacity_valid`;
+- `request_active_neutral_routing_valid`.
 
 Required result:
 
-`PASS`
+`FRP_INV_REQUEST_LANE_ORDER_VALID = 1`
 
-### `assert_state_update_flag`
+### Pending-Polarity Invariant
 
-Required value:
+`FRP_INV_PENDING_POLARITY_VALID` is the conjunction of:
 
-`state_update_valid = True`
-
-Required result:
-
-`PASS`
-
-### `assert_no_actual_direct_flag`
-
-Required value:
-
-`no_actual_direct_events = True`
+- `pending_domain_valid`;
+- `pending_polarity_valid`;
+- `pending_completion_from_zero_valid`;
+- `pending_non_overwrite_valid`;
+- `pending_capacity_valid`;
+- `pending_replay_deterministic`;
+- `no_pending_reserved_state`.
 
 Required result:
 
-`PASS`
+`FRP_INV_PENDING_POLARITY_VALID = 1`
 
-### `assert_no_reserved_state_flag`
+### Active-Neutral Invariant
 
-Required value:
+`FRP_INV_ACTIVE_NEUTRAL_VALID` is the conjunction of:
 
-`no_reserved_state = True`
-
-Required result:
-
-`PASS`
-
-### `assert_no_queue_overflow_flag`
-
-Required value:
-
-`no_queue_overflow = True`
+- `request_active_neutral_routing_valid`;
+- `active_neutral_routing_valid`;
+- `transition_pending_completion_from_zero_valid`;
+- `transition_replay_deterministic`;
+- `capacity_active_neutral_capacity_valid`;
+- `active_neutral_writeback_valid`;
+- `pending_completion_writeback_valid`;
+- `transition_no_actual_direct_events`;
+- `state_update_no_actual_direct_events`.
 
 Required result:
 
-`PASS`
+`FRP_INV_ACTIVE_NEUTRAL_VALID = 1`
 
-## M15 Vector Replay Assertions
+### Transition-Capacity Invariant
 
-M16 must remain replay-compatible with the M15 deterministic vector package.
+`FRP_INV_TRANSITION_CAPACITY_VALID` is the conjunction of:
 
-### `assert_m15_state_replay_match`
-
-M16 retained-state outputs must match the M15 cycle-exact integer golden trace.
-
-Required result:
-
-`PASS`
-
-### `assert_m15_pending_replay_match`
-
-M16 pending-route outputs must match the M15 cycle-exact integer golden trace.
-
-Required result:
-
-`PASS`
-
-### `assert_m15_scheduler_replay_match`
-
-M16 scheduler states and counters must match the M15 cycle-exact integer golden trace.
+- `request_transition_capacity_valid`;
+- `transition_capacity_valid_local`;
+- `capacity_transition_capacity_valid`;
+- `accepted_changes_within_limit`;
+- `capacity_remaining_valid`;
+- `capacity_exhaustion_valid`;
+- `same_state_capacity_valid`;
+- `capacity_pending_capacity_valid`;
+- `capacity_active_neutral_capacity_valid`;
+- `switch_load_bound_valid`;
+- `capacity_accepted_changes = state_update_accepted_changes`;
+- `capacity_accepted_change_mask = state_write_enable_mask`;
+- `capacity_switch_load_numerator = state_update_switch_load_numerator`.
 
 Required result:
 
-`PASS`
+`FRP_INV_TRANSITION_CAPACITY_VALID = 1`
 
-### `assert_m15_request_replay_match`
+### State-Update Invariant
 
-M16 request-lane acceptance and rejection masks must match the M15 cycle-exact integer golden trace.
+`FRP_INV_STATE_UPDATE_VALID` is the conjunction of:
 
-Required result:
-
-`PASS`
-
-### `assert_m15_transition_replay_match`
-
-M16 transition masks must match the M15 cycle-exact integer golden trace.
-
-Required result:
-
-`PASS`
-
-### `assert_m15_counter_replay_match`
-
-M16 event-counter deltas must match the M15 cycle-exact integer golden trace.
+- `state_update_valid`;
+- `state_domain_valid`;
+- `state_output_domain_valid`;
+- `state_write_capacity_valid`;
+- `same_state_hold_valid`;
+- `active_neutral_writeback_valid`;
+- `pending_completion_writeback_valid`;
+- `no_reserved_state_output`;
+- `state_update_no_actual_direct_events`.
 
 Required result:
 
-`PASS`
+`FRP_INV_STATE_UPDATE_VALID = 1`
 
-### `assert_m15_invariant_flag_replay_match`
+### No-Actual-Direct-Events Invariant
 
-M16 invariant flags must match the M15 replay expectations.
+`FRP_INV_NO_ACTUAL_DIRECT_EVENTS` is the conjunction of:
+
+- `request_no_actual_direct_events`;
+- `transition_no_actual_direct_events`;
+- `pending_no_actual_direct_events`;
+- `capacity_no_actual_direct_events`;
+- `state_update_no_actual_direct_events`;
+- `actual_direct_events = 0`.
 
 Required result:
 
+`FRP_INV_NO_ACTUAL_DIRECT_EVENTS = 1`
+
+### No-Reserved-State Invariant
+
+`FRP_INV_NO_RESERVED_STATE` is the conjunction of:
+
+- `no_reserved_transition`;
+- `no_pending_reserved_state`;
+- `no_reserved_state_output`;
+- `reserved_state_events = 0`.
+
+Required result:
+
+`FRP_INV_NO_RESERVED_STATE = 1`
+
+### No-Queue-Overflow Invariant
+
+`FRP_INV_NO_QUEUE_OVERFLOW` is the conjunction of:
+
+- `request_no_queue_overflow`;
+- `pending_no_queue_overflow`;
+- `capacity_no_queue_overflow`;
+- `queue_overflow_events = 0`.
+
+Required result:
+
+`FRP_INV_NO_QUEUE_OVERFLOW = 1`
+
+## Invariant-Flag Assertion Matrix
+
+| Invariant flag | Failure message | Qualified result |
+|---|---|:---:|
+| `FRP_INV_STATE_DOMAIN_VALID` | `FRP M16 assertion failed: state-domain invariant flag is false` | `PASS` |
+| `FRP_INV_SCHEDULER_COUNTS_VALID` | `FRP M16 assertion failed: scheduler-count invariant flag is false` | `PASS` |
+| `FRP_INV_REQUEST_LANE_ORDER_VALID` | `FRP M16 assertion failed: request-lane invariant flag is false` | `PASS` |
+| `FRP_INV_PENDING_POLARITY_VALID` | `FRP M16 assertion failed: pending-polarity invariant flag is false` | `PASS` |
+| `FRP_INV_ACTIVE_NEUTRAL_VALID` | `FRP M16 assertion failed: active-neutral invariant flag is false` | `PASS` |
+| `FRP_INV_TRANSITION_CAPACITY_VALID` | `FRP M16 assertion failed: transition-capacity invariant flag is false` | `PASS` |
+| `FRP_INV_STATE_UPDATE_VALID` | `FRP M16 assertion failed: state-update invariant flag is false` | `PASS` |
+| `FRP_INV_NO_ACTUAL_DIRECT_EVENTS` | `FRP M16 assertion failed: no-actual-direct-events flag is false` | `PASS` |
+| `FRP_INV_NO_RESERVED_STATE` | `FRP M16 assertion failed: no-reserved-state flag is false` | `PASS` |
+| `FRP_INV_NO_QUEUE_OVERFLOW` | `FRP M16 assertion failed: no-queue-overflow flag is false` | `PASS` |
+
+## Qualification Coverage Properties
+
+The assertion module contains six executable coverage properties.
+
+### Free Scheduler Mode Coverage
+
+Covered relation:
+
+`scheduler_mode_q = FRP_MODE_FREE`
+
+Qualification result:
+
 `PASS`
 
-## Module-Level Assertion Matrix
+### 7/1 Scheduler Mode Coverage
 
-| Module | Required assertion group |
+Covered relation:
+
+`scheduler_mode_q = FRP_MODE_7_1`
+
+Qualification result:
+
+`PASS`
+
+### 1/7 Scheduler Mode Coverage
+
+Covered relation:
+
+`scheduler_mode_q = FRP_MODE_1_7`
+
+Qualification result:
+
+`PASS`
+
+### Active-Neutral Route Coverage
+
+Covered relation:
+
+`neutral_routed_cell_mask != 0`
+
+Qualification result:
+
+`PASS`
+
+### Accepted Change With Retained Pending Route Coverage
+
+Covered relation:
+
+`accepted_change_mask != 0`
+
+and:
+
+`pending_route_out != 0`
+
+Qualification result:
+
+`PASS`
+
+### Capacity-Exhaustion Coverage
+
+Covered relation:
+
+`capacity_exhausted = 1`
+
+Qualification result:
+
+`PASS`
+
+## Integrated Invariant Qualification Record
+
+RTL qualification result:
+
+| Invariant | Result |
+|---|:---:|
+| `FRP_INV_STATE_DOMAIN_VALID` | `PASS` |
+| `FRP_INV_SCHEDULER_COUNTS_VALID` | `PASS` |
+| `FRP_INV_REQUEST_LANE_ORDER_VALID` | `PASS` |
+| `FRP_INV_PENDING_POLARITY_VALID` | `PASS` |
+| `FRP_INV_ACTIVE_NEUTRAL_VALID` | `PASS` |
+| `FRP_INV_TRANSITION_CAPACITY_VALID` | `PASS` |
+| `FRP_INV_STATE_UPDATE_VALID` | `PASS` |
+| `FRP_INV_NO_ACTUAL_DIRECT_EVENTS` | `PASS` |
+| `FRP_INV_NO_RESERVED_STATE` | `PASS` |
+| `FRP_INV_NO_QUEUE_OVERFLOW` | `PASS` |
+
+FPGA terminal invariant vector:
+
+`invariant_flags = 1111111111`
+
+FPGA integrated invariant qualification:
+
+`PASS`
+
+## M15 Semantic and Implementation-Mapping Foundation
+
+M15 remains the qualified semantic and implementation-mapping foundation of the M16 invariant assertion set.
+
+M15 workflow:
+
+`.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+
+Qualified workflow run:
+
+`#1`
+
+The M15 qualification record is:
+
+| Qualification relation | Result |
+|---|---:|
+| implementation-mapping qualification | `41 / 41 PASS` |
+| deterministic vector files byte-identical | `10 / 10` |
+| required semantic correlation matches equal to `1.0` | `5 / 5` |
+| deterministic replay matches equal to `1.0` | `6 / 6` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+| `fixed_point_topology_sum_exact` | `True` |
+| `fixed_point_thermal_sum_exact` | `True` |
+
+M15 qualification package digest:
+
+`703dd4b56f4b34289a2c5bc5521ad4ddc3113bdec8c38238c3244c69cb4d58df`
+
+The M16 assertion set realizes the retained-state, routing, capacity, scheduler, event, and invariant relations of this qualified semantic foundation at the RTL execution boundary.
+
+## M16 RTL Assertion Qualification
+
+Workflow:
+
+`FRP M16 RTL Artifact Boundary`
+
+Workflow file:
+
+`.github/workflows/frp-m16-rtl-artifact-boundary.yml`
+
+Trigger:
+
+`workflow_dispatch`
+
+### Initial Closure Record
+
+| Field | Value |
 |---|---|
-| `scheduler_state_rtl_realization` | scheduler assertions |
-| `request_lane_arbitration_module` | request-lane assertions |
-| `pending_route_register_module` | pending-route assertions |
-| `active_neutral_transition_module` | active-neutral transition assertions |
-| `transition_capacity_guard_module` | transition-capacity assertions |
-| `retained_state_update_module` | retained-state update assertions |
+| workflow run | `#82` |
+| repository commit | `a68a2af` |
+| branch | `main` |
+| workflow result | `SUCCESS` |
+| qualification artifact count | `1` |
+| final qualification result | `PASS` |
 
-Each module-level assertion group must pass independently before M16 core-level closure.
+### Synchronized Qualification Record
 
-## Core-Level Assertion Matrix
-
-The core-level assertion matrix requires:
-
-| Assertion group | Required status |
+| Field | Value |
 |---|---|
-| state-domain assertions | `PASS` |
-| reset assertions | `PASS` |
-| tick-enable assertions | `PASS` |
-| scheduler assertions | `PASS` |
-| request-lane assertions | `PASS` |
-| pending-route assertions | `PASS` |
-| active-neutral transition assertions | `PASS` |
-| transition-capacity assertions | `PASS` |
-| retained-state update assertions | `PASS` |
-| event-counter assertions | `PASS` |
-| invariant-flag assertions | `PASS` |
-| M15 vector replay assertions | `PASS` |
+| workflow run | `#84` |
+| qualified source commit | `ede53cf` |
+| branch | `main` |
+| workflow result | `SUCCESS` |
+| duration | `52s` |
+| qualification artifact count | `1` |
 
-## Required M16 Global Invariants
+RTL closure status:
 
-The M16 RTL core realization is valid only if:
+`M16 RTL EXECUTION LAYER CLOSED`
 
-Canonical ternary encoding is preserved.
+## RTL Assertion Execution Boundary
 
-Reserved state `2'b10` is never emitted as valid state.
+Simulation source:
 
-Reset initializes retained state to active neutral `0`.
+`rtl/m16/frp_m16_tb.sv`
 
-Tick-disabled cycles preserve retained state.
+Assertion source:
 
-Scheduler profiles match `free`, `7/1`, and `1/7`.
+`rtl/m16/frp_m16_assertions.sv`
 
-Request lanes are deterministic.
+Simulation top:
 
-Accepted changes never exceed `REQUEST_LANES`.
+`frp_m16_tb`
 
-Switch load remains bounded by `transition_fraction`.
+Synthesis boundary under test:
 
-Opposite-polarity transitions pass through `0`.
+`frp_m16_core`
 
-Direct opposite-polarity execution remains zero.
+Qualified execution includes:
 
-Pending routes preserve target polarity.
+- SystemVerilog parsing;
+- module elaboration;
+- executable testbench generation;
+- architectural simulation;
+- assertion execution;
+- terminal marker validation;
+- latch-diagnostic rejection;
+- multidriven-diagnostic rejection;
+- repository-integrity validation;
+- qualification evidence generation.
 
-Pending routes complete only from `0`.
+Assertion execution result:
 
-Capacity rejection does not clear pending routes.
+`PASS`
 
-Queue overflow events remain zero.
+Assertion-message syntax result:
 
-Event counters remain internally consistent.
+`PASS`
 
-Invariant flags correlate with assertion results.
+## RTL Qualified Relation Matrix
 
-M15 vector replay remains deterministic.
+| Assertion boundary | Result |
+|---|:---:|
+| retained-state domain | `PASS` |
+| pending-route domain | `PASS` |
+| reset state | `PASS` |
+| disabled-tick retained-state retention | `PASS` |
+| disabled-tick pending-route retention | `PASS` |
+| state-change authorization | `PASS` |
+| direct opposite-polarity exclusion | `PASS` |
+| active-neutral first-leg execution | `PASS` |
+| retained pending polarity | `PASS` |
+| pending-route deferral | `PASS` |
+| completion only from active neutral `0` | `PASS` |
+| scheduler mode and state | `PASS` |
+| scheduler-state counters | `PASS` |
+| request acceptance and rejection separation | `PASS` |
+| transition-capacity relations | `PASS` |
+| retained-state writeback | `PASS` |
+| integrated invariant flags | `PASS` |
+| assertion message syntax | `PASS` |
 
-## Closure Criteria
+## RTL Terminal Evidence
 
-The M16 invariant assertion set can be considered ready when:
+Terminal marker:
 
-- every module-level assertion group is defined;
-- every core-level assertion group is defined;
-- all required M15 invariants are represented;
-- assertion names are stable;
-- invariant flags map to assertion groups;
-- event-counter relations are defined;
-- M15 vector replay assertions are defined;
-- M16 closure assertions are explicit.
+`FRP M16 deterministic RTL testbench completed.`
 
-## Next Step
+| Terminal relation | Recorded value |
+|---|---:|
+| `CELLS` | `8` |
+| `REQUEST_LANES` | `2` |
+| `ticks_recorded` | `16` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
 
-The next M16 file should define the M15 vector replay compatibility layer:
+Terminal marker validation:
 
-`docs/m16_m15_vector_replay_compatibility_report.md`
+`PASS`
+
+## M16 FPGA Assertion Qualification
+
+Workflow:
+
+`FRP M16 FPGA Preparation`
+
+Workflow file:
+
+`.github/workflows/frp-m16-fpga-preparation.yml`
+
+Trigger:
+
+`workflow_dispatch`
+
+### Initial Closure Record
+
+| Field | Value |
+|---|---|
+| workflow run | `#1` |
+| qualified repository commit | `326b69e` |
+| branch | `main` |
+| workflow result | `SUCCESS` |
+| duration | `1m 7s` |
+| qualification artifact count | `1` |
+| final qualification result | `PASS` |
+
+### Synchronized Qualification Record
+
+| Field | Value |
+|---|---|
+| workflow run | `#2` |
+| qualified repository commit | `ede53cf` |
+| branch | `main` |
+| workflow result | `SUCCESS` |
+| duration | `36s` |
+| qualification artifact count | `1` |
+
+FPGA preparation closure status:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
+
+## FPGA Assertion Execution Boundary
+
+FPGA integration top:
+
+`fpga/m16/frp_m16_fpga_top.sv`
+
+FPGA executable testbench:
+
+`fpga/m16/frp_m16_fpga_tb.sv`
+
+Assertion source:
+
+`rtl/m16/frp_m16_assertions.sv`
+
+The FPGA testbench connects the assertion module to:
+
+`rst_n = core_ready`
+
+`tick_enable = tick_enable_qualified`
+
+`clear_counters = clear_counters_qualified`
+
+The FPGA assertion execution boundary includes:
+
+- asynchronous external reset assertion;
+- two-stage synchronous reset release;
+- `core_ready` generation;
+- tick gating before readiness;
+- counter-clear gating before readiness;
+- request-valid gating before readiness;
+- scheduler-mode propagation;
+- request-interface propagation;
+- active-neutral first-leg execution;
+- retained pending-route completion;
+- all ten invariant flags;
+- zero actual direct events;
+- zero reserved-state events;
+- zero queue-overflow events.
+
+FPGA assertion execution result:
+
+`PASS`
+
+## FPGA Terminal Evidence
+
+Terminal marker:
+
+`FRP M16 FPGA integration testbench completed.`
+
+| Terminal relation | Recorded value |
+|---|---:|
+| `CELLS` | `8` |
+| `REQUEST_LANES` | `2` |
+| `core_ready` | `1` |
+| `ticks_recorded` | `1` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+| `invariant_flags` | `1111111111` |
+
+Terminal marker validation:
+
+`PASS`
+
+The FPGA preparation qualification is target-independent.
+
+## Qualified Artifact Correlation
+
+| Artifact | Assertion-set relation |
+|---|---|
+| `rtl/m16/frp_m16_pkg.sv` | canonical state encoding, scheduler definitions, helper functions, and invariant indexes |
+| `rtl/m16/frp_m16_scheduler.sv` | scheduler mode, state, and counter sources |
+| `rtl/m16/frp_m16_request_lanes.sv` | deterministic request acceptance and rejection sources |
+| `rtl/m16/frp_m16_pending_routes.sv` | retained pending-route state and event sources |
+| `rtl/m16/frp_m16_active_neutral.sv` | active-neutral transition and routing sources |
+| `rtl/m16/frp_m16_capacity_guard.sv` | transition-capacity and accepted-change sources |
+| `rtl/m16/frp_m16_state_update.sv` | retained-state writeback and actual direct-event source |
+| `rtl/m16/frp_m16_core.sv` | public telemetry and integrated invariant aggregation |
+| `rtl/m16/frp_m16_assertions.sv` | executable assertion and coverage properties |
+| `rtl/m16/frp_m16_tb.sv` | executable RTL assertion qualification |
+| `fpga/m16/frp_m16_fpga_top.sv` | target-independent FPGA integration boundary |
+| `fpga/m16/frp_m16_fpga_tb.sv` | executable FPGA assertion qualification |
+
+## Qualification State
+
+The M16 invariant assertion-set qualification state is:
+
+`PASS`
+
+The M16 RTL execution-layer state is:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+The M16 FPGA preparation-layer state is:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
+
+## Author
+
+Maksym Marnov
+
+
