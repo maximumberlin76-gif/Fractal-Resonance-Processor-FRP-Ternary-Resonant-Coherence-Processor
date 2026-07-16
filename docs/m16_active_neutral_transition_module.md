@@ -2,7 +2,15 @@
 
 ## Status
 
-Planned architecture layer.
+Qualified RTL execution artifact.
+
+Qualification result:
+
+`PASS`
+
+Closure state:
+
+`M16 RTL EXECUTION LAYER CLOSED`
 
 ## Version
 
@@ -14,531 +22,1042 @@ Planned architecture layer.
 
 ## Purpose
 
-This document defines the active-neutral transition module for the M16 RTL core realization layer.
+This document records the implemented active-neutral transition module for the M16 RTL core realization layer.
 
-The active-neutral transition module preserves the M15-qualified transition semantics of the:
+The implemented artifact is:
+
+`rtl/m16/frp_m16_active_neutral.sv`
+
+The module is:
+
+`frp_m16_active_neutral`
+
+The active-neutral transition layer preserves the M15-qualified retained-state transition semantics of the:
 
 `Ternary Fractal Resonant Coherence Processor`
 
-M16 does not introduce a new processor model.
+M16 does not introduce a new Python semantic reference.
 
-M16 realizes the qualified retained-state transition law in an explicit RTL-oriented transition module.
+The executable semantic reference remains:
 
-## Active Neutral Boundary
+`frp_prototype_v1_7_0.py`
 
-The active-neutral transition module controls the legal retained-state transition path between ternary states.
+The module generates the complete pre-capacity retained-state transition candidate for the integrated M16 RTL execution chain.
 
-It covers:
+Final transition-capacity admission is performed downstream by:
 
-- canonical ternary state decoding;
-- legal transition classification;
-- direct opposite-polarity prevention;
+`rtl/m16/frp_m16_capacity_guard.sv`
+
+Final retained-state writeback is performed by:
+
+`rtl/m16/frp_m16_state_update.sv`
+
+## Implemented Artifact Boundary
+
+The active-neutral transition module implements:
+
+- canonical balanced ternary operand validation;
+- retained-state and pending-route domain validation;
+- explicit request transition classification;
+- pending-route completion candidate generation;
+- pending-completion priority;
+- same-state candidate generation;
+- zero-to-nonzero candidate generation;
+- nonzero-to-zero candidate generation;
+- opposite-polarity first-leg generation;
 - active-neutral routing through `0`;
-- pending-route creation trigger;
-- pending-route completion trigger;
-- retained-state next-value generation;
-- transition event masks;
-- direct-transition detection;
-- invariant flag generation;
-- assertion correlation;
-- M15 vector replay compatibility.
+- direct opposite-polarity candidate detection;
+- reserved-transition detection;
+- deterministic ascending cell processing;
+- deterministic ascending request-lane processing;
+- transition masks;
+- transition event telemetry;
+- pre-capacity accepted-change candidate accounting;
+- invariant outputs.
 
 The module does not compute:
 
+- Kuramoto-Sakaguchi phase coupling;
 - phase words;
-- Kuramoto-Sakaguchi coupling;
 - thermal state;
 - gamma drift;
 - coherence compression;
 - `C(t)`;
 - `P(t)`;
-- phase-derived ternary target generation.
+- phase-derived ternary targets;
+- request-lane acceptance;
+- final transition-capacity admission;
+- pending-route register writeback;
+- retained-state register writeback.
+
+## Integrated Execution Position
+
+The explicit request path is:
+
+`registered scheduler state`
+
+→ `request-lane arbitration`
+
+→ `active-neutral transition candidate generation`
+
+→ `transition-capacity admission`
+
+→ `pending-route register update`
+
+→ `retained-state writeback`
+
+The retained pending-completion path is:
+
+`retained state and retained pending target`
+
+→ `pending-completion candidate derivation`
+
+→ `active-neutral completion candidate generation`
+
+→ `transition-capacity admission`
+
+→ `pending-route clearing`
+
+→ `retained-state writeback`
+
+The active-neutral module receives pre-capacity accepted explicit request lanes.
+
+It produces:
+
+`state_candidate_d`
+
+The capacity guard selects the bounded subset that may reach retained-state writeback.
 
 ## Core Identity Preserved
 
-The active-neutral transition module preserves the central FRP retained-state rule:
+The active-neutral transition module preserves:
 
-Opposite-polarity transitions are never executed directly.
+- the balanced ternary retained-state domain `{-1, 0, 1}`;
+- active neutral state `0`;
+- same-state retention;
+- zero-to-nonzero release;
+- nonzero-to-zero neutralization;
+- forbidden direct retained-state transitions between `-1` and `1`;
+- opposite-polarity routing through active neutral `0`;
+- retained pending target polarity;
+- pending completion only from retained state `0`;
+- pending completion priority over new same-cell requests;
+- deterministic transition classification;
+- downstream transition-capacity enforcement;
+- zero reserved-state emission;
+- zero actual direct events.
 
-Forbidden direct transitions:
+The required routed sequences are:
 
-`-1 → +1`
+`-1 → 0 → 1`
 
-`+1 → -1`
+`1 → 0 → -1`
 
-Required routed sequences:
-
-`-1 → 0 → +1`
-
-`+1 → 0 → -1`
-
-Required invariant:
+Required integrated relation:
 
 `actual_direct_events = 0`
 
 ## Canonical Ternary Encoding
 
-The module uses the inherited canonical two-bit ternary encoding:
+The module imports the canonical two-bit balanced ternary encoding from:
 
-| Ternary state | Encoding | Meaning |
-|---|---|---|
-| `-1` | `2'b11` | negative retained polarity |
-| `0` | `2'b00` | active neutral state |
-| `+1` | `2'b01` | positive retained polarity |
-| reserved | `2'b10` | invalid state |
+`rtl/m16/frp_m16_pkg.sv`
 
-The reserved encoding is invalid.
+| Ternary state | SystemVerilog symbol | Encoding | Function |
+|---|---|---|---|
+| `-1` | `FRP_TERN_NEG` | `2'b11` | negative retained polarity |
+| `0` | `FRP_TERN_ZERO` | `2'b00` | active neutral state |
+| `1` | `FRP_TERN_POS` | `2'b01` | positive retained polarity |
+| reserved | `FRP_TERN_RESERVED` | `2'b10` | invalid state |
 
-Required invariant:
+The corresponding shared constants are:
+
+- `FRP_STATE_NEG`;
+- `FRP_STATE_ZERO`;
+- `FRP_STATE_POS`;
+- `FRP_STATE_RESERVED`.
+
+The active-neutral constant is:
+
+`FRP_ACTIVE_NEUTRAL = FRP_STATE_ZERO`
+
+Required relations:
+
+`reserved_transition_events = 0`
 
 `reserved_state_events = 0`
+
+## Module Parameterization
+
+The module parameters are:
+
+| Parameter | Definition |
+|---|---|
+| `CELLS` | number of retained balanced ternary cells |
+| `STATE_BITS` | packed width of one ternary state |
+| `REQUEST_LANES` | number of explicit request lanes |
+| `CELL_INDEX_BITS` | packed cell-index width |
+| `COUNTER_BITS` | transition event-counter width |
+
+Default parameter sources are:
+
+| Parameter | Default source |
+|---|---|
+| `CELLS` | `frp_m16_pkg::FRP_M16_DEFAULT_CELLS` |
+| `STATE_BITS` | `frp_m16_pkg::FRP_M16_STATE_BITS` |
+| `REQUEST_LANES` | `frp_m16_pkg::frp_calc_request_lanes(CELLS)` |
+| `CELL_INDEX_BITS` | `(CELLS <= 1) ? 1 : $clog2(CELLS)` |
+| `COUNTER_BITS` | `frp_m16_pkg::FRP_M16_COUNTER_BITS` |
+
+Required state width:
+
+`STATE_BITS = 2`
+
+The qualified architectural simulation profile is:
+
+| Parameter | Value |
+|---|---:|
+| `CELLS` | `8` |
+| `REQUEST_LANES` | `2` |
 
 ## Module Inputs
 
 The active-neutral transition module consumes:
 
-| Signal | Width | Meaning |
+| Signal | Width | Function |
 |---|---:|---|
-| `state_q` | `CELLS × STATE_BITS` | retained ternary state at tick start |
-| `request_target` | `REQUEST_LANES × STATE_BITS` | requested ternary target per lane |
-| `request_accept` | `REQUEST_LANES` | accepted request lanes |
-| `request_cell_index` | `REQUEST_LANES × CELL_INDEX_BITS` | accepted request cell indexes |
-| `pending_route_q` | `CELLS × STATE_BITS` | retained pending-route state |
-| `pending_completion_enable` | `CELLS` | pending completion eligibility mask |
-| `scheduler_state` | scheduler-state width | current scheduler state |
-| `tick_enable` | `1` | enables one processor tick |
+| `tick_enable` | `1` | enables transition candidate evaluation |
+| `scheduler_state` | scheduler-state width | registered temporal scheduler state |
+| `state_q` | `CELLS × STATE_BITS` | retained balanced ternary state |
+| `pending_route_q` | `CELLS × STATE_BITS` | retained pending-route target state |
+| `request_accept` | `REQUEST_LANES` | pre-capacity accepted explicit request lanes |
+| `request_neutralized` | `REQUEST_LANES` | accepted opposite-polarity request classification |
+| `request_cell_index` | `REQUEST_LANES × CELL_INDEX_BITS` | requested cell index for each lane |
+| `request_target` | `REQUEST_LANES × STATE_BITS` | requested balanced ternary target for each lane |
+| `pending_completion_enable` | `CELLS` | scheduler-qualified pending-completion candidate mask |
 
-Required relation:
+Within `frp_m16_core`, the connected explicit request input is:
 
-`STATE_BITS = 2`
+`request_accept_lane`
 
-## Module Outputs
+The connected pending-completion input is:
 
-The active-neutral transition module emits:
+`pending_completion_candidate`
 
-| Signal | Width | Meaning |
+Final capacity acceptance is not an input to this module.
+
+## Candidate-State Output
+
+The primary candidate output is:
+
+`state_candidate_d`
+
+Its width is:
+
+`CELLS × STATE_BITS`
+
+The candidate-state base is:
+
+`state_candidate_next = state_q`
+
+A cell retains its current state unless a legal enabled transition candidate changes it.
+
+The final combinational assignment is:
+
+`state_candidate_d = state_candidate_next`
+
+`state_candidate_d` is not the retained-state register.
+
+The downstream capacity guard selects admitted cells.
+
+The retained-state update module commits only capacity-approved candidate cells.
+
+## Transition Mask Outputs
+
+The module emits:
+
+| Signal | Width | Function |
 |---|---:|---|
-| `state_d` | `CELLS × STATE_BITS` | next retained ternary state |
-| `transition_valid_mask` | `CELLS` | cells with valid legal transition |
-| `same_state_mask` | `CELLS` | cells retaining same state |
-| `zero_to_nonzero_mask` | `CELLS` | cells executing `0 → ±1` |
-| `nonzero_to_zero_mask` | `CELLS` | cells executing `±1 → 0` |
-| `opposite_polarity_mask` | `CELLS` | cells with opposite-polarity request |
-| `neutral_routed_mask` | `CELLS` | cells routed through active neutral `0` |
-| `pending_completion_mask` | `CELLS` | cells completing pending route |
-| `actual_direct_mask` | `CELLS` | cells with detected direct opposite-polarity transition |
-| `reserved_transition_mask` | `CELLS` | cells blocked due to reserved encoding |
+| `transition_valid_mask` | `CELLS` | cells with a classified legal transition candidate |
+| `same_state_mask` | `CELLS` | cells with accepted same-state requests |
+| `zero_to_nonzero_mask` | `CELLS` | cells with `0` to nonzero candidates |
+| `nonzero_to_zero_mask` | `CELLS` | cells with nonzero to `0` candidates |
+| `opposite_polarity_mask` | `CELLS` | cells with accepted opposite-polarity requests |
+| `neutral_routed_mask` | `CELLS` | opposite-polarity candidates routed through active neutral `0` |
+| `pending_completion_mask` | `CELLS` | cells with legal pending-completion candidates |
+| `actual_direct_mask` | `CELLS` | cells whose final candidate crosses directly between `-1` and `1` |
+| `reserved_transition_mask` | `CELLS` | cells containing invalid transition operands or candidate values |
+| `accepted_change_candidate_mask` | `CELLS` | cells whose candidate state differs from retained state |
 
-Required invariant:
+A same-state request sets:
 
-`actual_direct_mask = 0`
+`transition_valid_mask`
 
-## Transition Classification
+and:
 
-For each cell `i`, the module classifies the relation between:
+`same_state_mask`
 
-`state_q_i`
+It does not set:
 
-and the selected target for that cell.
+`accepted_change_candidate_mask`
 
-The selected target may be:
+## Transition Event Outputs
 
-- accepted request target;
-- retained pending-route target;
-- active neutral target;
-- retained current state.
+The module emits:
 
-Transition classes:
+| Signal | Function |
+|---|---|
+| `same_state_events` | accepted same-state explicit requests |
+| `zero_to_nonzero_events` | zero-to-nonzero explicit requests and pending completions |
+| `nonzero_to_zero_events` | nonzero-to-zero explicit requests and opposite-polarity first legs |
+| `requested_direct_events` | accepted opposite-polarity explicit requests |
+| `prevented_direct_events` | accepted opposite-polarity requests routed to `0` |
+| `neutral_routed_events` | accepted opposite-polarity requests routed through active neutral `0` |
+| `pending_completion_events` | legal pending-completion candidates |
+| `actual_direct_events` | final candidate states that cross directly between `-1` and `1` |
+| `reserved_transition_events` | invalid retained, pending, request, or transition operands |
+| `accepted_change_candidate_events` | state-changing transition candidates |
+
+The integrated public direct-event counters use this transition-stage telemetry.
+
+Actual retained-state execution is checked again at the retained-state writeback boundary.
+
+## Transition Invariant Outputs
+
+The module emits:
+
+- `transition_domain_valid`;
+- `active_neutral_routing_valid`;
+- `pending_completion_from_zero_valid`;
+- `no_reserved_transition`;
+- `no_actual_direct_events`;
+- `transition_capacity_valid`;
+- `state_output_domain_valid`;
+- `transition_replay_deterministic`.
+
+These outputs participate in the integrated M16 invariant vector.
+
+## Combinational Evaluation Boundary
+
+The active-neutral transition module is combinational.
+
+At the beginning of every evaluation:
+
+`state_candidate_next = state_q`
+
+All masks are initialized to zero.
+
+All transition event outputs are initialized to zero.
+
+All transition invariant outputs are initialized to one before validation.
+
+The RTL qualification rejects inferred combinational latches.
+
+The qualified active-neutral implementation contains:
+
+`zero inferred latches`
+
+## Scheduler-State Validation
+
+The module validates:
+
+`scheduler_state`
+
+through:
+
+`frp_scheduler_state_is_valid`
+
+The valid scheduler states are:
+
+- `FRP_SCHED_FREE`;
+- `FRP_SCHED_BALANCE`;
+- `FRP_SCHED_COMMIT`;
+- `FRP_SCHED_EXCITE`;
+- `FRP_SCHED_NEUTRALIZE`.
+
+The final replay relation requires a valid scheduler state.
+
+## Complete Operand-Domain Validation
+
+Before transition candidate generation, the module scans every cell in ascending cell-index order.
+
+For every cell, it validates:
+
+- retained state from `state_q`;
+- retained pending target from `pending_route_q`.
+
+If either value is outside `{-1, 0, 1}`, the module:
+
+- sets `reserved_transition_mask[cell]`;
+- increments `reserved_transition_events`;
+- clears `transition_domain_valid`;
+- clears `no_reserved_transition`.
+
+Invalid operands are not converted into legal transition candidates.
+
+## Pending-Completion Evaluation Priority
+
+Pending-route completion is evaluated before explicit request lanes.
+
+Pending-completion cells are processed in ascending cell-index order:
+
+`cell 0 → cell 1 → ... → cell CELLS - 1`
+
+For each cell, completion is requested when:
+
+`tick_enable = 1`
+
+and:
+
+`pending_completion_enable[cell] = 1`
+
+A legal completion additionally requires:
+
+- retained state belongs to `{-1, 0, 1}`;
+- retained state is `0`;
+- retained pending target belongs to `{-1, 0, 1}`;
+- retained pending target is nonzero;
+- scheduler state is valid;
+- scheduler state is commit-capable.
+
+Commit-capable scheduler states are:
+
+- `FREE`;
+- `COMMIT`;
+- `EXCITE`.
+
+A legal completion claims the cell through:
+
+`pending_completion_mask[cell]`
+
+This claim precedes explicit request processing.
+
+## Explicit Request-Lane Evaluation
+
+After pending-completion evaluation, accepted explicit request lanes are processed in ascending order:
+
+`lane 0 → lane 1 → ... → lane REQUEST_LANES - 1`
+
+The request-lane arbitration module has already applied:
+
+- cell-index validation;
+- target-domain validation;
+- duplicate-cell guarding;
+- retained pending-route ownership;
+- scheduler transition eligibility.
+
+The active-neutral module validates the accepted inputs again.
+
+For each accepted lane, it extracts:
+
+- cell index;
+- retained cell state;
+- requested target;
+- pending-completion ownership.
+
+If an accepted lane has an invalid cell index, the module clears:
+
+- `transition_domain_valid`;
+- `no_reserved_transition`;
+- `transition_replay_deterministic`.
+
+If retained state or request target is invalid, the module:
+
+- sets `reserved_transition_mask`;
+- increments `reserved_transition_events`;
+- clears `transition_domain_valid`;
+- clears `no_reserved_transition`;
+- clears `transition_replay_deterministic`.
+
+If a pending completion already owns the cell, no explicit request candidate replaces it.
+
+The module clears:
+
+`transition_replay_deterministic`
+
+for this invalid ownership condition.
+
+## Explicit Transition Classification
+
+For a valid accepted explicit request, the module calls:
+
+`frp_classify_transition(retained_state, requested_target, FRP_STATE_ZERO)`
+
+The explicit transition classes are:
 
 | Transition class | Condition |
 |---|---|
-| `same_state` | `state_q_i = selected_target_i` |
-| `zero_to_nonzero` | `state_q_i = 0` and `selected_target_i != 0` |
-| `nonzero_to_zero` | `state_q_i != 0` and `selected_target_i = 0` |
-| `opposite_polarity` | `state_q_i × selected_target_i = -1` |
-| `pending_completion` | `state_q_i = 0` and `pending_route_q_i != 0` |
-| `reserved_transition` | state or target contains `2'b10` |
+| `FRP_TRANS_SAME_STATE` | retained state equals requested target |
+| `FRP_TRANS_ZERO_TO_NONZERO` | retained state is `0` and target is `-1` or `1` |
+| `FRP_TRANS_NONZERO_TO_ZERO` | retained state is `-1` or `1` and target is `0` |
+| `FRP_TRANS_OPPOSITE_POLARITY` | retained state and target are opposite nonzero polarities |
+| `FRP_TRANS_RESERVED_OPERAND` | retained state or target is outside `{-1, 0, 1}` |
+| `FRP_TRANS_INVALID` | no defined transition relation matches |
 
-Reserved encodings are never legal transition operands.
+The module evaluates scheduler eligibility through:
+
+`frp_scheduler_allows_transition`
 
 ## Same-State Transition
 
-If:
+A same-state explicit request satisfies:
 
-`state_q_i = selected_target_i`
+`state_q[cell] = request_target[lane]`
 
-then:
+The candidate value remains:
 
-`state_d_i = state_q_i`
+`state_candidate_d[cell] = state_q[cell]`
 
-No retained-state change occurs.
+The module sets:
+
+`transition_valid_mask[cell] = 1`
+
+`same_state_mask[cell] = 1`
+
+and increments:
+
+`same_state_events`
+
+It does not set:
+
+`accepted_change_candidate_mask[cell]`
+
+It does not increment:
+
+`accepted_change_candidate_events`
 
 No pending route is created.
 
-No active-neutral routing event is counted.
-
-No direct-transition event is counted.
+No direct-event counter is incremented.
 
 ## Neutral Release Transition
 
-If:
+A neutral release satisfies:
 
-`state_q_i = 0`
+`state_q[cell] = 0`
 
 and:
 
-`selected_target_i = -1 or +1`
+`request_target[lane] ∈ {-1, 1}`
 
-then the legal transition is:
+The transition is scheduler-eligible in:
 
-`0 → selected_target_i`
+- `FREE`;
+- `COMMIT`;
+- `EXCITE`.
 
-This transition is valid because it starts from active neutral state `0`.
+For an eligible accepted request:
 
-Required relation:
+`state_candidate_d[cell] = request_target[lane]`
 
-`zero_to_nonzero_mask_i = 1`
+The module sets:
+
+`transition_valid_mask[cell] = 1`
+
+`zero_to_nonzero_mask[cell] = 1`
+
+`accepted_change_candidate_mask[cell] = 1`
+
+and increments:
+
+`zero_to_nonzero_events`
+
+`accepted_change_candidate_events`
+
+The candidate remains subject to downstream transition-capacity admission.
 
 ## Neutralization Transition
 
-If:
+A neutralization satisfies:
 
-`state_q_i = -1 or +1`
+`state_q[cell] ∈ {-1, 1}`
 
 and:
 
-`selected_target_i = 0`
+`request_target[lane] = 0`
 
-then the legal transition is:
+The transition is scheduler-eligible in:
 
-`state_q_i → 0`
+- `FREE`;
+- `BALANCE`;
+- `NEUTRALIZE`.
 
-This transition is valid because it terminates in active neutral state `0`.
+For an eligible accepted request:
 
-Required relation:
+`state_candidate_d[cell] = FRP_ACTIVE_NEUTRAL`
 
-`nonzero_to_zero_mask_i = 1`
+The module sets:
+
+`transition_valid_mask[cell] = 1`
+
+`nonzero_to_zero_mask[cell] = 1`
+
+`accepted_change_candidate_mask[cell] = 1`
+
+and increments:
+
+`nonzero_to_zero_events`
+
+`accepted_change_candidate_events`
+
+The candidate remains subject to downstream transition-capacity admission.
 
 ## Opposite-Polarity Transition Request
 
-If:
+An opposite-polarity request satisfies either:
 
-`state_q_i = -1`
-
-and:
-
-`selected_target_i = +1`
-
-then direct execution is forbidden.
-
-The legal tick action is:
-
-`state_d_i = 0`
-
-and the requested target must be retained by the pending-route module as:
-
-`pending_route_d_i = +1`
-
-If:
-
-`state_q_i = +1`
+`state_q[cell] = -1`
 
 and:
 
-`selected_target_i = -1`
+`request_target[lane] = 1`
 
-then direct execution is forbidden.
+or:
 
-The legal tick action is:
+`state_q[cell] = 1`
 
-`state_d_i = 0`
+and:
 
-and the requested target must be retained by the pending-route module as:
+`request_target[lane] = -1`
 
-`pending_route_d_i = -1`
+The request is scheduler-eligible in:
 
-Required relation:
+- `FREE`;
+- `BALANCE`;
+- `NEUTRALIZE`.
 
-`neutral_routed_mask_i = 1`
+For each accepted opposite-polarity request, the module increments:
 
-Required invariant:
+`requested_direct_events`
 
-`actual_direct_events = 0`
+A legal active-neutral route additionally requires:
+
+`request_neutralized[lane] = 1`
+
+and scheduler eligibility.
+
+The candidate is:
+
+`state_candidate_d[cell] = FRP_ACTIVE_NEUTRAL`
+
+The module sets:
+
+`transition_valid_mask[cell] = 1`
+
+`opposite_polarity_mask[cell] = 1`
+
+`neutral_routed_mask[cell] = 1`
+
+`nonzero_to_zero_mask[cell] = 1`
+
+`accepted_change_candidate_mask[cell] = 1`
+
+It increments:
+
+`prevented_direct_events`
+
+`neutral_routed_events`
+
+`nonzero_to_zero_events`
+
+`accepted_change_candidate_events`
+
+The requested opposite target remains available on:
+
+`request_target`
+
+The pending-route module stores that target only if the first route leg receives downstream transition capacity.
+
+If `request_neutralized` or scheduler eligibility is absent for an accepted opposite-polarity request, the module clears:
+
+`active_neutral_routing_valid`
+
+## Active-Neutral First Leg
+
+For:
+
+`-1 → 1`
+
+the candidate first leg is:
+
+`-1 → 0`
+
+The pending target is:
+
+`1`
+
+For:
+
+`1 → -1`
+
+the candidate first leg is:
+
+`1 → 0`
+
+The pending target is:
+
+`-1`
+
+Direct candidate execution between opposite nonzero polarities is not generated by the legal routing branch.
+
+Each first-leg candidate remains subject to downstream transition-capacity admission.
 
 ## Pending Route Completion Transition
 
-If:
+A pending completion satisfies:
 
-`state_q_i = 0`
-
-and:
-
-`pending_route_q_i = -1 or +1`
+`state_q[cell] = 0`
 
 and:
 
-`pending_completion_enable_i = 1`
+`pending_route_q[cell] ∈ {-1, 1}`
 
-then the legal transition is:
+and:
 
-`0 → pending_route_q_i`
+`pending_completion_enable[cell] = 1`
 
-and the pending-route module clears:
+and:
 
-`pending_route_d_i = 0`
+`scheduler_state ∈ {FREE, COMMIT, EXCITE}`
 
-Pending completion remains subject to:
+For a legal completion:
 
-- scheduler eligibility;
-- request-lane arbitration;
-- transition-capacity boundary.
+`state_candidate_d[cell] = pending_route_q[cell]`
 
-Required relation:
+The module sets:
 
-`pending_completion_mask_i = 1`
+`transition_valid_mask[cell] = 1`
+
+`zero_to_nonzero_mask[cell] = 1`
+
+`pending_completion_mask[cell] = 1`
+
+`accepted_change_candidate_mask[cell] = 1`
+
+It increments:
+
+`zero_to_nonzero_events`
+
+`pending_completion_events`
+
+`accepted_change_candidate_events`
+
+The candidate remains subject to downstream transition-capacity admission.
+
+The pending-route module clears the retained pending target only after the completion receives capacity.
 
 ## Forbidden Pending Completion
 
-A pending route must not complete from a nonzero retained state.
+Pending completion is legal only from retained active neutral state:
 
-Forbidden:
+`state_q[cell] = 0`
 
-`state_q_i = -1`
+A completion request from retained state `-1` or `1` is invalid.
 
-and:
+A completion request with a zero pending target is invalid.
 
-`pending_route_q_i = +1`
+A completion request with a reserved retained state or reserved pending target is invalid.
 
-directly producing:
+A completion request during a scheduler state that is not commit-capable is invalid.
 
-`state_d_i = +1`
+For an invalid completion request, the module clears:
 
-Forbidden:
+- `pending_completion_from_zero_valid`;
+- `transition_replay_deterministic`.
 
-`state_q_i = +1`
+If the completion operands are invalid, the module also:
 
-and:
+- sets `reserved_transition_mask[cell]`;
+- clears `transition_domain_valid`;
+- clears `no_reserved_transition`.
 
-`pending_route_q_i = -1`
+Required relation:
 
-directly producing:
-
-`state_d_i = -1`
-
-Required invariant:
-
-`pending completion starts from 0`
+`pending completion starts from retained state 0`
 
 ## Direct Transition Detection
 
-The module must detect any illegal direct opposite-polarity transition attempt.
+After pending-completion and explicit-request candidate generation, the module scans every cell in ascending cell-index order.
 
-Detected direct transitions:
+For each cell, it compares:
 
-`state_q_i = -1` and `state_d_i = +1`
+`state_q[cell]`
 
-`state_q_i = +1` and `state_d_i = -1`
+with:
 
-Required detection output:
+`state_candidate_d[cell]`
 
-`actual_direct_mask_i = 1`
+A direct opposite-polarity candidate exists when:
 
-Required qualified value:
+`state_q[cell] = -1`
 
-`actual_direct_mask_i = 0`
+and:
 
-Required invariant:
+`state_candidate_d[cell] = 1`
+
+or when:
+
+`state_q[cell] = 1`
+
+and:
+
+`state_candidate_d[cell] = -1`
+
+For a detected direct candidate, the module sets:
+
+`actual_direct_mask[cell] = 1`
+
+increments:
+
+`actual_direct_events`
+
+and clears:
+
+`no_actual_direct_events`
+
+Qualified values:
+
+`actual_direct_mask = 0`
 
 `actual_direct_events = 0`
 
 ## Reserved Transition Guard
 
-A transition is invalid if any participating encoded value is:
+The reserved balanced ternary encoding is:
 
 `2'b10`
 
-The module must reject or block transitions involving reserved encodings.
+The module validates:
 
-Reserved operands include:
+- every retained state;
+- every retained pending target;
+- every accepted request target;
+- every final candidate state.
 
-- retained state;
-- selected target;
-- pending route;
-- request target.
+An invalid retained state or retained pending target:
 
-Required relation:
+- sets `reserved_transition_mask`;
+- increments `reserved_transition_events`;
+- clears `transition_domain_valid`;
+- clears `no_reserved_transition`.
 
-`reserved_transition_mask_i = 1`
+An invalid accepted request target or retained request cell state also clears:
 
-when any participating value is reserved.
+`transition_replay_deterministic`
 
-Required invariant:
+An invalid final candidate state:
+
+- sets `reserved_transition_mask`;
+- clears `state_output_domain_valid`;
+- clears `no_reserved_transition`.
+
+The final domain relation is:
+
+`transition_domain_valid = transition_domain_valid && state_output_domain_valid && no_reserved_transition`
+
+Qualified values:
+
+`reserved_transition_events = 0`
 
 `reserved_state_events = 0`
 
 ## Selected Target Priority
 
-The active-neutral transition module uses deterministic selected-target priority:
+The candidate-state base is:
 
-1. reset target;
-2. pending-route completion target;
-3. accepted request target;
-4. active neutral routing target;
-5. retained current state.
+`state_candidate_next = state_q`
 
-Priority relation:
+The implemented priority order is:
 
-`pending-route completion` precedes `new accepted request`
+1. retained current state;
+2. legal pending-route completion candidate;
+3. accepted explicit request candidate.
 
-This preserves deterministic continuation of already-retained opposite-polarity routes.
+Pending completion is processed before explicit request lanes.
 
-## State Next-Value Generation
+A pending completion claims its cell through:
 
-For each cell `i`, `state_d_i` is generated according to legal transition class:
+`pending_completion_mask`
 
-| Condition | `state_d_i` |
+An accepted explicit request targeting a claimed completion cell does not replace the pending completion candidate.
+
+Within an explicit request:
+
+- same-state classification retains the current state;
+- zero-to-nonzero classification selects the explicit request target;
+- nonzero-to-zero classification selects active neutral `0`;
+- opposite-polarity classification selects active neutral `0`.
+
+The module has no reset input.
+
+Reset-state generation is performed by the retained-state register layer.
+
+## State Candidate Generation
+
+The implemented candidate relations are:
+
+| Condition | Candidate state |
 |---|---|
-| reset | `0` |
-| reserved transition | `state_q_i` or safe `0`, according to higher-level guard |
-| pending completion from `0` | `pending_route_q_i` |
-| same state | `state_q_i` |
-| `0 → ±1` | `selected_target_i` |
-| `±1 → 0` | `0` |
-| opposite-polarity request | `0` |
-| no eligible transition | `state_q_i` |
+| no enabled legal transition | `state_q[cell]` |
+| accepted same-state request | `state_q[cell]` |
+| accepted zero-to-nonzero request | `request_target[lane]` |
+| accepted nonzero-to-zero request | `0` |
+| accepted opposite-polarity request | `0` |
+| legal pending completion | `pending_route_q[cell]` |
+| invalid transition operand | retained candidate remains unchanged and invariant outputs are cleared |
 
-The qualified replay path must never emit reserved encoding.
+The active-neutral module emits:
 
-Required invariant:
+`state_candidate_d`
 
-`state_d_i != 2'b10`
+The capacity guard determines which candidate cells receive final admission.
+
+The state-update module commits only capacity-approved candidate cells.
+
+Required candidate-domain relation:
+
+`state_candidate_d[cell] ∈ {-1, 0, 1}`
 
 ## Tick-Enable Behavior
 
-If:
+When:
 
 `tick_enable = 0`
 
-then:
+pending-completion evaluation is disabled.
 
-`state_d = state_q`
+Explicit request transition evaluation is disabled.
 
-No transition masks may indicate accepted retained-state change.
+The candidate-state base remains unchanged:
 
-Required relation:
+`state_candidate_d = state_q`
 
-`tick_enable = 0 → accepted_changes = 0`
+The state-changing candidate mask remains:
 
-Required invariant:
+`accepted_change_candidate_mask = 0`
 
-`tick_enable = 0 → no retained-state transition`
+The state-changing candidate event count remains:
+
+`accepted_change_candidate_events = 0`
+
+Transition-domain validation still evaluates the current retained-state and pending-route domains.
+
+Required integrated relation:
+
+`tick_enable = 0 → no retained-state writeback`
 
 ## Scheduler Interaction
 
-The scheduler provides temporal eligibility.
+The active-neutral module validates the registered scheduler state and applies the shared scheduler transition rules.
 
-The active-neutral transition module must preserve legal transition rules in every scheduler state.
+The scheduler cannot authorize a direct transition between `-1` and `1`.
 
-Forbidden transitions remain forbidden in:
+Explicit zero-to-nonzero transitions require a commit-capable state.
 
-- `free`;
-- `balance`;
-- `commit`;
-- `excite`;
-- `neutralize`.
+Explicit nonzero-to-zero transitions require a neutralize-capable state.
 
-Required invariant:
+Opposite-polarity first legs require a neutralize-capable state.
 
-`scheduler state cannot authorize direct opposite-polarity transition`
+Pending completion requires a commit-capable state.
+
+Same-state retention is legal in every valid scheduler state.
 
 ## Free-State Transition Behavior
 
-In `free` scheduler state, legal transitions may include:
+`FREE` is both commit-capable and neutralize-capable.
 
-- pending-route completion;
-- `0 → ±1`;
-- `±1 → 0`;
-- opposite-polarity routing through `0`;
-- same-state retention.
+The integrated `FREE` path admits:
 
-The transition-capacity boundary still applies.
+- same-state retention;
+- zero-to-nonzero release;
+- nonzero-to-zero neutralization;
+- opposite-polarity first-leg routing through `0`;
+- retained pending-route completion from `0`.
 
-Required invariant:
-
-`accepted_changes <= REQUEST_LANES`
+Every state-changing candidate remains subject to downstream capacity admission.
 
 ## Balance-State Transition Behavior
 
-In `balance` scheduler state, legal transitions may include:
+`BALANCE` is neutralize-capable.
+
+The integrated `BALANCE` path admits:
 
 - same-state retention;
-- `±1 → 0`;
-- opposite-polarity routing through `0`;
-- pending-route retention.
+- nonzero-to-zero neutralization;
+- opposite-polarity first-leg routing through `0`.
 
-Commit release is deferred to commit-eligible states.
+It does not admit:
 
-Required invariant:
+- zero-to-nonzero release;
+- pending-route completion.
 
-`actual_direct_events = 0`
+A pending target remains retained during `BALANCE`.
 
 ## Commit-State Transition Behavior
 
-In `commit` scheduler state, legal transitions may include:
+`COMMIT` is commit-capable.
 
-- pending-route completion;
-- `0 → ±1`;
-- accepted retained-state update;
-- same-state retention.
+The integrated `COMMIT` path admits:
 
-Required invariant:
+- same-state retention;
+- zero-to-nonzero release;
+- retained pending-route completion from `0`.
 
-`accepted_changes <= REQUEST_LANES`
+It does not admit:
+
+- nonzero-to-zero explicit requests;
+- opposite-polarity explicit requests.
 
 ## Excite-State Transition Behavior
 
-In `excite` scheduler state, legal transitions may include:
+`EXCITE` is commit-capable.
 
-- `0 → ±1`;
-- pending-route completion when eligible;
-- nonzero target acceptance;
-- same-state retention.
+The integrated `EXCITE` path admits:
 
-Required invariant:
+- same-state retention;
+- zero-to-nonzero release;
+- retained pending-route completion from `0`.
 
-`switch_load_peak <= transition_fraction`
+It does not admit:
+
+- nonzero-to-zero explicit requests;
+- opposite-polarity explicit requests.
 
 ## Neutralize-State Transition Behavior
 
-In `neutralize` scheduler state, legal transitions may include:
+`NEUTRALIZE` is neutralize-capable.
 
-- `±1 → 0`;
-- opposite-polarity routing through `0`;
-- pending-route retention;
-- same-state retention.
+The integrated `NEUTRALIZE` path admits:
 
-Required invariant:
+- same-state retention;
+- nonzero-to-zero neutralization;
+- opposite-polarity first-leg routing through `0`.
 
-`actual_direct_events = 0`
+It does not admit:
 
-## Transition Event Sources
+- zero-to-nonzero release;
+- pending-route completion.
 
-The active-neutral transition module provides counter sources for:
+A pending target remains retained during `NEUTRALIZE`.
 
-| Counter source | Meaning |
+## Transition Event Relations
+
+The active-neutral module records:
+
+| Event output | Recorded transition |
 |---|---|
-| `same_state_events` | cells retaining the same state |
-| `zero_to_nonzero_events` | legal `0 → ±1` transitions |
-| `nonzero_to_zero_events` | legal `±1 → 0` transitions |
-| `requested_direct_events` | opposite-polarity requests observed |
-| `prevented_direct_events` | direct opposite-polarity transitions prevented |
-| `neutral_routed_events` | opposite-polarity requests routed through `0` |
-| `pending_completion_events` | pending routes completed from `0` |
-| `actual_direct_events` | illegal direct opposite-polarity executions detected |
-| `reserved_transition_events` | reserved operand transitions detected |
-| `accepted_change_events` | retained-state changes accepted |
+| `same_state_events` | accepted same-state request |
+| `zero_to_nonzero_events` | explicit neutral release or pending completion |
+| `nonzero_to_zero_events` | explicit neutralization or opposite-polarity first leg |
+| `requested_direct_events` | accepted opposite-polarity request |
+| `prevented_direct_events` | opposite-polarity request assigned to active-neutral routing |
+| `neutral_routed_events` | opposite-polarity request routed through `0` |
+| `pending_completion_events` | legal pending completion candidate |
+| `actual_direct_events` | direct opposite-polarity candidate detected |
+| `reserved_transition_events` | invalid transition operand detected |
+| `accepted_change_candidate_events` | state-changing pre-capacity candidate |
 
-Required inherited relations:
+The active-neutral routing relations are:
 
 `prevented_direct_events >= requested_direct_events`
 
@@ -546,209 +1065,564 @@ Required inherited relations:
 
 `actual_direct_events = 0`
 
-`reserved_transition_events = 0`
+The qualified opposite-polarity test ticks record:
 
-## Accepted Change Relation
+`requested_direct_events = 1`
 
-A retained-state change occurs when:
+`prevented_direct_events = 1`
 
-`state_d_i != state_q_i`
+`neutral_routed_events = 1`
 
-The accepted-change mask is:
+`actual_direct_events = 0`
 
-`accepted_change_mask_i = 1`
+## Accepted Change Candidate Relation
 
-when the transition is legal and the retained state changes.
+The active-neutral module produces a pre-capacity candidate mask:
 
-Required relation:
+`accepted_change_candidate_mask`
 
-`accepted_changes = popcount(accepted_change_mask)`
+A bit is set for:
 
-Required bound:
+- zero-to-nonzero explicit transition;
+- nonzero-to-zero explicit transition;
+- opposite-polarity first leg;
+- pending-route completion.
+
+A same-state request does not set the mask.
+
+The candidate accounting relation is:
+
+```systemverilog
+accepted_change_candidate_events
+==
+$countones(accepted_change_candidate_mask)
+```
+
+The direct-candidate exclusion relation is:
+
+```systemverilog
+(
+    accepted_change_candidate_mask
+    & actual_direct_mask
+)
+==
+0
+```
+
+These two relations form the module output:
+
+`transition_capacity_valid`
+
+The active-neutral module does not apply the final bound:
 
 `accepted_changes <= REQUEST_LANES`
 
-## Switch Load Relation
+That bound is applied by:
 
-The transition module provides the numerator for switch-load calculation:
+`frp_m16_capacity_guard`
 
-`accepted_changes`
+## Final Capacity and Switch-Load Boundary
 
-The inherited relation is:
+The capacity guard consumes:
 
-`switch_load = accepted_changes / CELLS`
+- `state_q`;
+- `state_candidate_d`;
+- `accepted_change_candidate_mask`;
+- `neutral_routed_mask`;
+- pending-completion candidates;
+- pre-capacity accepted request lanes.
 
-Required bound:
+The capacity guard produces:
 
-`switch_load_peak <= transition_fraction`
+- `capacity_accept_mask`;
+- `capacity_reject_mask`;
+- `accepted_change_mask`;
+- `accepted_changes`;
+- `capacity_remaining`;
+- `capacity_exhausted`;
+- `switch_load_numerator`.
 
-## Active Neutral Route Determinism
+The integrated relations are:
 
-For the same input sequence:
+`accepted_changes <= REQUEST_LANES`
+
+`capacity_remaining = REQUEST_LANES - accepted_changes`
+
+`capacity_exhausted = (accepted_changes == REQUEST_LANES)`
+
+`switch_load_numerator = accepted_changes`
+
+The active-neutral candidate count and final accepted-change count are separate execution-stage quantities.
+
+## Active-Neutral Route Determinism
+
+Deterministic processing order is:
+
+1. complete retained-state and pending-route domain scan;
+2. pending completions in ascending cell-index order;
+3. accepted explicit requests in ascending lane order;
+4. final candidate-state domain and direct-transition scan in ascending cell-index order.
+
+The candidate-state base is always copied from:
 
 `state_q`
 
-`selected_target`
+The same input values and parameters produce the same:
 
-`pending_route_q`
+- `state_candidate_d`;
+- transition-valid mask;
+- transition-class masks;
+- neutral-routing mask;
+- pending-completion mask;
+- direct-transition mask;
+- reserved-transition mask;
+- accepted-change candidate mask;
+- transition event telemetry;
+- invariant outputs.
 
-`request_accept`
+The replay-valid output is:
 
-`scheduler_state`
+`transition_replay_deterministic`
 
-`transition_capacity`
+It is cleared by:
 
-the module must produce the same:
+- invalid scheduler state;
+- invalid retained-state or pending-route domain;
+- invalid explicit request input;
+- illegal pending completion;
+- explicit request conflict with a pending completion;
+- incomplete active-neutral routing;
+- detected direct opposite-polarity candidate.
 
-`state_d`
+## Active-Neutral Invariant Relations
 
-`transition masks`
+The active-neutral routing relation is:
 
-`event counter deltas`
+```systemverilog
+active_neutral_routing_valid =
+    active_neutral_routing_valid
+    && (
+        prevented_direct_events
+        >= requested_direct_events
+    )
+    && (
+        neutral_routed_events
+        >= prevented_direct_events
+    )
+    && no_actual_direct_events;
+```
 
-`invariant flags`
+The candidate accounting relation is:
 
-Required invariant:
+```systemverilog
+transition_capacity_valid =
+    (
+        accepted_change_candidate_events
+        ==
+        $countones(
+            accepted_change_candidate_mask
+        )
+    )
+    && (
+        (
+            accepted_change_candidate_mask
+            & actual_direct_mask
+        )
+        == 0
+    );
+```
 
-`active-neutral transition replay is deterministic`
+The replay relation is:
 
-## Invariant Flags
+```systemverilog
+transition_replay_deterministic =
+    transition_replay_deterministic
+    && scheduler_state_valid
+    && transition_domain_valid
+    && pending_completion_from_zero_valid
+    && active_neutral_routing_valid
+    && no_actual_direct_events;
+```
 
-The active-neutral transition module exposes:
+## Integrated Active-Neutral Invariant Flag
 
-| Flag | Required value |
-|---|---|
-| `transition_domain_valid` | `True` |
-| `active_neutral_routing_valid` | `True` |
-| `pending_completion_from_zero_valid` | `True` |
-| `no_reserved_transition` | `True` |
-| `no_actual_direct_events` | `True` |
-| `transition_capacity_valid` | `True` |
-| `state_output_domain_valid` | `True` |
-| `transition_replay_deterministic` | `True` |
+The integrated active-neutral flag is:
 
-These flags must correlate with the M16 assertion set and M15 vector replay expectations.
+`FRP_INV_ACTIVE_NEUTRAL_VALID`
+
+It includes:
+
+- request-stage active-neutral routing validation;
+- transition-stage active-neutral routing validation;
+- pending completion from retained state `0`;
+- transition replay determinism;
+- active-neutral capacity validation;
+- active-neutral retained-state writeback validation;
+- pending-completion writeback validation;
+- transition-stage zero direct-event validation;
+- state-update zero direct-event validation.
+
+The active-neutral module outputs also participate in:
+
+- `FRP_INV_STATE_DOMAIN_VALID`;
+- `FRP_INV_PENDING_POLARITY_VALID`;
+- `FRP_INV_TRANSITION_CAPACITY_VALID`;
+- `FRP_INV_STATE_UPDATE_VALID`;
+- `FRP_INV_NO_ACTUAL_DIRECT_EVENTS`;
+- `FRP_INV_NO_RESERVED_STATE`.
+
+The qualified integrated invariant vector is:
+
+`1111111111`
 
 ## Assertion Support
 
-The M16 active-neutral transition module supports the following assertion layer:
+The bound assertion artifact is:
 
-| Assertion | Required condition |
+`rtl/m16/frp_m16_assertions.sv`
+
+The integrated assertion relations include:
+
+| Assertion boundary | Required relation |
 |---|---|
-| `assert_no_reserved_state_operand` | transition operands do not contain `2'b10` |
-| `assert_no_reserved_state_output` | `state_d` does not contain `2'b10` |
-| `assert_no_direct_negative_to_positive` | no `-1 → +1` retained transition |
-| `assert_no_direct_positive_to_negative` | no `+1 → -1` retained transition |
-| `assert_opposite_request_routes_to_zero` | opposite-polarity request produces `state_d = 0` |
-| `assert_pending_completion_from_zero` | pending route completes only from `0` |
-| `assert_pending_target_used_for_completion` | completion target equals retained pending route |
-| `assert_tick_disable_holds_state` | `tick_enable = 0` preserves `state_q` |
-| `assert_scheduler_cannot_authorize_direct_transition` | no scheduler state permits direct opposite transition |
-| `assert_capacity_not_exceeded` | `accepted_changes <= REQUEST_LANES` |
+| retained-state domain | every state belongs to `{-1, 0, 1}` |
+| pending-route domain | every pending target belongs to `{-1, 0, 1}` |
+| disabled tick | retained state and pending route remain stable |
+| state-change authorization | retained-state change requires `accepted_change_mask` |
+| direct-transition guard | no retained-state transition crosses directly between `-1` and `1` |
+| active-neutral first leg | accepted opposite-polarity request writes retained state `0` |
+| retained pending polarity | pending target is opposite to the prior retained state |
+| deferred route | pending target remains stable without accepted completion |
+| completion source | pending completion starts from retained state `0` |
+| completion target | retained state receives the prior pending target |
+| completion clearing | pending route becomes `0` |
+| neutral-route ownership | every neutral-routed cell is capacity accepted |
+| active-neutral invariant flag | `FRP_INV_ACTIVE_NEUTRAL_VALID = 1` |
+| direct-event invariant flag | `FRP_INV_NO_ACTUAL_DIRECT_EVENTS = 1` |
 
-## M15 Vector Replay Boundary
+## Deterministic RTL Testbench Record
 
-The active-neutral transition module must replay against the M15 deterministic vector package.
+The executable testbench is:
 
-Comparison inputs:
+`rtl/m16/frp_m16_tb.sv`
 
-`state_q`
+The qualified parameter profile is:
 
-`request_target`
+| Parameter | Value |
+|---|---:|
+| `CELLS` | `8` |
+| `STATE_BITS` | `2` |
+| `REQUEST_LANES` | `2` |
 
-`request_accept`
+The free-mode sequence executes:
 
-`request_cell_index`
+`0 → 1`
 
-`pending_route_q`
+`1 → 0 → -1`
 
-`pending_completion_enable`
+`-1 → 0 → 1`
 
-`scheduler_state`
+The opposite-polarity first-leg ticks record:
 
-`tick_enable`
+- `neutral_routed_cell_mask[0] = 1`;
+- `requested_direct_events = 1`;
+- `prevented_direct_events = 1`;
+- `neutral_routed_events = 1`;
+- `actual_direct_events = 0`.
 
-`REQUEST_LANES`
+The retained pending target completes on the following eligible tick.
 
-Comparison outputs:
+The `7/1` sequence records:
 
-`state_d`
+- zero-to-nonzero deferral during `BALANCE`;
+- zero-to-nonzero release during `COMMIT`;
+- opposite-polarity first leg during `BALANCE`;
+- retained state `0` and pending target retention;
+- completion during the following `COMMIT`.
 
-`same_state_mask`
+The `1/7` sequence records:
 
-`zero_to_nonzero_mask`
+- zero-to-nonzero release during `EXCITE`;
+- opposite-polarity first leg during `NEUTRALIZE`;
+- retained state `0` and pending target retention;
+- completion during the following `EXCITE`.
 
-`nonzero_to_zero_mask`
+## Active-Neutral Qualification Record
 
-`opposite_polarity_mask`
+| Routing relation | Result |
+|---|---|
+| active neutral `0` executed as intermediate state | `PASS` |
+| direct `-1 → 1` absent | `PASS` |
+| direct `1 → -1` absent | `PASS` |
+| `-1 → 0 → 1` executed | `PASS` |
+| `1 → 0 → -1` executed | `PASS` |
+| requested opposite polarity retained | `PASS` |
+| pending completion executed only from `0` | `PASS` |
+| pending route cleared after completion | `PASS` |
 
-`neutral_routed_mask`
+The pending-route relations are:
 
-`pending_completion_mask`
+| Pending-route relation | Result |
+|---|---|
+| exact requested polarity retained | `PASS` |
+| same-cell overwrite prevented | `PASS` |
+| scheduler deferral preserves route | `PASS` |
+| capacity deferral preserves route | `PASS` |
+| completion executes only from `0` | `PASS` |
+| accepted completion clears route | `PASS` |
+| pending-route overflow absent | `PASS` |
 
-`actual_direct_mask`
+## M15 Semantic Foundation
 
-`reserved_transition_mask`
+M15 remains the qualified semantic and implementation-mapping foundation for M16.
 
-`accepted_change_mask`
+The M15 qualification record is:
 
-`counter deltas`
+| Qualification relation | Result |
+|---|---:|
+| qualification checks | `41 / 41 PASS` |
+| deterministic vector files | `10 / 10 byte-identical` |
+| required semantic correlation matches | `5 / 5 = 1.0` |
+| deterministic replay matches | `6 / 6 = 1.0` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+| `fixed_point_topology_sum_exact` | `True` |
+| `fixed_point_thermal_sum_exact` | `True` |
 
-`invariant flags`
+The M16 active-neutral implementation retains:
 
-Expected source:
+- M15 balanced ternary encoding;
+- active neutral state `0`;
+- same-state retention;
+- zero-to-nonzero release;
+- nonzero-to-zero neutralization;
+- tick-separated opposite-polarity routing;
+- exact pending-target polarity;
+- completion from retained state `0`;
+- transition-capacity qualification;
+- zero actual direct events;
+- zero reserved-state events;
+- zero queue-overflow events.
 
-`M15 cycle-exact integer golden trace`
+## RTL Workflow Record
 
-## Required M16 Active-Neutral Invariants
+Workflow:
 
-The M16 active-neutral transition module is valid only if:
+`FRP M16 RTL Artifact Boundary`
 
-Canonical ternary encoding is preserved.
+Workflow file:
 
-Reserved transition operands are rejected or blocked.
+`.github/workflows/frp-m16-rtl-artifact-boundary.yml`
 
-Reserved state output is never emitted.
+Initial closed workflow record:
 
-Same-state retention produces no retained-state change.
+| Field | Value |
+|---|---|
+| Run | `#82` |
+| Source commit | `a68a2af` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Artifact count | `1` |
 
-Neutral release starts from `0`.
+Synchronized workflow record:
 
-Neutralization terminates in `0`.
+| Field | Value |
+|---|---|
+| Run | `#84` |
+| Repository commit | `ede53cf` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Duration | `52s` |
+| Artifact count | `1` |
 
-Opposite-polarity requests are routed through `0`.
+Active-neutral qualification result:
 
-Pending routes complete only from `0`.
+`PASS`
 
-Direct opposite-polarity execution remains zero.
+RTL closure state:
 
-Accepted changes never exceed `REQUEST_LANES`.
+`M16 RTL EXECUTION LAYER CLOSED`
 
-Switch load remains bounded by `transition_fraction`.
+## FPGA Integration Qualification Record
 
-M15 vector replay remains deterministic.
+The target-independent FPGA integration top is:
 
-## Closure Criteria
+`fpga/m16/frp_m16_fpga_top.sv`
 
-This active-neutral transition module can be considered M16-ready when it supports:
+The executable FPGA integration testbench is:
 
-- canonical ternary transition decoding;
-- legal same-state retention;
-- legal `0 → ±1` release;
-- legal `±1 → 0` neutralization;
-- forbidden direct opposite-polarity transition blocking;
-- active-neutral route generation;
-- pending-route completion from `0`;
+`fpga/m16/frp_m16_fpga_tb.sv`
+
+The FPGA testbench executes:
+
+`0 → 1`
+
+then:
+
+`1 → 0`
+
+with retained:
+
+`pending_route = -1`
+
+and then:
+
+`0 → -1`
+
+During the opposite-polarity first leg, the recorded relations are:
+
+`request_accept[0] = 1`
+
+`neutral_routed_cell_mask[0] = 1`
+
+`requested_direct_events = 1`
+
+`prevented_direct_events = 1`
+
+`neutral_routed_events = 1`
+
+`actual_direct_events = 0`
+
+After the first leg:
+
+- retained state is `0`;
+- retained pending target is `-1`.
+
+After completion:
+
+- retained state is `-1`;
+- retained pending target is `0`.
+
+The synchronized FPGA preparation record is:
+
+| Field | Value |
+|---|---|
+| Workflow | `FRP M16 FPGA Preparation` |
+| Workflow file | `.github/workflows/frp-m16-fpga-preparation.yml` |
+| Run | `#2` |
+| Repository commit | `ede53cf` |
+| Branch | `main` |
+| Result | `SUCCESS` |
+| Duration | `36s` |
+| Artifact count | `1` |
+
+FPGA preparation qualification records:
+
+- asynchronous external reset assertion;
+- two-stage synchronous reset release;
+- `core_ready`;
+- execution-input gating before readiness;
+- scheduler propagation;
+- request-interface propagation;
+- active-neutral first-leg execution;
+- retained pending-route completion;
+- all ten invariant flags equal to `1`;
+- `actual_direct_events = 0`;
+- `reserved_state_events = 0`;
+- `queue_overflow_events = 0`.
+
+FPGA preparation closure state:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
+
+## Terminal Qualification Record
+
+The deterministic RTL testbench terminal output is:
+
+```text
+FRP M16 deterministic RTL testbench completed.
+CELLS=8 REQUEST_LANES=2
+ticks_recorded=16
+actual_direct_events=0
+reserved_state_events=0
+queue_overflow_events=0
+```
+
+Recorded terminal relations:
+
+| Relation | Value |
+|---|---:|
+| `CELLS` | `8` |
+| `REQUEST_LANES` | `2` |
+| final `ticks_recorded` | `16` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+
+Terminal marker validation:
+
+`PASS`
+
+## Qualification Closure
+
+The implemented active-neutral artifact records:
+
+- canonical balanced ternary operand validation;
+- deterministic pending-completion priority;
+- deterministic ascending request-lane evaluation;
+- same-state retention;
+- zero-to-nonzero candidate generation;
+- nonzero-to-zero candidate generation;
+- opposite-polarity first-leg routing through `0`;
+- retained pending-target completion from `0`;
 - direct-transition detection;
 - reserved-transition detection;
-- accepted-change mask generation;
-- event-counter source generation;
-- invariant flag generation;
-- assertion correlation;
-- M15 vector replay compatibility.
+- candidate-state domain validation;
+- pre-capacity change-mask generation;
+- transition event telemetry;
+- invariant generation;
+- downstream capacity qualification;
+- retained-state writeback correlation;
+- assertion execution;
+- executable deterministic testbench coverage;
+- FPGA integration propagation;
+- latch-diagnostic rejection;
+- multidriven-diagnostic rejection;
+- repository-integrity validation;
+- qualification artifact generation.
 
-## Next Step
+Final active-neutral result:
 
-The next M16 file should define the transition-capacity guard module:
+`PASS`
 
-`docs/m16_transition_capacity_guard_module.md`
+Final event values:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+Final RTL closure state:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+## Related M16 Artifacts
+
+- `rtl/m16/frp_m16_pkg.sv`;
+- `rtl/m16/frp_m16_scheduler.sv`;
+- `rtl/m16/frp_m16_request_lanes.sv`;
+- `rtl/m16/frp_m16_pending_routes.sv`;
+- `rtl/m16/frp_m16_active_neutral.sv`;
+- `rtl/m16/frp_m16_capacity_guard.sv`;
+- `rtl/m16/frp_m16_state_update.sv`;
+- `rtl/m16/frp_m16_core.sv`;
+- `rtl/m16/frp_m16_assertions.sv`;
+- `rtl/m16/frp_m16_tb.sv`;
+- `rtl/m16/SIMULATION_TRANSCRIPT.md`;
+- `rtl/m16/CLOSURE.md`;
+- `fpga/m16/frp_m16_fpga_top.sv`;
+- `fpga/m16/frp_m16_fpga_tb.sv`;
+- `fpga/m16/SIMULATION_TRANSCRIPT.md`;
+- `fpga/m16/CLOSURE.md`;
+- `docs/m16_request_lane_arbitration_module.md`;
+- `docs/m16_pending_route_register_module.md`;
+- `docs/m16_transition_capacity_guard_module.md`;
+- `docs/m16_retained_state_update_module.md`;
+- `docs/m16_invariant_assertion_set.md`;
+- `docs/m16_m15_vector_replay_compatibility_report.md`.
+
+## Author
+
+Maksym Marnov
