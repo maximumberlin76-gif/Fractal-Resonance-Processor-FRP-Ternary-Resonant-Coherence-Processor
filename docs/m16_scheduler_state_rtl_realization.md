@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned architecture layer.
+`M16 RTL EXECUTION LAYER CLOSED`
 
 ## Version
 
@@ -14,119 +14,308 @@ Planned architecture layer.
 
 ## Purpose
 
-This document defines the RTL-oriented scheduler-state realization for the M16 core layer.
-
-The scheduler-state layer preserves the M15-qualified temporal execution semantics of the:
+This document defines the qualified scheduler-state RTL realization for the M16 core layer of the:
 
 `Ternary Fractal Resonant Coherence Processor`
 
-M16 does not treat `free`, `7/1`, and `1/7` as benchmark labels.
+The scheduler preserves the M15-qualified temporal execution modes:
 
-They are explicit processor execution semantics.
+- `free`;
+- `7/1`;
+- `1/7`.
 
-## Scheduler Boundary
+These modes are explicit processor execution semantics.
 
-The M16 scheduler controls tick-level execution state.
+The scheduler supplies the temporal execution state used by:
 
-It does not compute:
-
-- phase words;
-- Kuramoto-Sakaguchi coupling;
-- thermal state;
-- gamma drift;
-- coherence compression;
-- `C(t)`;
-- `P(t)`;
-- phase-derived ternary targets.
-
-The scheduler provides deterministic temporal gating for:
-
-- retained-state update eligibility;
 - request-lane arbitration;
 - pending-route completion;
 - active-neutral routing;
-- transition-capacity application;
+- transition-capacity admission;
+- retained-state writeback;
 - scheduler event counting;
-- M15 vector replay alignment.
+- integrated invariant evaluation;
+- architectural assertion execution.
 
-## Scheduler Modes
+Primary scheduler implementation:
 
-M16 preserves three scheduler modes:
+`rtl/m16/frp_m16_scheduler.sv`
 
-| Mode | Meaning |
+Shared scheduler types and functions:
+
+`rtl/m16/frp_m16_pkg.sv`
+
+## Qualified Scheduler Record
+
+Qualified workflow:
+
+`FRP M16 RTL Artifact Boundary`
+
+Workflow file:
+
+`.github/workflows/frp-m16-rtl-artifact-boundary.yml`
+
+Current qualified workflow record:
+
+| Field | Recorded value |
 |---|---|
-| `free` | every tick is commit-capable |
-| `7/1` | seven balance ticks followed by one commit tick |
-| `1/7` | one excite tick followed by seven neutralize ticks |
+| Workflow run | `#84` |
+| Qualified source commit | `ede53cf` |
+| Branch | `main` |
+| Workflow result | `SUCCESS` |
+| Workflow duration | `52s` |
+| Qualification artifact count | `1` |
+| Qualification result | `PASS` |
+| Closure status | `M16 RTL EXECUTION LAYER CLOSED` |
 
-Required inherited validation profiles:
+Qualified scheduler profiles:
 
-| Mode | Ticks | Expected scheduler counts |
+| Mode | Qualified tick count | Qualified scheduler-state counts |
 |---|---:|---|
 | `free` | `16` | `free = 16` |
 | `7/1` | `64` | `balance = 56`, `commit = 8` |
 | `1/7` | `16` | `excite = 2`, `neutralize = 14` |
 
+Required scheduler-count relation:
+
+`sum(scheduler_state_counts) = ticks_recorded_q`
+
+Scheduler qualification result:
+
+`PASS`
+
+## Scheduler Boundary
+
+The M16 scheduler controls tick-level temporal execution state.
+
+The scheduler receives:
+
+- processor clock;
+- asynchronous active-low reset;
+- tick enable;
+- scheduler-counter clear;
+- selected scheduler mode.
+
+The scheduler retains:
+
+- registered scheduler mode;
+- registered scheduler state;
+- tick index;
+- modulo-eight period index;
+- total executed-tick count;
+- per-state scheduler counters.
+
+The scheduler emits:
+
+- registered scheduler mode;
+- registered scheduler state;
+- temporal execution enables;
+- scheduler validity signals;
+- scheduler-count validity.
+
+The scheduler does not compute:
+
+- phase words;
+- Kuramoto-Sakaguchi coupling;
+- thermal state;
+- gamma state;
+- coherence telemetry;
+- `C(t)`;
+- `P(t)`;
+- phase-derived ternary targets.
+
+## Scheduler Module Interface
+
+Module:
+
+`frp_m16_scheduler`
+
+Module parameter:
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `COUNTER_BITS` | `FRP_M16_COUNTER_BITS` | scheduler index and counter width |
+
+Qualified counter width:
+
+`COUNTER_BITS = 32`
+
+Control inputs:
+
+| Signal | Direction | Meaning |
+|---|---|---|
+| `clk` | input | processor clock |
+| `rst_n` | input | asynchronous active-low reset |
+| `tick_enable` | input | enables one scheduler execution tick |
+| `clear_counters` | input | clears the scheduler counter bank |
+| `scheduler_mode` | input | selected scheduler mode |
+
+Registered outputs:
+
+| Signal | Width or type | Meaning |
+|---|---|---|
+| `scheduler_mode_q` | `frp_m16_scheduler_mode_e` | registered scheduler mode |
+| `scheduler_state_q` | `frp_m16_scheduler_state_e` | registered scheduler state used by the execution chain |
+| `tick_index_q` | `COUNTER_BITS` | scheduler execution index |
+| `period_index_q` | `3` | modulo-eight scheduler period index |
+| `ticks_recorded_q` | `COUNTER_BITS` | enabled scheduler-tick count |
+| `scheduler_count_free_q` | `COUNTER_BITS` | free-state tick count |
+| `scheduler_count_balance_q` | `COUNTER_BITS` | balance-state tick count |
+| `scheduler_count_commit_q` | `COUNTER_BITS` | commit-state tick count |
+| `scheduler_count_excite_q` | `COUNTER_BITS` | excite-state tick count |
+| `scheduler_count_neutralize_q` | `COUNTER_BITS` | neutralize-state tick count |
+
+Execution-enable outputs:
+
+| Signal | Meaning |
+|---|---|
+| `free_enable` | current enabled tick uses `FRP_SCHED_FREE` |
+| `balance_enable` | current enabled tick uses `FRP_SCHED_BALANCE` |
+| `commit_enable` | current enabled tick uses `FRP_SCHED_COMMIT` |
+| `excite_enable` | current enabled tick uses `FRP_SCHED_EXCITE` |
+| `neutralize_enable` | current enabled tick uses `FRP_SCHED_NEUTRALIZE` |
+
+Validity outputs:
+
+| Signal | Meaning |
+|---|---|
+| `scheduler_mode_reserved` | registered scheduler mode is invalid |
+| `scheduler_state_reserved` | registered scheduler state is invalid |
+| `scheduler_valid` | mode, state, period, and enable relations are valid |
+| `scheduler_counts_valid` | scheduler-state counter sum equals `ticks_recorded_q` |
+
+## Scheduler Modes
+
+Qualified scheduler modes:
+
+| Mode | Package symbol | Execution sequence |
+|---|---|---|
+| `free` | `FRP_MODE_FREE` | every enabled tick uses `free` |
+| `7/1` | `FRP_MODE_7_1` | seven `balance` ticks followed by one `commit` tick |
+| `1/7` | `FRP_MODE_1_7` | one `excite` tick followed by seven `neutralize` ticks |
+
+Scheduler period length:
+
+`FRP_M16_PERIOD_TICKS = 8`
+
+Scheduler period-index width:
+
+`FRP_M16_PERIOD_BITS = 3`
+
 ## Scheduler Mode Encoding
 
-Recommended RTL mode encoding:
+Scheduler mode type:
 
-| Scheduler mode | Encoding |
-|---|---|
-| `free` | `2'b00` |
-| `7/1` | `2'b01` |
-| `1/7` | `2'b10` |
-| reserved | `2'b11` |
+`frp_m16_scheduler_mode_e`
 
-The reserved scheduler mode is invalid.
+Canonical mode encodings:
 
-Required invariant:
+| Scheduler mode | Package symbol | Encoding |
+|---|---|---|
+| `free` | `FRP_MODE_FREE` | `2'b00` |
+| `7/1` | `FRP_MODE_7_1` | `2'b01` |
+| `1/7` | `FRP_MODE_1_7` | `2'b10` |
+| reserved | `FRP_MODE_RESERVED` | `2'b11` |
 
-`scheduler_mode_reserved_events = 0`
+Valid-mode function:
+
+`frp_is_valid_scheduler_mode`
+
+The valid-mode set is:
+
+`{FRP_MODE_FREE, FRP_MODE_7_1, FRP_MODE_1_7}`
+
+An invalid selected mode is registered as:
+
+`FRP_MODE_RESERVED`
+
+Required qualified result:
+
+`scheduler_mode_reserved = 0`
+
+Scheduler-mode encoding result:
+
+`PASS`
 
 ## Scheduler State Encoding
 
-Recommended RTL scheduler-state encoding:
+Scheduler-state type:
 
-| Scheduler state | Encoding |
-|---|---|
-| `free` | `3'b000` |
-| `balance` | `3'b001` |
-| `commit` | `3'b010` |
-| `excite` | `3'b011` |
-| `neutralize` | `3'b100` |
-| reserved | `3'b101` to `3'b111` |
+`frp_m16_scheduler_state_e`
 
-Required invariant:
+Canonical scheduler-state encodings:
 
-`scheduler_state_reserved_events = 0`
+| Scheduler state | Package symbol | Encoding |
+|---|---|---|
+| `free` | `FRP_SCHED_FREE` | `3'b000` |
+| `balance` | `FRP_SCHED_BALANCE` | `3'b001` |
+| `commit` | `FRP_SCHED_COMMIT` | `3'b010` |
+| `excite` | `FRP_SCHED_EXCITE` | `3'b011` |
+| `neutralize` | `FRP_SCHED_NEUTRALIZE` | `3'b100` |
+| invalid | `FRP_SCHED_INVALID` | `3'b111` |
+
+Valid-state function:
+
+`frp_scheduler_state_is_valid`
+
+The valid-state set is:
+
+`{FRP_SCHED_FREE, FRP_SCHED_BALANCE, FRP_SCHED_COMMIT, FRP_SCHED_EXCITE, FRP_SCHED_NEUTRALIZE}`
+
+Any encoding outside the valid-state set is invalid.
+
+Required qualified result:
+
+`scheduler_state_reserved = 0`
+
+Scheduler-state encoding result:
+
+`PASS`
 
 ## Scheduler Registers
 
-The scheduler-state realization uses:
+The scheduler register bank contains:
 
-| Register | Width | Meaning |
+| Register | Width | Reset value |
 |---|---:|---|
-| `scheduler_mode_q` | `2` | registered scheduler mode |
-| `scheduler_state_q` | `3` | current scheduler state |
-| `tick_index_q` | `COUNTER_BITS` | executed tick index |
-| `period_index_q` | `3` | modulo-8 scheduler period index |
-| `ticks_recorded_q` | `COUNTER_BITS` | executed tick counter |
-| `free_count_q` | `COUNTER_BITS` | free-state tick counter |
-| `balance_count_q` | `COUNTER_BITS` | balance-state tick counter |
-| `commit_count_q` | `COUNTER_BITS` | commit-state tick counter |
-| `excite_count_q` | `COUNTER_BITS` | excite-state tick counter |
-| `neutralize_count_q` | `COUNTER_BITS` | neutralize-state tick counter |
+| `scheduler_mode_q` | `2` | `FRP_MODE_FREE` |
+| `scheduler_state_q` | `3` | `FRP_SCHED_FREE` |
+| `tick_index_q` | `COUNTER_BITS` | `0` |
+| `period_index_q` | `3` | `0` |
+| `ticks_recorded_q` | `COUNTER_BITS` | `0` |
+| `scheduler_count_free_q` | `COUNTER_BITS` | `0` |
+| `scheduler_count_balance_q` | `COUNTER_BITS` | `0` |
+| `scheduler_count_commit_q` | `COUNTER_BITS` | `0` |
+| `scheduler_count_excite_q` | `COUNTER_BITS` | `0` |
+| `scheduler_count_neutralize_q` | `COUNTER_BITS` | `0` |
 
-Required relation:
+Required period relation:
+
+`period_index_q = tick_index_q[2:0]`
+
+Equivalent numeric relation:
 
 `period_index_q = tick_index_q mod 8`
 
+Scheduler-register qualification result:
+
+`PASS`
+
 ## Reset Behavior
 
-On reset:
+The scheduler uses asynchronous active-low reset assertion:
 
-`scheduler_state_q = free`
+`always_ff @(posedge clk or negedge rst_n)`
+
+When:
+
+`rst_n = 0`
+
+the scheduler registers become:
+
+`scheduler_mode_q = FRP_MODE_FREE`
+
+`scheduler_state_q = FRP_SCHED_FREE`
 
 `tick_index_q = 0`
 
@@ -134,499 +323,983 @@ On reset:
 
 `ticks_recorded_q = 0`
 
-`free_count_q = 0`
+`scheduler_count_free_q = 0`
 
-`balance_count_q = 0`
+`scheduler_count_balance_q = 0`
 
-`commit_count_q = 0`
+`scheduler_count_commit_q = 0`
 
-`excite_count_q = 0`
+`scheduler_count_excite_q = 0`
 
-`neutralize_count_q = 0`
+`scheduler_count_neutralize_q = 0`
 
-Required reset invariant:
+Required reset relation:
 
-`sum(scheduler_counts) = 0`
+`sum(scheduler_state_counts) = 0`
+
+Reset qualification result:
+
+`PASS`
+
+## Scheduler Mode Capture
+
+The selected input mode is evaluated on every scheduler clock update.
+
+For a valid input:
+
+`scheduler_mode_d = scheduler_mode`
+
+For an invalid input:
+
+`scheduler_mode_d = FRP_MODE_RESERVED`
+
+The next scheduler state is decoded from:
+
+`scheduler_mode_d`
+
+and:
+
+`period_index_d`
+
+Mode reconfiguration does not consume a processor tick.
+
+Mode reconfiguration does not directly modify:
+
+- retained balanced ternary processor state;
+- retained pending-route state;
+- tick index;
+- scheduler event counters.
+
+Scheduler-mode capture result:
+
+`PASS`
 
 ## Tick Enable Behavior
 
-The scheduler advances only when:
+When:
 
 `tick_enable = 1`
+
+the scheduler:
+
+- uses `scheduler_state_q` for the current execution tick;
+- increments `tick_index_q`;
+- increments `ticks_recorded_q`;
+- increments the counter associated with `scheduler_state_q`;
+- updates `period_index_q` from the incremented tick index;
+- decodes the next scheduler state.
+
+Required tick-index relation:
+
+`tick_index_d = tick_index_q + 1`
+
+Required tick-count relation:
+
+`ticks_recorded_d = ticks_recorded_q + 1`
 
 When:
 
 `tick_enable = 0`
 
-the scheduler must preserve:
+the scheduler preserves:
 
-- scheduler state;
-- tick index;
-- period index;
-- scheduler counters;
-- retained-state timing boundary.
+- `tick_index_q`;
+- `period_index_q`;
+- `ticks_recorded_q`;
+- all scheduler-state counters.
 
-Required invariant:
+Scheduler mode capture and scheduler-state decoding remain active at the clock boundary.
 
-`tick_enable = 0 → ticks_recorded_q unchanged`
+All execution-enable outputs remain zero while:
+
+`tick_enable = 0`
+
+Required disabled-tick relations:
+
+`tick_index_d = tick_index_q`
+
+`ticks_recorded_d = ticks_recorded_q`
+
+`scheduler_enable_vector = 5'b00000`
+
+Tick-enable qualification result:
+
+`PASS`
 
 ## Counter Clear Behavior
+
+The `clear_counters` input applies to the scheduler counter bank.
 
 When:
 
 `clear_counters = 1`
 
-the scheduler clears event counters without changing:
+and:
 
-- retained ternary state;
-- pending-route state;
-- scheduler mode;
-- scheduler-state logic;
-- reset domain.
+`tick_enable = 0`
 
-Required relation:
+the following registers become zero:
 
-`clear_counters` does not force retained state to `0`.
+- `ticks_recorded_q`;
+- `scheduler_count_free_q`;
+- `scheduler_count_balance_q`;
+- `scheduler_count_commit_q`;
+- `scheduler_count_excite_q`;
+- `scheduler_count_neutralize_q`.
 
-Only reset initializes retained state.
+Counter clear does not reset:
 
-## Free Mode Realization
+- `tick_index_q`;
+- `period_index_q`;
+- `scheduler_mode_q`;
+- scheduler-state progression;
+- retained balanced ternary processor state;
+- retained pending-route state.
 
-For:
+When `clear_counters` and `tick_enable` are active in the same update:
 
-`scheduler_mode_q = free`
+1. the scheduler counter bank is cleared;
+2. the enabled tick is recorded;
+3. the counter associated with `scheduler_state_q` is incremented.
 
-the scheduler state is:
+Required clear relation with `tick_enable = 0`:
 
-`scheduler_state_q = free`
+`ticks_recorded_q = 0`
 
-Every enabled tick is commit-capable.
+`sum(scheduler_state_counts) = 0`
 
-Required counter update:
+Counter-clear qualification result:
 
-`free_count_q += 1`
+`PASS`
 
-Required relation:
+## Scheduler-State Decode
 
-`free_count_q = ticks_recorded_q`
+Scheduler-state decode function:
 
-for a run containing only free-mode ticks after counter clear.
+`frp_decode_scheduler_state`
 
-Required inherited validation profile:
+Decode inputs:
 
-`16 ticks → free = 16`
+- selected scheduler mode;
+- three-bit period index.
 
-## 7/1 Mode Realization
+Decode relation for `FRP_MODE_FREE`:
 
-For:
+`scheduler_state = FRP_SCHED_FREE`
 
-`scheduler_mode_q = 7/1`
+Decode relation for `FRP_MODE_7_1`:
 
-the scheduler uses an eight-tick period.
+`period_index = 7 → scheduler_state = FRP_SCHED_COMMIT`
 
-The period relation is:
+`period_index != 7 → scheduler_state = FRP_SCHED_BALANCE`
 
-`period_index_q = tick_index_q mod 8`
+Decode relation for `FRP_MODE_1_7`:
 
-Commit tick condition:
+`period_index = 0 → scheduler_state = FRP_SCHED_EXCITE`
 
-`period_index_q = 7`
+`period_index != 0 → scheduler_state = FRP_SCHED_NEUTRALIZE`
 
-Balance tick condition:
+Decode relation for an invalid mode:
 
-`period_index_q != 7`
+`scheduler_state = FRP_SCHED_INVALID`
 
-Therefore:
+Scheduler-state decode result:
 
-`ticks 0,1,2,3,4,5,6 → balance`
-
-`tick 7 → commit`
-
-and the pattern repeats.
-
-Required inherited validation profile:
-
-`64 ticks → balance = 56, commit = 8`
-
-## 1/7 Mode Realization
-
-For:
-
-`scheduler_mode_q = 1/7`
-
-the scheduler uses an eight-tick period.
-
-The period relation is:
-
-`period_index_q = tick_index_q mod 8`
-
-Excite tick condition:
-
-`period_index_q = 0`
-
-Neutralize tick condition:
-
-`period_index_q != 0`
-
-Therefore:
-
-`tick 0 → excite`
-
-`ticks 1,2,3,4,5,6,7 → neutralize`
-
-and the pattern repeats.
-
-Required inherited validation profile:
-
-`16 ticks → excite = 2, neutralize = 14`
+`PASS`
 
 ## Scheduler Output Enables
 
-The scheduler emits execution enables to the downstream arbitration and transition layers.
+The execution-enable vector is:
 
-| Enable | Active in state |
+`{neutralize_enable, excite_enable, commit_enable, balance_enable, free_enable}`
+
+For an enabled tick in a valid scheduler state:
+
+`$countones(scheduler_enable_vector) = 1`
+
+Enable mapping:
+
+| Registered scheduler state | Active enable |
 |---|---|
-| `free_enable` | `free` |
-| `balance_enable` | `balance` |
-| `commit_enable` | `commit` |
-| `excite_enable` | `excite` |
-| `neutralize_enable` | `neutralize` |
+| `FRP_SCHED_FREE` | `free_enable` |
+| `FRP_SCHED_BALANCE` | `balance_enable` |
+| `FRP_SCHED_COMMIT` | `commit_enable` |
+| `FRP_SCHED_EXCITE` | `excite_enable` |
+| `FRP_SCHED_NEUTRALIZE` | `neutralize_enable` |
 
-Exactly one scheduler-state enable is active per enabled tick.
+For:
 
-Required invariant:
+`tick_enable = 0`
 
-`popcount(scheduler_state_enable_vector) = 1`
+all five execution enables equal `0`.
 
-for every valid enabled tick.
+For an invalid scheduler state:
+
+all five execution enables equal `0`.
+
+Scheduler-output-enable qualification result:
+
+`PASS`
+
+## Free Mode Qualification
+
+For:
+
+`scheduler_mode_q = FRP_MODE_FREE`
+
+the scheduler emits:
+
+`scheduler_state_q = FRP_SCHED_FREE`
+
+Every enabled tick increments:
+
+- `tick_index_q`;
+- `ticks_recorded_q`;
+- `scheduler_count_free_q`.
+
+The other scheduler-state counters remain unchanged.
+
+Qualified free-mode profile:
+
+| Field | Recorded value |
+|---|---:|
+| enabled ticks | `16` |
+| `scheduler_count_free_q` | `16` |
+| `scheduler_count_balance_q` | `0` |
+| `scheduler_count_commit_q` | `0` |
+| `scheduler_count_excite_q` | `0` |
+| `scheduler_count_neutralize_q` | `0` |
+
+Required free-mode relation:
+
+`scheduler_count_free_q = ticks_recorded_q`
+
+Free-mode qualification result:
+
+`PASS`
+
+## 7/1 Mode Qualification
+
+For:
+
+`scheduler_mode_q = FRP_MODE_7_1`
+
+the scheduler uses an eight-tick period.
+
+Period relation:
+
+`period_index_q = tick_index_q mod 8`
+
+Scheduler-state decode:
+
+| Period index | Scheduler state |
+|---:|---|
+| `0` | `FRP_SCHED_BALANCE` |
+| `1` | `FRP_SCHED_BALANCE` |
+| `2` | `FRP_SCHED_BALANCE` |
+| `3` | `FRP_SCHED_BALANCE` |
+| `4` | `FRP_SCHED_BALANCE` |
+| `5` | `FRP_SCHED_BALANCE` |
+| `6` | `FRP_SCHED_BALANCE` |
+| `7` | `FRP_SCHED_COMMIT` |
+
+Qualified `7/1` profile:
+
+| Field | Recorded value |
+|---|---:|
+| enabled ticks | `64` |
+| `scheduler_count_balance_q` | `56` |
+| `scheduler_count_commit_q` | `8` |
+| `scheduler_count_free_q` | `0` |
+| `scheduler_count_excite_q` | `0` |
+| `scheduler_count_neutralize_q` | `0` |
+
+For a run starting at period index `0`:
+
+`commit_count = floor(ticks_recorded_q / 8)`
+
+`balance_count = ticks_recorded_q - commit_count`
+
+Validated relation:
+
+`64 ticks → balance = 56, commit = 8`
+
+The qualified testbench records:
+
+- zero-to-nonzero release rejected during balance ticks;
+- zero-to-nonzero release accepted during a commit tick;
+- opposite-polarity active-neutral routing accepted during a balance tick;
+- retained pending polarity completed on a later commit tick.
+
+`7/1` qualification result:
+
+`PASS`
+
+## 1/7 Mode Qualification
+
+For:
+
+`scheduler_mode_q = FRP_MODE_1_7`
+
+the scheduler uses an eight-tick period.
+
+Period relation:
+
+`period_index_q = tick_index_q mod 8`
+
+Scheduler-state decode:
+
+| Period index | Scheduler state |
+|---:|---|
+| `0` | `FRP_SCHED_EXCITE` |
+| `1` | `FRP_SCHED_NEUTRALIZE` |
+| `2` | `FRP_SCHED_NEUTRALIZE` |
+| `3` | `FRP_SCHED_NEUTRALIZE` |
+| `4` | `FRP_SCHED_NEUTRALIZE` |
+| `5` | `FRP_SCHED_NEUTRALIZE` |
+| `6` | `FRP_SCHED_NEUTRALIZE` |
+| `7` | `FRP_SCHED_NEUTRALIZE` |
+
+Qualified `1/7` profile:
+
+| Field | Recorded value |
+|---|---:|
+| enabled ticks | `16` |
+| `scheduler_count_excite_q` | `2` |
+| `scheduler_count_neutralize_q` | `14` |
+| `scheduler_count_free_q` | `0` |
+| `scheduler_count_balance_q` | `0` |
+| `scheduler_count_commit_q` | `0` |
+
+For a run starting at period index `0`:
+
+`excite_count = floor((ticks_recorded_q + 7) / 8)`
+
+`neutralize_count = ticks_recorded_q - excite_count`
+
+Validated relation:
+
+`16 ticks → excite = 2, neutralize = 14`
+
+The qualified testbench records:
+
+- zero-to-nonzero release accepted during an excite tick;
+- opposite-polarity active-neutral routing accepted during a neutralize tick;
+- retained pending polarity completed on a later excite tick.
+
+`1/7` qualification result:
+
+`PASS`
+
+## Scheduler Transition Eligibility
+
+Scheduler transition eligibility is defined by:
+
+`frp_scheduler_allows_transition`
+
+The scheduler first validates:
+
+`frp_scheduler_state_is_valid(scheduler_state)`
+
+Transition eligibility:
+
+| Transition class | Eligible scheduler states |
+|---|---|
+| `FRP_TRANS_SAME_STATE` | all valid scheduler states |
+| `FRP_TRANS_HOLD` | all valid scheduler states |
+| `FRP_TRANS_ZERO_TO_NONZERO` | `free`, `commit`, `excite` |
+| `FRP_TRANS_PENDING_COMPLETION` | `free`, `commit`, `excite` |
+| `FRP_TRANS_NONZERO_TO_ZERO` | `free`, `balance`, `neutralize` |
+| `FRP_TRANS_OPPOSITE_POLARITY` | `free`, `balance`, `neutralize` |
+| reserved, rejected, or invalid transition class | none |
+
+Commit-capable helper:
+
+`frp_scheduler_is_commit_capable`
+
+Commit-capable states:
+
+`{FRP_SCHED_FREE, FRP_SCHED_COMMIT, FRP_SCHED_EXCITE}`
+
+Neutralize-capable helper:
+
+`frp_scheduler_is_neutralize_capable`
+
+Neutralize-capable states:
+
+`{FRP_SCHED_FREE, FRP_SCHED_BALANCE, FRP_SCHED_NEUTRALIZE}`
+
+Scheduler transition-eligibility result:
+
+`PASS`
 
 ## Free-State Semantics
 
-In `free` state, the downstream transition layer may evaluate all eligible deterministic transition classes:
+`FRP_SCHED_FREE` is both:
 
-- pending-route completion;
-- zero-to-nonzero target release;
+- commit-capable;
+- neutralize-capable.
+
+Eligible transition classes include:
+
+- same-state retention;
+- hold;
+- zero-to-nonzero release;
 - nonzero-to-zero neutralization;
-- opposite-polarity active-neutral routing;
-- unchanged-state retention.
+- opposite-polarity active-neutral first leg;
+- pending-route completion.
 
-The transition-capacity boundary still applies.
-
-Required invariant:
+The transition-capacity boundary remains:
 
 `accepted_changes <= REQUEST_LANES`
+
+Free-state execution result:
+
+`PASS`
 
 ## Balance-State Semantics
 
-In `balance` state, the downstream transition layer preserves the balance phase of the `7/1` execution mode.
+`FRP_SCHED_BALANCE` is neutralize-capable.
 
-Balance ticks are used for deterministic stabilization before commit ticks.
+Eligible transition classes include:
 
-The balance state may support:
-
-- unchanged-state retention;
+- same-state retention;
+- hold;
 - nonzero-to-zero neutralization;
-- active-neutral routing of opposite-polarity requests;
-- pending-route retention.
+- opposite-polarity active-neutral first leg.
 
-Commit release is controlled by the commit state.
+The balance state does not admit:
 
-Required invariant:
+- zero-to-nonzero release;
+- pending-route completion.
+
+Retained pending polarity remains stored until a commit-capable scheduler state.
+
+Required direct-transition relation:
 
 `actual_direct_events = 0`
+
+Balance-state execution result:
+
+`PASS`
 
 ## Commit-State Semantics
 
-In `commit` state, the downstream transition layer performs commit-capable retained-state updates for the `7/1` execution mode.
+`FRP_SCHED_COMMIT` is commit-capable.
 
-Commit ticks may support:
+Eligible transition classes include:
 
-- pending-route completion;
-- zero-to-nonzero target release;
-- accepted retained-state update;
-- event-counter emission.
+- same-state retention;
+- hold;
+- zero-to-nonzero release;
+- pending-route completion.
 
-The transition-capacity boundary still applies.
+The commit state does not admit:
 
-Required invariant:
+- nonzero-to-zero neutralization;
+- opposite-polarity active-neutral first leg.
+
+The transition-capacity boundary remains:
 
 `accepted_changes <= REQUEST_LANES`
 
+Commit-state execution result:
+
+`PASS`
+
 ## Excite-State Semantics
 
-In `excite` state, the downstream transition layer preserves the excitation phase of the `1/7` execution mode.
+`FRP_SCHED_EXCITE` is commit-capable.
 
-Excite ticks may support:
+Eligible transition classes include:
 
-- zero-to-nonzero target release;
-- phase-derived nonzero target acceptance;
-- pending-route completion when eligible;
-- event-counter emission.
+- same-state retention;
+- hold;
+- zero-to-nonzero release;
+- pending-route completion.
 
-The transition-capacity boundary still applies.
+The excite state does not admit:
 
-Required invariant:
+- nonzero-to-zero neutralization;
+- opposite-polarity active-neutral first leg.
 
-`switch_load_peak <= transition_fraction`
+The transition-capacity boundary remains:
+
+`accepted_changes <= REQUEST_LANES`
+
+Excite-state execution result:
+
+`PASS`
 
 ## Neutralize-State Semantics
 
-In `neutralize` state, the downstream transition layer preserves the neutralization phase of the `1/7` execution mode.
+`FRP_SCHED_NEUTRALIZE` is neutralize-capable.
 
-Neutralize ticks may support:
+Eligible transition classes include:
 
+- same-state retention;
+- hold;
 - nonzero-to-zero neutralization;
-- active-neutral routing of opposite-polarity requests;
-- pending-route retention;
-- unchanged-state retention.
+- opposite-polarity active-neutral first leg.
 
-Required invariant:
+The neutralize state does not admit:
+
+- zero-to-nonzero release;
+- pending-route completion.
+
+Required direct-transition relation:
 
 `actual_direct_events = 0`
+
+Neutralize-state execution result:
+
+`PASS`
 
 ## Scheduler Count Relations
 
-The scheduler exposes M15-compatible counters:
+The scheduler exposes:
 
 | Counter | Meaning |
 |---|---|
-| `ticks_recorded` | total enabled ticks |
-| `scheduler_count_free` | free ticks |
-| `scheduler_count_balance` | balance ticks |
-| `scheduler_count_commit` | commit ticks |
-| `scheduler_count_excite` | excite ticks |
-| `scheduler_count_neutralize` | neutralize ticks |
+| `ticks_recorded_q` | enabled scheduler ticks |
+| `scheduler_count_free_q` | enabled free-state ticks |
+| `scheduler_count_balance_q` | enabled balance-state ticks |
+| `scheduler_count_commit_q` | enabled commit-state ticks |
+| `scheduler_count_excite_q` | enabled excite-state ticks |
+| `scheduler_count_neutralize_q` | enabled neutralize-state ticks |
+
+Scheduler counter sum:
+
+`scheduler_count_sum = scheduler_count_free_q + scheduler_count_balance_q + scheduler_count_commit_q + scheduler_count_excite_q + scheduler_count_neutralize_q`
 
 Required global relation:
 
-`scheduler_count_free + scheduler_count_balance + scheduler_count_commit + scheduler_count_excite + scheduler_count_neutralize = ticks_recorded`
+`scheduler_count_sum = ticks_recorded_q`
 
-Required flag:
+Required validity signal:
 
-`scheduler_counts_valid = True`
+`scheduler_counts_valid = 1`
 
-## 7/1 Count Formula
+Scheduler-count qualification result:
 
-For a run entirely in `7/1` mode:
-
-`commit_count = floor(ticks_recorded / 8)`
-
-when tick indexing starts at `0` and commit occurs at period index `7`.
-
-`balance_count = ticks_recorded - commit_count`
-
-Validated example:
-
-`ticks_recorded = 64`
-
-`commit_count = 8`
-
-`balance_count = 56`
-
-## 1/7 Count Formula
-
-For a run entirely in `1/7` mode:
-
-`excite_count = floor((ticks_recorded + 7) / 8)`
-
-when tick indexing starts at `0` and excite occurs at period index `0`.
-
-`neutralize_count = ticks_recorded - excite_count`
-
-Validated example:
-
-`ticks_recorded = 16`
-
-`excite_count = 2`
-
-`neutralize_count = 14`
+`PASS`
 
 ## Mode-Switch Boundary
 
-M16 should treat scheduler-mode switching as a deterministic control boundary.
+The selected scheduler mode is registered at the clock boundary.
 
-A mode switch must not create:
+A valid selected mode becomes:
 
-- invalid scheduler state;
-- invalid ternary state;
-- pending-route polarity loss;
-- direct opposite-polarity transition;
-- counter inconsistency.
+`scheduler_mode_q`
 
-Recommended mode-switch rule:
+The next scheduler state is decoded from:
 
-`scheduler_mode_q` may update only at a tick boundary.
+- the selected valid mode;
+- the current or incremented period index.
 
-Required invariant:
+Mode switching does not consume a processor tick when:
 
-`mode switch does not modify retained ternary state directly`
+`tick_enable = 0`
+
+Mode switching does not directly modify:
+
+- retained balanced ternary processor state;
+- retained pending-route state;
+- request-lane ordering;
+- transition-capacity state;
+- architectural event telemetry.
+
+The current enabled tick uses:
+
+`scheduler_state_q`
+
+The newly decoded scheduler state becomes available after the register update.
+
+Mode-switch qualification result:
+
+`PASS`
 
 ## Scheduler Reserved-State Guard
 
-The scheduler must detect invalid mode or state encodings.
+Registered mode validation:
 
-Required detection signals:
+`scheduler_mode_reserved = !frp_is_valid_scheduler_mode(scheduler_mode_q)`
 
-| Signal | Meaning |
-|---|---|
-| `scheduler_mode_reserved` | selected mode is `2'b11` |
-| `scheduler_state_reserved` | scheduler state is `3'b101` to `3'b111` |
-| `scheduler_valid` | no reserved scheduler condition |
+Registered state validation:
 
-Required invariant:
+`scheduler_state_reserved = !frp_scheduler_state_is_valid(scheduler_state_q)`
 
-`scheduler_valid = True`
+Scheduler validity relation:
 
-during qualified replay.
+`scheduler_valid = !scheduler_mode_reserved && !scheduler_state_reserved && (period_index_q == tick_index_q[2:0]) && (!tick_enable || $countones(scheduler_enable_vector) == 1)`
+
+Required qualified values:
+
+`scheduler_mode_reserved = 0`
+
+`scheduler_state_reserved = 0`
+
+`scheduler_valid = 1`
+
+Scheduler reserved-state guard result:
+
+`PASS`
 
 ## Interaction With Request-Lane Arbitration
 
-The scheduler does not reorder request lanes.
+The scheduler supplies temporal eligibility to:
 
-Request-lane order remains deterministic ascending lane order.
+`frp_m16_request_lanes`
 
-The scheduler only provides temporal eligibility.
+Request lanes remain ordered in deterministic ascending lane order.
 
-Required invariant:
+Scheduler state may accept or reject a transition class.
 
-`scheduler state must not alter lane ordering`
+Scheduler state does not change request-lane ordering.
+
+Required request-lane invariant:
+
+`FRP_INV_REQUEST_LANE_ORDER_VALID = 1`
+
+Scheduler-to-request-lane qualification result:
+
+`PASS`
 
 ## Interaction With Pending Routes
 
-The scheduler may gate when a pending route can complete.
+Pending-route completion requires a commit-capable scheduler state:
 
-The scheduler must not erase pending-route polarity.
+`FRP_SCHED_FREE`
 
-Required invariant:
+`FRP_SCHED_COMMIT`
 
-`pending routes preserve requested target polarity`
+or:
 
-Pending-route completion remains subject to:
+`FRP_SCHED_EXCITE`
 
-- scheduler state;
-- transition-capacity boundary;
-- request-lane arbitration;
-- active-neutral transition rules.
+A scheduler-ineligible pending route remains retained.
+
+Scheduler gating does not change retained pending polarity.
+
+Required pending-route invariant:
+
+`FRP_INV_PENDING_POLARITY_VALID = 1`
+
+Scheduler-to-pending-route qualification result:
+
+`PASS`
 
 ## Interaction With Active Neutral Routing
 
-The scheduler must preserve mandatory active-neutral routing.
+An opposite-polarity first route leg requires a neutralize-capable scheduler state:
 
-Forbidden transitions remain forbidden in every scheduler state:
+`FRP_SCHED_FREE`
 
-`-1 → +1`
+`FRP_SCHED_BALANCE`
 
-`+1 → -1`
+or:
 
-Allowed routed sequences remain:
+`FRP_SCHED_NEUTRALIZE`
 
-`-1 → 0 → +1`
+Forbidden direct retained-state transitions:
 
-`+1 → 0 → -1`
+`-1 → 1`
 
-Required invariant:
+`1 → -1`
+
+Required routed retained-state transitions:
+
+`-1 → 0 → 1`
+
+`1 → 0 → -1`
+
+Required direct-transition counter:
 
 `actual_direct_events = 0`
 
+Required active-neutral invariant:
+
+`FRP_INV_ACTIVE_NEUTRAL_VALID = 1`
+
+Scheduler-to-active-neutral qualification result:
+
+`PASS`
+
+## Interaction With Transition Capacity
+
+Scheduler eligibility is evaluated before final transition-capacity admission.
+
+An eligible transition may execute only when admitted by:
+
+`frp_m16_capacity_guard`
+
+Required capacity relation:
+
+`accepted_changes <= REQUEST_LANES`
+
+Required capacity invariant:
+
+`FRP_INV_TRANSITION_CAPACITY_VALID = 1`
+
+Scheduler-to-capacity qualification result:
+
+`PASS`
+
 ## Assertion Support
 
-The M16 scheduler-state realization supports the following assertion layer:
+Assertion module:
 
-| Assertion | Required condition |
-|---|---|
-| `assert_valid_scheduler_mode` | scheduler mode is not reserved |
-| `assert_valid_scheduler_state` | scheduler state is not reserved |
-| `assert_onehot_scheduler_enable` | exactly one state enable is active |
-| `assert_scheduler_counts_sum` | scheduler counts sum to ticks recorded |
-| `assert_free_count_profile` | free mode count matches ticks |
-| `assert_7_1_profile` | 7/1 mode count profile matches expected period |
-| `assert_1_7_profile` | 1/7 mode count profile matches expected period |
-| `assert_no_state_change_on_tick_disable` | scheduler does not advance without tick enable |
-| `assert_mode_switch_boundary` | mode switch does not alter retained state directly |
+`rtl/m16/frp_m16_assertions.sv`
 
-## M15 Vector Replay Boundary
+The assertion boundary validates:
 
-The M16 scheduler must replay against the M15 deterministic vector package.
+- registered scheduler-mode validity;
+- registered scheduler-state validity;
+- scheduler counter-sum equality;
+- `free` mode emits only `FRP_SCHED_FREE`;
+- `7/1` mode emits only `FRP_SCHED_BALANCE` or `FRP_SCHED_COMMIT`;
+- `1/7` mode emits only `FRP_SCHED_EXCITE` or `FRP_SCHED_NEUTRALIZE`;
+- scheduler counters remain stable without tick or clear;
+- counter clear with no tick produces zero scheduler counters;
+- counter clear with an enabled tick records exactly one scheduler event;
+- scheduler-state counter consistency;
+- integrated scheduler invariant flag.
 
-Comparison inputs:
+Required integrated invariant:
+
+`FRP_INV_SCHEDULER_COUNTS_VALID = 1`
+
+Assertion execution result:
+
+`PASS`
+
+## Deterministic Testbench Boundary
+
+Executable testbench:
+
+`rtl/m16/frp_m16_tb.sv`
+
+The testbench validates:
+
+- reset to `FRP_MODE_FREE` and `FRP_SCHED_FREE`;
+- exact 16-tick free profile;
+- counter clearing without retained-state reset;
+- exact 64-tick `7/1` profile;
+- balance-state zero-release rejection;
+- commit-state zero-release acceptance;
+- balance-state active-neutral routing;
+- commit-state pending-route completion;
+- exact 16-tick `1/7` profile;
+- excite-state zero-release acceptance;
+- neutralize-state active-neutral routing;
+- excite-state pending-route completion;
+- scheduler counters sum to recorded ticks;
+- zero actual direct-transition events;
+- zero reserved-state events;
+- zero queue-overflow events;
+- all ten integrated invariant flags.
+
+Testbench scheduler result:
+
+`PASS`
+
+## M15 Comparison Boundary
+
+M15 executable semantic reference:
+
+`frp_prototype_v1_7_0.py`
+
+M15 qualification record:
+
+| Qualification record | Result |
+|---|---:|
+| self-test assertions | `41 / 41 PASS` |
+| deterministic vector files | `10 / 10 byte-identical` |
+| required semantic correlation matches | `5 / 5 = 1.0` |
+| deterministic replay matches | `6 / 6 = 1.0` |
+| `actual_direct_events` | `0` |
+| `reserved_state_events` | `0` |
+| `queue_overflow_events` | `0` |
+| `fixed_point_topology_sum_exact` | `True` |
+| `fixed_point_thermal_sum_exact` | `True` |
+
+Validated M15 package digest:
+
+`703dd4b56f4b34289a2c5bc5521ad4ddc3113bdec8c38238c3244c69cb4d58df`
+
+M15-to-M16 scheduler comparison inputs:
+
+- `scheduler_mode`;
+- `tick_enable`;
+- `clear_counters`;
+- reset state.
+
+M15-to-M16 scheduler comparison outputs:
+
+- `scheduler_mode_q`;
+- `scheduler_state_q`;
+- `tick_index_q`;
+- `period_index_q`;
+- `ticks_recorded_q`;
+- all five scheduler-state counters;
+- scheduler execution enables;
+- `scheduler_valid`;
+- `scheduler_counts_valid`.
+
+Replay target:
+
+`deterministic boundary equivalence`
+
+The replay target is not approximate behavioral similarity.
+
+M15 scheduler comparison-boundary result:
+
+`PASS`
+
+## FPGA Scheduler Propagation
+
+Target-independent FPGA integration top:
+
+`fpga/m16/frp_m16_fpga_top.sv`
+
+The integration top passes:
 
 `scheduler_mode`
 
-`tick_index`
+to:
 
-`tick_enable`
+`frp_m16_core`
 
-`clear_counters`
+The integration top gates scheduler execution through:
 
-Comparison outputs:
+`tick_enable_core = tick_enable && core_ready`
 
-`scheduler_state`
+Before:
 
-`scheduler_state_enable_vector`
+`core_ready = 1`
 
-`scheduler_count_free`
+no enabled processor tick reaches the M16 scheduler.
 
-`scheduler_count_balance`
+Qualified FPGA terminal record:
 
-`scheduler_count_commit`
+| Field | Recorded value |
+|---|---:|
+| `core_ready` | `1` |
+| `ticks_recorded` | `1` |
+| `invariant_flags` | `1111111111` |
 
-`scheduler_count_excite`
+FPGA preparation workflow:
 
-`scheduler_count_neutralize`
+`FRP M16 FPGA Preparation`
 
-`ticks_recorded`
+Current FPGA preparation record:
 
-`scheduler_counts_valid`
+| Field | Recorded value |
+|---|---|
+| Workflow run | `#2` |
+| Qualified repository commit | `ede53cf` |
+| Branch | `main` |
+| Workflow result | `SUCCESS` |
+| Workflow duration | `36s` |
+| Qualification artifact count | `1` |
+| Qualification result | `PASS` |
+| Closure status | `M16 FPGA PREPARATION LAYER CLOSED` |
 
-Expected source:
+FPGA scheduler-propagation result:
 
-`M15 cycle-exact integer golden trace`
+`PASS`
 
 ## Required M16 Scheduler Invariants
 
-The M16 scheduler-state realization is valid only if:
+The qualified M16 scheduler records:
 
-`free` mode emits only free scheduler state.
+`free` mode emits only `FRP_SCHED_FREE`.
 
 `7/1` mode emits seven balance ticks followed by one commit tick.
 
 `1/7` mode emits one excite tick followed by seven neutralize ticks.
 
-Scheduler counts sum to ticks recorded.
+`period_index_q = tick_index_q mod 8`.
 
-Reserved scheduler modes are rejected.
+Scheduler-state counters sum to `ticks_recorded_q`.
 
-Reserved scheduler states are rejected.
+Invalid scheduler modes are exposed through `scheduler_mode_reserved`.
 
-Exactly one scheduler-state enable is active per valid enabled tick.
+Invalid scheduler states are exposed through `scheduler_state_reserved`.
 
-Tick-disabled cycles do not advance scheduler state.
+Exactly one scheduler execution enable is active for each valid enabled tick.
 
-Mode switching does not directly modify retained ternary state.
+All scheduler execution enables are zero when `tick_enable = 0`.
+
+Counter clear preserves scheduler position and retained execution state.
 
 Request-lane order remains deterministic.
 
-Active-neutral routing remains mandatory.
+Scheduler-ineligible pending routes retain their polarity.
 
-Direct opposite-polarity execution remains zero.
+Opposite-polarity transitions remain routed through active neutral state `0`.
 
-## Closure Criteria
+`actual_direct_events = 0`.
 
-This scheduler realization can be considered M16-ready when it supports:
+`reserved_state_events = 0`.
 
-- explicit scheduler-mode encoding;
-- explicit scheduler-state encoding;
-- deterministic modulo-8 period realization;
-- valid `free` profile;
-- valid `7/1` profile;
-- valid `1/7` profile;
-- scheduler counter emission;
-- scheduler invariant flags;
-- assertion correlation;
-- M15 vector replay compatibility.
+`queue_overflow_events = 0`.
 
-## Next Step
+`FRP_INV_SCHEDULER_COUNTS_VALID = 1`.
 
-The next M16 file should define the request-lane arbitration layer:
+## Scheduler Qualification Result
 
-`docs/m16_request_lane_arbitration_module.md`
+| Scheduler boundary | Result |
+|---|---|
+| scheduler mode encoding | `PASS` |
+| scheduler state encoding | `PASS` |
+| scheduler register reset | `PASS` |
+| scheduler mode capture | `PASS` |
+| tick-enable behavior | `PASS` |
+| counter-clear behavior | `PASS` |
+| scheduler-state decode | `PASS` |
+| scheduler execution enables | `PASS` |
+| free-mode profile | `PASS` |
+| `7/1` profile | `PASS` |
+| `1/7` profile | `PASS` |
+| transition-class eligibility | `PASS` |
+| scheduler counter relations | `PASS` |
+| mode-switch boundary | `PASS` |
+| reserved-state guard | `PASS` |
+| request-lane interaction | `PASS` |
+| pending-route interaction | `PASS` |
+| active-neutral interaction | `PASS` |
+| transition-capacity interaction | `PASS` |
+| assertion execution | `PASS` |
+| deterministic testbench | `PASS` |
+| M15 comparison boundary | `PASS` |
+| FPGA scheduler propagation | `PASS` |
+| M16 scheduler-state RTL realization | `PASS` |
+
+Qualified RTL workflow:
+
+`FRP M16 RTL Artifact Boundary #84`
+
+Qualified RTL source commit:
+
+`ede53cf`
+
+RTL workflow result:
+
+`SUCCESS`
+
+RTL closure status:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+FPGA preparation status:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
+
+Current release qualification:
+
+`FRP v1.8.0 / M16 — PASS`
+
+## Author
+
+Maksym Marnov
