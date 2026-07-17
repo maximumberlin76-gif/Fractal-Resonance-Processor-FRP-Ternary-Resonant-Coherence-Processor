@@ -125,6 +125,37 @@ Qualification record:
 
 `/tmp/frp_m16_qualification.txt`
 
+## Toolchain Record
+
+Execution environment:
+
+`GitHub Actions — ubuntu-latest`
+
+Installed toolchain components:
+
+- `verilator`
+- `g++`
+
+Toolchain installation command:
+
+`sudo apt-get install --yes verilator g++`
+
+Toolchain version record command:
+
+`verilator --version`
+
+Compiler version record command:
+
+`g++ --version | head -n 1`
+
+Toolchain record path:
+
+`/tmp/frp_m16_toolchain.log`
+
+Toolchain installation and version-record generation:
+
+`PASS`
+
 ## Build Command
 
 `verilator --sv --timing --assert --binary --top-module frp_m16_tb -Irtl/m16 --Mdir /tmp/frp_m16_obj rtl/m16/frp_m16_tb.sv 2>&1 | tee /tmp/frp_m16_build.log`
@@ -617,7 +648,7 @@ Qualified relations:
 | `FRP_INV_NO_RESERVED_STATE` | `PASS` |
 | `FRP_INV_NO_QUEUE_OVERFLOW` | `PASS` |
 
-## Terminal Output
+## Console Output
 
 `FRP M16 deterministic RTL testbench completed.`
 
@@ -676,7 +707,7 @@ Qualification evidence result:
 
 `PASS`
 
-## Final Qualification Result
+## Execution Result
 
 | Qualification boundary | Result |
 |---|---|
