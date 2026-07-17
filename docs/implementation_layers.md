@@ -6,59 +6,71 @@ This document defines the current implementation-layer structure of the Fractal 
 
 FRP is a ternary resonant coherence processor.
 
-Its implementation stack connects resonant phase dynamics, balanced ternary state retention, deterministic structured execution, fixed-point implementation mapping, cycle-exact reference traces, RTL comparison vectors, SystemVerilog interface mapping, reference-core mapping, equivalence, and qualification closure.
+Its implementation stack connects resonant phase dynamics, balanced ternary state retention, deterministic structured execution, fixed-point implementation mapping, cycle-exact reference traces, RTL comparison vectors, SystemVerilog interface mapping, executable RTL core realization, execution semantics, FPGA preparation, equivalence, and qualification closure.
 
 Current version:
 
-`FRP v1.7.0`
+`FRP v1.8.0`
 
 Current milestone:
 
-`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+`M16 — RTL Core Realization and Execution Semantics Package`
 
-Current executable reference:
+Qualified executable semantic reference:
 
 `../frp_prototype_v1_7_0.py`
 
-Current structured-output schema:
+Qualified structured-output schema:
 
 `frp.structured_output.v1.7.0`
 
-Current M15 benchmark-matrix schema:
+Qualified benchmark-matrix schema:
 
 `frp.m3.benchmark_matrix.v1.7.0`
 
 Current architecture document:
 
-`./m15_implementation_mapping_domain_interface_qualification_closure.md`
+`./m16_rtl_core_realization_execution_semantics.md`
 
 Current test report:
 
-`../TEST_REPORT_v1_7_0.md`
+`../TEST_REPORT_v1_8_0.md`
 
 Current validation index:
 
-`../FRP_VALIDATION_INDEX_v1_7_0.md`
+`../FRP_VALIDATION_INDEX_v1_8_0.md`
 
 Current release notes:
 
-`../RELEASE_NOTES_v1_7_0.md`
+`../RELEASE_NOTES_v1_8_0.md`
 
 Current primary qualification workflow:
 
-`../.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+`../.github/workflows/frp-m16-rtl-artifact-boundary.yml`
+
+Current FPGA preparation workflow:
+
+`../.github/workflows/frp-m16-fpga-preparation.yml`
 
 Current published validation result:
 
 `PASS`
 
-Current validated M15 self-test result:
+Inherited M15 self-test result:
 
 `41/41 PASS`
 
+M16 RTL qualification result:
+
+`PASS`
+
+M16 FPGA preparation qualification result:
+
+`PASS`
+
 ## 1. Purpose
 
-The implementation-layer structure defines how the FRP computational subject is preserved from executable semantics through hardware-facing deterministic qualification.
+The implementation-layer structure defines how the FRP computational subject is preserved from executable semantics through hardware-facing deterministic qualification, executable RTL realization, and FPGA preparation.
 
 The current chain is:
 
@@ -134,7 +146,47 @@ The current chain is:
 
 ↓
 
-`qualification closure`
+`M15 qualification closure`
+
+↓
+
+`M16 synthesizable RTL core realization`
+
+↓
+
+`M16 scheduler-state execution`
+
+↓
+
+`M16 request-lane arbitration`
+
+↓
+
+`M16 active-neutral routing`
+
+↓
+
+`M16 retained pending-route behavior`
+
+↓
+
+`M16 transition-capacity enforcement`
+
+↓
+
+`M16 retained-state writeback`
+
+↓
+
+`M16 integrated invariant evaluation`
+
+↓
+
+`M16 RTL qualification closure`
+
+↓
+
+`M16 FPGA preparation`
 
 Each layer inherits the validated behavior and contracts of the layers that feed it.
 
@@ -258,19 +310,20 @@ Primary current references:
 - `../README.md`;
 - `./core_principles.md`;
 - `./resonance_computation.md`;
-- `./architecture.md`.
+- `./architecture.md`;
+- `./m16_rtl_core_realization_execution_semantics.md`.
 
 ## 4. Layer 1 — Floating Semantic Reference Layer
 
 Purpose:
 
-`provide executable current FRP semantics`
+`provide the qualified executable FRP semantics inherited by the current release`
 
-Current executable reference:
+Qualified executable semantic reference:
 
 `../frp_prototype_v1_7_0.py`
 
-Current floating processor representation:
+Qualified floating processor representation:
 
 `FractalResonanceProcessor`
 
@@ -295,13 +348,13 @@ This layer implements:
 
 Engineering role:
 
-`semantic source for current implementation mapping and correlation`
+`semantic source inherited by the current M16 implementation mapping and correlation layers`
 
 ## 5. Layer 2 — Kernel Invariant Layer
 
 Purpose:
 
-`preserve the current processor execution contract`
+`preserve the qualified processor execution contract`
 
 Current state domain:
 
@@ -329,7 +382,7 @@ Tick-separated route relation:
 
 `tick N+1 or later: 0 → target polarity`
 
-Current validated invariants:
+Qualified invariants inherited by FRP v1.8.0 / M16:
 
 `balanced_ternary_state_domain = True`
 
@@ -359,7 +412,7 @@ Purpose:
 
 `expose deterministic processor state and execution evidence`
 
-Current structured-output schema:
+Qualified structured-output schema:
 
 `frp.structured_output.v1.7.0`
 
@@ -379,7 +432,7 @@ Full trace mode adds:
 - `cell_trace`;
 - `route_events`.
 
-Current default full-trace sizes:
+Qualified default full-trace sizes:
 
 `trace = 64 processor-tick rows`
 
@@ -416,15 +469,15 @@ Purpose:
 
 `qualify executable behavior through deterministic checks`
 
-Current self-test command:
+Qualified self-test command:
 
     python frp_prototype_v1_7_0.py --mode self-test --output json
 
-Current validated check count:
+Qualified check count:
 
 `41`
 
-Current result:
+Qualified result:
 
 `41/41 PASS`
 
@@ -435,7 +488,7 @@ Validated scheduler profiles:
 - `7/1`;
 - `1/7`.
 
-Current validation coverage includes:
+Qualified validation coverage includes:
 
 - active-neutral routing;
 - request-lane order;
@@ -452,11 +505,13 @@ Current validation coverage includes:
 - exact quantized replay;
 - qualification closure.
 
-Primary current references:
+Current release-facing references:
 
-- `../TEST_REPORT_v1_7_0.md`;
-- `../FRP_VALIDATION_INDEX_v1_7_0.md`;
+- `../TEST_REPORT_v1_8_0.md`;
+- `../FRP_VALIDATION_INDEX_v1_8_0.md`;
 - `../verification/README.md`.
+
+The 41-check self-test remains inherited from the qualified v1.7.0 semantic-reference layer.
 
 ## 8. Layer 5 — Benchmark Evidence Layer
 
@@ -466,9 +521,9 @@ Purpose:
 
 The repository preserves two benchmark contours.
 
-### 8.1 Current M15 benchmark matrix
+### 8.1 Inherited M15 benchmark matrix
 
-Current command:
+Qualified command:
 
     python frp_prototype_v1_7_0.py --mode benchmark
 
@@ -476,7 +531,7 @@ Equivalent export:
 
     python frp_prototype_v1_7_0.py --export-benchmark-matrix
 
-Current matrix rows:
+Qualified matrix rows:
 
 1. `frp_v1_6_0_m14_floating_semantic_reference`;
 2. `frp_v1_7_0_quantized_hardware_shadow`;
@@ -484,7 +539,7 @@ Current matrix rows:
 4. `frp_v1_7_0_systemverilog_correlation_contract`;
 5. `frp_v1_7_0_qualification_closure`.
 
-Current benchmark-matrix schema:
+Qualified benchmark-matrix schema:
 
 `frp.m3.benchmark_matrix.v1.7.0`
 
@@ -531,7 +586,7 @@ The same historical run records:
 
 Engineering role:
 
-`preserve current implementation-mapping evidence and historical transition evidence as separate release-specific measurement contours`
+`preserve inherited implementation-mapping evidence and historical transition evidence as separate release-specific measurement contours`
 
 ## 9. Layer 6 — Continuous Integration Qualification Layer
 
@@ -541,47 +596,59 @@ Purpose:
 
 Current repository workflow count:
 
-`19`
+`23`
 
 Current root README active passing badge count:
 
-`18`
+`2`
 
-Current primary M15 workflow:
+Current primary M16 workflow:
 
-`../.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+`../.github/workflows/frp-m16-rtl-artifact-boundary.yml`
 
 Workflow name:
 
+`FRP M16 RTL Artifact Boundary`
+
+Current FPGA preparation workflow:
+
+`../.github/workflows/frp-m16-fpga-preparation.yml`
+
+Workflow name:
+
+`FRP M16 FPGA Preparation`
+
+Current M16 qualification subjects include:
+
+1. synthesizable RTL source compilation;
+2. integrated M16 RTL core execution;
+3. scheduler-state propagation;
+4. request-lane arbitration;
+5. active-neutral transition routing;
+6. pending-route retention;
+7. transition-capacity enforcement;
+8. retained-state writeback;
+9. integrated invariant evaluation;
+10. deterministic RTL simulation;
+11. RTL transcript validation;
+12. RTL closure validation;
+13. FPGA integration-top compilation;
+14. FPGA testbench execution;
+15. reset synchronization and readiness gating;
+16. FPGA transcript validation;
+17. FPGA preparation closure validation.
+
+The inherited M15 workflow remains:
+
+`../.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+
+Inherited workflow name:
+
 `FRP M15 Implementation Mapping and Qualification Closure`
-
-Execution environment:
-
-`ubuntu-latest`
-
-Python version:
-
-`3.12`
-
-Timeout:
-
-`30 minutes`
-
-Current M15 workflow stages:
-
-1. checkout repository;
-2. set up Python;
-3. compile the FRP v1.7.0 reference file;
-4. generate M15 qualification outputs;
-5. compare deterministic vector packages;
-6. validate M15 schemas, kernel invariants, fixed-point contract, and equivalence;
-7. validate deterministic vector-package integrity;
-8. validate the M15 architecture document contract;
-9. upload M15 qualification artifacts.
 
 Engineering role:
 
-`bind source state, generated artifacts, deterministic comparison, and published validation status`
+`bind source state, executable RTL, deterministic simulation, FPGA preparation artifacts, transcripts, closure records, and published validation status`
 
 ## 10. Layer 7 — Documentation and Reproducibility Layer
 
@@ -604,7 +671,13 @@ Current core documentation includes:
 - `./architecture.md`;
 - `./benchmark_interpretation.md`;
 - `./limitations.md`;
-- `./implementation_layers.md`.
+- `./implementation_layers.md`;
+- `./m15_implementation_mapping_domain_interface_qualification_closure.md`;
+- `./m16_rtl_core_realization_execution_semantics.md`;
+- `../rtl/m16/SIMULATION_TRANSCRIPT.md`;
+- `../rtl/m16/CLOSURE.md`;
+- `../fpga/m16/SIMULATION_TRANSCRIPT.md`;
+- `../fpga/m16/CLOSURE.md`.
 
 Current reproducibility state records:
 
@@ -618,11 +691,17 @@ Current reproducibility state records:
 - step count;
 - processor parameters;
 - generated artifacts;
-- independent deterministic repeat.
+- independent deterministic repeat;
+- RTL source boundary;
+- RTL simulation transcript;
+- RTL qualification closure;
+- FPGA preparation source boundary;
+- FPGA simulation transcript;
+- FPGA preparation closure.
 
 Engineering role:
 
-`keep executable semantics, evidence, commands, and architecture interpretation synchronized`
+`keep executable semantics, hardware-facing evidence, RTL execution, FPGA preparation, commands, and architecture documentation synchronized`
 
 ## 11. Layer 8 — Release and Archival Traceability Layer
 
@@ -633,26 +712,27 @@ Purpose:
 Current release-facing files:
 
 - `../CHANGELOG.md`;
-- `../RELEASE_NOTES_v1_7_0.md`;
-- `../TEST_REPORT_v1_7_0.md`;
-- `../FRP_VALIDATION_INDEX_v1_7_0.md`;
+- `../RELEASE_NOTES_v1_8_0.md`;
+- `../TEST_REPORT_v1_8_0.md`;
+- `../FRP_VALIDATION_INDEX_v1_8_0.md`;
 - `../CITATION.cff`;
 - `../LICENSE`;
-- `../NOTICE`;
+- `../NOTICE.md`;
 - `../SECURITY.md`;
 - `../CONTRIBUTING.md`;
 - `../CODE_OF_CONDUCT.md`.
 
-Current validated release commit:
+Current qualification evidence includes:
 
-`5fd9a4f`
-
-Recorded workflow stack:
-
-- `FRP Structured Output #113 — PASS`;
-- `FRP M15 Implementation Mapping and Qualification Closure #1 — PASS`;
-- `FRP Self Test #154 — PASS`;
-- `FRP Benchmark Smoke Test #152 — PASS`.
+- inherited M15 semantic-reference qualification;
+- inherited 41-check self-test qualification;
+- inherited deterministic export and replay qualification;
+- M16 RTL Artifact Boundary qualification;
+- M16 RTL simulation transcript;
+- M16 RTL closure record;
+- M16 FPGA Preparation qualification;
+- M16 FPGA simulation transcript;
+- M16 FPGA preparation closure record.
 
 Engineering role:
 
@@ -668,7 +748,7 @@ Milestone:
 
 `FRP v0.9.5 — M3 Benchmark and Signal Map`
 
-Current workflow:
+Workflow:
 
 `../.github/workflows/frp-m3-benchmark-signal-map.yml`
 
@@ -784,19 +864,19 @@ This progression records:
 
 Engineering role:
 
-`establish the validated semantic and correlation base inherited by M15`
+`establish the validated semantic and physical-correlation base inherited by M15 and retained by M16`
 
 ## 16. Layer 13 — M15 Fixed-Point Interface Profile Layer
 
 Purpose:
 
-`define deterministic finite-word representations for the current processor domains`
+`define deterministic finite-word representations for the qualified processor domains`
 
 Artifact layer:
 
 `fixed_point_interface_profile`
 
-Current numeric representations:
+Inherited M15 numeric representations:
 
 | Domain | Representation |
 |---|---|
@@ -805,11 +885,11 @@ Current numeric representations:
 | phase | `PHASE_U32` |
 | Sakaguchi gamma | `GAMMA_S32` |
 
-Current deterministic trigonometric profile:
+Inherited M15 deterministic trigonometric profile:
 
 `4096-entry full-cycle lookup table`
 
-Current exactness markers:
+Inherited M15 exactness markers:
 
 `fixed_point_topology_sum_exact = True`
 
@@ -833,7 +913,7 @@ Artifact layer:
 
 `balanced_ternary_hardware_encoding_map`
 
-Current encoding:
+Inherited M15 encoding:
 
 `-1 → 2'b11`
 
@@ -857,7 +937,7 @@ Reserved integer code:
 
 `2`
 
-Current invariant:
+Inherited M15 invariant:
 
 `reserved_state_events = 0`
 
@@ -873,13 +953,13 @@ Engineering role:
 
 Purpose:
 
-`execute the current FRP semantics through stateful finite-word arithmetic`
+`execute the qualified FRP semantics through stateful finite-word arithmetic`
 
 Artifact layer:
 
 `quantized_reference_shadow_model`
 
-Current quantized processor representation:
+Qualified quantized processor representation:
 
 `QuantizedReferenceShadowProcessor`
 
@@ -916,7 +996,7 @@ Artifact layer:
 
 `cycle_exact_reference_trace`
 
-Current default trace length:
+Inherited M15 default trace length:
 
 `64 ticks`
 
@@ -938,7 +1018,7 @@ Export command:
 
 Engineering role:
 
-`bridge stateful quantized execution and deterministic RTL comparison`
+`bridge stateful quantized execution and deterministic RTL comparison inherited by M16`
 
 ## 20. Layer 17 — M15 RTL Comparison Vector Layer
 
@@ -950,11 +1030,11 @@ Artifact layer:
 
 `rtl_comparison_vector_package`
 
-Current vector-package file count:
+Inherited M15 vector-package file count:
 
 `10`
 
-Current files:
+Inherited M15 files:
 
 - `frp_m15_kernel_vectors.vec`;
 - `frp_m15_pending_routes.trace`;
@@ -967,7 +1047,7 @@ Current files:
 - `frp_m15_trig_lut_q30.vec`;
 - `frp_m15_sha256_manifest.json`.
 
-Current deterministic qualification generates two independent vector directories and requires byte-identical equality.
+The inherited M15 deterministic qualification generates two independent vector directories and requires byte-identical equality.
 
 Export command:
 
@@ -975,19 +1055,19 @@ Export command:
 
 Engineering role:
 
-`provide exact replay inputs, expected outputs, and integrity evidence`
+`provide exact replay inputs, expected outputs, and integrity evidence inherited by M16`
 
 ## 21. Layer 18 — M15 SystemVerilog Interface Layer
 
 Purpose:
 
-`map the current processor domains into deterministic testbench interfaces`
+`map the qualified processor domains into deterministic testbench interfaces`
 
 Artifact layer:
 
 `systemverilog_testbench_interface_map`
 
-Current default interface parameters include:
+Inherited M15 default interface parameters include:
 
 | Parameter | Value |
 |---|---:|
@@ -1015,19 +1095,19 @@ Export command:
 
 Engineering role:
 
-`define deterministic verification connectivity between M15 reference artifacts and SystemVerilog replay`
+`define deterministic verification connectivity between inherited M15 reference artifacts and SystemVerilog execution`
 
 ## 22. Layer 19 — M15 Synthesizable RTL Reference-Core Layer
 
 Purpose:
 
-`map the current processor semantics into synthesizable reference-core structure`
+`map the qualified processor semantics into synthesizable reference-core structure`
 
 Artifact layer:
 
 `synthesizable_rtl_reference_core`
 
-The current mapping covers:
+The inherited M15 mapping covers:
 
 - balanced ternary state execution;
 - active-neutral transition core;
@@ -1047,7 +1127,7 @@ Export command:
 
 Engineering role:
 
-`provide the current deterministic RTL realization map inherited by M16`
+`provide the deterministic RTL realization map inherited by the M16 executable RTL core`
 
 ## 23. Layer 20 — M15 RTL Assertion Correlation Layer
 
@@ -1059,11 +1139,11 @@ Artifact layer:
 
 `rtl_assertion_correlation_harness`
 
-Current assertion-correlation harness count:
+Inherited M15 assertion-correlation harness count:
 
 `13`
 
-Current exact integer comparison rule:
+Inherited M15 exact integer comparison rule:
 
 `actual integer field == expected integer field`
 
@@ -1081,7 +1161,7 @@ Export command:
 
 Engineering role:
 
-`turn current kernel and trace contracts into explicit RTL-facing qualification conditions`
+`turn inherited kernel and trace contracts into explicit RTL-facing qualification conditions`
 
 ## 24. Layer 21 — M15 Reference Equivalence Layer
 
@@ -1093,7 +1173,7 @@ Artifact layer:
 
 `reference_rtl_equivalence_report`
 
-The current equivalence architecture has two levels.
+The inherited M15 equivalence architecture has two levels.
 
 ### 24.1 Floating semantic reference to quantized shadow
 
@@ -1135,23 +1215,23 @@ Export command:
 
 Engineering role:
 
-`connect floating semantics, quantized execution, and deterministic RTL-facing replay through explicit correlation boundaries`
+`connect the inherited floating semantics, quantized execution, and deterministic RTL-facing replay through explicit correlation boundaries retained by FRP v1.8.0 / M16`
 
 ## 25. Layer 22 — M15 Qualification Closure Layer
 
 Purpose:
 
-`bind the complete M15 implementation stack into one final qualification result`
+`bind the complete inherited M15 implementation stack into one final qualification result`
 
 Artifact layer:
 
 `qualification_closure_manifest`
 
-Current artifact-layer count:
+Inherited M15 artifact-layer count:
 
 `10`
 
-Current qualification result:
+Inherited M15 qualification result:
 
 `PASS`
 
@@ -1159,7 +1239,7 @@ Export command:
 
     python frp_prototype_v1_7_0.py --export-qualification-closure-manifest
 
-The closure chain is:
+The inherited M15 closure chain is:
 
 `fixed-point interface`
 
@@ -1201,7 +1281,7 @@ The closure chain is:
 
 Engineering role:
 
-`establish one deterministic qualified implementation-mapping package for FRP v1.7.0`
+`preserve one deterministic qualified implementation-mapping package inherited from FRP v1.7.0 by FRP v1.8.0 / M16`
 
 ## 26. Layer 23 — Comparative Architecture and Hardware-Sensitivity Layer
 
@@ -1213,14 +1293,14 @@ Current directory:
 
 `../benchmarks/architecture_comparison/`
 
-Current architecture set:
+Qualified architecture set:
 
 1. `binary_synchronous_reference`;
 2. `binary_clock_gated_reference`;
 3. `direct_ternary_reference`;
 4. `frp_v1_7_0_quantized_shadow`.
 
-Current comparison chain:
+Qualified comparison chain:
 
 `one deterministic semantic workload`
 
@@ -1244,31 +1324,31 @@ Current comparison chain:
 
 `machine-readable comparison matrix`
 
-Current hardware-sensitivity scenarios:
+Qualified hardware-sensitivity scenarios:
 
 - `lower_bound`;
 - `nominal`;
 - `upper_bound`.
 
-Current ranking state:
+Qualified ranking state:
 
 `ranking_stable = true`
 
 `ranking_sensitive = false`
 
-Current qualification policy:
+Qualified qualification policy:
 
 `integrity_only_no_winner_assertions`
 
-Current winner assertions:
+Qualified winner assertions:
 
 `[]`
 
-The current M15 quantized-shadow row exposes its declared implementation-mapping activity concentration in fixed-point arithmetic and trigonometric lookup activity.
+The inherited M15 quantized-shadow row exposes its declared implementation-mapping activity concentration in fixed-point arithmetic and trigonometric lookup activity.
 
 Engineering role:
 
-`provide deterministic architecture-comparison and coefficient-sensitivity evidence around the validated M15 reference architecture`
+`provide deterministic architecture-comparison and coefficient-sensitivity evidence around the inherited M15 reference architecture retained by FRP v1.8.0 / M16`
 
 ## 27. Layer 24 — Hardware Pathway and Physical Validation Support Layer
 
@@ -1284,15 +1364,25 @@ Repository support documents include:
 - `./physical_validation_plan.md`;
 - `../funding_brief.md`.
 
+Current M16 architecture and qualification references include:
+
+- `./m16_rtl_core_realization_execution_semantics.md`;
+- `../rtl/m16/SIMULATION_TRANSCRIPT.md`;
+- `../rtl/m16/CLOSURE.md`;
+- `../fpga/m16/SIMULATION_TRANSCRIPT.md`;
+- `../fpga/m16/CLOSURE.md`.
+
 These documents cover:
 
 - hardware pathway planning;
 - FPGA mapping study;
 - ASIC mapping study;
 - physical validation planning;
+- executable M16 RTL realization;
+- M16 FPGA preparation;
 - partner and funding-facing technical presentation.
 
-Their implementation role is to inherit the current validated FRP architecture, evidence, terminology, and release identity when each document is synchronized.
+Their implementation role is to inherit the validated FRP semantics, evidence, terminology, architecture state, and FRP v1.8.0 / M16 release identity when each document is synchronized.
 
 ## 28. Layer Inheritance Rule
 
@@ -1372,7 +1462,47 @@ The current inheritance chain is:
 
 ↓
 
-`qualification closure`
+`M15 qualification closure`
+
+↓
+
+`M16 synthesizable RTL core realization`
+
+↓
+
+`M16 scheduler-state execution`
+
+↓
+
+`M16 request-lane arbitration`
+
+↓
+
+`M16 active-neutral routing`
+
+↓
+
+`M16 retained pending-route behavior`
+
+↓
+
+`M16 transition-capacity enforcement`
+
+↓
+
+`M16 retained-state writeback`
+
+↓
+
+`M16 integrated invariant evaluation`
+
+↓
+
+`M16 RTL qualification closure`
+
+↓
+
+`M16 FPGA preparation`
 
 Inheritance means:
 
@@ -1383,7 +1513,7 @@ Inheritance means:
 - benchmark layers record release-specific evidence;
 - workflows bind deterministic execution to repository validation;
 - M3-M14 preserve the implementation progression;
-- the M15 numeric layer maps current state domains;
+- the M15 numeric layer maps the qualified state domains;
 - the quantized shadow executes the finite-word contract;
 - the cycle-exact trace records the golden execution path;
 - the vector layer packages deterministic replay data;
@@ -1391,7 +1521,13 @@ Inheritance means:
 - the RTL reference-core layer maps synthesizable execution structure;
 - the assertion layer maps invariants to checks;
 - the equivalence layer qualifies correlation and replay;
-- the closure layer binds the complete package.
+- the M15 closure layer binds the inherited implementation-mapping package;
+- the M16 RTL layer realizes the inherited execution contract in synthesizable SystemVerilog;
+- the M16 scheduler and request layers propagate deterministic execution control;
+- the M16 active-neutral and pending-route layers preserve tick-separated ternary routing;
+- the M16 capacity and state-update layers enforce transition limits and retained-state writeback;
+- the M16 invariant layer evaluates the integrated RTL execution contract;
+- the M16 closure records bind RTL and FPGA preparation qualification evidence.
 
 ## 29. Historical and Current Benchmark Layer Separation
 
@@ -1409,7 +1545,7 @@ Direct archived thermal result:
 
 `distributed_neutral_ternary = 15.69× lower heat_peak than binary_style_forced_switch`
 
-Current M15 comparative contour:
+Inherited M15 comparative contour:
 
 `FRP v1.7.0 quantized hardware-shadow comparison`
 
@@ -1419,9 +1555,11 @@ Primary measured subject:
 
 The two contours retain their release-specific architecture identifiers, metrics, and interpretation domains.
 
-## 30. Current M15 Artifact and Schema Registry
+FRP v1.8.0 / M16 retains these benchmark contours and adds executable RTL and FPGA preparation qualification as separate evidence domains.
 
-Current artifact layers:
+## 30. Inherited M15 Artifact and Schema Registry
+
+Inherited M15 artifact layers:
 
 1. `fixed_point_interface_profile`;
 2. `balanced_ternary_hardware_encoding_map`;
@@ -1434,7 +1572,7 @@ Current artifact layers:
 9. `reference_rtl_equivalence_report`;
 10. `qualification_closure_manifest`.
 
-Current M15 schemas:
+Inherited M15 schemas:
 
 `frp.m15.fixed_point_interface_profile.v1.7.0`
 
@@ -1458,11 +1596,11 @@ Current M15 schemas:
 
 Engineering role:
 
-`keep each implementation layer identifiable through a stable schema contract`
+`keep each inherited implementation layer identifiable through a stable schema contract retained by FRP v1.8.0 / M16`
 
 ## 31. Current Workflow Inventory
 
-The repository contains 19 GitHub Actions workflow files:
+The repository contains 23 GitHub Actions workflow files:
 
 1. `.github/workflows/frp-architecture-comparison.yml`;
 2. `.github/workflows/frp-benchmark-smoke.yml`;
@@ -1474,47 +1612,66 @@ The repository contains 19 GitHub Actions workflow files:
 8. `.github/workflows/frp-m13-production-scaling-stabilization.yml`;
 9. `.github/workflows/frp-m14-physical-implementation-qualification.yml`;
 10. `.github/workflows/frp-m15-implementation-mapping-qualification.yml`;
-11. `.github/workflows/frp-m3-benchmark-signal-map.yml`;
-12. `.github/workflows/frp-m4-hdl-trace.yml`;
-13. `.github/workflows/frp-m5-rtl-assertion-harness.yml`;
-14. `.github/workflows/frp-m6-formal-verification.yml`;
-15. `.github/workflows/frp-m7-fpga-synthesis.yml`;
-16. `.github/workflows/frp-m8-production-release.yml`;
-17. `.github/workflows/frp-m9-silicon-architecture.yml`;
-18. `.github/workflows/frp-self-test.yml`;
-19. `.github/workflows/frp-structured-output.yml`.
+11. `.github/workflows/frp-m16-canonical-core-domain.yml`;
+12. `.github/workflows/frp-m16-fpga-preparation.yml`;
+13. `.github/workflows/frp-m16-reserved-cell-cleanup.yml`;
+14. `.github/workflows/frp-m16-rtl-artifact-boundary.yml`;
+15. `.github/workflows/frp-m3-benchmark-signal-map.yml`;
+16. `.github/workflows/frp-m4-hdl-trace.yml`;
+17. `.github/workflows/frp-m5-rtl-assertion-harness.yml`;
+18. `.github/workflows/frp-m6-formal-verification.yml`;
+19. `.github/workflows/frp-m7-fpga-synthesis.yml`;
+20. `.github/workflows/frp-m8-production-release.yml`;
+21. `.github/workflows/frp-m9-silicon-architecture.yml`;
+22. `.github/workflows/frp-self-test.yml`;
+23. `.github/workflows/frp-structured-output.yml`.
 
-The root `README.md` exposes 18 active passing validation badges.
+The root `README.md` exposes two active passing workflow badges:
 
-The Comparative Architecture Benchmark workflow completes the 19-file workflow inventory.
+- `FRP M16 RTL Artifact Boundary`;
+- `FRP M16 FPGA Preparation`.
+
+The four M16 workflow files extend the inherited 19-file workflow inventory to 23 files.
 
 ## 32. Current Layer Status
 
 | Layer | Current state |
 |---|---|
 | computational identity | established |
-| floating semantic reference | current in `frp_prototype_v1_7_0.py` |
+| floating semantic reference | retained in `frp_prototype_v1_7_0.py` |
 | kernel invariants | validated |
 | structured output and telemetry | validated |
-| verification and self-test | `41/41 PASS` |
+| verification and self-test | inherited `41/41 PASS` |
 | benchmark evidence | current and historical contours preserved |
 | Continuous Integration qualification | passing workflow chain |
 | documentation and reproducibility | active synchronized layer |
-| release and archival traceability | current v1.7.0 evidence recorded |
+| release and archival traceability | current v1.8.0 evidence recorded |
 | M3 benchmark and signal mapping | published progression layer |
 | M4-M7 HDL, RTL, formal, and FPGA scaffolds | published progression layers |
 | M8-M10 production, silicon, and tapeout architecture | published progression layers |
 | M11-M14 handoff, iteration, scaling, and physical correlation | published progression layers |
-| M15 fixed-point interface | validated |
-| M15 ternary hardware encoding | validated |
-| M15 quantized hardware shadow | validated |
-| M15 cycle-exact reference trace | validated |
-| M15 RTL comparison vectors | validated |
-| M15 SystemVerilog interface map | validated |
-| M15 synthesizable RTL reference-core map | validated |
-| M15 RTL assertion correlation | validated |
-| M15 reference equivalence | validated |
+| M15 fixed-point interface | validated and inherited |
+| M15 ternary hardware encoding | validated and inherited |
+| M15 quantized hardware shadow | validated and inherited |
+| M15 cycle-exact reference trace | validated and inherited |
+| M15 RTL comparison vectors | validated and inherited |
+| M15 SystemVerilog interface map | validated and inherited |
+| M15 synthesizable RTL reference-core map | validated and inherited |
+| M15 RTL assertion correlation | validated and inherited |
+| M15 reference equivalence | validated and inherited |
 | M15 qualification closure | `PASS` |
+| M16 synthesizable RTL core | qualified |
+| M16 scheduler-state execution | qualified |
+| M16 request-lane arbitration | qualified |
+| M16 active-neutral routing | qualified |
+| M16 retained pending-route behavior | qualified |
+| M16 transition-capacity enforcement | qualified |
+| M16 retained-state writeback | qualified |
+| M16 integrated invariant evaluation | qualified |
+| M16 RTL qualification closure | `M16 RTL EXECUTION LAYER CLOSED` |
+| M16 FPGA integration top | qualified |
+| M16 FPGA reset synchronization and readiness gating | qualified |
+| M16 FPGA preparation closure | `M16 FPGA PREPARATION LAYER CLOSED` |
 | comparative architecture and hardware sensitivity | qualified deterministic support layer |
 | hardware pathway and physical-validation support documents | repository support layer |
 
@@ -1522,28 +1679,45 @@ The Comparative Architecture Benchmark workflow completes the 19-file workflow i
 
 Current published release layer:
 
-`FRP v1.7.0 — M15 Implementation Mapping, Domain Interface, and Qualification Closure Package`
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
 
-Current validated release commit:
+Qualified executable semantic reference:
 
-`5fd9a4f`
+`frp_prototype_v1_7_0.py`
 
-Current validated workflow stack:
+Final synchronized M16 qualification commit:
 
-- `FRP Structured Output #113 — PASS`;
-- `FRP M15 Implementation Mapping and Qualification Closure #1 — PASS`;
-- `FRP Self Test #154 — PASS`;
-- `FRP Benchmark Smoke Test #152 — PASS`.
+`ede53cf`
 
-Current self-test result:
+Validated workflow stack:
+
+- inherited `.github/workflows/frp-m15-implementation-mapping-qualification.yml`;
+- `.github/workflows/frp-m16-rtl-artifact-boundary.yml`;
+- `.github/workflows/frp-m16-fpga-preparation.yml`.
+
+M16 maintenance workflows:
+
+- `.github/workflows/frp-m16-canonical-core-domain.yml`;
+- `.github/workflows/frp-m16-reserved-cell-cleanup.yml`.
+
+Qualification records:
+
+| Layer | Workflow run | Qualified commit | Result | Artifact count | Status |
+|---|---:|---|---|---:|---|
+| M16 RTL initial closure | `#82` | `a68a2af` | `SUCCESS` | `1` | `M16 RTL EXECUTION LAYER CLOSED` |
+| M16 RTL qualification rerun | `#84` | `ede53cf` | `SUCCESS` | `1` | `M16 RTL EXECUTION LAYER CLOSED` |
+| M16 FPGA preparation initial closure | `#1` | `326b69e` | `SUCCESS` | `1` | `M16 FPGA PREPARATION LAYER CLOSED` |
+| M16 FPGA preparation qualification rerun | `#2` | `ede53cf` | `SUCCESS` | `1` | `M16 FPGA PREPARATION LAYER CLOSED` |
+
+Inherited M15 self-test result:
 
 `41/41 PASS`
 
-Current qualification closure result:
+Inherited M15 qualification closure result:
 
 `PASS`
 
-Current M15 scale qualification:
+Inherited M15 scale qualification:
 
 `8 cells`
 
@@ -1551,9 +1725,17 @@ Current M15 scale qualification:
 
 `32 cells`
 
-Current deterministic vector qualification:
+Inherited deterministic vector qualification:
 
-`two independently generated packages → byte-identical equality`
+`two independently generated packages → 10/10 files byte-identical`
+
+Current M16 RTL qualification result:
+
+`PASS`
+
+Current M16 FPGA preparation qualification result:
+
+`PASS`
 
 Current vector integrity record:
 
@@ -1565,9 +1747,9 @@ This document is aligned with:
 
 - `../README.md`;
 - `../frp_prototype_v1_7_0.py`;
-- `../TEST_REPORT_v1_7_0.md`;
-- `../FRP_VALIDATION_INDEX_v1_7_0.md`;
-- `../RELEASE_NOTES_v1_7_0.md`;
+- `../TEST_REPORT_v1_8_0.md`;
+- `../FRP_VALIDATION_INDEX_v1_8_0.md`;
+- `../RELEASE_NOTES_v1_8_0.md`;
 - `../CI.md`;
 - `../REPRODUCIBILITY.md`;
 - `../USAGE.md`;
@@ -1580,20 +1762,27 @@ This document is aligned with:
 - `./benchmark_interpretation.md`;
 - `./limitations.md`;
 - `./m15_implementation_mapping_domain_interface_qualification_closure.md`;
-- `../.github/workflows/frp-m15-implementation-mapping-qualification.yml`.
+- `./m16_rtl_core_realization_execution_semantics.md`;
+- `../rtl/m16/SIMULATION_TRANSCRIPT.md`;
+- `../rtl/m16/CLOSURE.md`;
+- `../fpga/m16/SIMULATION_TRANSCRIPT.md`;
+- `../fpga/m16/CLOSURE.md`;
+- `../.github/workflows/frp-m15-implementation-mapping-qualification.yml`;
+- `../.github/workflows/frp-m16-rtl-artifact-boundary.yml`;
+- `../.github/workflows/frp-m16-fpga-preparation.yml`.
 
 Historical thermal evidence remains aligned with:
 
 - `../TEST_REPORT_v0_9_3.md`;
 - `../frp_prototype_v0_9_3_mobile.py`.
 
-## 35. Next Architecture Layer
+## 35. Current Architecture Layer
 
-FRP v1.7.0 establishes the reference base for:
+FRP v1.8.0 carries the qualified M15 implementation-mapping base into:
 
-`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
+`M16 RTL Core Realization and Execution Semantics Package`
 
-The M16 inheritance path begins from:
+The current M16 inheritance path is:
 
 `validated M15 processor semantics`
 
@@ -1635,7 +1824,47 @@ The M16 inheritance path begins from:
 
 ↓
 
-`validated qualification closure`
+`validated M15 qualification closure`
+
+↓
+
+`synthesizable M16 RTL core realization`
+
+↓
+
+`scheduler-state execution`
+
+↓
+
+`request-lane arbitration`
+
+↓
+
+`active-neutral transition routing`
+
+↓
+
+`retained pending-route behavior`
+
+↓
+
+`transition-capacity enforcement`
+
+↓
+
+`retained-state writeback`
+
+↓
+
+`integrated invariant evaluation`
+
+↓
+
+`M16 RTL qualification closure`
+
+↓
+
+`M16 FPGA preparation qualification closure`
 
 ## 36. Current Status
 
@@ -1659,38 +1888,67 @@ Active neutral state:
 
 `0`
 
-Current executable form:
+Current release:
 
-`Ternary Resonant Coherence Processor — Structured Output Prototype`
-
-Current version:
-
-`FRP v1.7.0`
+`FRP v1.8.0`
 
 Current milestone:
 
-`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+`M16 — RTL Core Realization and Execution Semantics Package`
 
-Current executable reference:
+Qualified executable semantic reference:
 
 `../frp_prototype_v1_7_0.py`
+
+Current M16 RTL architecture document:
+
+`./m16_rtl_core_realization_execution_semantics.md`
+
+Current M16 RTL evidence:
+
+`../rtl/m16/SIMULATION_TRANSCRIPT.md`
+
+`../rtl/m16/CLOSURE.md`
+
+Current M16 FPGA preparation evidence:
+
+`../fpga/m16/SIMULATION_TRANSCRIPT.md`
+
+`../fpga/m16/CLOSURE.md`
 
 Current published validation result:
 
 `PASS`
 
-Current validated M15 self-test result:
+Inherited M15 self-test result:
 
 `41/41 PASS`
 
-Current qualification closure result:
+Inherited M15 qualification closure result:
 
 `PASS`
+
+M16 RTL qualification result:
+
+`PASS`
+
+M16 RTL closure status:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+M16 FPGA preparation qualification result:
+
+`PASS`
+
+M16 FPGA preparation closure status:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
 
 Historical archived ternary-to-binary thermal result:
 
 `distributed_neutral_ternary recorded a 15.69× lower heat_peak than binary_style_forced_switch under the historical v0.9.3 transition benchmark model`
 
-Next planned architecture layer:
 
-`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
+
+
+
