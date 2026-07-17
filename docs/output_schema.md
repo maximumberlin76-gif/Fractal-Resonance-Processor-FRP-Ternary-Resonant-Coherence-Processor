@@ -2,73 +2,73 @@
 
 **Ternary Resonant Coherence Processor — Structured Output Prototype**
 
-This document defines the current console, structured JSON, benchmark-matrix, deterministic trace, hardware-facing export, equivalence, and qualification-closure output schemas for the Fractal Resonance Processor (FRP) project.
+This document defines the console, structured JSON, benchmark-matrix, deterministic trace, hardware-facing export, equivalence, qualification-closure, and M16 execution-evidence output schemas for the Fractal Resonance Processor (FRP) project.
 
 Current version:
 
-`FRP v1.7.0`
+`FRP v1.8.0`
 
 Current milestone:
 
-`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+`M16 — RTL Core Realization and Execution Semantics Package`
 
-Current executable reference:
+Qualified executable semantic reference:
 
 `../frp_prototype_v1_7_0.py`
 
-Current structured-output schema:
+Structured-output schema:
 
 `frp.structured_output.v1.7.0`
 
-Current benchmark-matrix schema:
+Benchmark-matrix schema:
 
 `frp.m3.benchmark_matrix.v1.7.0`
 
-Current M15 export-schema count:
+Inherited M15 export-schema count:
 
 `10`
 
-Current total release-facing schema count:
+Total release-facing schema count:
 
 `12`
 
 Current architecture document:
 
-`./m15_implementation_mapping_domain_interface_qualification_closure.md`
+`./m16_rtl_core_realization_execution_semantics.md`
 
 Current test report:
 
-`../TEST_REPORT_v1_7_0.md`
+`../TEST_REPORT_v1_8_0.md`
 
 Current validation index:
 
-`../FRP_VALIDATION_INDEX_v1_7_0.md`
+`../FRP_VALIDATION_INDEX_v1_8_0.md`
 
 Current release notes:
 
-`../RELEASE_NOTES_v1_7_0.md`
+`../RELEASE_NOTES_v1_8_0.md`
 
 Current primary qualification workflow:
 
-`../.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+`../.github/workflows/frp-m16-rtl-artifact-boundary.yml`
 
-Current published validation result:
+Validated qualification result:
 
 `PASS`
 
-Current validated M15 self-test result:
+Inherited M15 self-test result:
 
 `41/41 PASS`
 
 ## 1. Purpose
 
-The current FRP output layer provides machine-readable and human-readable representations of:
+The FRP output layer provides machine-readable and human-readable representations of:
 
 - processor configuration;
 - balanced ternary kernel identity;
 - hardware-facing numeric profile;
 - deterministic quantized execution;
-- current execution summary;
+- execution summary;
 - scheduler behavior;
 - active neutral transition routing;
 - pending neutral routes;
@@ -92,9 +92,18 @@ The current FRP output layer provides machine-readable and human-readable repres
 - RTL assertion correlation;
 - floating-to-quantized semantic correlation;
 - exact deterministic replay;
-- qualification closure.
+- qualification closure;
+- M16 RTL execution evidence;
+- M16 scheduler-state execution;
+- M16 request-lane arbitration;
+- M16 active-neutral routing;
+- M16 retained pending-route behavior;
+- M16 transition-capacity enforcement;
+- M16 retained-state writeback;
+- M16 integrated invariant evaluation;
+- M16 FPGA preparation evidence.
 
-The current structured-output chain is:
+The structured-output chain is:
 
 `FRP processor execution`
 
@@ -124,7 +133,7 @@ The current structured-output chain is:
 
 ↓
 
-`M15 export schemas`
+`inherited M15 export schemas`
 
 ↓
 
@@ -136,9 +145,17 @@ The current structured-output chain is:
 
 ↓
 
-`qualification closure`
+`M15 qualification closure`
 
-The current output layer supports:
+↓
+
+`M16 RTL execution evidence`
+
+↓
+
+`M16 FPGA preparation evidence`
+
+The output layer supports:
 
 - reproducibility;
 - CI qualification;
@@ -152,18 +169,18 @@ The current output layer supports:
 - physical-validation planning;
 - archival release evidence.
 
-## 2. Current Output Architecture
+## 2. Output Architecture
 
-The current executable exposes four output families.
+The qualified executable semantic reference exposes four output families.
 
 | Output Family | Primary Role |
 |---|---|
-| structured processor output | current processor configuration, kernel, hardware profile, summary, and optional traces |
-| self-test output | 41-check M15 qualification registry and detailed validation objects |
+| structured processor output | processor configuration, kernel, hardware profile, summary, and optional traces |
+| self-test output | 41-check inherited M15 qualification registry and detailed validation objects |
 | benchmark matrix | five-row implementation progression from M14 floating semantics through M15 qualification closure |
 | M15 export package | ten hardware-facing implementation-mapping and qualification schemas |
 
-The current schema chain is:
+The release-facing schema chain is:
 
 `frp.structured_output.v1.7.0`
 
@@ -173,23 +190,25 @@ The current schema chain is:
 
 +
 
-`10 M15 export schemas`
+`10 inherited M15 export schemas`
 
 =
 
 `12 release-facing schemas`
 
-Current validated release-facing schema count:
+Validated release-facing schema count:
 
 `12`
 
-Current validation result:
+Validation result:
 
 `PASS`
 
+The M16 layer adds executable RTL and FPGA qualification evidence while retaining the qualified M15 structured-output and export-schema identities.
+
 ## 3. Output Modes
 
-The current executable supports two presentation formats:
+The qualified executable semantic reference supports two presentation formats:
 
 | Output Mode | CLI Option | Role |
 |---|---|---|
@@ -204,36 +223,47 @@ JSON mode:
 
 `json`
 
-Current demo behavior:
+Demo behavior:
 
 - text output through `--output text`;
 - structured JSON through `--output json`;
 - complete trace inclusion through `--include-trace`.
 
-Current self-test behavior:
+Self-test behavior:
 
 - compact text report through `--output text`;
 - complete qualification object through `--output json`.
 
-Current benchmark behavior:
+Benchmark behavior:
 
 - benchmark-matrix JSON output.
 
-Current export behavior:
+Export behavior:
 
-- every M15 export flag produces JSON.
+- every inherited M15 export flag produces JSON.
 
-## 4. Current Command-Line Output Controls
+M16 RTL and FPGA qualification evidence is recorded through:
 
-Current primary mode arguments:
+- executable SystemVerilog testbench output;
+- invariant flags;
+- event counters;
+- scheduler counters;
+- retained-state and pending-route observations;
+- GitHub Actions qualification records;
+- simulation transcripts;
+- closure records.
+
+## 4. Command-Line Output Controls
+
+Primary mode arguments:
 
 | Argument | Values | Default | Role |
 |---|---|---|---|
-| `--mode` | `demo`, `self-test`, `benchmark` | `demo` | selects current execution family |
+| `--mode` | `demo`, `self-test`, `benchmark` | `demo` | selects execution family |
 | `--output` | `text`, `json` | `text` | selects presentation format |
 | `--include-trace` | flag | disabled | adds complete demo trace objects |
 
-Current execution-profile arguments:
+Execution-profile arguments:
 
 | Argument | Default | Role |
 |---|---:|---|
@@ -255,39 +285,33 @@ Current execution-profile arguments:
 | `--equivalence-tolerance` | `1e-12` | sets floating correlation tolerance |
 | `--vector-output-dir` | `None` | optional deterministic vector-package output directory |
 
-Current cell-count requirement:
+Cell-count requirement:
 
 `cells = power of two and cells >= 2`
 
-Current scheduler values:
+## 5. Qualified Semantic-Reference Execution Commands
 
-- `free`;
-- `7/1`;
-- `1/7`.
-
-## 5. Current Execution Commands
-
-Current default structured demo:
+Default structured demo:
 
     python ../frp_prototype_v1_7_0.py --mode demo --output json
 
-Current full trace:
+Full trace:
 
     python ../frp_prototype_v1_7_0.py --mode demo --output json --include-trace
 
-Current text demo:
+Text demo:
 
     python ../frp_prototype_v1_7_0.py --mode demo --output text
 
-Current self-test JSON:
+Self-test JSON:
 
     python ../frp_prototype_v1_7_0.py --mode self-test --output json
 
-Current self-test text:
+Self-test text:
 
     python ../frp_prototype_v1_7_0.py --mode self-test --output text
 
-Current benchmark matrix:
+Benchmark matrix:
 
     python ../frp_prototype_v1_7_0.py --mode benchmark --output json
 
@@ -295,17 +319,19 @@ Equivalent benchmark export:
 
     python ../frp_prototype_v1_7_0.py --export-benchmark-matrix
 
-## 6. Stable v1.7.0 Schema Registry
+These commands execute the qualified FRP v1.7.0 semantic reference retained by the FRP v1.8.0 / M16 release package.
 
-Current structured-output schema:
+## 6. Stable Inherited v1.7.0 Schema Registry
+
+Qualified structured-output schema:
 
 `frp.structured_output.v1.7.0`
 
-Current benchmark schema:
+Qualified benchmark schema:
 
 `frp.m3.benchmark_matrix.v1.7.0`
 
-Current M15 export schemas:
+Inherited M15 export schemas:
 
 1. `frp.m15.fixed_point_interface_profile.v1.7.0`;
 2. `frp.m15.balanced_ternary_hardware_encoding_map.v1.7.0`;
@@ -318,42 +344,48 @@ Current M15 export schemas:
 9. `frp.m15.reference_rtl_equivalence_report.v1.7.0`;
 10. `frp.m15.qualification_closure_manifest.v1.7.0`.
 
-Current total release-facing schema count:
+Inherited release-facing schema count:
 
 `12`
 
-Current self-test schema-count markers:
+Inherited M15 self-test schema-count markers:
 
 `export_schema_count_10 = True`
 
 `all_export_schemas_exact = True`
 
-## 7. Shared Release-Facing Envelope
+The M16 executable RTL and FPGA preparation layers retain these schema identifiers without renaming or rewriting the qualified M15 output contract.
 
-Current structured and exported JSON objects use the following common identity fields:
+## 7. Shared Inherited Release-Facing Envelope
+
+The qualified structured and exported JSON objects use the following common identity fields:
 
 | Field | Type | Meaning |
 |---|---|---|
 | `schema` | string | exact schema identifier |
 | `kind` | string | output or artifact type |
-| `version` | string | FRP version |
-| `milestone` | string | current milestone identity |
+| `version` | string | semantic-reference version |
+| `milestone` | string | inherited semantic-reference milestone identity |
 
-Current version value:
+Qualified semantic-reference version value:
 
 `1.7.0`
 
-Current milestone value:
+Inherited milestone value:
 
 `M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
 
-Current JSON serialization:
+These values identify the retained M15 semantic-reference and export artifacts. They do not redefine the repository release state, which is:
+
+`FRP v1.8.0 / M16`
+
+JSON serialization:
 
 - two-space indentation;
 - sorted keys;
 - Unicode preservation.
 
-The executable prints structured JSON through:
+The qualified executable prints structured JSON through:
 
 `json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False)`
 
@@ -361,7 +393,7 @@ The executable prints structured JSON through:
 
 Digest-producing objects use canonical JSON bytes.
 
-Current canonical serialization properties:
+Canonical serialization properties:
 
 - sorted keys;
 - compact separators;
@@ -369,7 +401,7 @@ Current canonical serialization properties:
 - trailing newline;
 - UTF-8 encoding.
 
-Current relation:
+Canonical relation:
 
 `canonical JSON object`
 
@@ -381,11 +413,11 @@ Current relation:
 
 `SHA-256`
 
-Current digest function:
+Digest function:
 
 `sha256`
 
-Current digest representation:
+Digest representation:
 
 `64-character lowercase hexadecimal string`
 
@@ -396,21 +428,21 @@ This digest structure is used for:
 - per-cell trace identity;
 - deterministic vector-package integrity.
 
-## 9. Current Demo JSON Output
+## 9. Qualified Semantic-Reference Demo JSON Output
 
 Command:
 
     python ../frp_prototype_v1_7_0.py --mode demo --output json
 
-Current top-level fields:
+Top-level fields:
 
 | Field | Type | Meaning |
 |---|---|---|
 | `schema` | string | `frp.structured_output.v1.7.0` |
 | `kind` | string | `demo` |
-| `version` | string | `1.7.0` |
-| `milestone` | string | current M15 milestone |
-| `configuration` | object | current execution profile |
+| `version` | string | `1.7.0` semantic-reference identity |
+| `milestone` | string | inherited M15 milestone identity |
+| `configuration` | object | execution profile |
 | `kernel` | object | processor-kernel identity |
 | `hardware_profile` | object | hardware-facing numeric and state profile |
 | `summary` | object | aggregate quantized execution result |
@@ -426,11 +458,13 @@ Full trace mode adds:
 | `cell_trace` | array | per-cell per-tick rows |
 | `route_events` | array | pending and applied neutral-route events |
 
+The demo JSON remains an inherited qualified M15 semantic-reference artifact inside the FRP v1.8.0 / M16 release package.
+
 ## 10. Configuration Object
 
-The current `configuration` object records the complete primary execution profile.
+The inherited M15 `configuration` object records the complete primary execution profile of the qualified semantic reference.
 
-Current fields:
+Fields:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -451,7 +485,7 @@ Current fields:
 | `delay_alpha` | number | stateful delay coefficient |
 | `thermal_diffusion_gain` | number | hierarchical thermal diffusion gain |
 
-Current default configuration:
+Qualified default configuration:
 
 | Field | Value |
 |---|---:|
@@ -474,45 +508,45 @@ Current default configuration:
 
 ## 11. Kernel Object
 
-The current `kernel` object identifies the processor kernel carried by the structured output.
+The inherited M15 `kernel` object identifies the processor kernel carried by the qualified structured output.
 
-Current fields:
+Fields:
 
 | Field | Type | Meaning |
 |---|---|---|
-| `balanced_ternary_states` | array | current ternary state domain |
+| `balanced_ternary_states` | array | ternary state domain |
 | `active_neutral_state` | integer | active neutral state |
 | `neutral_routes` | array | mandatory opposite-polarity routes |
 | `scheduler_modes` | array | available scheduler modes |
 | `actual_direct_events_target` | integer | validated direct-event target |
 
-Current values:
+Qualified values:
 
 `balanced_ternary_states = [-1, 0, 1]`
 
 `active_neutral_state = 0`
 
-Current neutral routes:
+Neutral routes:
 
 `-1 -> 0 -> 1`
 
 `1 -> 0 -> -1`
 
-Current scheduler modes:
+Scheduler modes:
 
 - `free`;
 - `7/1`;
 - `1/7`.
 
-Current direct-event target:
+Direct-event target:
 
 `actual_direct_events_target = 0`
 
 ## 12. Hardware Profile Object
 
-The current `hardware_profile` object records the primary hardware-facing numeric and encoding domains.
+The inherited M15 `hardware_profile` object records the primary hardware-facing numeric and encoding domains.
 
-Current fields:
+Fields:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -522,7 +556,7 @@ Current fields:
 | `gamma` | string | Sakaguchi gamma representation |
 | `state_encoding` | object | balanced ternary encoding |
 
-Current values:
+Qualified values:
 
 `scalar = S32Q16`
 
@@ -532,7 +566,7 @@ Current values:
 
 `gamma = GAMMA_S32`
 
-Current state encoding:
+State encoding:
 
 | Ternary State | Two-Bit Encoding |
 |---|---|
@@ -541,16 +575,18 @@ Current state encoding:
 | `1` | `01` |
 | reserved | `10` |
 
-## 13. Current Summary Object
+The M16 RTL execution layer retains the same canonical balanced ternary state encoding.
 
-The current demo and quantized-shadow `summary` object records aggregate execution state and validated invariants.
+## 13. Summary Object
 
-Current fields:
+The inherited M15 demo and quantized-shadow `summary` object records aggregate execution state and validated invariants.
+
+Fields:
 
 | Field | Type | Meaning |
 |---|---|---|
-| `version` | string | FRP version |
-| `milestone` | string | milestone identity |
+| `version` | string | semantic-reference version |
+| `milestone` | string | semantic-reference milestone identity |
 | `cells` | integer | cell count |
 | `hierarchy_depth` | integer | dyadic hierarchy depth |
 | `request_lanes` | integer | request-lane count |
@@ -560,7 +596,7 @@ Current fields:
 | `scheduler_counts` | object | scheduler-state counts |
 | `scheduler_counts_valid` | boolean | scheduler-count validation |
 | `transition_fraction` | number | distributed commit fraction |
-| `balanced_ternary_state_domain` | boolean | current-state domain validation |
+| `balanced_ternary_state_domain` | boolean | state-domain validation |
 | `reserved_state_events` | integer | reserved encoding events |
 | `actual_direct_events` | integer | direct opposite-polarity events |
 | `requested_direct_events` | integer | opposite-polarity requests |
@@ -580,9 +616,9 @@ Current fields:
 | `fixed_point_topology_sum_exact` | boolean | exact topology-weight closure |
 | `fixed_point_thermal_sum_exact` | boolean | exact thermal-weight closure |
 
-## 14. Current Default Summary Evidence
+## 14. Qualified Default Summary Evidence
 
-Current default structured execution records:
+The qualified default semantic-reference execution records:
 
 | Metric | Value |
 |---|---:|
@@ -610,13 +646,13 @@ Current default structured execution records:
 | `fixed_point_topology_sum_exact` | `True` |
 | `fixed_point_thermal_sum_exact` | `True` |
 
-Current default result:
+Qualified result:
 
 `PASS`
 
 ## 15. Digest Fields
 
-The compact demo output records three deterministic digests.
+The compact inherited M15 demo output records three deterministic digests.
 
 | Field | Source |
 |---|---|
@@ -624,7 +660,7 @@ The compact demo output records three deterministic digests.
 | `trace_digest` | canonical processor-tick trace |
 | `cell_trace_digest` | canonical per-cell trace |
 
-Current default execution digests:
+Qualified default execution digests:
 
 `preload_digest = fbd4ce8153133a30bacb4004ef6b126858e64da1f464b763439d29fd8c98b5af`
 
@@ -632,7 +668,7 @@ Current default execution digests:
 
 `cell_trace_digest = ba7d5f5a5f45d1c6808a0d4c7d7f612916bb2e2c4d33faf5e182810d704ad544`
 
-These values correspond to the current default deterministic execution profile.
+These values correspond to the qualified default deterministic semantic-reference execution profile.
 
 ## 16. Full Trace Mode
 
@@ -646,13 +682,13 @@ Full trace mode adds:
 - `cell_trace`;
 - `route_events`.
 
-Current default trace lengths:
+Qualified default trace lengths:
 
 `trace = 64 rows`
 
 `cell_trace = 1024 rows`
 
-Current relation:
+Trace relation:
 
 `64 ticks × 16 cells = 1024 cell-trace rows`
 
@@ -660,9 +696,9 @@ The same digests remain present in the full trace output.
 
 ## 17. Processor-Tick Trace Row
 
-Each current `trace` row records one post-tick quantized processor state.
+Each inherited M15 `trace` row records one post-tick quantized processor state.
 
-Current fields:
+Fields:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -681,7 +717,7 @@ Current fields:
 | `states_packed_hex` | string | packed hexadecimal state vector |
 | `states_human` | string | human ternary state string |
 | `pending_route_count` | integer | active pending-route count |
-| `switch_load_q16` | integer | current transition load |
+| `switch_load_q16` | integer | transition load |
 | `heat_global_q16` | integer | global model heat |
 | `global_phase_coherence_q30` | integer | global phase coherence |
 | `C_q16` | integer | operational coherence |
@@ -694,13 +730,13 @@ Current fields:
 | `actual_direct_events` | integer | accumulated direct opposite-polarity events |
 | `reserved_state_events` | integer | accumulated reserved-state events |
 | `queue_overflow_events` | integer | accumulated queue-overflow events |
-| `changes` | integer | current-tick state changes |
+| `changes` | integer | state changes for the recorded tick |
 
-The trace row is the primary cycle-exact integer comparison unit.
+The trace row is the primary cycle-exact integer comparison unit of the inherited M15 reference package.
 
 ## 18. Scheduler Encoding in Trace Rows
 
-Current scheduler-mode encoding:
+Scheduler-mode encoding:
 
 | Mode | Code |
 |---|---:|
@@ -708,7 +744,7 @@ Current scheduler-mode encoding:
 | `7/1` | `1` |
 | `1/7` | `2` |
 
-Current scheduler-state encoding:
+Scheduler-state encoding:
 
 | State | Code |
 |---|---:|
@@ -723,15 +759,17 @@ The trace carries both:
 - encoded scheduler state;
 - human-readable scheduler-state name.
 
+The M16 RTL execution layer retains the same scheduler-mode and scheduler-state identities.
+
 ## 19. Packed Ternary State Fields
 
-Current trace state fields:
+Trace state fields:
 
 - `states_packed`;
 - `states_packed_hex`;
 - `states_human`.
 
-Current human-state symbols:
+Human-state symbols:
 
 | Ternary State | Human Symbol |
 |---|---|
@@ -739,23 +777,25 @@ Current human-state symbols:
 | `0` | `N` |
 | `1` | `P` |
 
-Current packed state relation:
+Packed-state relation:
 
 `2 bits per cell`
 
-Current default packed width:
+Qualified default packed width:
 
 `32 bits`
 
-Current cell mapping:
+Cell mapping:
 
 `cell i → [2i+1:2i]`
 
+The M16 retained-state boundary uses the same two-bit-per-cell balanced ternary encoding.
+
 ## 20. Per-Cell Trace Row
 
-Each current `cell_trace` row records one cell at one processor tick.
+Each inherited M15 `cell_trace` row records one cell at one processor tick.
 
-Current fields:
+Fields:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -764,9 +804,9 @@ Current fields:
 | `state_code` | integer | encoded balanced ternary state |
 | `phase_word` | integer | `PHASE_U32` state |
 | `frequency_target_q16` | integer | target frequency |
-| `frequency_current_q16` | integer | current delayed frequency |
+| `frequency_current_q16` | integer | delayed frequency state |
 | `frequency_lag_q16` | integer | remaining frequency lag |
-| `generated_power_q16` | integer | current generated-power state |
+| `generated_power_q16` | integer | generated-power state |
 | `heat_q16` | integer | local model heat |
 | `thermal_overload_q16` | integer | local thermal overload |
 | `gamma_noise_state_q16` | integer | correlated gamma-noise state |
@@ -787,9 +827,9 @@ The per-cell trace supplies the detailed deterministic comparison domain for:
 
 ## 21. Route Event Object
 
-Each current `route_events` row records one pending or applied active-neutral route event.
+Each inherited M15 `route_events` row records one pending or applied active-neutral route event.
 
-Current fields:
+Fields:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -799,18 +839,18 @@ Current fields:
 | `ready_tick` | integer | earliest route-completion tick |
 | `route_status` | string | route event state |
 
-Current route-status values:
+Route-status values:
 
 - `pending`;
 - `applied`.
 
-Current route relation:
+Route relation:
 
 `opposite-polarity request`
 
 ↓
 
-`current state → 0`
+`retained state → 0`
 
 ↓
 
@@ -828,18 +868,20 @@ Current route relation:
 
 `0 → target polarity`
 
-## 22. Current Text Output Compatibility
+The M16 RTL execution layer implements the same tick-separated active-neutral route relation through retained pending-route state.
 
-The compact text output remains available for demo and self-test modes.
+## 22. Text Output Compatibility
 
-Current demo text command:
+The compact text output remains available for demo and self-test modes of the qualified semantic reference.
+
+Demo text command:
 
     python ../frp_prototype_v1_7_0.py --mode demo --output text
 
-Current demo text fields include:
+Demo text fields include:
 
-- FRP version;
-- milestone;
+- FRP semantic-reference version;
+- inherited milestone identity;
 - `kind`;
 - `balanced_ternary_state_domain`;
 - `reserved_state_events`;
@@ -851,7 +893,7 @@ Current demo text fields include:
 - `fixed_point_topology_sum_exact`;
 - `fixed_point_thermal_sum_exact`.
 
-Current default demo text markers:
+Qualified default demo text markers:
 
 `FRP v1.7.0`
 
@@ -865,11 +907,11 @@ Current default demo text markers:
 
 `C_minus_P_min: 0.6142730712890625`
 
-Current self-test text command:
+Self-test text command:
 
     python ../frp_prototype_v1_7_0.py --mode self-test --output text
 
-Current self-test text markers:
+Qualified self-test text markers:
 
 `FRP v1.7.0`
 
@@ -879,20 +921,22 @@ Current self-test text markers:
 
 `check_count: 41`
 
-## 23. Current Self-Test JSON Output
+These markers identify the inherited M15 semantic-reference output and do not redefine the repository release state.
+
+## 23. Self-Test JSON Output
 
 Command:
 
     python ../frp_prototype_v1_7_0.py --mode self-test --output json
 
-Current top-level fields:
+Top-level fields:
 
 | Field | Type | Meaning |
 |---|---|---|
 | `schema` | string | `frp.structured_output.v1.7.0` |
 | `kind` | string | `self_test` |
-| `version` | string | `1.7.0` |
-| `milestone` | string | current M15 milestone |
+| `version` | string | `1.7.0` semantic-reference identity |
+| `milestone` | string | inherited M15 milestone identity |
 | `status` | string | qualification status |
 | `check_count` | integer | check count |
 | `checks` | object | complete boolean check registry |
@@ -909,17 +953,17 @@ Current top-level fields:
 | `vector_determinism` | object | vector-package determinism |
 | `scaling_validation` | object | 8, 16, and 32-cell execution |
 
-Current status:
+Qualified status:
 
 `PASS`
 
-Current check count:
+Qualified check count:
 
 `41`
 
-## 24. Current 41-Check Registry
+## 24. Qualified 41-Check Registry
 
-Current check registry:
+Check registry:
 
 1. `1_7_scheduler_pass`;
 2. `7_1_scheduler_pass`;
@@ -963,17 +1007,165 @@ Current check registry:
 40. `trig_lut_pass`;
 41. `vector_determinism_pass`.
 
-Current required result:
+Required result:
 
 `all 41 values = True`
 
-Current result:
+Qualified result:
 
 `41/41 PASS`
 
+## 25. Benchmark Matrix Output
+
+Command:
+
+    python ../frp_prototype_v1_7_0.py --mode benchmark --output json
+
+Schema:
+
+`frp.m3.benchmark_matrix.v1.7.0`
+
+Top-level fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `schema` | string | benchmark schema identifier |
+| `kind` | string | benchmark matrix |
+| `version` | string | semantic-reference version |
+| `milestone` | string | inherited semantic-reference milestone |
+| `rows` | array | implementation progression |
+| `qualification` | object | benchmark qualification summary |
+
+The benchmark matrix remains the qualified inherited M15 benchmark artifact retained by the FRP v1.8.0 / M16 release.
+
+## 26. Benchmark Matrix Rows
+
+The qualified benchmark matrix records five implementation layers.
+
+| Layer | Description |
+|---|---|
+| M11 | floating semantic reference |
+| M12 | balanced ternary transition architecture |
+| M13 | thermal and delay semantic model |
+| M14 | implementation mapping |
+| M15 | qualification closure |
+
+Each benchmark row records:
+
+- implementation layer;
+- execution profile;
+- scheduler mode;
+- deterministic execution;
+- active-neutral routing;
+- dynamic-stability metrics;
+- thermal metrics;
+- validation status.
+
+The benchmark matrix is retained unchanged for cross-release reproducibility.
+
+## 27. Export Schema Package
+
+The inherited M15 export package contains ten qualified implementation artifacts.
+
+Export package:
+
+1. fixed-point interface profile;
+2. balanced ternary hardware encoding map;
+3. quantized reference shadow model;
+4. cycle-exact reference trace;
+5. RTL comparison vector package;
+6. SystemVerilog interface map;
+7. synthesizable RTL reference core;
+8. RTL assertion correlation harness;
+9. reference RTL equivalence report;
+10. qualification closure manifest.
+
+Qualified export count:
+
+`10`
+
+Qualified result:
+
+`PASS`
+
+The M16 execution layer consumes these artifacts without changing their schema identities.
+
+## 28. M16 Execution Evidence
+
+The M16 release extends the inherited semantic-reference package with executable RTL qualification evidence.
+
+Evidence sources include:
+
+- synthesizable SystemVerilog modules;
+- executable RTL testbench;
+- deterministic scheduler execution;
+- request-lane arbitration;
+- retained pending-route execution;
+- active-neutral transition execution;
+- transition-capacity enforcement;
+- retained-state writeback;
+- invariant verification;
+- simulation transcript;
+- qualification closure;
+- FPGA preparation layer.
+
+These artifacts supplement the inherited semantic-reference package while preserving the qualified output schemas.
+
+## 29. FPGA Preparation Evidence
+
+The FPGA preparation layer records:
+
+- top-level FPGA wrapper;
+- FPGA-oriented testbench;
+- implementation mapping;
+- execution transcript;
+- qualification closure;
+- workflow qualification.
+
+The FPGA preparation package preserves semantic equivalence with the inherited M15 reference while extending executable implementation evidence.
+
+## 30. Release Compatibility
+
+FRP v1.8.0 preserves compatibility with the qualified structured-output package.
+
+Retained components:
+
+- executable semantic reference;
+- structured-output schema;
+- benchmark schema;
+- export schemas;
+- deterministic digests;
+- balanced ternary encoding;
+- scheduler encoding;
+- request-lane ordering;
+- active-neutral routing semantics;
+- deterministic replay.
+
+Repository additions in M16:
+
+- RTL execution layer;
+- executable SystemVerilog package;
+- simulation transcript;
+- qualification closure;
+- FPGA preparation layer.
+
+## 31. Output Stability Statement
+
+The structured-output contract remains stable across the FRP v1.8.0 / M16 release.
+
+The retained semantic-reference executable continues to generate:
+
+- deterministic structured JSON;
+- deterministic benchmark matrices;
+- deterministic export artifacts;
+- deterministic trace digests;
+- deterministic validation evidence.
+
+The M16 release extends executable implementation evidence while preserving the qualified structured-output contract established by the inherited M15 semantic-reference package.
+
 ## 25. Neutral Route Validation Object
 
-Current `neutral_route_validation` contains:
+The inherited M15 `neutral_route_validation` object contains:
 
 - `-1_to_0_to_1`;
 - `1_to_0_to_-1`.
@@ -989,13 +1181,15 @@ Each direction object contains:
 | `summary` | object | quantized execution summary |
 | `status` | string | validation status |
 
-Current route validation result:
+Qualified route validation result:
 
 `PASS`
 
+The M16 RTL execution layer retains the same tick-separated active-neutral route semantics.
+
 ## 26. Scheduler Validation Object
 
-Current `scheduler_validation` contains:
+The inherited M15 `scheduler_validation` object contains:
 
 - `free`;
 - `7/1`;
@@ -1010,19 +1204,21 @@ Each scheduler object contains:
 | `summary` | object | quantized execution summary |
 | `status` | string | validation status |
 
-Current result for all scheduler modes:
+Qualified result for all scheduler modes:
 
 `PASS`
 
+The M16 scheduler execution layer retains the same three scheduler modes and their encoded execution states.
+
 ## 27. Request-Lane Order Validation Object
 
-Current `request_lane_order_validation` contains:
+The inherited M15 `request_lane_order_validation` object contains:
 
 - `checks`;
 - `summary`;
 - `status`.
 
-Current checks include:
+Qualified checks include:
 
 - request lanes at least two;
 - lane zero applied first;
@@ -1031,19 +1227,21 @@ Current checks include:
 - pending target equals negative one;
 - actual direct events remain zero.
 
-Current status:
+Qualified status:
 
 `PASS`
 
+The M16 request-lane arbitration layer preserves deterministic lane ordering and active-neutral interception.
+
 ## 28. Queue Exhaustion Validation Object
 
-Current `queue_exhaustion_validation` contains:
+The inherited M15 `queue_exhaustion_validation` object contains:
 
 - `checks`;
 - `summary`;
 - `status`.
 
-Current checks include:
+Qualified checks include:
 
 - queue capacity equals cell count;
 - queue length remains bounded;
@@ -1051,18 +1249,20 @@ Current checks include:
 - same-tick result remains neutral;
 - actual direct events remain zero.
 
-Current status:
+Qualified status:
 
 `PASS`
 
+The M16 retained pending-route layer preserves bounded pending-route storage and queue-overflow accounting.
+
 ## 29. Fixed-Point Validation Object
 
-Current `fixed_point_validation` contains:
+The inherited M15 `fixed_point_validation` object contains:
 
 - `checks`;
 - `status`.
 
-Current checks include:
+Qualified checks include:
 
 - Q16 one identity;
 - Q30 one identity;
@@ -1080,20 +1280,22 @@ Current checks include:
 - phase wrap;
 - negative phase wrap.
 
-Current status:
+Qualified status:
 
 `PASS`
 
+These fixed-point validation results remain the arithmetic reference for M16 RTL execution correlation.
+
 ## 30. Encoding Validation Object
 
-Current `encoding_validation` contains:
+The inherited M15 `encoding_validation` object contains:
 
 - `sample_states`;
 - `packed_hex`;
 - `checks`;
 - `status`.
 
-Current checks include:
+Qualified checks include:
 
 - negative-state code;
 - neutral-state code;
@@ -1107,13 +1309,15 @@ Current checks include:
 - scheduler mode encoding for `1/7`;
 - unique scheduler-state encodings.
 
-Current status:
+Qualified status:
 
 `PASS`
 
+The M16 RTL package retains the same balanced ternary state codes, packed-state order, scheduler-mode codes, and scheduler-state codes.
+
 ## 31. Topology Validation Object
 
-Current `topology_validation` contains profiles for:
+The inherited M15 `topology_validation` object contains profiles for:
 
 - `8` cells;
 - `16` cells;
@@ -1129,19 +1333,21 @@ Each profile contains:
 | `checks` | object | topology checks |
 | `status` | string | profile status |
 
-Current status for all three profiles:
+Qualified status for all three profiles:
 
 `PASS`
 
+The validated topology profiles remain the fixed-point topology reference for the FRP v1.8.0 / M16 release package.
+
 ## 32. Trigonometric LUT Validation Object
 
-Current `trigonometric_lut_validation` contains:
+The inherited M15 `trigonometric_lut_validation` object contains:
 
 - `checks`;
 - `sha256`;
 - `status`.
 
-Current checks include:
+Qualified checks include:
 
 - entry count;
 - sine zero;
@@ -1150,17 +1356,19 @@ Current checks include:
 - cosine relation;
 - deterministic rebuild.
 
-Current trigonometric lookup SHA-256:
+Qualified trigonometric lookup SHA-256:
 
 `acb0dfe2c00998840f9ca00f9ef9e3b46011db6c745faa59a9db13c4121cc57b`
 
-Current status:
+Qualified status:
 
 `PASS`
 
+The validated lookup-table identity remains the trigonometric arithmetic reference for M16 RTL execution correlation.
+
 ## 33. Semantic Correlation Object
 
-Current `semantic_correlation` compares:
+The inherited M15 `semantic_correlation` object compares:
 
 `floating semantic reference`
 
@@ -1168,9 +1376,9 @@ with:
 
 `quantized hardware shadow`
 
-Current sequence-correlation fields:
+Qualified sequence-correlation fields:
 
-| Field | Current Value |
+| Field | Qualified Value |
 |---|---:|
 | `state_sequence_match` | `1.0` |
 | `scheduler_sequence_match` | `1.0` |
@@ -1178,7 +1386,7 @@ Current sequence-correlation fields:
 | `C_minus_P_sign_match` | `1.0` |
 | `boundary_order_match` | `1.0` |
 
-Current error fields:
+Recorded error fields:
 
 - `max_phase_error`;
 - `max_frequency_error`;
@@ -1189,25 +1397,27 @@ Current error fields:
 - `max_P_error`;
 - `max_C_minus_P_error`.
 
-Current boundary fields:
+Recorded boundary fields:
 
 - `float_boundary_tick`;
 - `shadow_boundary_tick`.
 
-Current summary objects:
+Recorded summary objects:
 
 - `float_summary`;
 - `shadow_summary`.
 
-Current semantic correlation result:
+Qualified semantic-correlation result:
 
 `PASS`
 
+This correlation object remains the inherited semantic comparison basis for the M16 executable RTL layer.
+
 ## 34. Exact Shadow Replay Object
 
-Current `exact_shadow_replay` fields:
+The inherited M15 `exact_shadow_replay` fields are:
 
-| Field | Current Value |
+| Field | Qualified Value |
 |---|---:|
 | `shadow_replay_state_match` | `1.0` |
 | `shadow_replay_scheduler_match` | `1.0` |
@@ -1221,13 +1431,15 @@ The object also carries:
 - `trace_digest`;
 - `cell_trace_digest`.
 
-Current exact deterministic replay result:
+Qualified exact deterministic replay result:
 
 `PASS`
 
+The M16 RTL execution package retains these deterministic replay identities as implementation-correlation evidence.
+
 ## 35. Vector Determinism Object
 
-Current `vector_determinism` contains:
+The inherited M15 `vector_determinism` object contains:
 
 - `checks`;
 - `byte_matches`;
@@ -1235,7 +1447,7 @@ Current `vector_determinism` contains:
 - `package_digest`;
 - `status`.
 
-Current checks include:
+Qualified checks include:
 
 - identical file set;
 - all files byte-identical;
@@ -1249,25 +1461,27 @@ Current checks include:
 - trigonometric LUT present;
 - SHA-256 manifest present.
 
-Current deterministic package digest:
+Qualified deterministic package digest:
 
 `703dd4b56f4b34289a2c5bc5521ad4ddc3113bdec8c38238c3244c69cb4d58df`
 
-Current file count:
+Qualified file count:
 
 `10`
 
-Current independent regeneration result:
+Independent regeneration result:
 
 `10/10 files byte-identical`
 
-Current status:
+Qualified status:
 
 `PASS`
 
+The deterministic vector package remains the inherited replay input set for M16 RTL qualification.
+
 ## 36. Scaling Validation Object
 
-Current `scaling_validation` contains:
+The inherited M15 `scaling_validation` object contains:
 
 - `8`;
 - `16`;
@@ -1283,7 +1497,7 @@ Each profile contains:
 | `topology` | object | topology validation data |
 | `status` | string | scaling status |
 
-Current validated scaling results:
+Qualified scaling results:
 
 | Cells | Hierarchy Depth | Request Lanes | `C_minus_P_min` | Switch Load Peak |
 |---|---:|---:|---:|---:|
@@ -1291,9 +1505,11 @@ Current validated scaling results:
 | `16` | `4` | `4` | `0.6142730712890625` | `0.25` |
 | `32` | `5` | `8` | `0.6628875732421875` | `0.25` |
 
-Current status for all profiles:
+Qualified status for all profiles:
 
 `PASS`
+
+These validated scaling profiles remain the inherited fixed-point execution reference for FRP v1.8.0 / M16.
 
 ## 37. Current Benchmark JSON Output
 
@@ -1553,22 +1769,6 @@ Current rounding:
 
 `round-to-nearest, half cases away from zero`
 
-Current saturation:
-
-`signed destination saturation`
-
-Current phase overflow:
-
-`modulo 2^32 wrap`
-
-Current multiplication rules:
-
-`mul_q16 = round_shift(a * b, 16)`
-
-`mul_q16_q30 = round_shift(a * b, 30)`
-
-`mul_q30 = round_shift(a * b, 30)`
-
 ## 42. Trigonometric and Exponential Profile Fields
 
 Current trigonometric profile:
@@ -1756,28 +1956,30 @@ Top-level fields:
 - `manifest`;
 - `deterministic_package_digest`.
 
-Current vector classes:
+Inherited M15 vector classes:
 
 - `kernel_transition_vectors`;
 - `scheduler_vectors`;
 - `full_correlation_vectors`.
 
-Current manifest fields:
+Manifest fields:
 
 - `file_count`;
 - `files`.
 
-Current file count:
+Qualified file count:
 
 `10`
 
-Current deterministic package digest:
+Qualified deterministic package digest:
 
 `703dd4b56f4b34289a2c5bc5521ad4ddc3113bdec8c38238c3244c69cb4d58df`
 
-## 48. Current Vector Package Files
+The deterministic vector package remains the inherited exact replay input set for FRP v1.8.0 / M16 RTL qualification.
 
-Current files:
+## 48. Vector Package Files
+
+Qualified files:
 
 1. `frp_m15_kernel_vectors.vec`;
 2. `frp_m15_pending_routes.trace`;
@@ -1796,7 +1998,7 @@ The manifest records file identity through:
 - SHA-256;
 - byte size.
 
-Current independent regeneration result:
+Qualified independent regeneration result:
 
 `10/10 files byte-identical`
 
@@ -1806,11 +2008,13 @@ Optional command:
 
     python ../frp_prototype_v1_7_0.py --export-rtl-comparison-vector-package --vector-output-dir <directory>
 
-Current role:
+Role:
 
-`write the deterministic M15 vector package into the selected directory`
+`write the deterministic inherited M15 vector package into the selected directory`
 
 The JSON export remains available together with the written package.
+
+The generated vectors provide exact deterministic replay inputs for the M16 executable RTL layer.
 
 ## 50. SystemVerilog Testbench Interface Map Export
 
@@ -1838,7 +2042,7 @@ Top-level fields:
 - `comparison_outputs`;
 - `vector_replay_order`.
 
-Current parameters:
+Qualified inherited M15 parameters:
 
 | Parameter | Value |
 |---|---:|
@@ -1850,9 +2054,11 @@ Current parameters:
 | `SCALAR_WIDTH` | `32` |
 | `PHASE_WIDTH` | `32` |
 
+The M16 executable RTL package retains these interface dimensions for correlation with the inherited SystemVerilog contract.
+
 ## 51. SystemVerilog Execution Inputs
 
-Current execution inputs:
+Execution inputs:
 
 - `clk`;
 - `reset_n`;
@@ -1862,13 +2068,13 @@ Current execution inputs:
 - `request_cell_id`;
 - `request_target_state`.
 
-Current verification stimulus inputs:
+Verification stimulus inputs:
 
 - `preload_valid`;
 - `gamma_noise_update_valid`;
 - `gamma_noise_target_q`.
 
-Current comparison outputs include:
+Comparison outputs include:
 
 - `states_packed`;
 - `scheduler_state`;
@@ -1885,9 +2091,11 @@ Current comparison outputs include:
 - `neutralized_conflicts`;
 - `actual_direct_events`.
 
+These inputs and outputs define the inherited exact integer correlation boundary used by the FRP v1.8.0 / M16 RTL execution package.
+
 ## 52. Vector Replay Order
 
-Current vector replay order contains nine stages:
+The inherited M15 vector replay order contains nine stages:
 
 1. parse vector row;
 2. drive input signals before active clock edge;
@@ -1899,9 +2107,11 @@ Current vector replay order contains nine stages:
 8. execute invariant assertions;
 9. stop immediately on mismatch.
 
-Current exact integer comparison rule:
+Exact integer comparison rule:
 
 `actual integer field == expected integer field`
+
+This replay order remains the deterministic comparison procedure used by the M16 executable RTL qualification layer.
 
 ## 53. Synthesizable RTL Reference-Core Export
 
@@ -1927,17 +2137,19 @@ Top-level fields:
 - `planned_rtl_files`;
 - `exact_tick_execution_order`.
 
-Current planned RTL file count:
+Inherited M15 mapped RTL file count:
 
 `13`
 
-Current exact tick-order count:
+Exact tick-order count:
 
 `26`
 
-## 54. Current Planned RTL File Set
+This export remains the qualified implementation map inherited by the FRP v1.8.0 / M16 executable RTL package.
 
-Current mapped RTL domains:
+## 54. Inherited M15 RTL Mapping Set
+
+The inherited M15 reference-core export maps the following RTL domains:
 
 1. `rtl/m15/frp_m15_types_pkg.sv`;
 2. `rtl/m15/frp_m15_fixed_point_pkg.sv`;
@@ -1953,9 +2165,13 @@ Current mapped RTL domains:
 12. `rtl/m15/frp_m15_stability_telemetry.sv`;
 13. `rtl/m15/frp_m15_top.sv`.
 
+These paths identify the inherited M15 implementation-mapping contract. The current executable RTL realization is provided by the M16 RTL package under:
+
+`rtl/m16/`
+
 ## 55. Exact Tick Execution Order
 
-Current exact 26-stage execution order:
+The inherited exact 26-stage execution order is:
 
 1. resolve scheduler state;
 2. clear current-tick switch-change counters;
@@ -1984,7 +2200,7 @@ Current exact 26-stage execution order:
 25. detect first stability crossing;
 26. capture post-tick outputs.
 
-This sequence defines the current cycle-correlation order.
+This sequence defines the inherited cycle-correlation order retained by the M16 RTL execution layer.
 
 ## 56. RTL Assertion Correlation Harness Export
 
@@ -2012,17 +2228,19 @@ Top-level fields:
 - `scheduler_modes`;
 - `exact_comparison_rule`.
 
-Current assertion count:
+Inherited assertion count:
 
 `13`
 
-Current exact comparison rule:
+Exact comparison rule:
 
 `actual integer field == expected integer field`
 
-## 57. Current Assertion Domains
+The M16 executable RTL package retains these assertion domains and exact integer comparison rules as qualification evidence.
 
-Current assertion domains:
+## 57. Assertion Domains
+
+Inherited M15 assertion domains:
 
 1. valid balanced ternary encoding;
 2. reserved-state exclusion;
@@ -2037,6 +2255,8 @@ Current assertion domains:
 11. thermal-topology fixed-point normalization;
 12. deterministic trace tick count;
 13. exact cycle-output comparison contract.
+
+These assertion domains remain the inherited qualification basis for the FRP v1.8.0 / M16 executable RTL package.
 
 ## 58. Reference RTL Equivalence Report Export
 
@@ -2062,13 +2282,15 @@ Top-level fields:
 - `quantized_shadow_deterministic_replay`;
 - `rtl_exact_integer_comparison_contract`.
 
-The report carries two correlation boundaries:
+The report carries two inherited correlation boundaries:
 
 `floating semantic reference → quantized hardware shadow`
 
 and:
 
 `quantized hardware shadow → exact deterministic replay`
+
+The M16 RTL execution layer extends this chain with executable SystemVerilog qualification evidence while preserving both inherited correlation boundaries.
 
 ## 59. Qualification Closure Manifest Export
 
@@ -2097,17 +2319,19 @@ Top-level fields:
 - `vector_manifest`;
 - `status`.
 
-Current artifact layer count:
+Inherited M15 artifact layer count:
 
 `10`
 
-Current status:
+Qualified status:
 
 `PASS`
 
+The qualification closure manifest remains the inherited semantic-reference closure record retained by FRP v1.8.0 / M16.
+
 ## 60. Qualification Closure Checks
 
-Current qualification-closure checks include:
+Inherited M15 qualification-closure checks include:
 
 - balanced ternary state-sequence match;
 - scheduler-sequence match;
@@ -2120,19 +2344,21 @@ Current qualification-closure checks include:
 - exact cell-trace replay;
 - complete vector-package presence.
 
-Current result:
+Qualified result:
 
 `PASS`
 
-## 61. Current Primary Validation Markers
+The M16 package adds RTL artifact-boundary and FPGA preparation qualification without changing these inherited closure checks.
 
-Current structured-output validation markers:
+## 61. Primary Validation Markers
+
+Qualified structured-output validation markers:
 
 | Marker | Expected Value |
 |---|---|
 | `schema` | `frp.structured_output.v1.7.0` |
 | `version` | `1.7.0` |
-| `milestone` | current M15 milestone |
+| `milestone` | inherited M15 milestone identity |
 | `kind` | `demo` or `self_test` |
 | `summary.balanced_ternary_state_domain` | `True` |
 | `summary.reserved_state_events` | `0` |
@@ -2145,7 +2371,7 @@ Current structured-output validation markers:
 | `summary.fixed_point_topology_sum_exact` | `True` |
 | `summary.fixed_point_thermal_sum_exact` | `True` |
 
-Current self-test markers:
+Qualified self-test markers:
 
 | Marker | Expected Value |
 |---|---|
@@ -2156,9 +2382,11 @@ Current self-test markers:
 | `len(checks)` | `41` |
 | every `checks` value | `True` |
 
-## 62. Current Benchmark Validation Markers
+These markers identify the inherited M15 semantic-reference output contract retained by the FRP v1.8.0 / M16 release package.
 
-Current benchmark markers:
+## 62. Benchmark Validation Markers
+
+Qualified inherited benchmark markers:
 
 | Marker | Expected Value |
 |---|---|
@@ -2175,7 +2403,7 @@ Required architecture rows:
 - `frp_v1_7_0_systemverilog_correlation_contract`;
 - `frp_v1_7_0_qualification_closure`.
 
-Current semantic markers:
+Qualified semantic markers:
 
 `state_sequence_match = 1.0`
 
@@ -2183,22 +2411,24 @@ Current semantic markers:
 
 `C_minus_P_sign_match = 1.0`
 
-Current vector marker:
+Qualified vector marker:
 
 `vector_repeat_match = 1.0`
 
-Current qualification artifact count:
+Qualified artifact-layer count:
 
 `10`
 
-## 63. Recommended CI Checks for Structured Demo Output
+These markers belong to the inherited M15 benchmark and qualification package retained by FRP v1.8.0 / M16.
 
-Recommended checks:
+## 63. CI Checks for Structured Demo Output
+
+Structured demo checks:
 
 - JSON parses successfully;
 - `schema` equals `frp.structured_output.v1.7.0`;
 - `version` equals `1.7.0`;
-- `milestone` equals the current M15 milestone;
+- `milestone` equals the inherited M15 milestone identity;
 - `kind` equals `demo`;
 - `summary.cells` equals the selected cell count;
 - `summary.ticks_recorded` equals the selected step count;
@@ -2208,15 +2438,17 @@ Recommended checks:
 - `summary.reserved_state_events` equals `0`;
 - `summary.actual_direct_events` equals `0`;
 - `summary.queue_overflow_events` equals `0`;
-- `summary.switch_load_peak` stays within transition fraction;
+- `summary.switch_load_peak` stays within the transition fraction;
 - `summary.C_minus_P_min` stays positive;
 - topology fixed-point exactness equals `True`;
 - thermal fixed-point exactness equals `True`;
 - digest fields contain 64 hexadecimal characters.
 
-## 64. Recommended CI Checks for Full Trace Output
+These checks validate the retained semantic-reference output contract.
 
-Recommended full trace checks:
+## 64. CI Checks for Full Trace Output
+
+Full trace checks:
 
 - `trace` length equals `steps`;
 - `cell_trace` length equals `steps × cells`;
@@ -2230,14 +2462,16 @@ Recommended full trace checks:
 - route-event rows use the defined field set;
 - route-status values remain inside `pending` and `applied`.
 
-## 65. Recommended CI Checks for M15 Exports
+These checks preserve deterministic trace compatibility between the inherited M15 reference package and the M16 execution layer.
 
-Recommended export checks:
+## 65. CI Checks for Inherited M15 Exports
+
+Inherited M15 export checks:
 
 - every export parses as JSON;
 - every export schema equals its exact v1.7.0 schema;
 - every export version equals `1.7.0`;
-- every export milestone equals the M15 milestone;
+- every export milestone equals the inherited M15 milestone identity;
 - M15 export-schema count equals `10`;
 - artifact-layer count equals `10`;
 - fixed-point topology sum exactness equals `True`;
@@ -2246,52 +2480,78 @@ Recommended export checks:
 - reserved integer state code equals `2`;
 - deterministic vector file count equals `10`;
 - deterministic package digest contains 64 hexadecimal characters;
-- SystemVerilog parameters equal the current default interface contract;
+- SystemVerilog parameters equal the inherited interface contract;
 - assertion count equals `13`;
 - exact tick execution order contains `26` stages;
 - semantic sequence matches equal `1.0`;
 - exact deterministic replay matches equal `1.0`;
 - qualification closure status equals `PASS`.
 
-## 66. Current GitHub Actions Validation Context
+These checks preserve the qualified M15 export boundary used by the FRP v1.8.0 / M16 package.
 
-Current primary current-schema validation workflow:
+## 66. GitHub Actions Validation Context
 
-`../.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+Primary M16 RTL qualification workflow:
+
+`../.github/workflows/frp-m16-rtl-artifact-boundary.yml`
 
 Workflow name:
 
-`FRP M15 Implementation Mapping and Qualification Closure`
+`FRP M16 RTL Artifact Boundary`
 
 Job name:
 
-`M15 implementation mapping qualification`
+`M16 RTL Architecture Qualification`
 
-Current environment:
+Execution environment:
 
 `ubuntu-latest`
 
-Current Python version:
+Timeout:
 
-`3.12`
+`20 minutes`
 
-Current timeout:
-
-`30 minutes`
-
-Current permissions:
+Permissions:
 
 `contents: read`
 
-Current triggers:
+Trigger:
 
-- push;
-- pull request;
-- workflow dispatch.
+`workflow_dispatch`
 
-## 67. Current M15 Workflow Output Generation
+Primary M16 FPGA qualification workflow:
 
-The current M15 workflow generates:
+`../.github/workflows/frp-m16-fpga-preparation.yml`
+
+Workflow name:
+
+`FRP M16 FPGA Preparation`
+
+Job name:
+
+`M16 FPGA Integration Qualification`
+
+Execution environment:
+
+`ubuntu-latest`
+
+Timeout:
+
+`20 minutes`
+
+Permissions:
+
+`contents: read`
+
+Trigger:
+
+`workflow_dispatch`
+
+The inherited M15 implementation-mapping workflow remains preserved as qualification evidence for the semantic-reference and export-schema package.
+
+## 67. Inherited M15 Workflow Output Generation
+
+The inherited M15 qualification workflow generates:
 
 - structured demo output;
 - default self-test output;
@@ -2315,66 +2575,163 @@ The current M15 workflow generates:
 - independent vector package A;
 - independent vector package B.
 
-## 68. Current M15 Workflow Validation Stages
+These outputs remain the qualified semantic-reference and implementation-mapping evidence inherited by FRP v1.8.0 / M16.
 
-Current workflow stages:
+## 68. M16 Qualification Workflow Stages
+
+The M16 qualification stack contains two executable workflow layers.
+
+### 68.1 RTL Artifact Boundary
+
+Workflow:
+
+`FRP M16 RTL Artifact Boundary`
+
+Workflow file:
+
+`../.github/workflows/frp-m16-rtl-artifact-boundary.yml`
+
+Qualification stages:
 
 1. checkout repository;
-2. set up Python;
-3. compile the FRP v1.7.0 reference file;
-4. generate M15 qualification outputs;
-5. compare deterministic vector packages;
-6. validate schemas, kernel invariants, fixed-point contract, and equivalence;
-7. validate deterministic vector-package integrity;
-8. validate the M15 architecture-document contract;
-9. upload M15 qualification artifacts.
+2. install the SystemVerilog execution toolchain;
+3. validate the M16 RTL artifact inventory;
+4. validate the M16 RTL documentation inventory;
+5. parse the SystemVerilog package and modules;
+6. elaborate the integrated RTL core and testbench;
+7. reject combinational latch diagnostics;
+8. build the executable testbench;
+9. execute scheduler-mode qualification;
+10. execute request-lane arbitration;
+11. execute active-neutral routing;
+12. execute retained pending-route completion;
+13. execute transition-capacity enforcement;
+14. execute retained-state writeback;
+15. evaluate the ten integrated invariant flags;
+16. validate repository integrity;
+17. upload qualification evidence.
 
-Current result:
+Qualified result:
 
 `PASS`
 
-## 69. Current Workflow Schema Validation
+### 68.2 FPGA Preparation
 
-The M15 workflow validates:
+Workflow:
+
+`FRP M16 FPGA Preparation`
+
+Workflow file:
+
+`../.github/workflows/frp-m16-fpga-preparation.yml`
+
+Qualification stages:
+
+1. checkout repository;
+2. install the SystemVerilog execution toolchain;
+3. validate the FPGA artifact inventory;
+4. validate the inherited M16 RTL dependency inventory;
+5. parse and elaborate the FPGA integration top;
+6. build and execute the FPGA testbench;
+7. reject latch and multidriven diagnostics;
+8. validate asynchronous external reset assertion;
+9. validate two-stage synchronous reset release;
+10. validate `core_ready` generation;
+11. validate execution-input gating before readiness;
+12. validate scheduler propagation;
+13. validate request propagation;
+14. validate active-neutral routing;
+15. validate retained pending-route completion;
+16. evaluate the ten integrated invariant flags;
+17. validate repository integrity;
+18. upload qualification evidence.
+
+Qualified result:
+
+`PASS`
+
+## 69. Workflow Schema and Execution Validation
+
+The inherited M15 workflow validates:
 
 `frp.structured_output.v1.7.0`
 
-The workflow also validates all ten M15 export schemas and:
+The inherited workflow also validates all ten M15 export schemas and:
 
 `frp.m3.benchmark_matrix.v1.7.0`
 
-Current validated release-facing schema count:
+Validated inherited release-facing schema count:
 
 `12`
+
+The M16 RTL workflow validates the executable realization of:
+
+- balanced ternary retained-state encoding;
+- scheduler-mode and scheduler-state execution;
+- deterministic request-lane arbitration;
+- retained pending polarity;
+- active-neutral routing;
+- transition-capacity enforcement;
+- retained-state writeback;
+- integrated invariant evaluation;
+- zero actual direct events;
+- zero reserved-state events;
+- zero queue-overflow events.
+
+The M16 FPGA workflow validates:
+
+- FPGA integration-top parsing and elaboration;
+- executable FPGA testbench behavior;
+- reset synchronization;
+- readiness gating;
+- scheduler and request propagation;
+- retained pending-route completion;
+- active-neutral routing;
+- integrated invariant preservation.
 
 Current result:
 
 `PASS`
 
-## 70. Current Release Validation Evidence
+## 70. FRP v1.8.0 Release Validation Evidence
 
 Current validated release layer:
 
-`FRP v1.7.0 — M15 Implementation Mapping, Domain Interface, and Qualification Closure Package`
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
 
-Current validation environment:
+Validation environment:
 
-`GitHub Actions hardware-backed CI execution`
+`GitHub Actions SystemVerilog execution and qualification`
 
-Validated processor-evidence commit recorded in the release artifacts:
+Qualified M16 RTL workflow records:
 
-`5fd9a4f`
+| Workflow Run | Qualified Commit | Result | Duration |
+|---|---|---|---|
+| `#82` | `a68a2af` | `SUCCESS` | recorded in the RTL closure artifact |
+| `#84` | `ede53cf` | `SUCCESS` | `52s` |
 
-Recorded workflow stack:
+Qualified M16 FPGA preparation workflow records:
 
-- `FRP Structured Output #113 — PASS`;
-- `FRP M15 Implementation Mapping and Qualification Closure #1 — PASS`;
-- `FRP Self Test #154 — PASS`;
-- `FRP Benchmark Smoke Test #152 — PASS`.
+| Workflow Run | Qualified Commit | Result | Duration |
+|---|---|---|---|
+| `#1` | `326b69e` | `SUCCESS` | `1m 7s` |
+| `#2` | `ede53cf` | `SUCCESS` | `36s` |
 
-Current overall published result:
+Inherited semantic-reference qualification:
+
+`M15 self-test suite — 41/41 PASS`
+
+M16 RTL qualification:
 
 `PASS`
+
+M16 FPGA preparation qualification:
+
+`PASS`
+
+Current overall release result:
+
+`FRP v1.8.0 / M16 — PASS`
 
 ## 71. Earlier Structured Output Workflow Layer
 
@@ -2409,7 +2766,7 @@ Historical workflow subjects include:
 - JSON demo;
 - JSON telemetry demo.
 
-The current v1.7.0 schema qualification is carried by the M15 workflow.
+The qualified v1.7.0 schema is retained by the inherited M15 workflow and remains part of the FRP v1.8.0 / M16 release package.
 
 The earlier structured-output workflow remains a historical schema-validation layer.
 
@@ -2718,7 +3075,7 @@ Historical mapping path:
 
 `testbench comparison`
 
-The current M15 layer carries this output subject into deterministic fixed-point, trace, vector, interface, equivalence, and qualification schemas.
+The inherited M15 layer carries this output subject into deterministic fixed-point, trace, vector, interface, equivalence, and qualification schemas retained by FRP v1.8.0 / M16.
 
 ## 82. Historical Self-Test JSON Output
 
@@ -2773,7 +3130,7 @@ Historical failure labels included:
 - `tick mismatch`;
 - `scheduler mismatch`.
 
-The current M15 self-test expresses validation detail through the 41-check registry and dedicated validation objects.
+The inherited M15 self-test expresses validation detail through the 41-check registry and dedicated validation objects retained by FRP v1.8.0 / M16.
 
 ## 84. Historical Benchmark JSON Output
 
@@ -2883,7 +3240,7 @@ Historical candidate invariants:
 | telemetry | `ticks_recorded = steps` |
 | scheduler | counts match selected cycle mode |
 
-The current M15 layer carries the corresponding processor invariants into:
+The inherited M15 layer carries the corresponding processor invariants into:
 
 - quantized execution;
 - exact fixed-point closure;
@@ -2892,6 +3249,8 @@ The current M15 layer carries the corresponding processor invariants into:
 - semantic correlation;
 - exact replay;
 - qualification closure.
+
+The M16 layer carries the same invariant domains into executable RTL and FPGA preparation qualification.
 
 ## 88. Output Evidence-Domain Separation
 
@@ -2918,13 +3277,13 @@ Primary subjects:
 - historical self-test JSON;
 - historical architecture benchmark JSON.
 
-### 88.2 Current FRP v1.7.0 structured-output contour
+### 88.2 Inherited FRP v1.7.0 structured-output contour
 
 Primary schema:
 
 `frp.structured_output.v1.7.0`
 
-Primary executable:
+Qualified executable semantic reference:
 
 `frp_prototype_v1_7_0.py`
 
@@ -2940,7 +3299,7 @@ Primary subjects:
 - optional route-event trace;
 - 41-check self-test qualification.
 
-### 88.3 Current M15 benchmark contour
+### 88.3 Inherited M15 benchmark contour
 
 Primary schema:
 
@@ -2950,7 +3309,7 @@ Primary subject:
 
 `five-stage implementation progression from M14 floating semantics through M15 qualification closure`
 
-### 88.4 Current M15 hardware-facing export contour
+### 88.4 Inherited M15 hardware-facing export contour
 
 Primary subjects:
 
@@ -2965,10 +3324,41 @@ Primary subjects:
 - equivalence;
 - qualification closure.
 
+### 88.5 Current M16 executable RTL contour
+
+Primary subjects:
+
+- synthesizable RTL realization;
+- scheduler-state execution;
+- request-lane arbitration;
+- active-neutral routing;
+- retained pending-route behavior;
+- transition-capacity enforcement;
+- retained-state writeback;
+- integrated invariant evaluation;
+- executable SystemVerilog testbench;
+- RTL simulation transcript;
+- RTL qualification closure.
+
+### 88.6 Current M16 FPGA preparation contour
+
+Primary subjects:
+
+- FPGA integration top;
+- FPGA-oriented testbench;
+- reset synchronization;
+- readiness gating;
+- scheduler propagation;
+- request propagation;
+- active-neutral route completion;
+- integrated invariant preservation;
+- FPGA simulation transcript;
+- FPGA qualification closure.
+
 Each contour retains its own:
 
 - version;
-- schema;
+- schema or artifact identity;
 - executable;
 - field set;
 - workflow context;
@@ -2976,7 +3366,7 @@ Each contour retains its own:
 
 ## 89. Current Reproduction Commands
 
-Compile the current executable:
+Compile the qualified semantic-reference executable:
 
     python -m py_compile ../frp_prototype_v1_7_0.py
 
@@ -2992,19 +3382,21 @@ Run compact text output:
 
     python ../frp_prototype_v1_7_0.py --mode demo --output text
 
-Run current self-test JSON:
+Run self-test JSON:
 
     python ../frp_prototype_v1_7_0.py --mode self-test --output json
 
-Run current self-test text:
+Run self-test text:
 
     python ../frp_prototype_v1_7_0.py --mode self-test --output text
 
-Run current benchmark matrix:
+Run benchmark matrix:
 
     python ../frp_prototype_v1_7_0.py --mode benchmark --output json
 
-## 90. Current M15 Export Commands
+These commands reproduce the inherited qualified semantic-reference outputs retained by FRP v1.8.0 / M16.
+
+## 90. Inherited M15 Export Commands
 
 Fixed-point interface profile:
 
@@ -3056,9 +3448,9 @@ This output schema document is aligned with:
 
 - `../README.md`;
 - `../frp_prototype_v1_7_0.py`;
-- `../TEST_REPORT_v1_7_0.md`;
-- `../FRP_VALIDATION_INDEX_v1_7_0.md`;
-- `../RELEASE_NOTES_v1_7_0.md`;
+- `../TEST_REPORT_v1_8_0.md`;
+- `../FRP_VALIDATION_INDEX_v1_8_0.md`;
+- `../RELEASE_NOTES_v1_8_0.md`;
 - `../CI.md`;
 - `../REPRODUCIBILITY.md`;
 - `../USAGE.md`;
@@ -3076,12 +3468,19 @@ This output schema document is aligned with:
 - `./benchmark_interpretation.md`;
 - `./limitations.md`;
 - `./m15_implementation_mapping_domain_interface_qualification_closure.md`;
+- `./m16_rtl_core_realization_execution_semantics.md`;
+- `../rtl/m16/SIMULATION_TRANSCRIPT.md`;
+- `../rtl/m16/CLOSURE.md`;
+- `../fpga/m16/SIMULATION_TRANSCRIPT.md`;
+- `../fpga/m16/CLOSURE.md`;
 - `../verification/README.md`;
 - `../verification/coherence_metrics.md`;
 - `../models/README.md`;
 - `../simulations/README.md`;
 - `../examples/README.md`;
-- `../.github/workflows/frp-m15-implementation-mapping-qualification.yml`.
+- `../.github/workflows/frp-m15-implementation-mapping-qualification.yml`;
+- `../.github/workflows/frp-m16-rtl-artifact-boundary.yml`;
+- `../.github/workflows/frp-m16-fpga-preparation.yml`.
 
 Historical structured-output evidence remains aligned with:
 
@@ -3105,29 +3504,29 @@ Processor class:
 
 Current version:
 
-`FRP v1.7.0`
+`FRP v1.8.0`
 
 Current milestone:
 
-`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+`M16 — RTL Core Realization and Execution Semantics Package`
 
-Current executable reference:
+Qualified executable semantic reference:
 
 `../frp_prototype_v1_7_0.py`
 
-Current structured-output schema:
+Qualified structured-output schema:
 
 `frp.structured_output.v1.7.0`
 
-Current benchmark-matrix schema:
+Qualified benchmark-matrix schema:
 
 `frp.m3.benchmark_matrix.v1.7.0`
 
-Current M15 export-schema count:
+Inherited M15 export-schema count:
 
 `10`
 
-Current release-facing schema count:
+Release-facing schema count:
 
 `12`
 
@@ -3147,27 +3546,43 @@ Current benchmark output:
 
 `five-row M14-to-M15 implementation progression matrix`
 
-Current M15 export output:
+Inherited M15 export output:
 
 `fixed-point interface → balanced ternary encoding → quantized shadow → cycle-exact trace → deterministic vectors → SystemVerilog interface → RTL reference-core map → assertion correlation → equivalence → qualification closure`
 
-Current self-test result:
+Current M16 executable evidence:
+
+`RTL core realization → scheduler execution → request-lane arbitration → active-neutral routing → retained pending routes → transition-capacity enforcement → retained-state writeback → integrated invariant evaluation`
+
+Current M16 FPGA preparation evidence:
+
+`FPGA integration top → reset synchronization → readiness gating → scheduler and request propagation → retained route completion → integrated invariant preservation`
+
+Inherited self-test result:
 
 `41/41 PASS`
 
-Current semantic correlation result:
+Inherited semantic correlation result:
 
 `PASS`
 
-Current exact deterministic replay result:
+Inherited exact deterministic replay result:
 
 `PASS`
 
-Current vector regeneration result:
+Inherited vector regeneration result:
 
 `10/10 files byte-identical`
 
-Current qualification closure result:
+Inherited M15 qualification closure result:
+
+`PASS`
+
+M16 RTL qualification result:
+
+`PASS`
+
+M16 FPGA preparation qualification result:
 
 `PASS`
 
@@ -3177,8 +3592,13 @@ Current published validation result:
 
 Current output-schema role:
 
-`provide deterministic machine-readable processor execution, qualification, hardware-facing implementation mapping, cycle-exact correlation, reproducibility, CI validation, and release evidence`
+`provide deterministic machine-readable processor execution, qualification, hardware-facing implementation mapping, cycle-exact correlation, executable RTL evidence, FPGA preparation evidence, reproducibility, CI validation, and release evidence`
 
-Next planned architecture layer:
 
-`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
+  
+
+
+
+
+
+
