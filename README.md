@@ -396,7 +396,6 @@ The physical foundation defines:
 - Binary hardware can model nonlinear dynamics; FRP transfers selected nonlinear dynamic mechanisms into the organization of computation itself;
 - the physical evidence boundary of the current FRP repository.
 
-
 ## Processor Architecture
 
 ### Computational State and Tick Order
@@ -2599,134 +2598,6 @@ Closed status:
 
 `M16 FPGA PREPARATION LAYER CLOSED`
 
-### M16 FPGA Preparation Boundary
-
-The closed FPGA preparation source boundary is:
-
-`fpga/m16/`
-
-It contains:
-
-| File | Function |
-|---|---|
-| `fpga/m16/frp_m16_fpga_top.sv` | target-independent FPGA integration and synthesis boundary |
-| `fpga/m16/frp_m16_fpga_tb.sv` | executable FPGA integration qualification boundary |
-| `fpga/m16/SIMULATION_TRANSCRIPT.md` | final FPGA preparation qualification record |
-| `fpga/m16/CLOSURE.md` | final FPGA preparation closure record |
-
-The FPGA integration top instantiates:
-
-`frp_m16_core`
-
-The target-independent integration layer adds:
-
-- FPGA clock input;
-- asynchronous external reset input;
-- two-stage synchronous reset release;
-- internal core reset;
-- `core_ready`;
-- tick-enable gating before readiness;
-- counter-clear gating before readiness;
-- request-valid gating before readiness;
-- scheduler-mode propagation;
-- request-interface propagation;
-- retained-state telemetry;
-- pending-route telemetry;
-- transition-capacity telemetry;
-- direct-transition telemetry;
-- reserved-state telemetry;
-- queue-overflow telemetry;
-- ten integrated invariant outputs.
-
-The FPGA preparation boundary contains no vendor-specific primitive.
-
-It preserves the qualified M16 execution semantics inside:
-
-`frp_m16_core`
-
-### M16 FPGA Integration Qualification
-
-The executable FPGA integration testbench validates:
-
-- asynchronous reset assertion;
-- two-stage synchronous reset release;
-- `core_ready` activation;
-- blocked execution before readiness;
-- scheduler propagation;
-- request-interface propagation;
-- active-neutral first-leg execution;
-- retained pending-route completion;
-- retained balanced ternary writeback;
-- all ten integrated invariant flags;
-- zero actual direct-transition events;
-- zero reserved-state events;
-- zero queue-overflow events.
-
-### M16 FPGA Preparation Qualification Closure
-
-Workflow:
-
-`FRP M16 FPGA Preparation`
-
-Workflow file:
-
-`.github/workflows/frp-m16-fpga-preparation.yml`
-
-Trigger:
-
-`workflow_dispatch`
-
-Qualified workflow run:
-
-`#2`
-
-Qualified repository commit:
-
-`ede53cf`
-
-Branch:
-
-`main`
-
-Workflow result:
-
-`SUCCESS`
-
-Workflow duration:
-
-`36s`
-
-Qualification evidence artifacts:
-
-`1`
-
-Final qualification result:
-
-`PASS`
-
-The successful qualification includes:
-
-- exact FPGA artifact-boundary validation;
-- inherited M16 RTL dependency validation;
-- FPGA integration-top elaboration;
-- executable FPGA testbench build;
-- executable FPGA integration simulation;
-- latch-diagnostic rejection;
-- multidriven-diagnostic rejection;
-- reset-synchronization validation;
-- `core_ready` validation;
-- execution-input gating validation;
-- scheduler and request-interface propagation;
-- active-neutral route validation;
-- retained pending-route completion;
-- integrated-invariant validation;
-- repository-integrity validation;
-- qualification-evidence generation.
-
-Closed status:
-
-`M16 FPGA PREPARATION LAYER CLOSED`
-
 ### Architecture Progression
 
 The validated FRP architecture progression is:
@@ -3734,8 +3605,8 @@ Measurement contour:
 |---|---|
 | Workflow | `FRP M16 RTL Artifact Boundary` |
 | Workflow file | `.github/workflows/frp-m16-rtl-artifact-boundary.yml` |
-| Qualified workflow run | `#84` |
-| Qualified source commit | `ede53cf` |
+| Qualified workflow run | `#88` |
+| Qualified source commit | `975222b` |
 | Branch | `main` |
 | Workflow result | `SUCCESS` |
 | Qualification result | `PASS` |
@@ -3776,11 +3647,11 @@ Closed status:
 |---|---|
 | Workflow | `FRP M16 FPGA Preparation` |
 | Workflow file | `.github/workflows/frp-m16-fpga-preparation.yml` |
-| Qualified workflow run | `#2` |
-| Qualified repository commit | `ede53cf` |
+| Qualified workflow run | `#6` |
+| Qualified repository commit | `975222b` |
 | Branch | `main` |
 | Workflow result | `SUCCESS` |
-| Workflow duration | `36s` |
+| Workflow duration | `38s` |
 | Qualification result | `PASS` |
 
 Recorded terminal values:
@@ -4051,8 +3922,8 @@ Qualification record:
 |---|---|
 | Workflow | `FRP M16 RTL Artifact Boundary` |
 | Workflow file | `.github/workflows/frp-m16-rtl-artifact-boundary.yml` |
-| Workflow run | `#84` |
-| Qualified source commit | `ede53cf` |
+| Workflow run | `#88` |
+| Qualified source commit | `975222b` |
 | Branch | `main` |
 | Result | `SUCCESS` |
 | Status | `M16 RTL EXECUTION LAYER CLOSED` |
@@ -4087,11 +3958,11 @@ Qualification record:
 |---|---|
 | Workflow | `FRP M16 FPGA Preparation` |
 | Workflow file | `.github/workflows/frp-m16-fpga-preparation.yml` |
-| Workflow run | `#2` |
-| Qualified repository commit | `ede53cf` |
+| Workflow run | `#6` |
+| Qualified repository commit | `975222b` |
 | Branch | `main` |
 | Result | `SUCCESS` |
-| Duration | `36s` |
+| Duration | `38s` |
 | Status | `M16 FPGA PREPARATION LAYER CLOSED` |
 
 ### Current Qualification Position
@@ -4325,8 +4196,8 @@ M16 RTL qualification record:
 | Field | Recorded value |
 |---|---|
 | Workflow | `FRP M16 RTL Artifact Boundary` |
-| Workflow run | `#84` |
-| Qualified source commit | `ede53cf` |
+| Workflow run | `#88` |
+| Qualified source commit | `975222b` |
 | Result | `SUCCESS` |
 
 M16 FPGA preparation qualification record:
@@ -4334,8 +4205,8 @@ M16 FPGA preparation qualification record:
 | Field | Recorded value |
 |---|---|
 | Workflow | `FRP M16 FPGA Preparation` |
-| Workflow run | `#2` |
-| Qualified repository commit | `ede53cf` |
+| Workflow run | `#6` |
+| Qualified repository commit | `975222b` |
 | Result | `SUCCESS` |
 
 Current hardware-facing release state:
@@ -4373,8 +4244,8 @@ M16 RTL qualification record:
 | Field | Recorded value |
 |---|---|
 | Workflow | `FRP M16 RTL Artifact Boundary` |
-| Workflow run | `#84` |
-| Qualified source commit | `ede53cf` |
+| Workflow run | `#88` |
+| Qualified source commit | `975222b` |
 | Result | `SUCCESS` |
 | Status | `M16 RTL EXECUTION LAYER CLOSED` |
 
@@ -4383,8 +4254,8 @@ M16 FPGA preparation qualification record:
 | Field | Recorded value |
 |---|---|
 | Workflow | `FRP M16 FPGA Preparation` |
-| Workflow run | `#2` |
-| Qualified repository commit | `ede53cf` |
+| Workflow run | `#6` |
+| Qualified repository commit | `975222b` |
 | Result | `SUCCESS` |
 | Status | `M16 FPGA PREPARATION LAYER CLOSED` |
 
@@ -4588,8 +4459,8 @@ RTL qualification record:
 | Field | Recorded value |
 |---|---|
 | Workflow | `FRP M16 RTL Artifact Boundary` |
-| Workflow run | `#84` |
-| Qualified source commit | `ede53cf` |
+| Workflow run | `#88` |
+| Qualified source commit | `975222b` |
 | Result | `SUCCESS` |
 | Status | `M16 RTL EXECUTION LAYER CLOSED` |
 
@@ -4613,8 +4484,8 @@ FPGA preparation qualification record:
 | Field | Recorded value |
 |---|---|
 | Workflow | `FRP M16 FPGA Preparation` |
-| Workflow run | `#2` |
-| Qualified repository commit | `ede53cf` |
+| Workflow run | `#6` |
+| Qualified repository commit | `975222b` |
 | Result | `SUCCESS` |
 | Status | `M16 FPGA PREPARATION LAYER CLOSED` |
 
@@ -4751,8 +4622,8 @@ M16 RTL qualification:
 |---|---|
 | Workflow | `FRP M16 RTL Artifact Boundary` |
 | Workflow file | `.github/workflows/frp-m16-rtl-artifact-boundary.yml` |
-| Workflow run | `#84` |
-| Qualified source commit | `ede53cf` |
+| Workflow run | `#88` |
+| Qualified source commit | `975222b` |
 | Branch | `main` |
 | Result | `SUCCESS` |
 | Qualification result | `PASS` |
@@ -4764,11 +4635,11 @@ M16 FPGA preparation qualification:
 |---|---|
 | Workflow | `FRP M16 FPGA Preparation` |
 | Workflow file | `.github/workflows/frp-m16-fpga-preparation.yml` |
-| Workflow run | `#2` |
-| Qualified repository commit | `ede53cf` |
+| Workflow run | `#6` |
+| Qualified repository commit | `975222b` |
 | Branch | `main` |
 | Result | `SUCCESS` |
-| Duration | `36s` |
+| Duration | `38s` |
 | Qualification result | `PASS` |
 | Status | `M16 FPGA PREPARATION LAYER CLOSED` |
 
@@ -4874,14 +4745,6 @@ Historical archived DOI:
 Maksym Marnov (Alchimist)
 
 **Berlin, 8 July 2026**
-
-
-
-
-
-
-
-
 
 
 
