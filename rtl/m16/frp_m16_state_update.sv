@@ -20,7 +20,7 @@
 //   - opposite polarity commits only the legal first leg +/-1 -> 0;
 //   - pending completion commits only on a later eligible tick from 0;
 //   - capacity rejection defers without state or pending-route corruption;
-//   - reserved encoding and direct -1 <-> +1 writeback are never committed.
+//   - reserved encoding and direct -1 <-> 1 writeback are never committed.
 
 `ifndef FRP_M16_STATE_UPDATE_SV
 `define FRP_M16_STATE_UPDATE_SV
@@ -427,7 +427,7 @@ module frp_m16_state_update #(
         end
       end
 
-      for (
+            for (
         int element_index = 0;
         element_index < CELLS;
         element_index++
