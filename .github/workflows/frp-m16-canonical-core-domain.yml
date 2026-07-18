@@ -67,23 +67,85 @@ jobs:
               raise SystemExit("No M16 text files were found.")
 
           positive_with_sign = bytes([43]) + b"1"
-          noncanonical_domain = b"{-1, 0, " + positive_with_sign + b"}"
-          canonical_domain = b"{-1, 0, 1}"
+          canonical_positive = b"1"
+
+          positive_state_pattern = re.compile(
+              rb"(?<![A-Za-z0-9_])"
+              + re.escape(positive_with_sign)
+              + rb"(?![A-Za-z0-9_])"
+          )
+
+          self_test_cases = (
+              (
+                  b"{-1, 0, " + positive_with_sign + b"}",
+                  b"{-1, 0, 1}",
+              ),
+              (
+                  b"-1 -> 0 -> " + positive_with_sign,
+                  b"-1 -> 0 -> 1",
+              ),
+              (
+                  positive_with_sign + b" -> 0 -> -1",
+                  b"1 -> 0 -> -1",
+              ),
+              (
+                  b"state = " + positive_with_sign,
+                  b"state = 1",
+              ),
+              (
+                  b"| `" + positive_with_sign + b"` |",
+                  b"| `1` |",
+              ),
+              (
+                  b"tick N" + positive_with_sign,
+                  b"tick N" + positive_with_sign,
+              ),
+              (
+                  b"bits [2i" + positive_with_sign + b":2i]",
+                  b"bits [2i" + positive_with_sign + b":2i]",
+              ),
+              (
+                  b"tick + 1",
+                  b"tick + 1",
+              ),
+              (
+                  b"2'b01",
+                  b"2'b01",
+              ),
+              (
+                  b"+/-1",
+                  b"+/-1",
+              ),
+              (
+                  bytes([194, 177]) + b"1",
+                  bytes([194, 177]) + b"1",
+              ),
+          )
+
+          for source, expected in self_test_cases:
+              actual = positive_state_pattern.sub(
+                  canonical_positive,
+                  source,
+              )
+
+              if actual != expected:
+                  raise SystemExit(
+                      "M16 positive-state token classifier self-test failed."
+                  )
 
           changed_files = []
           replacement_count = 0
 
           for path in target_files:
               original = path.read_bytes()
-              replacements = original.count(noncanonical_domain)
+              canonical, replacements = positive_state_pattern.subn(
+                  canonical_positive,
+                  original,
+              )
 
               if replacements == 0:
                   continue
 
-              canonical = original.replace(
-                  noncanonical_domain,
-                  canonical_domain,
-              )
               path.write_bytes(canonical)
               changed_files.append((path, replacements))
               replacement_count += replacements
@@ -92,21 +154,17 @@ jobs:
 
           for path in target_files:
               content = path.read_bytes()
+              matches = list(positive_state_pattern.finditer(content))
 
-              if noncanonical_domain in content:
-                  remaining.append(
-                      (
-                          path,
-                          content.count(noncanonical_domain),
-                      )
-                  )
+              if matches:
+                  remaining.append((path, len(matches)))
 
           if remaining:
               for path, count in remaining:
                   print(f"{path}: {count}")
 
               raise SystemExit(
-                  "Noncanonical M16 core-domain notation remains."
+                  "Noncanonical M16 positive-state notation remains."
               )
 
           package_path = Path("rtl/m16/frp_m16_pkg.sv")
@@ -130,9 +188,10 @@ jobs:
                       f"Missing canonical M16 encoding for {label}."
                   )
 
+          print("M16 positive-state token classifier: PASS")
           print(f"Checked M16 text files: {len(target_files)}")
           print(
-              "Canonicalized core-domain records: "
+              "Canonicalized positive-state tokens: "
               f"{replacement_count}"
           )
 
