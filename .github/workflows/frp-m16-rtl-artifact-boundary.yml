@@ -307,7 +307,7 @@ jobs:
             echo "- RTL documentation artifacts: 5"
             echo "- Top module: frp_m16_tb"
             echo "- Scheduler modes: free, 7/1, 1/7"
-            echo "- Active-neutral routes: -1 → 0 → +1 and +1 → 0 → -1"
+            echo "- Active-neutral routes: -1 → 0 → 1 and 1 → 0 → -1"
             echo "- Build directory: /tmp/frp_m16_obj"
             echo "- Execution log: frp_m16_execution.log"
           } >> "${GITHUB_STEP_SUMMARY}"
