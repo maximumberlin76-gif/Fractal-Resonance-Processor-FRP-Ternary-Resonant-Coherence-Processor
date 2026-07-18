@@ -268,7 +268,7 @@ Parameter qualification:
 |---|---|
 | `-1` | `2'b11` |
 | `0` | `2'b00` |
-| `+1` | `2'b01` |
+| `1` | `2'b01` |
 | reserved | `2'b10` |
 
 The state `0` remains the active neutral processor state.
@@ -380,7 +380,7 @@ Scheduler propagation qualification:
 
 Qualified request:
 
-`cell 0: 0 → +1`
+`cell 0: 0 → 1`
 
 The request crossed the FPGA boundary with:
 
@@ -395,7 +395,7 @@ The request crossed the FPGA boundary with:
 
 Retained result:
 
-`cell 0 = +1`
+`cell 0 = 1`
 
 Pending-route result:
 
@@ -409,13 +409,13 @@ Request propagation qualification:
 
 Requested opposite-polarity transition:
 
-`+1 → -1`
+`1 → -1`
 
 Direct retained-state writeback is excluded.
 
 First qualified tick:
 
-`+1 → 0`
+`1 → 0`
 
 Retained pending target:
 
@@ -427,7 +427,7 @@ Following qualified tick:
 
 Completed route:
 
-`+1 → 0 → -1`
+`1 → 0 → -1`
 
 Qualified telemetry:
 
@@ -456,7 +456,7 @@ Active-neutral routing qualification:
 
 First route leg:
 
-`+1 → 0`
+`1 → 0`
 
 Retained route:
 
@@ -654,3 +654,5 @@ Maksym Marnov
 | Workflow duration | `36s` |
 | Qualification artifact count | `1` |
 | Closure status | `M16 FPGA PREPARATION LAYER CLOSED` |
+
+
