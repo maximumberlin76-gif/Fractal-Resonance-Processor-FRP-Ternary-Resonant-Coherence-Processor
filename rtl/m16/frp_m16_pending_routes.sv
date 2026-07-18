@@ -17,8 +17,8 @@
         polarity request while the retained ternary state executes the
         mandatory active-neutral route:
 
-            -1 -> 0 -> +1
-            +1 -> 0 -> -1
+            -1 -> 0 -> 1
+            1 -> 0 -> -1
 
         The first eligible tick commits only the nonzero-to-zero leg and
         stores the requested opposite polarity. A later commit-capable and
