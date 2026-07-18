@@ -226,7 +226,7 @@ Result:
 |---|---|
 | `-1` | `2'b11` |
 | `0` | `2'b00` |
-| `+1` | `2'b01` |
+| `1` | `2'b01` |
 | reserved | `2'b10` |
 
 The state `0` executes as the active neutral processor state.
@@ -286,7 +286,7 @@ Result:
 
 Executed transition:
 
-`0 → +1`
+`0 → 1`
 
 Result:
 
@@ -296,11 +296,11 @@ Result:
 
 Requested transition:
 
-`+1 → -1`
+`1 → -1`
 
 First eligible tick:
 
-`+1 → 0`
+`1 → 0`
 
 Retained route:
 
@@ -312,7 +312,7 @@ Following eligible tick:
 
 Completed route:
 
-`+1 → 0 → -1`
+`1 → 0 → -1`
 
 Result:
 
@@ -322,7 +322,7 @@ Result:
 
 Requested transition:
 
-`-1 → +1`
+`-1 → 1`
 
 First eligible tick:
 
@@ -330,15 +330,15 @@ First eligible tick:
 
 Retained route:
 
-`pending_route = +1`
+`pending_route = 1`
 
 Following eligible tick:
 
-`0 → +1`
+`0 → 1`
 
 Completed route:
 
-`-1 → 0 → +1`
+`-1 → 0 → 1`
 
 Result:
 
@@ -348,9 +348,9 @@ Result:
 
 Two retained-state changes execute during one tick:
 
-`cell 1: 0 → +1`
+`cell 1: 0 → 1`
 
-`cell 2: 0 → +1`
+`cell 2: 0 → 1`
 
 | Capacity signal | Value |
 |---|---:|
@@ -406,11 +406,11 @@ Result:
 
 During balance ticks:
 
-`0 → +1` remains uncommitted.
+`0 → 1` remains uncommitted.
 
 During the commit tick:
 
-`0 → +1` executes.
+`0 → 1` executes.
 
 Result:
 
@@ -420,7 +420,7 @@ Result:
 
 During a balance tick:
 
-`+1 → 0`
+`1 → 0`
 
 Retained route:
 
@@ -438,7 +438,7 @@ During the following commit tick:
 
 Completed route:
 
-`+1 → 0 → -1`
+`1 → 0 → -1`
 
 | Relation | Result |
 |---|---|
@@ -478,7 +478,7 @@ Result:
 
 During the excite tick:
 
-`0 → +1`
+`0 → 1`
 
 Result:
 
@@ -488,7 +488,7 @@ Result:
 
 During a neutralize tick:
 
-`+1 → 0`
+`1 → 0`
 
 Retained route:
 
@@ -506,7 +506,7 @@ During the following excite tick:
 
 Completed route:
 
-`+1 → 0 → -1`
+`1 → 0 → -1`
 
 | Relation | Result |
 |---|---|
@@ -518,23 +518,23 @@ Completed route:
 
 Forbidden direct retained-state transitions:
 
-`-1 → +1`
+`-1 → 1`
 
-`+1 → -1`
+`1 → -1`
 
 Qualified tick-separated routes:
 
-`-1 → 0 → +1`
+`-1 → 0 → 1`
 
-`+1 → 0 → -1`
+`1 → 0 → -1`
 
 | Routing relation | Result |
 |---|---|
 | active neutral `0` executed as intermediate state | `PASS` |
-| direct `-1 → +1` absent | `PASS` |
-| direct `+1 → -1` absent | `PASS` |
-| `-1 → 0 → +1` executed | `PASS` |
-| `+1 → 0 → -1` executed | `PASS` |
+| direct `-1 → 1` absent | `PASS` |
+| direct `1 → -1` absent | `PASS` |
+| `-1 → 0 → 1` executed | `PASS` |
+| `1 → 0 → -1` executed | `PASS` |
 | requested opposite polarity retained | `PASS` |
 | pending completion executed only from `0` | `PASS` |
 | pending route cleared after completion | `PASS` |
