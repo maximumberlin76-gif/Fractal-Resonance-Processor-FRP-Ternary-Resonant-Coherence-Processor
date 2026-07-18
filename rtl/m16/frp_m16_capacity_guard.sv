@@ -24,7 +24,7 @@
 //   - each legal state-changing tick leg consumes one capacity slot;
 //   - opposite-polarity routing remains split through active neutral 0;
 //   - rejected pending completion remains retained for a later eligible tick;
-//   - capacity exhaustion never authorizes a direct -1 <-> +1 transition.
+//   - capacity exhaustion never authorizes a direct -1 <-> 1 transition.
 
 `ifndef FRP_M16_CAPACITY_GUARD_SV
 `define FRP_M16_CAPACITY_GUARD_SV
@@ -261,7 +261,7 @@ module frp_m16_capacity_guard #(
             end
         end
 
-        // New request lanes follow retained pending-route priority and retain
+            // New request lanes follow retained pending-route priority and retain
         // deterministic ascending lane order.
         for (
             int lane_index = 0;
