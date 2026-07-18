@@ -343,7 +343,7 @@ module frp_m16_fpga_tb;
         end
         expect_zero_events_and_flags();
 
-        // Qualified request propagation: 0 -> +1.
+        // Qualified request propagation: 0 -> 1.
         clear_requests();
         set_lane(0, 0, FRP_STATE_POS);
         start_tick(FRP_SCHED_FREE);
@@ -364,7 +364,7 @@ module frp_m16_fpga_tb;
         end
         expect_zero_events_and_flags();
 
-        // Active-neutral first leg: +1 -> 0 with retained target -1.
+        // Active-neutral first leg: 1 -> 0 with retained target -1.
         clear_requests();
         set_lane(0, 0, FRP_STATE_NEG);
         start_tick(FRP_SCHED_FREE);
