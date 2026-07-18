@@ -1,0 +1,323 @@
+name: FRP Output Schema Section Numbering Repair
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: frp-output-schema-section-numbering-repair
+  cancel-in-progress: false
+
+jobs:
+  repair-output-schema-numbering:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate execution branch
+        shell: bash
+        run: |
+          test "${GITHUB_REF_TYPE}" = "branch"
+          test "${GITHUB_REF_NAME}" = "main"
+
+      - name: Renumber output schema sections
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("docs/output_schema.md")
+
+          source_bytes = path.read_bytes()
+          source_text = source_bytes.decode("utf-8")
+          source_lines = source_text.splitlines(keepends=True)
+
+          heading_pattern = re.compile(r"^## ([0-9]+)\. (.+)$")
+
+          headings = []
+
+          for line_index, line in enumerate(source_lines):
+              raw_line = line.rstrip("\r\n")
+              line_ending = line[len(raw_line):]
+              match = heading_pattern.fullmatch(raw_line)
+
+              if match:
+                  headings.append(
+                      (
+                          line_index,
+                          int(match.group(1)),
+                          match.group(2),
+                          line_ending,
+                      )
+                  )
+
+          expected_source_numbers = (
+              list(range(1, 32))
+              + list(range(25, 93))
+          )
+
+          actual_source_numbers = [
+              number
+              for _, number, _, _ in headings
+          ]
+
+          if actual_source_numbers != expected_source_numbers:
+              raise SystemExit(
+                  "Unexpected source section-number sequence. "
+                  "No file was modified."
+              )
+
+          if len(headings) != 99:
+              raise SystemExit(
+                  "Unexpected numbered-section count. "
+                  "No file was modified."
+              )
+
+          if headings[30][2] != "Output Stability Statement":
+              raise SystemExit(
+                  "Section 31 source anchor does not match. "
+                  "No file was modified."
+              )
+
+          if headings[31][2] != "Neutral Route Validation Object":
+              raise SystemExit(
+                  "Restarted section 25 source anchor does not match. "
+                  "No file was modified."
+              )
+
+          if headings[-1][2] != "Current Status":
+              raise SystemExit(
+                  "Final source section does not match. "
+                  "No file was modified."
+              )
+
+          source_titles = [
+              title
+              for _, _, title, _ in headings
+          ]
+
+          target_line_indices = {
+              line_index
+              for line_index, _, _, _ in headings[31:]
+          }
+
+          output_lines = list(source_lines)
+
+          for line_index, number, title, line_ending in headings[31:]:
+              output_lines[line_index] = (
+                  f"## {number + 7}. {title}{line_ending}"
+              )
+
+          changed_line_indices = {
+              line_index
+              for line_index, (source_line, output_line)
+              in enumerate(zip(source_lines, output_lines))
+              if source_line != output_line
+          }
+
+          if changed_line_indices != target_line_indices:
+              raise SystemExit(
+                  "A non-target line would be modified. "
+                  "No file was modified."
+              )
+
+          if len(changed_line_indices) != 68:
+              raise SystemExit(
+                  "Unexpected changed-heading count. "
+                  "No file was modified."
+              )
+
+          output_text = "".join(output_lines)
+
+          output_headings = []
+
+          for line_index, line in enumerate(output_lines):
+              raw_line = line.rstrip("\r\n")
+              match = heading_pattern.fullmatch(raw_line)
+
+              if match:
+                  output_headings.append(
+                      (
+                          line_index,
+                          int(match.group(1)),
+                          match.group(2),
+                      )
+                  )
+
+          output_numbers = [
+              number
+              for _, number, _ in output_headings
+          ]
+
+          output_titles = [
+              title
+              for _, _, title in output_headings
+          ]
+
+          if output_numbers != list(range(1, 100)):
+              raise SystemExit(
+                  "Target section-number sequence validation failed. "
+                  "No file was modified."
+              )
+
+          if output_titles != source_titles:
+              raise SystemExit(
+                  "Section-title preservation validation failed. "
+                  "No file was modified."
+              )
+
+          path.write_bytes(output_text.encode("utf-8"))
+
+          print("source_sequence=1-31,25-92")
+          print("target_sequence=1-99")
+          print("renumbered_headings=68")
+          print(
+              "first_change="
+              "25 -> 32: Neutral Route Validation Object"
+          )
+          print(
+              "last_change="
+              "92 -> 99: Current Status"
+          )
+          PY
+
+      - name: Validate repaired output schema
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("docs/output_schema.md")
+          text = path.read_bytes().decode("utf-8")
+
+          heading_pattern = re.compile(
+              r"^## ([0-9]+)\. (.+)$",
+              re.MULTILINE,
+          )
+
+          headings = heading_pattern.findall(text)
+          numbers = [int(number) for number, _ in headings]
+          titles = [title for _, title in headings]
+
+          if numbers != list(range(1, 100)):
+              raise SystemExit(
+                  "Final section-number sequence is not 1 through 99."
+              )
+
+          if len(numbers) != len(set(numbers)):
+              raise SystemExit(
+                  "Duplicate numbered sections remain."
+              )
+
+          if titles[31] != "Neutral Route Validation Object":
+              raise SystemExit(
+                  "Section 32 title does not match."
+              )
+
+          if titles[-1] != "Current Status":
+              raise SystemExit(
+                  "Section 99 title does not match."
+              )
+
+          print("numbered_sections=99")
+          print("section_sequence=1-99")
+          print("duplicate_section_numbers=0")
+          PY
+
+          git diff --check
+
+          changed_files="$(git diff --name-only)"
+
+          if [ "${changed_files}" != "docs/output_schema.md" ]; then
+            echo "Unexpected file modification before workflow cleanup:"
+            printf '%s\n' "${changed_files}"
+            exit 1
+          fi
+
+      - name: Remove one-time workflow
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          workflow_path = Path(
+              ".github/workflows/"
+              "frp-output-schema-numbering-fix.yml"
+          )
+
+          if not workflow_path.is_file():
+              raise SystemExit(
+                  "One-time workflow file was not found."
+              )
+
+          workflow_path.unlink()
+
+          print(
+              "removed_workflow="
+              ".github/workflows/"
+              "frp-output-schema-numbering-fix.yml"
+          )
+          PY
+
+      - name: Validate repository change boundary
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from subprocess import check_output
+
+          actual_files = set(
+              check_output(
+                  ["git", "diff", "--name-only"],
+                  text=True,
+              ).splitlines()
+          )
+
+          expected_files = {
+              ".github/workflows/"
+              "frp-output-schema-numbering-fix.yml",
+              "docs/output_schema.md",
+          }
+
+          if actual_files != expected_files:
+              raise SystemExit(
+                  "Repository change boundary validation failed. "
+                  f"Expected {sorted(expected_files)}, "
+                  f"found {sorted(actual_files)}."
+              )
+
+          print("repository_change_boundary=PASS")
+          print("persistent_document_change=docs/output_schema.md")
+          print(
+              "one_time_workflow_removal="
+              ".github/workflows/"
+              "frp-output-schema-numbering-fix.yml"
+          )
+          PY
+
+          git diff --check
+
+      - name: Commit and push numbering repair
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -- \
+            docs/output_schema.md \
+            .github/workflows/frp-output-schema-numbering-fix.yml
+
+          git diff --cached --check
+
+          git commit -m "Repair output schema section numbering"
+
+          git push origin "HEAD:${GITHUB_REF_NAME}"
