@@ -22,7 +22,7 @@
             - same-state retention is legal and consumes no state change;
             - 0 -> +/-1 is a commit-capable release;
             - +/-1 -> 0 is a neutralize-capable transition;
-            - direct -1 <-> +1 execution is forbidden;
+            - direct -1 <-> 1 execution is forbidden;
             - opposite-polarity requests execute only the first tick leg
               +/-1 -> 0 and retain the opposite target in pending_route;
             - pending routes complete only on a later eligible tick from 0;
@@ -340,7 +340,7 @@ module frp_m16_active_neutral #(
             end
         end
 
-        // Accepted request lanes are evaluated in deterministic ascending
+               // Accepted request lanes are evaluated in deterministic ascending
         // lane order. Request arbitration has already prevented duplicate
         // accepted cells and blocked cells owned by a retained pending route.
 
@@ -551,7 +551,7 @@ module frp_m16_active_neutral #(
                                 // Only the first route leg executes now:
                                 //
                                 //     -1 -> 0
-                                //     +1 -> 0
+                                //     1 -> 0
                                 //
                                 // The opposite target remains available on
                                 // request_target for capacity-approved
@@ -741,4 +741,4 @@ module frp_m16_active_neutral #(
 
 endmodule : frp_m16_active_neutral
 
-`endif
+`endif 
