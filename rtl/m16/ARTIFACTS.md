@@ -74,7 +74,7 @@ Canonical encoding:
 |---|---|
 | `-1` | `2'b11` |
 | `0` | `2'b00` |
-| `+1` | `2'b01` |
+| `1` | `2'b01` |
 | reserved | `2'b10` |
 
 The same encoding is used by:
@@ -116,9 +116,9 @@ It admits:
 
 - same-state retention;
 - `0 → -1`;
-- `0 → +1`;
+- `0 → 1`;
 - `-1 → 0`;
-- `+1 → 0`;
+- `1 → 0`;
 - opposite-polarity first-leg routing;
 - pending-route completion.
 
@@ -145,14 +145,14 @@ Balance ticks admit:
 
 - same-state retention;
 - `-1 → 0`;
-- `+1 → 0`;
+- `1 → 0`;
 - opposite-polarity first-leg routing.
 
 Commit ticks admit:
 
 - same-state retention;
 - `0 → -1`;
-- `0 → +1`;
+- `0 → 1`;
 - pending-route completion.
 
 Required scheduler relations:
@@ -184,14 +184,14 @@ Excite ticks admit:
 
 - same-state retention;
 - `0 → -1`;
-- `0 → +1`;
+- `0 → 1`;
 - pending-route completion.
 
 Neutralize ticks admit:
 
 - same-state retention;
 - `-1 → 0`;
-- `+1 → 0`;
+- `1 → 0`;
 - opposite-polarity first-leg routing.
 
 Required scheduler relation:
@@ -202,15 +202,15 @@ Required scheduler relation:
 
 Direct opposite-polarity execution is excluded from the retained-state boundary:
 
-`-1 → +1`
+`-1 → 1`
 
-`+1 → -1`
+`1 → -1`
 
 The implemented routes are:
 
-`-1 → 0 → +1`
+`-1 → 0 → 1`
 
-`+1 → 0 → -1`
+`1 → 0 → -1`
 
 The first eligible neutralize-capable tick performs:
 
@@ -238,7 +238,7 @@ The slot values use the canonical balanced ternary encoding:
 |---|---|
 | `0` | no retained pending polarity |
 | `-1` | retained negative completion target |
-| `+1` | retained positive completion target |
+| `1` | retained positive completion target |
 | reserved | invalid route encoding |
 
 Pending-route ownership provides:
@@ -272,9 +272,9 @@ Qualified parameter relations:
 Capacity is consumed by:
 
 - `0 → -1`;
-- `0 → +1`;
+- `0 → 1`;
 - `-1 → 0`;
-- `+1 → 0`;
+- `1 → 0`;
 - opposite-polarity first-leg execution;
 - pending-route completion.
 
@@ -620,9 +620,9 @@ The deterministic testbench executes:
 - `free` execution;
 - `7/1` execution;
 - `1/7` execution;
-- `0 → +1`;
-- `+1 → 0 → -1`;
-- `-1 → 0 → +1`;
+- `0 → 1`;
+- `1 → 0 → -1`;
+- `-1 → 0 → 1`;
 - pending-route retention;
 - pending-route completion;
 - transition-capacity saturation;
