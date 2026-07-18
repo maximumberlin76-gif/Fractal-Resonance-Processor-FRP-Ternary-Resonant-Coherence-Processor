@@ -26,7 +26,7 @@
 // Architecture preserved:
 //   - balanced ternary retained-state domain {-1, 0, 1};
 //   - active neutral state 0 as a computational state;
-//   - mandatory tick-separated routing -1 -> 0 -> +1 and +1 -> 0 -> -1;
+//   - mandatory tick-separated routing -1 -> 0 -> 1 and 1 -> 0 -> -1;
 //   - retained pending-route target polarity;
 //   - free / 7/1 / 1/7 temporal execution modes;
 //   - deterministic ascending request-lane order;
@@ -417,8 +417,8 @@ package frp_m16_pkg;
       endcase
     end
   endfunction
-
-  // --------------------------------------------------------------------------
+  
+    // --------------------------------------------------------------------------
   // Scheduler helpers and transition eligibility
   // --------------------------------------------------------------------------
 
