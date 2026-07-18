@@ -23,7 +23,7 @@
 //   - pending-route ownership before new same-element_index requests;
 //   - scheduler-qualified transition admission;
 //   - opposite-polarity routing through active neutral 0;
-//   - no direct -1 <-> +1 execution;
+//   - no direct -1 <-> 1 execution;
 //   - downstream transition-capacity qualification.
 
 `ifndef FRP_M16_REQUEST_LANES_SV
