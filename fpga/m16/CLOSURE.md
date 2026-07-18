@@ -82,7 +82,7 @@ Qualification documentation:
 | File | Function |
 |---|---|
 | `SIMULATION_TRANSCRIPT.md` | final FPGA preparation qualification record |
-| `CLOSURE.md` | final FPGA preparation closure record |
+| `CLOSURE.md` | final M16 FPGA preparation closure record |
 
 Closed FPGA preparation boundary:
 
@@ -193,7 +193,7 @@ Canonical encoding:
 |---|---|
 | `-1` | `2'b11` |
 | `0` | `2'b00` |
-| `+1` | `2'b01` |
+| `1` | `2'b01` |
 | reserved | `2'b10` |
 
 The state `0` remains the active neutral processor state.
@@ -399,7 +399,7 @@ Request-interface closure result:
 
 Qualified request:
 
-`cell 0: 0 → +1`
+`cell 0: 0 → 1`
 
 Qualified request relations:
 
@@ -414,7 +414,7 @@ Qualified request relations:
 
 Retained result:
 
-`cell 0 = +1`
+`cell 0 = 1`
 
 Pending-route result:
 
@@ -428,23 +428,23 @@ Request propagation closure result:
 
 Direct opposite-polarity retained-state transitions remain excluded:
 
-`-1 → +1`
+`-1 → 1`
 
-`+1 → -1`
+`1 → -1`
 
 Qualified tick-separated routes remain:
 
-`-1 → 0 → +1`
+`-1 → 0 → 1`
 
-`+1 → 0 → -1`
+`1 → 0 → -1`
 
 Qualified FPGA integration route:
 
-`+1 → 0 → -1`
+`1 → 0 → -1`
 
 First route leg:
 
-`+1 → 0`
+`1 → 0`
 
 Retained pending polarity:
 
@@ -496,7 +496,7 @@ The pending-route boundary preserves:
 
 Pending-route completion record:
 
-`+1 → 0`
+`1 → 0`
 
 `pending_route = -1`
 
