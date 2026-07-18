@@ -146,7 +146,7 @@ For eight retained cells:
 |---|---|
 | `-1` | `2'b11` |
 | `0` | `2'b00` |
-| `+1` | `2'b01` |
+| `1` | `2'b01` |
 | reserved | `2'b10` |
 
 The state `0` is the active neutral processor state.
@@ -219,9 +219,9 @@ It executes:
 
 - same-state retention
 - `0 → -1`
-- `0 → +1`
+- `0 → 1`
 - `-1 → 0`
-- `+1 → 0`
+- `1 → 0`
 - opposite-polarity first-leg routing
 - pending-route completion
 
@@ -229,11 +229,11 @@ It executes:
 
 Request:
 
-`cell 0: 0 → +1`
+`cell 0: 0 → 1`
 
 Result:
 
-`state[0] = +1`
+`state[0] = 1`
 
 `pending_route[0] = 0`
 
@@ -241,11 +241,11 @@ Result:
 
 Request:
 
-`cell 0: +1 → -1`
+`cell 0: 1 → -1`
 
 The first active-neutral route leg executes:
 
-`+1 → 0`
+`1 → 0`
 
 The requested opposite polarity is retained:
 
@@ -279,13 +279,13 @@ Result:
 
 Completed route:
 
-`+1 → 0 → -1`
+`1 → 0 → -1`
 
 ### Free Tick 3
 
 Request:
 
-`cell 0: -1 → +1`
+`cell 0: -1 → 1`
 
 The first active-neutral route leg executes:
 
@@ -293,13 +293,13 @@ The first active-neutral route leg executes:
 
 The requested opposite polarity is retained:
 
-`pending_route[0] = +1`
+`pending_route[0] = 1`
 
 Result:
 
 `state[0] = 0`
 
-`pending_route[0] = +1`
+`pending_route[0] = 1`
 
 `requested_direct_events = 1`
 
@@ -313,25 +313,25 @@ Result:
 
 The pending route completes:
 
-`0 → +1`
+`0 → 1`
 
 Result:
 
-`state[0] = +1`
+`state[0] = 1`
 
 `pending_route[0] = 0`
 
 Completed route:
 
-`-1 → 0 → +1`
+`-1 → 0 → 1`
 
 ### Free Tick 5
 
 Two state-changing requests execute during the same tick:
 
-`cell 1: 0 → +1`
+`cell 1: 0 → 1`
 
-`cell 2: 0 → +1`
+`cell 2: 0 → 1`
 
 Capacity relation:
 
@@ -398,7 +398,7 @@ Scheduler count relation:
 
 Request:
 
-`cell 0: 0 → +1`
+`cell 0: 0 → 1`
 
 The balance ticks retain:
 
@@ -414,11 +414,11 @@ Scheduler state:
 
 Executed transition:
 
-`0 → +1`
+`0 → 1`
 
 Result:
 
-`state[0] = +1`
+`state[0] = 1`
 
 `pending_route[0] = 0`
 
@@ -430,11 +430,11 @@ Scheduler state:
 
 Request:
 
-`cell 0: +1 → -1`
+`cell 0: 1 → -1`
 
 The first active-neutral route leg executes:
 
-`+1 → 0`
+`1 → 0`
 
 Result:
 
@@ -476,7 +476,7 @@ Result:
 
 The complete route is:
 
-`+1 → 0 → -1`
+`1 → 0 → -1`
 
 The first leg executes during a balance tick.
 
@@ -519,11 +519,11 @@ Scheduler state:
 
 Request:
 
-`cell 0: 0 → +1`
+`cell 0: 0 → 1`
 
 Result:
 
-`state[0] = +1`
+`state[0] = 1`
 
 `pending_route[0] = 0`
 
@@ -535,11 +535,11 @@ Scheduler state:
 
 Request:
 
-`cell 0: +1 → -1`
+`cell 0: 1 → -1`
 
 The first active-neutral route leg executes:
 
-`+1 → 0`
+`1 → 0`
 
 Result:
 
@@ -581,7 +581,7 @@ Result:
 
 The complete route is:
 
-`+1 → 0 → -1`
+`1 → 0 → -1`
 
 The first leg executes during a neutralize tick.
 
@@ -669,8 +669,8 @@ The simulation verifies:
 - `commit = 8`
 - `excite = 2`
 - `neutralize = 14`
-- `+1 → 0 → -1`
-- `-1 → 0 → +1`
+- `1 → 0 → -1`
+- `-1 → 0 → 1`
 - pending polarity retention
 - pending completion only from active neutral `0`
 - deterministic request-lane order
