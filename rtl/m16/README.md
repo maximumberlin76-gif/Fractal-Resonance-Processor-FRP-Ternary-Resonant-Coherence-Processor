@@ -50,7 +50,7 @@ The retained processor-state domain is:
 |---|---|
 | `-1` | negative / inhibitory / counter-phase / suppressive potential |
 | `0` | active neutral balancing / damping / transition / stabilization state |
-| `+1` | positive / excitatory / phase-supporting / constructive potential |
+| `1` | positive / excitatory / phase-supporting / constructive potential |
 
 The neutral state `0` is an active processor state. It provides logical neutrality, phase damping, balancing, transition buffering, conflict neutralization, polarity bridging, switching-load distribution, temporal scheduling control, and retained-state stabilization.
 
@@ -60,7 +60,7 @@ The neutral state `0` is an active processor state. It provides logical neutrali
 |---|---|
 | `-1` | `2'b11` |
 | `0` | `2'b00` |
-| `+1` | `2'b01` |
+| `1` | `2'b01` |
 | reserved | `2'b10` |
 
 The processor-state, target, transition-candidate, and pending-route domains use the same canonical encoding.
@@ -71,15 +71,15 @@ The processor-state, target, transition-candidate, and pending-route domains use
 
 Direct opposite-polarity transitions are forbidden:
 
-`-1 → +1`
+`-1 → 1`
 
-`+1 → -1`
+`1 → -1`
 
 Every opposite-polarity transition is separated across eligible processor ticks:
 
-`-1 → 0 → +1`
+`-1 → 0 → 1`
 
-`+1 → 0 → -1`
+`1 → 0 → -1`
 
 For:
 
@@ -112,13 +112,13 @@ A retained pending route:
 - clears only after the corresponding `0 → pending polarity` state writeback;
 - cannot be overwritten by another route.
 
-For `+1 → -1`:
+For `1 → -1`:
 
-`+1 → 0`, retain `pending_route = -1`, wait through ineligible ticks, commit `0 → -1`, clear the pending slot.
+`1 → 0`, retain `pending_route = -1`, wait through ineligible ticks, commit `0 → -1`, clear the pending slot.
 
-For `-1 → +1`:
+For `-1 → 1`:
 
-`-1 → 0`, retain `pending_route = +1`, wait through ineligible ticks, commit `0 → +1`, clear the pending slot.
+`-1 → 0`, retain `pending_route = 1`, wait through ineligible ticks, commit `0 → 1`, clear the pending slot.
 
 `queue_overflow_events = 0`
 
