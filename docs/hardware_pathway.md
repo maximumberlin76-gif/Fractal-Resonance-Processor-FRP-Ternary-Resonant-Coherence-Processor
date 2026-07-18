@@ -1,60 +1,88 @@
 # Hardware Pathway — Fractal Resonance Processor (FRP)
 
-**Ternary Resonant Coherence Processor — Structured Output Prototype**
+**Ternary Fractal Resonant Coherence Processor — Hardware Pathway**
 
 This document defines the current hardware-facing development pathway for the Fractal Resonance Processor (FRP) project.
 
 Current version:
 
-`FRP v1.7.0`
+`FRP v1.8.0`
 
 Current milestone:
 
-`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+`M16 — RTL Core Realization and Execution Semantics Package`
 
-Current executable reference:
+Qualified executable semantic reference:
 
 `../frp_prototype_v1_7_0.py`
 
-Current structured-output schema:
+Qualified structured-output schema:
 
 `frp.structured_output.v1.7.0`
 
-Current M15 benchmark-matrix schema:
+Qualified benchmark-matrix schema:
 
 `frp.m3.benchmark_matrix.v1.7.0`
 
-Current architecture document:
+Inherited M15 architecture document:
 
 `./m15_implementation_mapping_domain_interface_qualification_closure.md`
 
+Current M16 architecture document:
+
+`./m16_rtl_core_realization_execution_semantics.md`
+
 Current test report:
 
-`../TEST_REPORT_v1_7_0.md`
+`../TEST_REPORT_v1_8_0.md`
 
 Current validation index:
 
-`../FRP_VALIDATION_INDEX_v1_7_0.md`
+`../FRP_VALIDATION_INDEX_v1_8_0.md`
 
 Current release notes:
 
-`../RELEASE_NOTES_v1_7_0.md`
+`../RELEASE_NOTES_v1_8_0.md`
 
-Current primary qualification workflow:
+Inherited M15 qualification workflow:
 
 `../.github/workflows/frp-m15-implementation-mapping-qualification.yml`
+
+Current M16 RTL qualification workflow:
+
+`../.github/workflows/frp-m16-rtl-artifact-boundary.yml`
+
+Current M16 FPGA preparation workflow:
+
+`../.github/workflows/frp-m16-fpga-preparation.yml`
 
 Current published validation result:
 
 `PASS`
 
-Current validated M15 self-test result:
+Inherited M15 self-test result:
 
 `41/41 PASS`
 
+Current M16 RTL qualification result:
+
+`PASS`
+
+Current M16 RTL closure status:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+Current M16 FPGA preparation qualification result:
+
+`PASS`
+
+Current M16 FPGA preparation closure status:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
+
 ## 1. Purpose
 
-The purpose of this document is to define the hardware-facing development path from the current validated FRP processor semantics through deterministic implementation mapping, RTL realization, FPGA execution correlation, ASIC-oriented implementation study, and physical validation.
+The purpose of this document is to define the hardware-facing development path from the qualified FRP processor semantics through deterministic implementation mapping, executable RTL realization, target-independent FPGA preparation, ASIC-oriented implementation study, and physical validation.
 
 The current public repository establishes an engineering chain that includes:
 
@@ -87,69 +115,155 @@ The current public repository establishes an engineering chain that includes:
 - RTL assertion correlation;
 - floating-to-quantized reference equivalence;
 - exact deterministic replay;
-- qualification closure;
+- M15 qualification closure;
+- executable M16 SystemVerilog RTL core realization;
+- M16 scheduler-state execution;
+- deterministic M16 request-lane arbitration;
+- retained M16 pending-route execution;
+- M16 active-neutral routing;
+- M16 transition-capacity enforcement;
+- M16 retained-state writeback;
+- M16 architectural telemetry;
+- ten integrated M16 invariant flags;
+- M16 RTL qualification closure;
+- target-independent M16 FPGA integration top;
+- executable M16 FPGA integration testbench;
+- asynchronous external reset assertion;
+- two-stage synchronous reset release;
+- `core_ready` generation;
+- execution-input gating before readiness;
+- scheduler and request-interface propagation;
+- M16 FPGA preparation qualification closure;
 - comparative architecture benchmarking;
 - hardware-sensitivity qualification;
-- staged FPGA, ASIC, and physical-validation documents.
+- FPGA, ASIC, and physical-validation documents.
 
-The current pathway therefore begins from validated processor semantics and continues through explicit implementation artifacts and correlation evidence.
+The current pathway connects the qualified M15 semantic and implementation-mapping foundation to the closed M16 RTL execution and FPGA preparation layers and to the documented subsequent implementation stages.
 
 ## 2. Current Validated Layer
 
-The current validated layer is:
+The current validated release layer is:
+
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
+
+The inherited qualified semantic and implementation-mapping foundation is:
 
 `FRP v1.7.0 — M15 Implementation Mapping, Domain Interface, and Qualification Closure Package`
 
 The current validation chain is:
 
-`floating semantic reference`
+`M15 floating semantic reference`
 
 ↓
 
-`hardware-facing numeric profile`
+`M15 hardware-facing numeric profile`
 
 ↓
 
-`balanced ternary hardware encoding`
+`M15 balanced ternary hardware encoding`
 
 ↓
 
-`stateful quantized hardware shadow`
+`M15 stateful quantized hardware shadow`
 
 ↓
 
-`cycle-exact integer golden trace`
+`M15 cycle-exact integer golden trace`
 
 ↓
 
-`deterministic RTL comparison vectors`
+`M15 deterministic RTL comparison vectors`
 
 ↓
 
-`SystemVerilog interface mapping`
+`M15 SystemVerilog interface mapping`
 
 ↓
 
-`synthesizable RTL reference-core mapping`
+`M15 synthesizable RTL reference-core mapping`
 
 ↓
 
-`RTL assertion correlation`
+`M15 RTL assertion correlation`
 
 ↓
 
-`reference equivalence`
+`M15 reference equivalence`
 
 ↓
 
-`qualification closure PASS`
+`M15 qualification closure PASS`
+
+↓
+
+`M16 synthesizable RTL core realization`
+
+↓
+
+`M16 scheduler-state execution`
+
+↓
+
+`M16 deterministic request-lane arbitration`
+
+↓
+
+`M16 retained pending-route execution`
+
+↓
+
+`M16 active-neutral transition generation`
+
+↓
+
+`M16 distributed transition-capacity admission`
+
+↓
+
+`M16 retained-state writeback`
+
+↓
+
+`M16 architectural telemetry`
+
+↓
+
+`M16 integrated invariant evaluation`
+
+↓
+
+`M16 RTL execution-layer closure`
+
+↓
+
+`M16 target-independent FPGA integration top`
+
+↓
+
+`M16 asynchronous reset assertion`
+
+↓
+
+`M16 two-stage synchronous reset release`
+
+↓
+
+`M16 core-readiness and execution-input gating`
+
+↓
+
+`M16 FPGA integration testbench`
+
+↓
+
+`M16 FPGA preparation-layer closure`
 
 Current validation evidence includes:
 
 - Python compilation;
 - default structured execution;
 - full trace generation;
-- 41-check self-test qualification;
+- 41-check M15 self-test qualification;
 - free scheduler qualification;
 - `7/1` scheduler qualification;
 - `1/7` scheduler qualification;
@@ -162,18 +276,71 @@ Current validation evidence includes:
 - byte-identical vector-package comparison;
 - semantic sequence correlation;
 - exact quantized replay;
-- qualification closure;
+- M15 qualification closure;
+- exact ten-file M16 SystemVerilog artifact boundary;
+- exact five-file M16 RTL documentation boundary;
+- Verilator parsing;
+- module elaboration;
+- executable M16 RTL testbench generation;
+- architectural RTL simulation;
+- assertion execution;
+- latch-diagnostic rejection;
+- multidriven-diagnostic rejection;
+- scheduler validation;
+- request-lane arbitration;
+- active-neutral routing;
+- retained pending-route completion;
+- transition-capacity enforcement;
+- retained-state writeback;
+- ten integrated RTL invariant flags;
+- RTL repository-integrity validation;
+- M16 RTL qualification closure;
+- exact two-file M16 FPGA SystemVerilog boundary;
+- exact two-file M16 FPGA documentation boundary;
+- FPGA integration-top elaboration;
+- executable FPGA integration testbench;
+- asynchronous external reset assertion;
+- two-stage synchronous reset release;
+- `core_ready` validation;
+- execution-input gating;
+- scheduler propagation;
+- request-interface propagation;
+- active-neutral first-leg execution;
+- retained pending-route completion;
+- ten integrated FPGA invariant flags;
+- FPGA repository-integrity validation;
+- M16 FPGA preparation qualification closure;
 - GitHub Actions validation evidence.
 
-Current result:
+Inherited M15 result:
 
-`PASS`
+`41/41 PASS`
+
+Current M16 RTL result:
+
+`SUCCESS`
+
+Current M16 RTL status:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+Current M16 FPGA preparation result:
+
+`SUCCESS`
+
+Current M16 FPGA preparation status:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
+
+Current release result:
+
+`FRP v1.8.0 / M16 — PASS`
 
 ## 3. Engineering Trajectory
 
 The current FRP hardware pathway follows this staged trajectory:
 
-`validated processor semantics`
+`qualified processor semantics`
 
 ↓
 
@@ -181,11 +348,27 @@ The current FRP hardware pathway follows this staged trajectory:
 
 ↓
 
+`M15 qualification closure`
+
+↓
+
 `M16 RTL core realization and execution semantics`
 
 ↓
 
-`FPGA execution and timing correlation`
+`M16 RTL qualification closure`
+
+↓
+
+`M16 target-independent FPGA preparation`
+
+↓
+
+`M16 FPGA preparation qualification closure`
+
+↓
+
+`FPGA implementation and timing correlation`
 
 ↓
 
@@ -201,21 +384,45 @@ The current FRP hardware pathway follows this staged trajectory:
 
 Each stage inherits the processor invariants and correlation requirements of the preceding stage.
 
-The current M15 layer defines the deterministic hardware-facing comparison domain.
+The qualified M15 layer defines the deterministic hardware-facing semantic, numeric, trace, vector, interface, assertion, equivalence, and replay domains.
 
-The planned M16 layer extends that domain into explicit RTL execution semantics.
+The current M16 RTL layer realizes:
 
-FPGA and ASIC stages can then evaluate timing, resource, activity, power, area, and implementation tradeoffs against the same qualified reference chain.
+- scheduler-state execution;
+- deterministic request-lane processing;
+- active-neutral opposite-polarity routing;
+- retained pending-route execution;
+- distributed transition-capacity enforcement;
+- retained-state writeback;
+- architectural counters;
+- integrated invariant evaluation.
 
-Physical validation can then compare measured execution against the same workload, trace, state, timing, and metric identities.
+The current M16 FPGA preparation layer realizes:
+
+- target-independent FPGA integration;
+- asynchronous external reset assertion;
+- two-stage synchronous reset release;
+- `core_ready`;
+- tick gating before readiness;
+- counter-clear gating before readiness;
+- request-valid gating before readiness;
+- scheduler propagation;
+- request-interface propagation;
+- active-neutral route execution;
+- pending-route completion;
+- invariant propagation.
+
+The FPGA and ASIC study documents preserve the qualified M15 reference identities and the executable M16 interface and execution contracts for subsequent implementation correlation.
+
+The physical validation plan preserves workload, trace, state, timing, switching-activity, power, energy, temperature, and repeatability identities for physical correlation.
 
 ## 4. Executable Semantic Reference
 
-The current floating semantic processor representation is:
+The qualified floating semantic processor representation is:
 
 `FractalResonanceProcessor`
 
-Current executable reference:
+Qualified executable semantic reference:
 
 `../frp_prototype_v1_7_0.py`
 
@@ -246,9 +453,23 @@ This representation defines:
 - dynamic-stability margin;
 - structured telemetry.
 
-Engineering role:
+Qualified role:
 
 `semantic source for deterministic implementation mapping and correlation`
+
+M16 interface relation:
+
+`qualified M15 phase-derived ternary target vector and explicit request inputs`
+
+↓
+
+`M16 temporal execution architecture`
+
+↓
+
+`balanced ternary retained-state output`
+
+M16 does not introduce or rename the Python executable semantic reference.
 
 ## 5. Balanced Ternary State Mapping
 
@@ -256,7 +477,7 @@ FRP uses the balanced ternary state and retained-result domain:
 
 `{-1, 0, 1}`
 
-| State | Current computational role |
+| State | Computational role |
 |---|---|
 | `-1` | negative target polarity and retained negative state |
 | `0` | active neutral balancing, damping, transition, and stabilization state |
@@ -270,11 +491,11 @@ The balanced ternary layer carries:
 - transition path;
 - retained result.
 
-Current state-domain invariant:
+State-domain invariant:
 
 `balanced_ternary_state_domain = True`
 
-Current reserved-state invariant:
+Reserved-state invariant:
 
 `reserved_state_events = 0`
 
@@ -284,9 +505,24 @@ The hardware pathway preserves the complete ternary state semantics through:
 - canonical two-bit encoding;
 - packed state vectors;
 - cycle-exact traces;
-- RTL comparison vectors;
-- assertion correlation;
+- deterministic RTL comparison vectors;
+- M16 retained-state registers;
+- M16 request-target inputs;
+- M16 pending-route polarity storage;
+- M16 retained-state writeback;
+- M16 integrated assertions;
 - exact replay.
+
+Current M16 state-domain records include:
+
+- `FRP_TERN_NEG`;
+- `FRP_TERN_ZERO`;
+- `FRP_TERN_POS`;
+- `FRP_TERN_RESERVED`;
+- `FRP_ACTIVE_NEUTRAL`;
+- `frp_is_valid_ternary`;
+- `frp_is_opposite_polarity`;
+- `frp_classify_transition`.
 
 ## 6. Active-Neutral Transition Routing
 
@@ -318,41 +554,58 @@ The active neutral state provides:
 - retained route state;
 - switching-load control.
 
-Current route invariant:
+Route invariant:
 
 `actual_direct_events = 0`
 
-Current queue invariant:
+Reserved-state invariant:
+
+`reserved_state_events = 0`
+
+Queue invariant:
 
 `queue_overflow_events = 0`
 
-Current pending-route state retains:
+The pending-route state retains:
 
 - cell index;
 - target polarity;
-- earliest ready tick.
+- route-valid state;
+- scheduler eligibility;
+- transition-capacity eligibility.
 
-Hardware-facing blocks associated with this relation include:
+M16 RTL artifacts associated with this relation include:
 
-- active-neutral route controller;
-- pending-route storage;
-- ready-tick comparator;
-- request-lane arbitration;
-- route-completion logic;
-- route counters;
-- packed state update logic.
+- `rtl/m16/frp_m16_request_lanes.sv`;
+- `rtl/m16/frp_m16_active_neutral.sv`;
+- `rtl/m16/frp_m16_pending_routes.sv`;
+- `rtl/m16/frp_m16_capacity_guard.sv`;
+- `rtl/m16/frp_m16_state_update.sv`;
+- `rtl/m16/frp_m16_assertions.sv`;
+- `rtl/m16/frp_m16_core.sv`.
+
+Recorded M16 relations:
+
+- opposite-polarity requests produce an active-neutral first leg;
+- pending polarity is retained across scheduler-ineligible ticks;
+- pending polarity is retained across transition-capacity deferral;
+- pending completion begins from active neutral state `0`;
+- direct opposite-polarity retained-state transitions are forbidden;
+- `actual_direct_events = 0`;
+- `reserved_state_events = 0`;
+- `queue_overflow_events = 0`.
 
 ## 7. Distributed Commit as an Execution Constraint
 
-Current default transition fraction:
+Qualified M15 default transition fraction:
 
 `0.25`
 
-Current maximum-change relation:
+Maximum-change relation:
 
 `max_changes = max(1, round(cells × transition_fraction))`
 
-Current validated request-lane profiles:
+Qualified request-lane profiles:
 
 | Cells | Request lanes |
 |---|---:|
@@ -360,37 +613,64 @@ Current validated request-lane profiles:
 | `16` | `4` |
 | `32` | `8` |
 
-Current validated relation:
+Qualified relation:
 
 `switch_load_peak <= transition_fraction`
 
-Hardware-facing interpretation:
+The M16 RTL execution boundary uses:
 
-- transition fraction defines commit bandwidth;
-- request lanes define concurrent transition-request capacity;
+- parameterized cell count;
+- parameterized request-lane count;
+- deterministic ascending request-lane order;
+- duplicate-cell request rejection;
+- pending-busy request rejection;
+- scheduler-based request rejection;
+- transition-capacity rejection;
+- accepted-change counting;
+- remaining-capacity reporting;
+- capacity-exhaustion reporting;
+- retained-state preservation during rejected or deferred transitions.
+
+Current M16 testbench configuration:
+
+| Parameter | Recorded value |
+|---|---:|
+| `CELLS` | `8` |
+| `REQUEST_LANES` | `2` |
+| recorded ticks | `16` |
+
+Recorded hardware-facing relations:
+
+- transition fraction defines the qualified distributed commit capacity;
+- request lanes carry concurrent transition requests;
 - pending routes preserve tick-separated opposite-polarity execution;
-- current-tick switch activity feeds generated power and destabilizing load;
-- distributed commit preserves deterministic transition-capacity behavior.
+- deterministic lane order governs request processing;
+- pending-route completion has retained execution state;
+- transition-capacity rejection preserves the retained state;
+- current-tick state changes feed switching-load telemetry.
 
 Implementation blocks include:
 
 - request-lane input interface;
 - ascending lane-order processor;
 - transition-capacity counter;
-- current-tick state-change counter;
-- per-cell switch-activity register;
-- packed state update path;
-- switching-load output.
+- accepted-change counter;
+- remaining-capacity output;
+- capacity-exhausted output;
+- per-cell state-change mask;
+- packed retained-state update path;
+- switching-load numerator output;
+- transition-capacity invariant.
 
 ## 8. Scheduler Mapping
 
-Current scheduler modes:
+Qualified scheduler modes:
 
 - `free`;
 - `7/1`;
 - `1/7`.
 
-Current validated 16-tick profiles:
+Qualified 16-tick profiles:
 
 | Scheduler | Counts |
 |---|---|
@@ -398,13 +678,13 @@ Current validated 16-tick profiles:
 | `7/1` | `balance = 14`, `commit = 2` |
 | `1/7` | `excite = 2`, `neutralize = 14` |
 
-Current validated default 64-tick `7/1` profile:
+Qualified default 64-tick `7/1` profile:
 
 `balance = 56`
 
 `commit = 8`
 
-Current scheduler phase push:
+Qualified M15 scheduler phase push:
 
 | Scheduler state | Phase push |
 |---|---:|
@@ -412,34 +692,55 @@ Current scheduler phase push:
 | `excite` | `0.006` |
 | all other scheduler states | `0.003` |
 
-Hardware-facing blocks include:
+The M16 scheduler realization is defined by:
 
-- scheduler state counter;
-- scheduler state decoder;
-- phase-push selector;
-- commit-state output;
-- balance-state output;
-- excite-state output;
-- neutralize-state output;
-- cycle-exact scheduler trace field.
+- `rtl/m16/frp_m16_pkg.sv`;
+- `rtl/m16/frp_m16_scheduler.sv`;
+- `rtl/m16/frp_m16_core.sv`;
+- `rtl/m16/frp_m16_assertions.sv`;
+- `rtl/m16/frp_m16_tb.sv`.
 
-The scheduler state sequence participates directly in semantic correlation and exact deterministic replay.
+Current M16 scheduler states:
+
+- `FRP_SCHED_FREE`;
+- `FRP_SCHED_BALANCE`;
+- `FRP_SCHED_COMMIT`;
+- `FRP_SCHED_EXCITE`;
+- `FRP_SCHED_NEUTRALIZE`.
+
+Current M16 scheduler modes:
+
+- `FRP_MODE_FREE`;
+- `FRP_MODE_7_1`;
+- `FRP_MODE_1_7`.
+
+Current M16 scheduler outputs include:
+
+- scheduler mode;
+- scheduler state;
+- scheduler-state counters;
+- commit-capable state;
+- neutralize-capable state;
+- transition-eligibility state;
+- scheduler-count validity.
+
+The scheduler state sequence participates directly in semantic correlation, exact deterministic replay, RTL execution, and FPGA propagation.
 
 ## 9. Kuramoto-Sakaguchi Phase Layer Mapping
 
-The current floating semantic interaction is:
+The qualified M15 floating semantic interaction is:
 
 `sin(phase_j - phase_i - gamma_effective_i)`
 
-Current default nominal phase lag:
+Qualified default nominal phase lag:
 
 `gamma = 0.30 × pi`
 
-Current source constant:
+Qualified source constant:
 
 `DEFAULT_GAMMA = 0.30 × pi`
 
-Current default nominal coupling strength:
+Qualified default nominal coupling strength:
 
 `coupling_nominal = 0.28`
 
@@ -451,7 +752,7 @@ The pair interaction combines:
 - effective local gamma;
 - nominal coupling strength.
 
-Hardware-facing blocks include:
+The qualified M15 hardware-facing mapping fields include:
 
 - phase register;
 - phase-difference datapath;
@@ -463,15 +764,33 @@ Hardware-facing blocks include:
 - coupling accumulation path;
 - phase-coupling telemetry.
 
+The current M16 interface relation is:
+
+`qualified Kuramoto-Sakaguchi phase evolution`
+
+↓
+
+`phase-derived balanced ternary target vector`
+
+↓
+
+`M16 temporal execution architecture`
+
+↓
+
+`balanced ternary retained-state output`
+
+The M16 RTL core consumes the packed phase-derived target vector through the core interface contract.
+
 ## 10. Hierarchical Fractal Topology Mapping
 
-The current architecture uses a dyadic hierarchical ultrametric topology.
+The qualified semantic architecture uses a dyadic hierarchical ultrametric topology.
 
-Current default cell count:
+Qualified default cell count:
 
 `16`
 
-Current default hierarchy depth:
+Qualified default hierarchy depth:
 
 `4`
 
@@ -487,11 +806,11 @@ Shell population:
 
 `2^(distance - 1)`
 
-Current default fractal exponent:
+Qualified default fractal exponent:
 
 `fractal_alpha = 0.70`
 
-The current topology model defines:
+The qualified topology model defines:
 
 - hierarchy levels;
 - pair shells;
@@ -501,26 +820,38 @@ The current topology model defines:
 - thermal-diffusion weights;
 - multiscale coherence groups.
 
-Current exactness marker:
+Qualified exactness marker:
 
 `fixed_point_topology_sum_exact = True`
 
-Hardware-facing blocks include:
+The M15 hardware-facing topology mapping records include:
 
 - hierarchy-level index;
 - cell-group address generation;
 - shell-weight storage;
 - pair or group accumulation;
 - topology exactness check;
-- multiscale group scheduler.
+- multiscale group scheduler;
+- Q30 phase-coupling coefficients;
+- Q30 thermal-diffusion coefficients.
+
+The exact aggregate phase-topology relation is:
+
+`sum(all off-diagonal Q30 phase-coupling coefficients) = cells × 2^30`
+
+The exact aggregate thermal-topology relation is:
+
+`sum(all off-diagonal Q30 thermal-diffusion coefficients) = cells × 2^30`
+
+These topology and coefficient records remain part of the qualified M15 implementation-mapping foundation inherited by M16.
 
 ## 11. Phase Velocity and Phase Evolution Mapping
 
-Current phase velocity:
+Qualified M15 phase velocity:
 
 `phase_velocity_i = 0.060 × frequency_i + scheduler_push + coupling_field_i`
 
-Current phase update:
+Qualified M15 phase update:
 
 `phase_i = (phase_i + phase_velocity_i) mod 2π`
 
@@ -531,7 +862,7 @@ The phase-evolution datapath combines:
 - hierarchical coupling field;
 - phase wrapping.
 
-Hardware-facing blocks include:
+The qualified M15 hardware-facing mapping fields include:
 
 - frequency contribution multiplier;
 - scheduler contribution input;
@@ -541,22 +872,48 @@ Hardware-facing blocks include:
 - full-cycle wrap logic;
 - cycle-exact phase output.
 
+The phase-evolution output supplies the phase-derived balanced ternary target vector consumed by the M16 execution interface.
+
+Cross-layer relation:
+
+`M15 scheduler state`
+
+↓
+
+`M15 scheduler phase push`
+
+↓
+
+`M15 phase velocity`
+
+↓
+
+`M15 phase evolution`
+
+↓
+
+`M15 phase-derived ternary targets`
+
+↓
+
+`M16 scheduler-controlled retained-state execution`
+
 ## 12. Kuramoto Order Parameter and Multiscale Coherence Mapping
 
-Current phase-order relation:
+Qualified M15 phase-order relation:
 
 `R = sqrt(mean(cos(phase))² + mean(sin(phase))²)`
 
 The same phase-order relation is applied to hierarchical groups.
 
-Current coherence domains:
+Qualified coherence domains:
 
 - pair domain;
 - cluster domain;
 - supercluster domain;
 - global domain.
 
-Current outputs include:
+Qualified outputs include:
 
 - pair-domain coherence mean;
 - pair-domain coherence minimum;
@@ -567,7 +924,7 @@ Current outputs include:
 - global phase coherence;
 - coherence dispersion across clusters.
 
-Hardware-facing blocks include:
+The qualified M15 hardware-facing mapping fields include:
 
 - sine lookup read path;
 - cosine lookup read path;
@@ -578,23 +935,39 @@ Hardware-facing blocks include:
 - coherence-dispersion calculation;
 - normalized Q30 outputs.
 
+Phase synchronization and phase coherence remain separate quantities.
+
+The Kuramoto order parameter is:
+
+`R(t)`
+
+The processor-specific operational coherence quantity is:
+
+`C(t)`
+
+Recorded relation:
+
+`R(t) is not identical to C(t)`
+
+The multiscale coherence records participate in the calculation of operational coherence and the phase-derived target vector inherited by the M16 execution layer.
+
 ## 13. Stateful Delay Mapping
 
-Each current processor cell maintains:
+Each qualified semantic processor cell maintains:
 
 - base frequency;
 - target frequency;
 - current frequency.
 
-Current frequency-target relation:
+Qualified frequency-target relation:
 
 `frequency_target = base_frequency + 0.06 × abs(state) + 0.12 × switch_activity`
 
-Current delayed response:
+Qualified delayed response:
 
 `frequency_next = frequency_current + delay_alpha × (frequency_target - frequency_current)`
 
-Current default delay coefficient:
+Qualified default delay coefficient:
 
 `delay_alpha = 0.30`
 
@@ -606,7 +979,7 @@ The delay state feeds:
 - operational coherence;
 - dynamic stability.
 
-Hardware-facing blocks include:
+The qualified M15 hardware-facing mapping fields include:
 
 - base-frequency register;
 - target-frequency datapath;
@@ -615,9 +988,33 @@ Hardware-facing blocks include:
 - delay-coefficient multiplier;
 - lag output.
 
+Cross-layer relation:
+
+`M16 retained ternary state`
+
+↓
+
+`qualified M15 frequency target`
+
+↓
+
+`qualified M15 delayed frequency response`
+
+↓
+
+`qualified M15 phase evolution`
+
+↓
+
+`phase-derived ternary target`
+
+↓
+
+`M16 retained-state execution`
+
 ## 14. Distributed Local Thermal Mapping
 
-Each current processor cell tracks:
+Each qualified semantic processor cell tracks:
 
 - generated power;
 - thermal dissipation;
@@ -625,15 +1022,15 @@ Each current processor cell tracks:
 - local heat;
 - local thermal overload.
 
-Current generated-power relation:
+Qualified generated-power relation:
 
 `generated_power_i = 0.0018 + 0.052 × switch_activity_i + 0.018 × frequency_lag_i`
 
-Current thermal dissipation relation:
+Qualified thermal-dissipation relation:
 
 `thermal_dissipation_i = (previous_heat_i - ambient_heat) / thermal_time_constant`
 
-Current default thermal parameters:
+Qualified default thermal parameters:
 
 | Parameter | Value |
 |---|---:|
@@ -645,11 +1042,11 @@ Current default thermal parameters:
 | thermal topology exponent | `1.20` |
 | thermal coupling gain | `2.50` |
 
-Current exactness marker:
+Qualified exactness marker:
 
 `fixed_point_thermal_sum_exact = True`
 
-Hardware-facing blocks include:
+The qualified M15 hardware-facing mapping fields include:
 
 - generated-power datapath;
 - thermal-dissipation datapath;
@@ -659,17 +1056,21 @@ Hardware-facing blocks include:
 - global heat reduction path;
 - thermal exactness check.
 
+The thermal state remains an endogenous feedback variable within the FRP semantic and quantized reference models.
+
+The M16 RTL execution layer supplies retained-state transitions and switching-load telemetry to the inherited processor execution chain.
+
 ## 15. Thermal Coupling Feedback Mapping
 
-Current local thermal overload:
+Qualified local thermal overload:
 
 `max(0, local_heat - thermal_soft_limit)`
 
-Current thermal node factor:
+Qualified thermal node factor:
 
 `exp(-0.5 × thermal_coupling_gain × overload)`
 
-Current thermal coupling gain:
+Qualified thermal coupling gain:
 
 `2.50`
 
@@ -691,13 +1092,17 @@ The feedback chain is:
 
 ↓
 
-`coherence`
+`phase-order quantities`
+
+↓
+
+`operational coherence`
 
 ↓
 
 `dynamic stability`
 
-Hardware-facing blocks include:
+The qualified M15 hardware-facing mapping fields include:
 
 - overload calculation;
 - exponential-response approximation;
@@ -705,9 +1110,19 @@ Hardware-facing blocks include:
 - pair-factor combination;
 - coupling-field modulation.
 
+The exact pair relation is:
+
+`thermal_pair_factor(i,j) = thermal_node_factor_i × thermal_node_factor_j`
+
+The effective coupling relation is:
+
+`K_eff(i,j) = coupling_nominal × W_ij × thermal_pair_factor(i,j)`
+
+Thermal state participates in endogenous processor feedback.
+
 ## 16. Correlated Gamma Drift Mapping
 
-The current processor tracks:
+The qualified semantic processor tracks:
 
 - nominal gamma;
 - deterministic gamma-noise target;
@@ -724,17 +1139,17 @@ Target range:
 
 `[-1.0, 1.0]`
 
-Current correlated update:
+Qualified correlated update:
 
 `gamma_noise_state += 0.15 × (gamma_noise_target - gamma_noise_state)`
 
-Current effective local gamma:
+Qualified effective local gamma:
 
 `gamma_effective = gamma_nominal + 0.08 × thermal_overload × gamma_noise_state`
 
-The deterministic gamma-noise target sequence is carried in the hardware-facing verification stimulus stream.
+The deterministic gamma-noise target sequence is carried in the qualified hardware-facing verification stimulus stream.
 
-Hardware-facing blocks include:
+The qualified M15 hardware-facing mapping fields include:
 
 - gamma-noise target register;
 - target-refresh counter;
@@ -743,29 +1158,57 @@ Hardware-facing blocks include:
 - effective gamma adder;
 - gamma trace output.
 
+Cross-layer relation:
+
+`local thermal overload`
+
+↓
+
+`correlated gamma-noise state`
+
+↓
+
+`effective local gamma`
+
+↓
+
+`Kuramoto-Sakaguchi interaction`
+
+↓
+
+`phase evolution`
+
+↓
+
+`phase-derived ternary target`
+
+↓
+
+`M16 temporal execution`
+
 ## 17. Nonlinear Coherence Compression Mapping
 
-Current stability soft margin:
+Qualified stability soft margin:
 
 `0.25`
 
-Current margin pressure:
+Qualified margin pressure:
 
 `margin_pressure = max(0, stability_soft_margin - previous_C_minus_P)`
 
-Current thermal-overload mean:
+Qualified thermal-overload mean:
 
 `mean(local thermal overload)`
 
-Current nonlinear compression:
+Qualified nonlinear compression:
 
 `coherence_compression = exp(-(3.0 × thermal_overload_mean² + 1.5 × margin_pressure²))`
 
-Current effective coherence:
+Qualified effective coherence:
 
 `effective_coherence = raw_phase_coherence × coherence_compression`
 
-Hardware-facing blocks include:
+The qualified M15 hardware-facing mapping fields include:
 
 - thermal-overload reduction;
 - margin-pressure comparator;
@@ -774,31 +1217,53 @@ Hardware-facing blocks include:
 - exponential compression approximation;
 - effective-coherence multiplier.
 
+The compression path is:
+
+`raw phase coherence`
+
+↓
+
+`thermal overload pressure`
+
+↓
+
+`inherited stability-margin pressure`
+
+↓
+
+`nonlinear coherence compression`
+
+↓
+
+`effective coherence`
+
+The effective-coherence result participates in the qualified operational-coherence calculation.
+
 ## 18. Operational Coherence and Dynamic-Stability Mapping
 
-Current operational coherence:
+Qualified operational coherence:
 
 `C = 0.82 + 0.34 × effective_coherence + 0.16 × cluster_coherence_mean + 0.08 × neutral_fraction - 0.10 × mean_frequency_lag`
 
-Current destabilizing load:
+Qualified destabilizing load:
 
 `P = heat + switch_load`
 
-Current dynamic-stability margin:
+Qualified dynamic-stability margin:
 
 `C_minus_P = C - P`
 
-Current validated condition:
+Qualified condition:
 
 `C_minus_P_min > 0.0`
 
-Current semantic correlation markers:
+Qualified semantic correlation markers:
 
 `semantic_C_minus_P_sign_match = True`
 
 `semantic_boundary_order_match = True`
 
-Hardware-facing blocks include:
+The qualified M15 hardware-facing mapping fields include:
 
 - effective-coherence contribution;
 - cluster-coherence contribution;
@@ -811,9 +1276,49 @@ Hardware-facing blocks include:
 - `C_minus_P` output register;
 - first stability-boundary crossing detector.
 
+The cross-layer execution relation is:
+
+`qualified M15 operational quantities`
+
+↓
+
+`C(t)`
+
+↓
+
+`P(t)`
+
+↓
+
+`C(t) - P(t)`
+
+↓
+
+`phase-derived balanced ternary target vector`
+
+↓
+
+`M16 request-lane and scheduler inputs`
+
+↓
+
+`M16 active-neutral execution`
+
+↓
+
+`M16 retained balanced ternary state`
+
+The qualified semantic correlation result is:
+
+`PASS`
+
+The qualified exact deterministic replay result is:
+
+`PASS`
+
 ## 19. Phase-Derived Ternary Target Mapping
 
-Current automatic target mapping:
+Qualified M15 automatic target mapping:
 
 `sin(phase) > 0.33 → 1`
 
@@ -827,7 +1332,7 @@ The cross-tick relation is:
 
 ↓
 
-`phase-derived ternary target`
+`phase-derived balanced ternary target`
 
 ↓
 
@@ -839,13 +1344,13 @@ The cross-tick relation is:
 
 ↓
 
-`retained ternary state`
+`retained balanced ternary state`
 
 ↓
 
 `subsequent resonant evolution`
 
-Hardware-facing blocks include:
+The qualified M15 hardware-facing mapping fields include:
 
 - sine lookup read;
 - positive threshold comparator;
@@ -854,11 +1359,45 @@ Hardware-facing blocks include:
 - auto-target enable control;
 - request and auto-target arbitration.
 
+The current M16 RTL interface consumes:
+
+- packed phase-derived balanced ternary target state;
+- explicit request-valid lanes;
+- explicit request cell indexes;
+- explicit request targets;
+- scheduler mode;
+- tick-enable control;
+- counter-clear control.
+
+Current cross-layer relation:
+
+`qualified M15 phase-derived target vector`
+
+↓
+
+`M16 deterministic request-lane arbitration`
+
+↓
+
+`M16 scheduler eligibility`
+
+↓
+
+`M16 active-neutral transition classification`
+
+↓
+
+`M16 transition-capacity admission`
+
+↓
+
+`M16 retained-state writeback`
+
 ## 20. Structured Telemetry Mapping
 
-The current execution domain produces compact deterministic summaries and optional full traces.
+The qualified M15 execution domain produces compact deterministic summaries and optional full traces.
 
-Compact execution records:
+Compact execution records include:
 
 - configuration;
 - kernel contract;
@@ -874,13 +1413,13 @@ Full trace mode adds:
 - `cell_trace`;
 - `route_events`.
 
-Current default trace sizes:
+Qualified default M15 trace sizes:
 
 `trace = 64 processor-tick rows`
 
 `cell_trace = 1024 cell-tick rows`
 
-The processor-tick trace carries fields associated with:
+The M15 processor-tick trace carries fields associated with:
 
 - scheduler state;
 - packed ternary state;
@@ -893,7 +1432,7 @@ The processor-tick trace carries fields associated with:
 - `C_minus_P`;
 - route counters.
 
-The per-cell trace carries fields associated with:
+The M15 per-cell trace carries fields associated with:
 
 - cell identifier;
 - ternary state code;
@@ -909,17 +1448,48 @@ The per-cell trace carries fields associated with:
 - thermal node factor;
 - coupling field.
 
-Hardware-facing interfaces can map these fields into:
+The current M16 RTL execution layer exposes architectural telemetry for:
 
-- trace buffers;
-- debug registers;
+- scheduler mode;
+- scheduler state;
+- scheduler-state counters;
+- requested direct events;
+- prevented direct events;
+- neutral-routed events;
+- actual direct events;
+- reserved-state events;
+- queue-overflow events;
+- accepted state changes;
+- transition-capacity state;
+- pending-route completion;
+- retained-state writeback;
+- integrated invariant flags.
+
+Current M16 terminal relations:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+Current M16 invariant-flag record:
+
+`1111111111`
+
+The structured fields map into:
+
+- deterministic trace files;
+- RTL simulation outputs;
+- qualification artifacts;
 - benchmark capture interfaces;
-- testbench comparison buses;
-- laboratory capture channels.
+- testbench comparison records;
+- FPGA integration outputs;
+- repository release evidence.
 
 ## 21. Hardware-Facing Numeric Profile
 
-FRP v1.7.0 defines four primary hardware-facing numeric representations:
+The qualified M15 implementation-mapping foundation defines four primary hardware-facing numeric representations:
 
 | Domain | Representation |
 |---|---|
@@ -928,7 +1498,7 @@ FRP v1.7.0 defines four primary hardware-facing numeric representations:
 | phase | `PHASE_U32` |
 | Sakaguchi gamma | `GAMMA_S32` |
 
-Current deterministic trigonometric profile:
+Qualified deterministic trigonometric profile:
 
 `4096-entry full-cycle lookup table`
 
@@ -944,17 +1514,27 @@ The numeric profile defines:
 - lookup-table identity;
 - integer trace identity.
 
-This profile provides the numeric contract for the M15 hardware-facing comparison domain.
+This profile supplies the numeric contract for the qualified M15 hardware-facing comparison domain inherited by M16.
+
+Qualified exactness markers:
+
+`fixed_point_topology_sum_exact = True`
+
+`fixed_point_thermal_sum_exact = True`
+
+Qualified trigonometric lookup marker:
+
+`trig_lut_pass = True`
 
 ## 22. Balanced Ternary Hardware Encoding
 
-Current two-bit encoding:
+Canonical two-bit encoding:
 
 `-1 → 2'b11`
 
 `0 → 2'b00`
 
-`+1 → 2'b01`
+`1 → 2'b01`
 
 Reserved encoding:
 
@@ -966,11 +1546,24 @@ Canonical integer encoding:
 
 `0 → 0`
 
-`+1 → 1`
+`1 → 1`
 
 Reserved integer code:
 
 `2`
+
+M16 package symbols:
+
+| State | SystemVerilog symbol | Encoding |
+|---|---|---|
+| `-1` | `FRP_TERN_NEG` | `2'b11` |
+| `0` | `FRP_TERN_ZERO` | `2'b00` |
+| `1` | `FRP_TERN_POS` | `2'b01` |
+| reserved | `FRP_TERN_RESERVED` | `2'b10` |
+
+Active neutral symbol:
+
+`FRP_ACTIVE_NEUTRAL = FRP_TERN_ZERO`
 
 Current reserved-state invariant:
 
@@ -981,14 +1574,17 @@ The hardware pathway preserves this encoding through:
 - packed state vectors;
 - preload artifacts;
 - cycle-exact traces;
-- RTL vectors;
+- deterministic RTL comparison vectors;
 - SystemVerilog interfaces;
-- assertion correlation;
-- replay checks.
+- M16 retained-state registers;
+- M16 request-target inputs;
+- M16 pending-route polarity storage;
+- M16 state-domain assertions;
+- exact replay checks.
 
 ## 23. Stateful Quantized Hardware Shadow
 
-Current quantized processor representation:
+Qualified quantized processor representation:
 
 `QuantizedReferenceShadowProcessor`
 
@@ -1010,17 +1606,36 @@ The quantized hardware shadow preserves:
 - destabilizing load;
 - dynamic stability.
 
-Engineering role:
+Qualified role:
 
 `stateful finite-word execution reference for deterministic hardware correlation`
 
 The M15 cycle-exact golden vectors are generated from this quantized execution path.
 
+The current M16 RTL execution layer inherits:
+
+- canonical balanced ternary encoding;
+- scheduler modes;
+- deterministic request-lane order;
+- active-neutral routing;
+- retained pending polarity;
+- distributed transition capacity;
+- retained-state writeback;
+- invariant relations.
+
+Qualified shadow event relations:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
 ## 24. M15 Exact Tick Execution Order
 
-The M15 quantized shadow and RTL reference-core domain use the same ordered tick sequence.
+The M15 quantized shadow and M15 RTL reference-core domain use the same ordered tick sequence.
 
-The normative order is:
+The qualified M15 order is:
 
 1. resolve scheduler state for tick;
 2. clear current-tick switch-change counters;
@@ -1049,7 +1664,32 @@ The normative order is:
 25. detect first positive-to-nonpositive stability crossing;
 26. capture post-tick trace outputs.
 
-This ordered sequence defines the current exact execution contract for cycle correlation.
+This ordered sequence defines the qualified M15 execution contract for cycle correlation.
+
+For every enabled M16 RTL tick:
+
+1. register the selected scheduler mode;
+2. determine the scheduler state for the current period index;
+3. identify pending-route completion candidates;
+4. arbitrate explicit requests in ascending lane order;
+5. classify each accepted transition;
+6. generate active-neutral state candidates;
+7. retain opposite-polarity targets for first-leg candidates;
+8. place pending completions before explicit requests in the capacity order;
+9. admit state changes up to `REQUEST_LANES`;
+10. commit the admitted retained-state changes;
+11. create pending routes for admitted opposite-polarity first legs;
+12. clear pending routes for admitted completion legs;
+13. retain every deferred state and route;
+14. update scheduler counters and architectural telemetry.
+
+M16 retained-state relation:
+
+`state produced by tick N = retained input state of tick N + 1`
+
+M16 retained execution tick-order qualification result:
+
+`PASS`
 
 ## 25. Cycle-Exact Integer Golden Trace
 
@@ -1057,7 +1697,7 @@ Artifact layer:
 
 `cycle_exact_reference_trace`
 
-Current default trace length:
+Qualified default trace length:
 
 `64 ticks`
 
@@ -1077,12 +1717,22 @@ The cycle-exact trace preserves deterministic integer fields for:
 - `C_minus_P`;
 - route counters.
 
-The trace provides the reference sequence for:
+The trace supplies the reference sequence for:
 
 - RTL simulation comparison;
 - assertion correlation;
 - FPGA replay;
 - physical trace comparison.
+
+Qualified exact replay markers:
+
+`exact_reference_vector_replay_match = True`
+
+`exact_reference_cell_trace_replay_match = True`
+
+Qualified deterministic replay result:
+
+`6/6 exact replay matches = 1.0`
 
 ## 26. Deterministic RTL Comparison Vector Package
 
@@ -1090,11 +1740,11 @@ Artifact layer:
 
 `rtl_comparison_vector_package`
 
-Current vector-package file count:
+Qualified vector-package file count:
 
 `10`
 
-Current files:
+Qualified files:
 
 - `frp_m15_kernel_vectors.vec`;
 - `frp_m15_pending_routes.trace`;
@@ -1107,11 +1757,15 @@ Current files:
 - `frp_m15_trig_lut_q30.vec`;
 - `frp_m15_sha256_manifest.json`.
 
-Current deterministic qualification generates two independent packages and requires byte-identical equality.
+The deterministic qualification generates two independent packages and requires byte-identical equality.
 
-Current self-test marker:
+Qualified self-test marker:
 
 `vector_determinism_pass = True`
+
+Qualified regeneration result:
+
+`10/10 deterministic vector files byte-identical`
 
 The package supplies:
 
@@ -1124,13 +1778,17 @@ The package supplies:
 - trigonometric lookup contents;
 - SHA-256 integrity evidence.
 
+The M16 vector-compatibility record is:
+
+`docs/m16_m15_vector_replay_compatibility_report.md`
+
 ## 27. SystemVerilog Interface Mapping
 
-Artifact layer:
+M15 artifact layer:
 
 `systemverilog_testbench_interface_map`
 
-Current default interface parameters:
+Qualified M15 default interface parameters:
 
 | Parameter | Value |
 |---|---:|
@@ -1142,7 +1800,7 @@ Current default interface parameters:
 | `SCALAR_WIDTH` | `32` |
 | `PHASE_WIDTH` | `32` |
 
-The interface map defines correlation-facing domains for:
+The M15 interface map defines correlation-facing domains for:
 
 - clocks and reset;
 - scheduler state;
@@ -1157,15 +1815,37 @@ The interface map defines correlation-facing domains for:
 - `C`, `P`, and `C_minus_P`;
 - route and invariant counters.
 
-This mapping connects the deterministic M15 reference domain to a SystemVerilog testbench contract.
+The current M16 core interface defines:
+
+- `clk`;
+- `rst_n`;
+- `tick_enable`;
+- `clear_counters`;
+- scheduler mode;
+- request-valid lanes;
+- request cell indexes;
+- request targets;
+- packed phase-derived target state;
+- packed retained-state output;
+- pending-route output;
+- scheduler-state output;
+- execution-event counters;
+- transition-capacity outputs;
+- ten integrated invariant flags.
+
+The M16 core interface contract is:
+
+`docs/m16_rtl_core_interface_contract.md`
+
+The target-independent FPGA integration top propagates the qualified M16 core interface after synchronized reset release and `core_ready` assertion.
 
 ## 28. Synthesizable RTL Reference-Core Mapping
 
-Artifact layer:
+M15 artifact layer:
 
 `synthesizable_rtl_reference_core`
 
-The current mapping covers:
+The qualified M15 mapping covers:
 
 - balanced ternary state execution;
 - active-neutral route controller;
@@ -1182,27 +1862,81 @@ The current mapping covers:
 - dynamic-stability outputs;
 - cycle-exact trace correlation.
 
-The current M15 technical position is:
+The qualified M15 role is:
 
-`bridge between the published M14 semantic reference architecture and an exact hardware-facing RTL comparison domain`
+`bridge between the semantic reference architecture and the exact hardware-facing RTL comparison domain`
 
-The planned M16 layer extends this qualified reference-core domain toward explicit RTL execution semantics.
+The current M16 executable RTL chain is:
+
+`frp_m16_pkg`
+
+↓
+
+`frp_m16_scheduler`
+
+↓
+
+`frp_m16_request_lanes`
+
+↓
+
+`frp_m16_active_neutral`
+
+↓
+
+`frp_m16_capacity_guard`
+
+↓
+
+`frp_m16_pending_routes`
+
+↓
+
+`frp_m16_state_update`
+
+↓
+
+`frp_m16_core`
+
+↓
+
+`frp_m16_assertions`
+
+↓
+
+`frp_m16_tb`
+
+Current M16 SystemVerilog artifact count:
+
+`10`
+
+Current M16 RTL documentation artifact count:
+
+`5`
+
+Current M16 RTL qualification result:
+
+`PASS`
+
+Current M16 RTL closure status:
+
+`M16 RTL EXECUTION LAYER CLOSED`
 
 ## 29. RTL Assertion Correlation
 
-Artifact layer:
+M15 artifact layer:
 
 `rtl_assertion_correlation_harness`
 
-Current assertion-correlation harness count:
+Qualified M15 assertion-correlation harness count:
 
 `13`
 
-Current exact integer comparison rule:
+Qualified exact integer comparison rule:
 
 `actual integer field == expected integer field`
 
-The assertion-correlation layer covers current kernel and execution domains including:
+The M15 assertion-correlation layer covers:
 
 - balanced ternary state validity;
 - active-neutral route sequence;
@@ -1218,17 +1952,48 @@ The assertion-correlation layer covers current kernel and execution domains incl
 - boundary-order correlation;
 - trace identity.
 
+The current M16 integrated invariant set contains:
+
+| Invariant | Required state |
+|---|---|
+| `FRP_INV_STATE_DOMAIN_VALID` | `1` |
+| `FRP_INV_SCHEDULER_COUNTS_VALID` | `1` |
+| `FRP_INV_REQUEST_LANE_ORDER_VALID` | `1` |
+| `FRP_INV_PENDING_POLARITY_VALID` | `1` |
+| `FRP_INV_ACTIVE_NEUTRAL_VALID` | `1` |
+| `FRP_INV_TRANSITION_CAPACITY_VALID` | `1` |
+| `FRP_INV_STATE_UPDATE_VALID` | `1` |
+| `FRP_INV_NO_ACTUAL_DIRECT_EVENTS` | `1` |
+| `FRP_INV_NO_RESERVED_STATE` | `1` |
+| `FRP_INV_NO_QUEUE_OVERFLOW` | `1` |
+
+Current M16 invariant-flag record:
+
+`1111111111`
+
+Current M16 terminal event relations:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+Current M16 assertion execution result:
+
+`PASS`
+
 ## 30. Reference Equivalence and Exact Replay
 
-Artifact layer:
+M15 artifact layer:
 
 `reference_rtl_equivalence_report`
 
-The current equivalence architecture has two boundaries.
+The qualified equivalence architecture contains two M15 boundaries and one M15-to-M16 compatibility boundary.
 
-### 30.1 Floating semantic reference to quantized hardware shadow
+### 30.1 Floating Semantic Reference to Quantized Hardware Shadow
 
-Current required sequence relations:
+Qualified sequence relations:
 
 `state_sequence_match = 1.0`
 
@@ -1240,13 +2005,17 @@ Current required sequence relations:
 
 `boundary_order_match = 1.0`
 
-Current semantic correlation result:
+Qualified semantic correlation result:
+
+`5/5 required semantic correlation matches = 1.0`
+
+Qualified semantic correlation status:
 
 `PASS`
 
-### 30.2 Exact quantized deterministic replay
+### 30.2 Exact Quantized Deterministic Replay
 
-Current required replay relations:
+Qualified replay relations:
 
 `shadow_replay_state_match = 1.0`
 
@@ -1260,17 +2029,81 @@ Current required replay relations:
 
 `shadow_replay_cell_trace_match = 1.0`
 
-Current exact deterministic replay result:
+Qualified exact deterministic replay result:
+
+`6/6 deterministic replay matches = 1.0`
+
+Qualified replay status:
+
+`PASS`
+
+### 30.3 M15-to-M16 Compatibility Boundary
+
+Compatibility record:
+
+`./m16_m15_vector_replay_compatibility_report.md`
+
+The qualified compatibility chain is:
+
+`M15 floating semantic reference`
+
+↓
+
+`M15 quantized hardware shadow`
+
+↓
+
+`M15 cycle-exact integer trace`
+
+↓
+
+`M15 deterministic RTL comparison vectors`
+
+↓
+
+`M15 exact deterministic replay record`
+
+↓
+
+`M16 executable RTL execution boundary`
+
+↓
+
+`M16 architectural assertion boundary`
+
+↓
+
+`M16 target-independent FPGA preparation boundary`
+
+Qualified compatibility relations include:
+
+- canonical balanced ternary encoding;
+- active neutral state `0`;
+- scheduler modes and scheduler-state counts;
+- request-lane profiles;
+- deterministic request ordering;
+- tick-separated opposite-polarity routing;
+- retained pending-route polarity;
+- pending completion from active neutral state `0`;
+- transition-capacity enforcement;
+- retained-state writeback;
+- direct-transition event relations;
+- reserved-state event relations;
+- queue-overflow event relations;
+- integrated invariant relations;
+- executable assertion results.
+
+M15-to-M16 compatibility status:
 
 `PASS`
 
 ## 31. Qualification Closure
 
-Artifact layer:
+M15 artifact layer:
 
 `qualification_closure_manifest`
 
-FRP v1.7.0 defines ten current M15 artifact layers:
+FRP v1.7.0 defines ten qualified M15 artifact layers:
 
 1. `fixed_point_interface_profile`;
 2. `balanced_ternary_hardware_encoding_map`;
@@ -1283,15 +2116,15 @@ FRP v1.7.0 defines ten current M15 artifact layers:
 9. `reference_rtl_equivalence_report`;
 10. `qualification_closure_manifest`.
 
-Current artifact layer count:
+Qualified M15 artifact-layer count:
 
 `10`
 
-Current qualification closure result:
+Qualified M15 closure result:
 
 `PASS`
 
-The closure chain is:
+The M15 closure chain is:
 
 `fixed-point interface`
 
@@ -1331,25 +2164,230 @@ The closure chain is:
 
 `qualification closure`
 
+The current M16 RTL closure chain is:
+
+`exact ten-file SystemVerilog artifact boundary`
+
+↓
+
+`Verilator parsing`
+
+↓
+
+`module elaboration`
+
+↓
+
+`executable RTL testbench generation`
+
+↓
+
+`architectural simulation`
+
+↓
+
+`assertion execution`
+
+↓
+
+`scheduler validation`
+
+↓
+
+`request-lane arbitration`
+
+↓
+
+`active-neutral routing`
+
+↓
+
+`retained pending-route completion`
+
+↓
+
+`transition-capacity enforcement`
+
+↓
+
+`retained-state writeback`
+
+↓
+
+`ten integrated invariant flags`
+
+↓
+
+`repository-integrity validation`
+
+↓
+
+`qualification evidence generation`
+
+↓
+
+`M16 RTL execution-layer closure`
+
+Current M16 RTL closure status:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+The current M16 FPGA preparation closure chain is:
+
+`target-independent FPGA integration top`
+
+↓
+
+`FPGA top parsing and elaboration`
+
+↓
+
+`executable FPGA integration testbench`
+
+↓
+
+`asynchronous external reset assertion`
+
+↓
+
+`two-stage synchronous reset release`
+
+↓
+
+`core_ready`
+
+↓
+
+`execution-input gating`
+
+↓
+
+`scheduler and request-interface propagation`
+
+↓
+
+`active-neutral first-leg execution`
+
+↓
+
+`retained pending-route completion`
+
+↓
+
+`ten integrated invariant flags`
+
+↓
+
+`repository-integrity validation`
+
+↓
+
+`qualification evidence generation`
+
+↓
+
+`M16 FPGA preparation-layer closure`
+
+Current M16 FPGA preparation closure status:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
+
 ## 32. FPGA Mapping and Execution Path
 
-The FPGA pathway uses the current M15 execution contract as its correlation source.
-
-Primary current FPGA study document:
+Primary FPGA study document:
 
 `./fpga_mapping_study.md`
 
-The FPGA path can map:
+Current FPGA preparation artifacts:
 
-- two-bit balanced ternary state storage;
+- `../fpga/m16/frp_m16_fpga_top.sv`;
+- `../fpga/m16/frp_m16_fpga_tb.sv`;
+- `../fpga/m16/SIMULATION_TRANSCRIPT.md`;
+- `../fpga/m16/CLOSURE.md`.
+
+The current executable FPGA preparation path is:
+
+`qualified M15 semantic and implementation-mapping foundation`
+
+↓
+
+`qualified M16 RTL execution layer`
+
+↓
+
+`target-independent M16 FPGA integration top`
+
+↓
+
+`asynchronous external reset assertion`
+
+↓
+
+`two-stage synchronous reset release`
+
+↓
+
+`core_ready`
+
+↓
+
+`execution-input gating`
+
+↓
+
+`M16 FPGA integration testbench`
+
+↓
+
+`M16 FPGA preparation qualification`
+
+Current FPGA preparation workflow:
+
+`../.github/workflows/frp-m16-fpga-preparation.yml`
+
+Synchronized qualification record:
+
+| Field | Recorded value |
+|---|---|
+| workflow | `FRP M16 FPGA Preparation` |
+| workflow run | `#2` |
+| qualified repository commit | `ede53cf` |
+| branch | `main` |
+| result | `SUCCESS` |
+| duration | `36s` |
+| qualification artifact count | `1` |
+| closure status | `M16 FPGA PREPARATION LAYER CLOSED` |
+
+Current qualified FPGA relations:
+
+- FPGA integration-top elaboration;
+- executable FPGA integration testbench;
+- asynchronous external reset assertion;
+- two-stage synchronous reset release;
+- `core_ready = 1`;
+- tick gating before readiness;
+- counter-clear gating before readiness;
+- request-valid gating before readiness;
+- scheduler propagation;
+- request-interface propagation;
+- active-neutral first-leg execution;
+- retained pending-route completion;
+- all ten invariant flags equal to `1`;
+- `actual_direct_events = 0`;
+- `reserved_state_events = 0`;
+- `queue_overflow_events = 0`.
+
+The FPGA mapping study also records correlation domains for:
+
+- balanced ternary state storage;
 - packed state vectors;
 - scheduler state machine;
 - request lanes;
-- active-neutral route controller;
+- active-neutral route control;
 - pending-route storage;
 - transition-capacity control;
 - phase-word registers;
-- 4096-entry trigonometric lookup memory;
+- trigonometric lookup memory;
 - hierarchical coupling weights;
 - fixed-point arithmetic;
 - delay-state registers;
@@ -1358,9 +2396,9 @@ The FPGA path can map:
 - multiscale coherence datapath;
 - dynamic-stability outputs;
 - trace capture;
-- vector replay.
+- deterministic vector replay.
 
-FPGA correlation outputs can include:
+Recorded FPGA implementation evidence fields include:
 
 - synthesis report;
 - utilization report;
@@ -1369,17 +2407,17 @@ FPGA correlation outputs can include:
 - vector-replay result;
 - cycle-exact comparison result;
 - telemetry capture result;
-- implementation optimization report.
+- implementation record.
 
-The FPGA execution path preserves the same workload, preload, scheduler, request, state, trace, and digest identities used by the M15 correlation domain.
+The FPGA execution path preserves the workload, preload, scheduler, request, state, trace, vector, and digest identities of the qualified M15 correlation domain.
 
 ## 33. ASIC-Oriented Implementation Path
 
-Primary current ASIC study document:
+Primary ASIC study document:
 
 `./asic_mapping_study.md`
 
-The ASIC-oriented path can evaluate:
+The ASIC-oriented path defines records for:
 
 - balanced ternary state storage;
 - two-bit state encoding;
@@ -1389,7 +2427,7 @@ The ASIC-oriented path can evaluate:
 - transition-capacity control;
 - scheduler logic;
 - phase datapath;
-- trigonometric approximation strategy;
+- trigonometric approximation;
 - hierarchical coupling datapath;
 - delay-state datapath;
 - distributed thermal-state datapath;
@@ -1399,23 +2437,29 @@ The ASIC-oriented path can evaluate:
 - clocking and control;
 - test interface;
 - trace correlation;
-- power, performance, and area study.
+- power;
+- performance;
+- area.
 
-The current M15 event profile identifies engineering optimization targets associated with:
+Recorded dominant M15 event totals:
 
-- fixed-point multiplication and accumulation;
-- trigonometric lookup volume;
-- hierarchical coupling activity;
-- distributed thermal processing;
-- multiscale coherence processing.
+| Event | Total |
+|---|---:|
+| `fixed_point_multiplies_32x32` | `518728` |
+| `fixed_point_accumulates_64` | `296534` |
+| `fixed_point_adds_32` | `339899` |
+| `fixed_point_compares_32` | `45430` |
+| `lut_reads_32` | `172221` |
+
+The ASIC mapping study preserves the qualified M15 event names, event totals, workload identity, trace identity, and hardware-sensitivity coefficient records.
 
 ## 34. Physical Validation Path
 
-Primary current physical-validation document:
+Primary physical-validation document:
 
 `./physical_validation_plan.md`
 
-The physical validation path can define measurement and correlation for:
+The physical-validation path defines measurement and correlation records for:
 
 - logical state correctness;
 - scheduler sequence;
@@ -1432,14 +2476,15 @@ The physical validation path can define measurement and correlation for:
 - `P(t)`;
 - `C_minus_P`;
 - timing;
-- activity;
-- energy;
-- temperature;
+- switching activity;
+- electrical power;
+- electrical energy;
+- physical temperature;
 - repeatability;
 - trace identity;
 - workload identity.
 
-A physical measurement package can preserve:
+A physical measurement package records:
 
 - configuration identity;
 - preload identity;
@@ -1453,16 +2498,39 @@ A physical measurement package can preserve:
 - correlation result;
 - review record.
 
+The physical-validation record remains connected to:
+
+- the qualified M15 semantic reference;
+- the qualified M15 implementation-mapping package;
+- the executable M16 RTL interface;
+- the target-independent M16 FPGA preparation boundary.
+
 ## 35. Current Comparative Architecture Evidence
 
-The current Comparative Architecture Benchmark Suite evaluates:
+The Comparative Architecture Benchmark Suite evaluates:
 
 1. `binary_synchronous_reference`;
 2. `binary_clock_gated_reference`;
 3. `direct_ternary_reference`;
 4. `frp_v1_7_0_quantized_shadow`.
 
-Current canonical workload:
+Canonical directory:
+
+`../benchmarks/architecture_comparison/`
+
+Canonical schema:
+
+`frp.benchmark.architecture_comparison.v1`
+
+Canonical result:
+
+`../benchmarks/architecture_comparison/results/reference_comparison_seed_76.json`
+
+Canonical cost profile:
+
+`unit_event_cost_v1`
+
+Canonical workload:
 
 - `256 commands`;
 - `16 cells`;
@@ -1477,7 +2545,7 @@ All architecture rows record:
 
 `semantic_output_match = 1.0`
 
-Current unit-event baseline results:
+Canonical unit-event baseline results:
 
 | Architecture | Normalized activity cost | Peak temperature proxy |
 |---|---:|---:|
@@ -1486,7 +2554,7 @@ Current unit-event baseline results:
 | `direct_ternary_reference` | `1242.0` | `1.119499710224827` |
 | `frp_v1_7_0_quantized_shadow` | `1393509.0` | `675.0796999541329` |
 
-Current FRP comparative route evidence:
+Recorded FRP comparative route evidence:
 
 `requested_direct_events = 125`
 
@@ -1504,7 +2572,7 @@ Current FRP comparative route evidence:
 
 `reserved_state_events = 0`
 
-Current FRP comparative stability evidence:
+Recorded FRP comparative stability evidence:
 
 `global_phase_coherence_final = 0.9999997103586793`
 
@@ -1516,15 +2584,29 @@ Current FRP comparative stability evidence:
 
 `fixed_point_thermal_sum_exact = True`
 
-The current full M15 quantized-shadow row identifies the declared activity-cost concentration targeted by the next implementation stage.
+Canonical comparison package digest:
+
+`5a4be61ce7fd6bc680bbd8bc28bfe7cc9d2ad35adddf642cecff111fbd503d6a`
+
+Comparison qualification status:
+
+`PASS`
 
 ## 36. Current Hardware-Sensitivity Evidence
 
-Current hardware-sensitivity profile:
+Canonical hardware-sensitivity schema:
+
+`frp.benchmark.hardware_sensitivity_comparison.v1`
+
+Canonical hardware-sensitivity result:
+
+`../benchmarks/architecture_comparison/results/reference_comparison_seed_76_hardware_sensitivity_v1.json`
+
+Hardware-sensitivity profile:
 
 `literature_anchored_cmos45_sensitivity_v1`
 
-Current normalization:
+Normalization:
 
 `32-bit integer addition = 1.0`
 
@@ -1536,13 +2618,13 @@ Technology context:
 
 `45 nm CMOS`
 
-Current scenarios:
+Scenarios:
 
 1. `lower_bound`;
 2. `nominal`;
 3. `upper_bound`.
 
-Current results:
+Recorded results:
 
 | Scenario | Binary synchronous | Binary clock gated | Direct ternary | FRP v1.7.0 quantized shadow |
 |---|---:|---:|---:|---:|
@@ -1550,7 +2632,7 @@ Current results:
 | `nominal` | `724.3125` | `444.4375` | `472.3125` | `25157118.0` |
 | `upper_bound` | `4049.25` | `2929.75` | `3041.25` | `39955490.0` |
 
-Current ranking across all three scenarios:
+Recorded ranking across all three scenarios:
 
 `binary_clock_gated_reference`
 
@@ -1566,17 +2648,33 @@ Current ranking across all three scenarios:
 
 `frp_v1_7_0_quantized_shadow`
 
-Current ranking state:
+Recorded ranking state:
 
 `ranking_stable = true`
 
 `ranking_sensitive = false`
 
-Current package result:
+Recorded dominant event totals:
+
+| Event | Total |
+|---|---:|
+| `fixed_point_multiplies_32x32` | `518728` |
+| `fixed_point_accumulates_64` | `296534` |
+| `fixed_point_adds_32` | `339899` |
+| `fixed_point_compares_32` | `45430` |
+| `lut_reads_32` | `172221` |
+
+Hardware-sensitivity package digest:
+
+`a44cf392d946e3b5c21dffbaa1d726d31da326a007e2908914f6477215261ea0`
+
+Profile qualification status:
 
 `PASS`
 
-This evidence supplies a coefficient-sensitivity contour for implementation optimization studies.
+Comparison qualification status:
+
+`PASS`
 
 ## 37. Historical Transition Benchmark Evidence
 
@@ -1588,14 +2686,14 @@ Historical evidence source:
 
 Recorded historical benchmark:
 
-| Architecture | Match | C-P_min | Heat Peak | Switch Peak | Actual Direct | Prevented Direct | Neutralized |
+| Architecture | Match | `C-P_min` | `heat_peak` | `switch_load_peak` | `actual_direct_events` | `prevented_direct_events` | `neutralized_conflicts` |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | `binary_style_forced_switch` | `1.000` | `-0.551000` | `0.051000` | `1.000000` | `2052` | `0` | `0` |
 | `direct_ternary_commit` | `1.000` | `-0.551000` | `0.051000` | `1.000000` | `2052` | `0` | `0` |
 | `distributed_neutral_ternary` | `1.000` | `0.174750` | `0.003250` | `0.250000` | `0` | `0` | `2052` |
 | `frp_distributed_resonant` | `1.000` | `0.144750` | `0.107000` | `0.250000` | `0` | `3820` | `2392` |
 
-The historical transition benchmark records:
+Recorded heat-peak values:
 
 `binary_style_forced_switch heat_peak = 0.051000`
 
@@ -1605,21 +2703,23 @@ Exact ratio:
 
 `0.051000 / 0.003250 = 15.6923076923`
 
-Under the historical v0.9.3 transition benchmark model and workload:
+Recorded numerical representation:
 
-`distributed_neutral_ternary recorded a 15.69× lower heat_peak than binary_style_forced_switch`
+`15.69× lower heat_peak`
 
 Equivalent relative reduction:
 
 `93.63% lower heat_peak`
 
-This historical contour isolates the distributed-neutral ternary transition mechanism inside its release-specific benchmark model.
+Measurement contour:
+
+`FRP v0.9.3 transition benchmark model and defined workload`
 
 ## 38. Hardware Pathway Evidence-Domain Separation
 
-The hardware pathway preserves four distinct evidence contours.
+The hardware pathway preserves eight distinct evidence contours.
 
-### 38.1 Preliminary Kuramoto contour
+### 38.1 Preliminary Kuramoto Contour
 
 Measured subject:
 
@@ -1630,7 +2730,7 @@ Primary records:
 - `../models/kuramoto_frp_background_model.md`;
 - `../simulations/initial_kuramoto_result.md`.
 
-### 38.2 Historical v0.9.3 transition contour
+### 38.2 Historical v0.9.3 Transition Contour
 
 Measured subject:
 
@@ -1640,7 +2740,7 @@ Primary evidence:
 
 `../TEST_REPORT_v0_9_3.md`
 
-### 38.3 Current FRP v1.7.0 semantic contour
+### 38.3 Qualified FRP v1.7.0 Semantic Contour
 
 Measured subject:
 
@@ -1650,7 +2750,11 @@ Primary executable:
 
 `../frp_prototype_v1_7_0.py`
 
-### 38.4 Current M15 implementation-mapping contour
+Structured-output schema:
+
+`frp.structured_output.v1.7.0`
+
+### 38.4 Qualified M15 Implementation-Mapping Contour
 
 Measured subject:
 
@@ -1660,41 +2764,133 @@ Primary architecture document:
 
 `./m15_implementation_mapping_domain_interface_qualification_closure.md`
 
-Each contour retains its architecture identifiers, workload, metric definitions, and evidence records.
+Qualification result:
+
+`41/41 PASS`
+
+### 38.5 Comparative Architecture Contour
+
+Measured subject:
+
+`semantic completion, normalized unit-event activity cost, thermal-proxy response, and architecture event totals`
+
+Canonical package:
+
+`../benchmarks/architecture_comparison/results/reference_comparison_seed_76.json`
+
+Package digest:
+
+`5a4be61ce7fd6bc680bbd8bc28bfe7cc9d2ad35adddf642cecff111fbd503d6a`
+
+### 38.6 Hardware-Sensitivity Contour
+
+Measured subject:
+
+`shared hardware-informed coefficient scenarios, normalized activity costs, thermal-proxy responses, ranking state, and event totals`
+
+Canonical package:
+
+`../benchmarks/architecture_comparison/results/reference_comparison_seed_76_hardware_sensitivity_v1.json`
+
+Package digest:
+
+`a44cf392d946e3b5c21dffbaa1d726d31da326a007e2908914f6477215261ea0`
+
+### 38.7 Current M16 RTL Execution Contour
+
+Measured subject:
+
+`SystemVerilog parsing, module elaboration, scheduler execution, request-lane arbitration, active-neutral routing, pending-route completion, transition-capacity enforcement, retained-state writeback, assertions, event counters, and invariant flags`
+
+Primary workflow:
+
+`../.github/workflows/frp-m16-rtl-artifact-boundary.yml`
+
+Primary architecture document:
+
+`./m16_rtl_core_realization_execution_semantics.md`
+
+Qualification result:
+
+`PASS`
+
+Closure status:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+### 38.8 Current M16 FPGA Preparation Contour
+
+Measured subject:
+
+`FPGA integration-top elaboration, reset synchronization, core readiness, execution-input gating, scheduler propagation, request-interface propagation, active-neutral routing, pending-route completion, event counters, and invariant flags`
+
+Primary workflow:
+
+`../.github/workflows/frp-m16-fpga-preparation.yml`
+
+Primary artifacts:
+
+- `../fpga/m16/frp_m16_fpga_top.sv`;
+- `../fpga/m16/frp_m16_fpga_tb.sv`;
+- `../fpga/m16/SIMULATION_TRANSCRIPT.md`;
+- `../fpga/m16/CLOSURE.md`.
+
+Qualification result:
+
+`PASS`
+
+Closure status:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
+
+Each contour retains its architecture identifiers, workload, metric definitions, schemas, qualification records, and evidence artifacts.
 
 ## 39. Funding and Partner Relevance
 
-The current FRP repository provides a partner-facing technical foundation built from:
+The current FRP repository provides a partner-facing technical record containing:
 
-- validated processor semantics;
-- deterministic implementation mapping;
-- current benchmark evidence;
-- current hardware-sensitivity evidence;
-- exact correlation artifacts;
-- qualification closure;
-- a defined next implementation layer.
+- qualified processor semantics;
+- deterministic M15 implementation mapping;
+- executable M16 RTL realization;
+- target-independent M16 FPGA preparation;
+- comparative architecture benchmark evidence;
+- hardware-sensitivity evidence;
+- cycle-exact correlation artifacts;
+- qualification closure records;
+- FPGA mapping documentation;
+- ASIC mapping documentation;
+- physical-validation planning.
 
-Current partner-facing message:
+Current partner-facing record:
 
-`FRP v1.7.0 provides a validated ternary resonant coherence processor reference, a deterministic hardware-facing implementation-mapping package, cycle-exact correlation artifacts, benchmark evidence, and qualification closure.`
+`FRP v1.8.0 contains the qualified M15 ternary resonant coherence processor semantic and implementation-mapping foundation, the executable M16 RTL execution layer, the target-independent M16 FPGA preparation layer, deterministic correlation artifacts, benchmark evidence, and qualification records.`
 
-Current engineering opportunity:
-
-`M16 can target the measured fixed-point arithmetic, trigonometric lookup, hierarchical coupling, thermal-processing, and multiscale-coherence activity concentration while preserving the qualified M15 execution contract.`
-
-Relevant collaboration areas include:
+Recorded collaboration areas include:
 
 - RTL engineering;
 - verification engineering;
 - FPGA engineering;
 - ASIC architecture;
-- fixed-point optimization;
-- lookup optimization;
-- hierarchical datapath optimization;
+- fixed-point implementation;
+- lookup-table implementation;
+- hierarchical datapath implementation;
 - power and thermal analysis;
 - physical measurement planning;
 - laboratory correlation;
 - independent technical review.
+
+Current qualification records available to partners include:
+
+- `41/41 PASS` M15 self-test;
+- `10/10` deterministic vector files byte-identical;
+- `5/5` semantic correlation matches equal to `1.0`;
+- `6/6` deterministic replay matches equal to `1.0`;
+- M16 RTL execution-layer closure;
+- M16 FPGA preparation-layer closure;
+- ten integrated M16 invariant flags;
+- zero actual direct events;
+- zero reserved-state events;
+- zero queue-overflow events.
 
 ## 40. Current Hardware-Facing Documents
 
@@ -1702,20 +2898,35 @@ The current hardware-facing document set includes:
 
 | File | Current role |
 |---|---|
-| `hardware_pathway.md` | overall validated hardware-facing development path |
+| `hardware_pathway.md` | FRP v1.8.0 hardware-facing development path |
 | `implementation_layers.md` | staged FRP implementation layers |
 | `fpga_mapping_study.md` | FPGA-oriented mapping and execution-correlation study |
 | `asic_mapping_study.md` | ASIC-oriented implementation and cost study |
-| `physical_validation_plan.md` | measurement and physical correlation planning |
-| `m15_implementation_mapping_domain_interface_qualification_closure.md` | current M15 deterministic implementation-mapping architecture |
-| `output_schema.md` | structured output and schema reference |
+| `physical_validation_plan.md` | measurement and physical-correlation planning |
+| `m15_implementation_mapping_domain_interface_qualification_closure.md` | qualified M15 semantic and deterministic implementation-mapping foundation |
+| `m16_rtl_core_realization_execution_semantics.md` | current M16 RTL architecture and execution-semantics record |
+| `m16_rtl_core_interface_contract.md` | M16 RTL core interface contract |
+| `m16_qualification_manifest.md` | M16 qualification manifest |
+| `m16_qualification_index.md` | M16 qualification index |
+| `m16_m15_vector_replay_compatibility_report.md` | M15-to-M16 compatibility record |
+| `m16_rtl_artifact_boundary_qualification.md` | M16 RTL artifact-boundary qualification record |
+| `output_schema.md` | structured-output and schema reference |
+| `mathematical_foundation.md` | FRP mathematical foundation |
+| `physical_foundation.md` | FRP physical foundation |
+| `../rtl/m16/README.md` | M16 RTL architecture boundary |
+| `../rtl/m16/ARTIFACTS.md` | M16 RTL artifact inventory |
+| `../rtl/m16/SIMULATION.md` | M16 RTL simulation procedure |
+| `../rtl/m16/SIMULATION_TRANSCRIPT.md` | M16 RTL simulation record |
+| `../rtl/m16/CLOSURE.md` | M16 RTL closure record |
+| `../fpga/m16/SIMULATION_TRANSCRIPT.md` | M16 FPGA preparation simulation record |
+| `../fpga/m16/CLOSURE.md` | M16 FPGA preparation closure record |
 | `../verification/README.md` | current verification registry |
 | `../verification/coherence_metrics.md` | current coherence and dynamic-stability metrics |
-| `../funding_brief.md` | funding and partner-facing engineering package |
+| `../funding_brief.md` | funding and partner-facing technical package |
 
 The current development chain across these documents is:
 
-`processor semantics`
+`qualified processor semantics`
 
 ↓
 
@@ -1727,11 +2938,27 @@ The current development chain across these documents is:
 
 ↓
 
-`M16 RTL realization`
+`M15 qualification closure`
 
 ↓
 
-`FPGA execution correlation`
+`M16 executable RTL realization`
+
+↓
+
+`M16 RTL qualification closure`
+
+↓
+
+`M16 target-independent FPGA preparation`
+
+↓
+
+`M16 FPGA preparation qualification closure`
+
+↓
+
+`FPGA implementation and timing correlation`
 
 ↓
 
@@ -1741,89 +2968,143 @@ The current development chain across these documents is:
 
 `physical measurement correlation`
 
-## 41. Next Architecture Layer
+## 41. Current Architecture Layer
 
-The next planned architecture layer is:
+The current architecture layer is:
 
 `FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
 
-M16 extends the qualified M15 RTL reference-core domain toward:
+M16 realizes the qualified M15 retained-state execution contract through:
 
 - explicit RTL execution semantics;
-- concrete state-transition sequencing;
+- concrete retained-state transition sequencing;
 - scheduler execution semantics;
-- request-lane execution semantics;
-- pending-route execution semantics;
-- fixed-point datapath realization;
-- phase-update realization;
-- hierarchical coupling realization;
-- delay-state realization;
-- thermal-state realization;
-- gamma-state realization;
-- multiscale coherence realization;
-- dynamic-stability output realization;
-- cycle-exact vector correlation;
-- execution-semantics documentation;
-- later processor instruction-architecture definition.
+- deterministic request-lane execution;
+- retained pending-route execution;
+- active-neutral opposite-polarity routing;
+- distributed transition-capacity enforcement;
+- retained-state writeback;
+- architectural event telemetry;
+- executable assertions;
+- ten integrated invariant flags;
+- deterministic RTL testbench execution;
+- target-independent FPGA integration;
+- FPGA reset synchronization;
+- FPGA core-readiness generation;
+- FPGA execution-input gating;
+- FPGA scheduler propagation;
+- FPGA request-interface propagation.
 
-The M15 package supplies the qualified source domain for this next stage.
+The qualified M15 package supplies:
 
-## 42. Recommended Hardware Development Sequence
+- the executable semantic reference;
+- the hardware-facing numeric profile;
+- the canonical balanced ternary encoding;
+- the stateful quantized hardware shadow;
+- the cycle-exact integer trace;
+- the deterministic RTL comparison vectors;
+- the SystemVerilog interface map;
+- the synthesizable RTL reference-core map;
+- the assertion-correlation harness;
+- the reference-equivalence report;
+- the qualification-closure manifest.
 
-Recommended development sequence:
+M15 remains the qualified semantic and implementation-mapping foundation.
 
-1. preserve the current FRP v1.7.0 semantic reference;
-2. preserve the ten M15 artifact schemas;
+M16 is the current RTL execution and FPGA preparation layer.
+
+## 42. Hardware Development Sequence
+
+The hardware development sequence is:
+
+1. preserve the qualified FRP v1.7.0 semantic reference;
+2. preserve the ten M15 implementation-mapping artifact schemas;
 3. preserve canonical balanced ternary encoding;
-4. preserve the 26-stage exact tick order;
+4. preserve the qualified 26-stage M15 exact tick order;
 5. preserve deterministic preload and lookup identities;
 6. preserve scheduler sequences;
 7. preserve active-neutral route sequences;
-8. preserve request-lane order;
+8. preserve deterministic request-lane order;
 9. preserve topology exactness;
 10. preserve thermal exactness;
-11. realize the M16 RTL execution core;
-12. replay the current M15 vector package;
-13. close exact integer correlation;
-14. map the qualified core into FPGA resources;
-15. capture synthesis and timing evidence;
-16. optimize measured activity-cost concentration;
-17. repeat cycle-exact correlation;
-18. perform ASIC-oriented datapath and cost study;
-19. define physical measurement interfaces;
-20. correlate measured traces with the same qualified reference identities.
+11. realize the M16 retained-state RTL execution core;
+12. qualify M16 scheduler execution;
+13. qualify M16 request-lane arbitration;
+14. qualify M16 active-neutral routing;
+15. qualify M16 retained pending-route execution;
+16. qualify M16 transition-capacity enforcement;
+17. qualify M16 retained-state writeback;
+18. qualify the ten integrated M16 invariant flags;
+19. close the M16 RTL execution layer;
+20. integrate the M16 target-independent FPGA top;
+21. qualify asynchronous reset assertion;
+22. qualify two-stage synchronous reset release;
+23. qualify `core_ready`;
+24. qualify execution-input gating;
+25. qualify scheduler and request-interface propagation;
+26. close the M16 FPGA preparation layer;
+27. preserve deterministic vector and trace identities for FPGA implementation correlation;
+28. record synthesis, utilization, and timing evidence;
+29. preserve cycle-exact correlation;
+30. perform ASIC-oriented datapath and cost study;
+31. define physical measurement interfaces;
+32. correlate measured traces with the qualified reference identities.
 
 ## 43. Current Reproduction Commands
 
-Compile the current executable reference:
+Compile the qualified executable semantic reference:
 
     python -m py_compile frp_prototype_v1_7_0.py
 
-Run the current default structured execution:
+Run the qualified default structured execution:
 
     python frp_prototype_v1_7_0.py --mode demo --output json
 
-Run the current full trace:
+Run the qualified full trace:
 
     python frp_prototype_v1_7_0.py --mode demo --output json --include-trace
 
-Run the current 41-check self-test:
+Run the qualified 41-check M15 self-test:
 
     python frp_prototype_v1_7_0.py --mode self-test --output json
 
-Export the current M15 benchmark matrix:
+Export the qualified M15 benchmark matrix:
 
     python frp_prototype_v1_7_0.py --export-benchmark-matrix
 
-Export the current reference-equivalence report:
+Export the qualified M15 reference-equivalence report:
 
     python frp_prototype_v1_7_0.py --export-reference-rtl-equivalence-report
 
-Export the current qualification-closure manifest:
+Export the qualified M15 qualification-closure manifest:
 
     python frp_prototype_v1_7_0.py --export-qualification-closure-manifest
 
-## 44. Current M15 Export Commands
+Build the current M16 RTL testbench:
+
+    verilator --sv --timing --assert --binary --top-module frp_m16_tb -Irtl/m16 --Mdir /tmp/frp_m16_obj rtl/m16/frp_m16_tb.sv
+
+Execute the current M16 RTL testbench:
+
+    /tmp/frp_m16_obj/Vfrp_m16_tb
+
+Elaborate the current M16 FPGA integration top:
+
+    verilator --sv --lint-only --top-module frp_m16_fpga_top -Irtl/m16 -Ifpga/m16 fpga/m16/frp_m16_fpga_top.sv
+
+Build the current M16 FPGA integration testbench:
+
+    verilator --sv --timing --assert --binary --top-module frp_m16_fpga_tb -Irtl/m16 -Ifpga/m16 --Mdir /tmp/frp_m16_fpga_obj fpga/m16/frp_m16_fpga_tb.sv
+
+Execute the current M16 FPGA integration testbench:
+
+    /tmp/frp_m16_fpga_obj/Vfrp_m16_fpga_tb
+
+Run the M16 artifact-manifest test:
+
+    python -m pytest tests/test_m16_rtl_artifact_manifest.py -q
+
+## 44. Qualified M15 Export Commands
 
 Fixed-point interface profile:
 
@@ -1869,60 +3150,157 @@ Qualification closure manifest:
 
 Current repository workflow count:
 
-`19`
+`23`
 
-Current root README active passing badge count:
+Current `CI.md` workflow badge count:
 
-`18`
+`23`
 
-Current primary M15 workflow:
+Current root `README.md` M16 workflow badge count:
+
+`2`
+
+Inherited M15 qualification workflow:
 
 `../.github/workflows/frp-m15-implementation-mapping-qualification.yml`
 
-Current workflow environment:
+Current M16 RTL qualification workflow:
+
+`../.github/workflows/frp-m16-rtl-artifact-boundary.yml`
+
+Current M16 FPGA preparation workflow:
+
+`../.github/workflows/frp-m16-fpga-preparation.yml`
+
+Current M16 maintenance workflows:
+
+- `../.github/workflows/frp-m16-canonical-core-domain.yml`;
+- `../.github/workflows/frp-m16-reserved-cell-cleanup.yml`.
+
+Current workflow runner:
 
 `ubuntu-latest`
 
-Current Python version:
+Qualified M15 workflow Python version:
 
 `3.12`
 
-Current M15 workflow stages:
+The qualified M15 workflow stages include:
 
 1. checkout repository;
 2. set up Python;
 3. compile the FRP v1.7.0 reference file;
 4. generate M15 qualification outputs;
-5. compare deterministic vector packages;
-6. validate M15 schemas, kernel invariants, fixed-point contract, and equivalence;
-7. validate deterministic vector-package integrity;
-8. validate the M15 architecture-document contract;
-9. upload M15 qualification artifacts.
+5. generate two deterministic vector packages;
+6. compare vector packages byte for byte;
+7. validate M15 schemas;
+8. validate kernel invariants;
+9. validate the fixed-point contract;
+10. validate semantic correlation;
+11. validate exact deterministic replay;
+12. validate vector-package integrity;
+13. validate qualification closure;
+14. upload M15 qualification artifacts.
+
+The current M16 RTL workflow stages include:
+
+1. checkout repository;
+2. validate the exact M16 artifact boundary;
+3. validate obsolete-workflow absence;
+4. prepare isolated simulation paths;
+5. install Verilator and `g++`;
+6. record SystemVerilog source hashes;
+7. build the integrated M16 RTL testbench;
+8. execute the architectural RTL testbench;
+9. validate terminal execution markers;
+10. validate scheduler records;
+11. validate active-neutral routing;
+12. validate retained pending-route execution;
+13. validate transition-capacity enforcement;
+14. validate retained-state writeback;
+15. validate all ten invariant flags;
+16. reject latch diagnostics;
+17. reject multidriven diagnostics;
+18. validate repository integrity;
+19. generate qualification evidence;
+20. upload qualification artifacts.
+
+The current M16 FPGA preparation workflow stages include:
+
+1. checkout repository;
+2. validate the FPGA artifact boundary;
+3. prepare isolated FPGA simulation paths;
+4. install Verilator and `g++`;
+5. record FPGA and RTL source hashes;
+6. elaborate the FPGA integration top;
+7. build the FPGA integration testbench;
+8. reject latch diagnostics;
+9. reject multidriven diagnostics;
+10. execute the FPGA integration testbench;
+11. validate reset assertion and release;
+12. validate `core_ready`;
+13. validate execution-input gating;
+14. validate scheduler propagation;
+15. validate request-interface propagation;
+16. validate active-neutral routing;
+17. validate retained pending-route completion;
+18. validate all ten invariant flags;
+19. validate terminal event relations;
+20. validate repository integrity;
+21. generate qualification evidence;
+22. upload qualification artifacts.
 
 ## 46. Current Release Validation Evidence
 
 Current validated release layer:
 
-`FRP v1.7.0 — M15 Implementation Mapping, Domain Interface, and Qualification Closure Package`
+`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
 
 Current validation environment:
 
-`GitHub Actions hardware-backed CI execution`
+`GitHub Actions`
 
-Validated processor-evidence commit recorded in the release artifacts:
+Qualified M15 record:
 
-`5fd9a4f`
+| Field | Recorded value |
+|---|---|
+| workflow | `FRP M15 Implementation Mapping and Qualification Closure` |
+| workflow run | `#1` |
+| result | `PASS` |
+| self-test checks | `41/41 PASS` |
+| deterministic vector files | `10/10 byte-identical` |
+| semantic correlation matches | `5/5 = 1.0` |
+| deterministic replay matches | `6/6 = 1.0` |
 
-Recorded workflow stack:
+M16 RTL qualification records:
 
-- `FRP Structured Output #113 — PASS`;
-- `FRP M15 Implementation Mapping and Qualification Closure #1 — PASS`;
-- `FRP Self Test #154 — PASS`;
-- `FRP Benchmark Smoke Test #152 — PASS`.
+| Qualification record | Workflow run | Qualified commit | Branch | Result | Artifact count | Status |
+|---|---:|---|---|---|---:|---|
+| initial closure | `#82` | `a68a2af` | `main` | `SUCCESS` | `1` | `M16 RTL EXECUTION LAYER CLOSED` |
+| synchronized qualification | `#84` | `ede53cf` | `main` | `SUCCESS` | `1` | `M16 RTL EXECUTION LAYER CLOSED` |
+
+M16 FPGA preparation qualification records:
+
+| Qualification record | Workflow run | Qualified commit | Branch | Result | Duration | Artifact count | Status |
+|---|---:|---|---|---|---|---:|---|
+| initial closure | `#1` | `326b69e` | `main` | `SUCCESS` | `1m 7s` | `1` | `M16 FPGA PREPARATION LAYER CLOSED` |
+| synchronized qualification | `#2` | `ede53cf` | `main` | `SUCCESS` | `36s` | `1` | `M16 FPGA PREPARATION LAYER CLOSED` |
+
+Current terminal event relations:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+Current integrated invariant record:
+
+`1111111111`
 
 Current overall published result:
 
-`PASS`
+`FRP v1.8.0 / M16 — PASS`
 
 ## 47. Current File Alignment
 
@@ -1930,9 +3308,10 @@ This hardware pathway is aligned with:
 
 - `../README.md`;
 - `../frp_prototype_v1_7_0.py`;
-- `../TEST_REPORT_v1_7_0.md`;
-- `../FRP_VALIDATION_INDEX_v1_7_0.md`;
-- `../RELEASE_NOTES_v1_7_0.md`;
+- `../TEST_REPORT_v1_8_0.md`;
+- `../FRP_VALIDATION_INDEX_v1_8_0.md`;
+- `../RELEASE_NOTES_v1_8_0.md`;
+- `../RELEASE_CHECKLIST_v1_8_0.md`;
 - `../CI.md`;
 - `../REPRODUCIBILITY.md`;
 - `../USAGE.md`;
@@ -1952,7 +3331,22 @@ This hardware pathway is aligned with:
 - `./asic_mapping_study.md`;
 - `./physical_validation_plan.md`;
 - `./output_schema.md`;
+- `./mathematical_foundation.md`;
+- `./physical_foundation.md`;
 - `./m15_implementation_mapping_domain_interface_qualification_closure.md`;
+- `./m16_rtl_core_realization_execution_semantics.md`;
+- `./m16_rtl_core_interface_contract.md`;
+- `./m16_m15_vector_replay_compatibility_report.md`;
+- `./m16_qualification_manifest.md`;
+- `./m16_qualification_index.md`;
+- `./m16_rtl_artifact_boundary_qualification.md`;
+- `../rtl/m16/README.md`;
+- `../rtl/m16/ARTIFACTS.md`;
+- `../rtl/m16/SIMULATION.md`;
+- `../rtl/m16/SIMULATION_TRANSCRIPT.md`;
+- `../rtl/m16/CLOSURE.md`;
+- `../fpga/m16/SIMULATION_TRANSCRIPT.md`;
+- `../fpga/m16/CLOSURE.md`;
 - `../verification/README.md`;
 - `../verification/coherence_metrics.md`;
 - `../models/README.md`;
@@ -1961,7 +3355,9 @@ This hardware pathway is aligned with:
 - `../simulations/initial_kuramoto_result.md`;
 - `../examples/README.md`;
 - `../examples/resonance_convergence_example.md`;
-- `../.github/workflows/frp-m15-implementation-mapping-qualification.yml`.
+- `../.github/workflows/frp-m15-implementation-mapping-qualification.yml`;
+- `../.github/workflows/frp-m16-rtl-artifact-boundary.yml`;
+- `../.github/workflows/frp-m16-fpga-preparation.yml`.
 
 Historical transition evidence remains aligned with:
 
@@ -1976,11 +3372,11 @@ Processor:
 
 Processor class:
 
-`Ternary Resonant Coherence Processor`
+`Ternary Fractal Resonant Coherence Processor`
 
 Current hardware-facing chain:
 
-`validated processor semantics → fixed-point interface → balanced ternary hardware encoding → stateful quantized hardware shadow → cycle-exact integer golden trace → deterministic RTL comparison vectors → SystemVerilog interface mapping → synthesizable RTL reference-core mapping → RTL assertion correlation → reference equivalence → qualification closure`
+`qualified M15 processor semantics → fixed-point interface → balanced ternary hardware encoding → stateful quantized hardware shadow → cycle-exact integer golden trace → deterministic RTL comparison vectors → SystemVerilog interface mapping → synthesizable RTL reference-core mapping → RTL assertion correlation → reference equivalence → M15 qualification closure → M16 executable RTL realization → M16 scheduler and request execution → active-neutral routing → retained pending-route completion → transition-capacity enforcement → retained-state writeback → ten integrated invariant flags → M16 RTL qualification closure → target-independent FPGA preparation → reset synchronization → core readiness → execution-input gating → M16 FPGA preparation qualification closure`
 
 Current processor chain:
 
@@ -1988,48 +3384,80 @@ Current processor chain:
 
 Current version:
 
-`FRP v1.7.0`
+`FRP v1.8.0`
 
 Current milestone:
 
-`M15 — Implementation Mapping, Domain Interface, and Qualification Closure Package`
+`M16 — RTL Core Realization and Execution Semantics Package`
 
-Current executable reference:
+Qualified executable semantic reference:
 
 `../frp_prototype_v1_7_0.py`
 
-Current self-test result:
+Qualified structured-output schema:
+
+`frp.structured_output.v1.7.0`
+
+Qualified benchmark-matrix schema:
+
+`frp.m3.benchmark_matrix.v1.7.0`
+
+Inherited M15 self-test result:
 
 `41/41 PASS`
 
-Current M15 artifact layer count:
+Qualified M15 artifact-layer count:
 
 `10`
 
-Current semantic correlation result:
+Qualified semantic correlation result:
 
-`PASS`
+`5/5 required matches = 1.0`
 
-Current exact deterministic replay result:
+Qualified exact deterministic replay result:
 
-`PASS`
+`6/6 matches = 1.0`
 
-Current qualification closure result:
+Qualified deterministic vector result:
 
-`PASS`
+`10/10 files byte-identical`
 
-Current published validation result:
+Current M16 RTL result:
 
-`PASS`
+`SUCCESS`
+
+Current M16 RTL status:
+
+`M16 RTL EXECUTION LAYER CLOSED`
+
+Current M16 FPGA preparation result:
+
+`SUCCESS`
+
+Current M16 FPGA preparation status:
+
+`M16 FPGA PREPARATION LAYER CLOSED`
+
+Current event relations:
+
+`actual_direct_events = 0`
+
+`reserved_state_events = 0`
+
+`queue_overflow_events = 0`
+
+Current integrated invariant flags:
+
+`1111111111`
 
 Historical archived ternary-to-binary thermal result:
 
 `distributed_neutral_ternary recorded a 15.69× lower heat_peak than binary_style_forced_switch under the historical v0.9.3 transition benchmark model`
 
-Current engineering optimization target:
+Current published validation result:
 
-`fixed-point arithmetic, trigonometric lookup, hierarchical coupling, thermal processing, and multiscale coherence activity concentration`
+`FRP v1.8.0 / M16 — PASS`
 
-Next planned architecture layer:
 
-`FRP v1.8.0 — M16 RTL Core Realization and Execution Semantics Package`
+
+
