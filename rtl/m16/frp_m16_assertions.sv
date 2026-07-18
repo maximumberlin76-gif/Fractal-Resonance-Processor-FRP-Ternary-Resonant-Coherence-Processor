@@ -18,7 +18,7 @@
 // Protected architecture:
 //   - canonical balanced ternary domain {-1, 0, 1};
 //   - active neutral 0 as an executable retained state;
-//   - forbidden direct -1 <-> +1 retained-state transitions;
+//   - forbidden direct -1 <-> 1 retained-state transitions;
 //   - mandatory tick-separated opposite-polarity routing through 0;
 //   - retained pending-route polarity;
 //   - pending completion only from retained state 0;
@@ -463,7 +463,7 @@ module frp_m16_assertions #(
         end
     endgenerate
 
-    // ----------------------------------------------------------------------
+          // ----------------------------------------------------------------------
     // Scheduler assertions
     // ----------------------------------------------------------------------
 
@@ -794,7 +794,7 @@ module frp_m16_assertions #(
         "FRP M16 assertion failed: prevented direct event was not neutral-routed"
     );
 
-    // ----------------------------------------------------------------------
+           // ----------------------------------------------------------------------
     // Integrated invariant-flag assertions
     // ----------------------------------------------------------------------
 
@@ -940,4 +940,4 @@ module frp_m16_assertions #(
 
 endmodule : frp_m16_assertions
 
-`endif
+`endif 
