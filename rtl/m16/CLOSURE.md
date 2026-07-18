@@ -169,7 +169,7 @@ Canonical hardware encoding:
 |---|---|---|
 | `-1` | `2'b11` | negative, inhibitory, counter-phase, or suppressive potential |
 | `0` | `2'b00` | active neutral balancing, damping, transition, and stabilization state |
-| `+1` | `2'b01` | positive, excitatory, phase-supporting, or constructive potential |
+| `1` | `2'b01` | positive, excitatory, phase-supporting, or constructive potential |
 | reserved | `2'b10` | invalid processor-state encoding |
 
 The state `0` is an active processor state.
@@ -223,9 +223,9 @@ It admits:
 
 - same-state retention
 - `0 → -1`
-- `0 → +1`
+- `0 → 1`
 - `-1 → 0`
-- `+1 → 0`
+- `1 → 0`
 - opposite-polarity first-leg routing
 - pending-route completion from `0`
 
@@ -256,14 +256,14 @@ A `balance` tick admits:
 
 - same-state retention
 - `-1 → 0`
-- `+1 → 0`
+- `1 → 0`
 - opposite-polarity first-leg routing
 
 A `commit` tick admits:
 
 - same-state retention
 - `0 → -1`
-- `0 → +1`
+- `0 → 1`
 - pending-route completion from active neutral `0`
 
 Qualified profile:
@@ -293,14 +293,14 @@ An `excite` tick admits:
 
 - same-state retention
 - `0 → -1`
-- `0 → +1`
+- `0 → 1`
 - pending-route completion from active neutral `0`
 
 A `neutralize` tick admits:
 
 - same-state retention
 - `-1 → 0`
-- `+1 → 0`
+- `1 → 0`
 - opposite-polarity first-leg routing
 
 Qualified profile:
@@ -332,15 +332,15 @@ Scheduler closure result:
 
 Direct opposite-polarity retained-state transitions are excluded:
 
-`-1 → +1`
+`-1 → 1`
 
-`+1 → -1`
+`1 → -1`
 
 The implemented tick-separated routes are:
 
-`-1 → 0 → +1`
+`-1 → 0 → 1`
 
-`+1 → 0 → -1`
+`1 → 0 → -1`
 
 For an opposite-polarity request, the first neutralize-capable tick performs:
 
@@ -359,10 +359,10 @@ The two route legs execute on separate eligible ticks.
 | Active-neutral relation | Result |
 |---|---|
 | active neutral `0` executed between opposite polarities | `PASS` |
-| direct `-1 → +1` writeback absent | `PASS` |
-| direct `+1 → -1` writeback absent | `PASS` |
-| `-1 → 0 → +1` executed | `PASS` |
-| `+1 → 0 → -1` executed | `PASS` |
+| direct `-1 → 1` writeback absent | `PASS` |
+| direct `1 → -1` writeback absent | `PASS` |
+| `-1 → 0 → 1` executed | `PASS` |
+| `1 → 0 → -1` executed | `PASS` |
 | requested opposite polarity retained | `PASS` |
 | pending completion executed only from `0` | `PASS` |
 
@@ -391,11 +391,11 @@ The pending-route slot:
 
 For:
 
-`+1 → -1`
+`1 → -1`
 
 the execution relation is:
 
-`+1 → 0`
+`1 → 0`
 
 `pending_route = -1`
 
@@ -403,15 +403,15 @@ the execution relation is:
 
 For:
 
-`-1 → +1`
+`-1 → 1`
 
 the execution relation is:
 
 `-1 → 0`
 
-`pending_route = +1`
+`pending_route = 1`
 
-`0 → +1`
+`0 → 1`
 
 | Pending-route relation | Result |
 |---|---|
