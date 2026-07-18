@@ -3148,11 +3148,11 @@ Workflow file:
 
 Qualified workflow run:
 
-`#84`
+`#88`
 
 Qualified repository commit:
 
-`ede53cf`
+`975222b`
 
 Branch:
 
@@ -3161,6 +3161,10 @@ Branch:
 Workflow result:
 
 `SUCCESS`
+
+Workflow duration:
+
+`42s`
 
 Qualification evidence artifacts:
 
@@ -3240,11 +3244,11 @@ Workflow file:
 
 Qualified workflow run:
 
-`#2`
+`#6`
 
 Qualified repository commit:
 
-`ede53cf`
+`975222b`
 
 Branch:
 
@@ -3256,7 +3260,7 @@ Workflow result:
 
 Workflow duration:
 
-`36s`
+`38s`
 
 Qualification evidence artifacts:
 
