@@ -1,0 +1,597 @@
+name: FRP M32 Full Integrated Core Synthesis
+
+run-name: "FRP M32 Full Integrated Core Synthesis @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-m32-full-integrated-core-synthesis-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  synthesize-full-integrated-m32-core:
+    name: Synthesize complete FRP M32 integrated core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      TOP_MODULE: frp_m32_core
+      CORE_MODULE_PATH: rtl/m32/frp_m32_core.sv
+      PHASE_MODULE_PATH: rtl/m31/frp_m31_phase_interference.sv
+      SIN_LUT_PATH: rtl/m31/frp_m31_sin_q30.mem
+      M32_CELLS: "8"
+      M32_REQUEST_LANES: "2"
+      LC_ALL: C.UTF-8
+      TZ: UTC
+
+    steps:
+      - name: Check out dispatched commit
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up exact Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Require manual main-branch execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ github.event_name }}" = "workflow_dispatch"
+          test "${{ github.ref }}" = "refs/heads/main"
+          test "${{ github.ref_name }}" = "main"
+          test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+          test -z "$(git status --porcelain)"
+          printf '%s\n' "Manual main-branch synthesis boundary: PASS"
+
+      - name: Verify exact integrated-core source identities
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          identity_record="${RUNNER_TEMP}/m32-full-core-source-identities.sha256"
+          : > "$identity_record"
+
+          check_identity() {
+            local path="$1"
+            local expected_bytes="$2"
+            local expected_digest="$3"
+            local actual_bytes
+            local actual_digest
+
+            test -f "$path"
+            test ! -L "$path"
+            git ls-files --error-unmatch "$path" >/dev/null
+
+            actual_bytes="$(wc -c < "$path")"
+            actual_digest="$(sha256sum "$path" | cut -d' ' -f1)"
+
+            test "$actual_bytes" -eq "$expected_bytes"
+            test "$actual_digest" = "$expected_digest"
+            printf '%s  %s\n' "$actual_digest" "$path" \
+              >> "$identity_record"
+          }
+
+          while IFS='|' read -r path expected_bytes expected_digest; do
+            check_identity "$path" "$expected_bytes" "$expected_digest"
+          done <<'IDENTITIES'
+          rtl/m31/frp_m31_pkg.sv|18531|762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94
+          rtl/m31/frp_m31_fixed_point_pkg.sv|7278|6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24
+          rtl/m31/frp_m31_scheduler.sv|10560|fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f
+          rtl/m31/frp_m31_request_lanes.sv|18290|32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109
+          rtl/m31/frp_m31_pending_routes.sv|17005|18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411
+          rtl/m31/frp_m31_active_neutral.sv|25909|765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0
+          rtl/m31/frp_m31_capacity_guard.sv|20787|d0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123
+          rtl/m31/frp_m31_state_update.sv|18147|ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90
+          rtl/m31/frp_m31_execution_core.sv|33724|e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92
+          rtl/m31/frp_m31_phase_interference.sv|11245|e8ceb80feb0b30db5e28d70bc4d68d51506da4d596b46a73c0137465d1455fe0
+          rtl/m31/frp_m31_phase_request_adapter.sv|2251|fa78bcfe965270cc74855908aa392989d857575a2097a126539aabb1aab8990d
+          rtl/m31/frp_m31_thermal_proxy.sv|1883|34df4ebfc5dfad8e3e5e454e560404585de5c881e6f75abaae367d3bd9fb11bd
+          rtl/m31/frp_m31_stability.sv|2203|69c06833e6dfbb28e25b74a5787dcd03756dddf0f66726de3ea47c1ad2931931
+          rtl/m31/frp_m31_sin_q30.mem|36864|adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d
+          rtl/m32/frp_m32_registered_target_boundary.sv|3947|9626474b49d32b411e107d7ccc8ee5aa7f42728e9a6f70d634d16d3f2a414c5e
+          rtl/m32/frp_m32_registered_target_request_path.sv|3244|02250069a68737f055a419cd67bf2d439b3f63b3f6a7a245f40e9bf29d1958eb
+          rtl/m32/frp_m32_core.sv|10564|925342326b7ad555a1382e8ee3bc5754ed3012ba60e0eabf512113731e0ee6c9
+          IDENTITIES
+
+          test "$(wc -l < "$identity_record")" -eq 17
+          (
+            cd "$RUNNER_TEMP"
+            sha256sum m32-full-core-source-identities.sha256 \
+              > m32-full-core-source-identities-manifest.sha256
+          )
+
+          grep -Fq 'module frp_m32_core #(' "$CORE_MODULE_PATH"
+          grep -Fx '`include "frp_m31_execution_core.sv"' \
+            "$CORE_MODULE_PATH"
+          grep -Fx '`include "frp_m31_phase_interference.sv"' \
+            "$CORE_MODULE_PATH"
+          grep -Fx '`include "frp_m32_registered_target_request_path.sv"' \
+            "$CORE_MODULE_PATH"
+          grep -Fx '`include "frp_m31_thermal_proxy.sv"' \
+            "$CORE_MODULE_PATH"
+          grep -Fx '`include "frp_m31_stability.sv"' \
+            "$CORE_MODULE_PATH"
+          test "$(grep -Fc '$readmemh(SIN_LUT_FILE, sin_lut);' \
+            "$PHASE_MODULE_PATH")" -eq 1
+          test "$(wc -l < "$SIN_LUT_PATH")" -eq 4096
+
+          printf '%s\n' "Exact full-core source identities: PASS"
+
+      - name: Prepare memory-preserving synthesis view
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          synthesis_view="${RUNNER_TEMP}/frp-m32-full-core-source"
+          mkdir -p "$synthesis_view/rtl/m31" "$synthesis_view/rtl/m32"
+          cp -a rtl/m31/. "$synthesis_view/rtl/m31/"
+          cp -a rtl/m32/. "$synthesis_view/rtl/m32/"
+
+          SYNTHESIS_VIEW="$synthesis_view" python - <<'PY'
+          import difflib
+          import hashlib
+          import os
+          from pathlib import Path
+
+          view = Path(os.environ["SYNTHESIS_VIEW"])
+          phase_path = view / "rtl/m31/frp_m31_phase_interference.sv"
+          original_path = Path("rtl/m31/frp_m31_phase_interference.sv")
+          diff_path = Path(os.environ["RUNNER_TEMP"]) / "m32-synthesis-view.patch"
+
+          original = original_path.read_bytes()
+          staged = phase_path.read_bytes()
+          if staged != original:
+              raise SystemExit("Staged phase source differs before normalization")
+
+          old = b"""    $readmemh(SIN_LUT_FILE, sin_lut);\n    if (sin_lut[0] !== 32'sd0)\n      $fatal(1, \"FRP M31 sine LUT zero-point mismatch\");\n    if (sin_lut[1024] !== FRP_M31_Q30_ONE)\n      $fatal(1, \"FRP M31 sine LUT quarter-cycle mismatch\");\n    if (sin_lut[2048] !== 32'sd0)\n      $fatal(1, \"FRP M31 sine LUT half-cycle mismatch\");\n    if (sin_lut[3072] !== -FRP_M31_Q30_ONE)\n      $fatal(1, \"FRP M31 sine LUT three-quarter-cycle mismatch\");\n"""
+          new = b"""    $readmemh(SIN_LUT_FILE, sin_lut);\n"""
+
+          if original.count(old) != 1:
+              raise SystemExit("Expected LUT simulation-check block was not unique")
+
+          normalized = original.replace(old, new, 1)
+          if len(normalized) != 10853:
+              raise SystemExit("Unexpected normalized phase-source length")
+          if hashlib.sha256(normalized).hexdigest() != (
+              "571a1df102318fc5b62d2b0977aa57625e7abd999db3487e62fe2d270f190bb8"
+          ):
+              raise SystemExit("Unexpected normalized phase-source digest")
+          if normalized.count(b"$readmemh(SIN_LUT_FILE, sin_lut);") != 1:
+              raise SystemExit("LUT initialization was not preserved exactly once")
+
+          phase_path.write_bytes(normalized)
+          diff = difflib.unified_diff(
+              original.decode("utf-8").splitlines(keepends=True),
+              normalized.decode("utf-8").splitlines(keepends=True),
+              fromfile="canonical/rtl/m31/frp_m31_phase_interference.sv",
+              tofile="synthesis-view/rtl/m31/frp_m31_phase_interference.sv",
+          )
+          diff_path.write_text("".join(diff), encoding="utf-8")
+          PY
+
+          test "$(sha256sum "$PHASE_MODULE_PATH" | cut -d' ' -f1)" = \
+            "e8ceb80feb0b30db5e28d70bc4d68d51506da4d596b46a73c0137465d1455fe0"
+          test "$(sha256sum \
+            "$synthesis_view/$PHASE_MODULE_PATH" | cut -d' ' -f1)" = \
+            "571a1df102318fc5b62d2b0977aa57625e7abd999db3487e62fe2d270f190bb8"
+          test "$(sha256sum \
+            "$synthesis_view/$SIN_LUT_PATH" | cut -d' ' -f1)" = \
+            "adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d"
+          test -s "${RUNNER_TEMP}/m32-synthesis-view.patch"
+
+          printf '%s\n' "Memory-preserving synthesis view: PASS"
+
+      - name: Install exact synthesis toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install \
+            --disable-pip-version-check \
+            yowasp-yosys==0.68.0.0.post1208
+          python -m pip check
+
+          {
+            python --version
+            yowasp-yosys -V
+            python -m pip show yowasp-yosys
+            python -m pip show yowasp-runtime
+          } 2>&1 | tee "${RUNNER_TEMP}/m32-synthesis-toolchain.txt"
+
+          yowasp-yosys -Q -T -p 'help read_slang' 2>&1 \
+            | tee "${RUNNER_TEMP}/m32-read-slang-help.txt"
+          grep -Fq \
+            'Read SystemVerilog sources and elaborate a design hierarchy' \
+            "${RUNNER_TEMP}/m32-read-slang-help.txt"
+
+          printf '%s\n' "Exact synthesis toolchain: PASS"
+
+      - name: Synthesize full integrated M32 core twice
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          synthesis_view="${RUNNER_TEMP}/frp-m32-full-core-source"
+          results_dir="${RUNNER_TEMP}/frp-m32-full-core-synthesis"
+          mkdir -p "$results_dir"
+
+          synthesize_replay() {
+            local replay="$1"
+            local json_path="${results_dir}/m32-full-core-run-${replay}.json"
+            local verilog_path="${results_dir}/m32-full-core-run-${replay}.v"
+            local stat_path="${results_dir}/m32-full-core-stat-run-${replay}.json"
+            local log_path="${results_dir}/m32-full-core-run-${replay}.log"
+            local yosys_script
+
+            yosys_script="read_slang -j 1 --std 1800-2017 --ignore-assertions -G CELLS=${M32_CELLS} -G REQUEST_LANES=${M32_REQUEST_LANES} --top ${TOP_MODULE} -Irtl/m31 -Irtl/m32 ${CORE_MODULE_PATH}; synth -top ${TOP_MODULE} -run begin:fine; check -assert; tee -o ${stat_path} stat -json -top ${TOP_MODULE}; write_json ${json_path}; write_verilog -noattr -noexpr -nodec ${verilog_path}"
+
+            printf 'Starting synthesis replay %s\n' "$replay"
+            (
+              cd "$synthesis_view"
+              yowasp-yosys -Q -T -q -l "$log_path" -p "$yosys_script"
+            )
+
+            test -s "$json_path"
+            test -s "$verilog_path"
+            test -s "$stat_path"
+            test -s "$log_path"
+            test "$(grep -Fc \
+              'Build succeeded: 0 errors, 0 warnings' \
+              "$log_path")" -eq 1
+            test "$(grep -Fc \
+              'Found and reported 0 problems.' \
+              "$log_path")" -ge 1
+            test "$(grep -Fc \
+              'Executing MEMORY_COLLECT pass' \
+              "$log_path")" -eq 1
+            if grep -Fq 'ERROR:' "$log_path"; then
+              printf '%s\n' "Yosys reported an error" >&2
+              exit 1
+            fi
+            printf 'Completed synthesis replay %s\n' "$replay"
+          }
+
+          synthesize_replay 1
+          synthesize_replay 2
+
+          cmp \
+            "$results_dir/m32-full-core-run-1.json" \
+            "$results_dir/m32-full-core-run-2.json"
+          cmp \
+            "$results_dir/m32-full-core-run-1.v" \
+            "$results_dir/m32-full-core-run-2.v"
+          cmp \
+            "$results_dir/m32-full-core-stat-run-1.json" \
+            "$results_dir/m32-full-core-stat-run-2.json"
+
+          printf '%s\n' "Deterministic full-core synthesis replays: PASS"
+
+      - name: Validate complete netlist and retained sine ROM
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          results_dir="${RUNNER_TEMP}/frp-m32-full-core-synthesis"
+          RESULTS_DIR="$results_dir" python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          from collections import Counter
+          from pathlib import Path
+
+          results = Path(os.environ["RESULTS_DIR"])
+          netlist_1_path = results / "m32-full-core-run-1.json"
+          netlist_2_path = results / "m32-full-core-run-2.json"
+          verilog_1_path = results / "m32-full-core-run-1.v"
+          verilog_2_path = results / "m32-full-core-run-2.v"
+          stat_1_path = results / "m32-full-core-stat-run-1.json"
+          stat_2_path = results / "m32-full-core-stat-run-2.json"
+          lut_path = Path("rtl/m31/frp_m31_sin_q30.mem")
+
+          if netlist_1_path.read_bytes() != netlist_2_path.read_bytes():
+              raise SystemExit("JSON synthesis replay mismatch")
+          if verilog_1_path.read_bytes() != verilog_2_path.read_bytes():
+              raise SystemExit("Verilog synthesis replay mismatch")
+          if stat_1_path.read_bytes() != stat_2_path.read_bytes():
+              raise SystemExit("Synthesis-stat replay mismatch")
+
+          netlist = json.loads(netlist_1_path.read_text(encoding="utf-8"))
+          if set(netlist["modules"]) != {"frp_m32_core"}:
+              raise SystemExit("Netlist is not the single flattened M32 top")
+          module = netlist["modules"]["frp_m32_core"]
+          if int(module["attributes"].get("top", "0"), 2) != 1:
+              raise SystemExit("M32 netlist top attribute is missing")
+
+          expected_port_rows = """
+          clk|input|1
+          rst_n|input|1
+          tick_enable|input|1
+          clear_counters|input|1
+          scheduler_mode|input|2
+          phase_load_valid|input|1
+          phase_load|input|256
+          frequency_load_q16|input|256
+          gamma_effective_word|input|256
+          thermal_node_factor_q30|input|256
+          auto_target_enable|input|1
+          external_request_valid|input|2
+          external_request_cell_index|input|6
+          external_request_target|input|4
+          external_target_bank|input|16
+          phase_word_q|output|256
+          frequency_current_q16|output|256
+          coupling_field_q16|output|256
+          phase_projection_q30|output|256
+          phase_target_source|output|16
+          registered_target_q|output|16
+          registered_target_valid_q|output|1
+          phase_target_domain_valid|output|1
+          registered_target_domain_valid|output|1
+          target_capture_accepted|output|1
+          target_capture_rejected|output|1
+          accepted_target_capture_events_q|output|32
+          rejected_target_capture_events_q|output|32
+          registered_request_enable|output|1
+          phase_request_valid|output|2
+          phase_request_cell_index|output|6
+          phase_request_target|output|4
+          execution_request_valid|output|2
+          execution_request_cell_index|output|6
+          execution_request_target|output|4
+          execution_target_bank|output|16
+          state_out|output|16
+          pending_route_out|output|16
+          scheduler_mode_q|output|2
+          scheduler_state_q|output|3
+          ticks_recorded_q|output|32
+          scheduler_count_free_q|output|32
+          scheduler_count_balance_q|output|32
+          scheduler_count_commit_q|output|32
+          scheduler_count_excite_q|output|32
+          scheduler_count_neutralize_q|output|32
+          request_accept|output|2
+          request_reject|output|2
+          accepted_cell_mask|output|8
+          neutral_routed_cell_mask|output|8
+          accepted_change_mask|output|8
+          accepted_changes|output|32
+          capacity_remaining|output|32
+          capacity_exhausted|output|1
+          switch_load_numerator|output|32
+          requested_direct_events|output|32
+          prevented_direct_events|output|32
+          neutral_routed_events|output|32
+          actual_direct_events|output|32
+          reserved_state_events|output|32
+          queue_overflow_events|output|32
+          invariant_flags|output|10
+          pair_coherence_q30|output|32
+          cluster_coherence_q30|output|32
+          global_coherence_q30|output|32
+          organization_dispersion_q30|output|32
+          normalized_cycle_cost_q16|output|32
+          temperature_proxy_q16|output|32
+          peak_temperature_proxy_q16|output|32
+          thermal_sample_count_q|output|32
+          coherence_capacity_q16|output|32
+          pressure_q16|output|32
+          stability_margin_q16|output|32
+          stable|output|1
+          """
+          expected_ports = {}
+          for row in expected_port_rows.strip().splitlines():
+              name, direction, width = row.strip().split("|")
+              expected_ports[name] = (direction, int(width))
+
+          actual_ports = {
+              name: (record["direction"], len(record["bits"]))
+              for name, record in module["ports"].items()
+          }
+          if actual_ports != expected_ports:
+              raise SystemExit("M32 top-level port contract mismatch")
+          if len(actual_ports) != 74:
+              raise SystemExit("M32 top-level port-count mismatch")
+          if sum(width for _, width in actual_ports.values()) != 3135:
+              raise SystemExit("M32 top-level port-bit mismatch")
+          if Counter(direction for direction, _ in actual_ports.values()) != {
+              "input": 15,
+              "output": 59,
+          }:
+              raise SystemExit("M32 top-level port-direction mismatch")
+
+          cells = module["cells"]
+          if any(not record["type"].startswith("$") for record in cells.values()):
+              raise SystemExit("Unexpected unresolved or black-box cell type")
+          if len(cells) < 7000:
+              raise SystemExit("Integrated M32 logic contour is incomplete")
+
+          rom_name = "u_phase_interference.sin_lut"
+          if rom_name not in cells:
+              raise SystemExit("M32 sine ROM cell is missing")
+          rom = cells[rom_name]
+          if rom["type"] != "$mem_v2":
+              raise SystemExit("M32 sine ROM was not retained as memory")
+
+          def binary_parameter(name):
+              return int(rom["parameters"][name], 2)
+
+          if binary_parameter("WIDTH") != 32:
+              raise SystemExit("M32 sine ROM width mismatch")
+          if binary_parameter("SIZE") != 4096:
+              raise SystemExit("M32 sine ROM depth mismatch")
+          if binary_parameter("ABITS") != 12:
+              raise SystemExit("M32 sine ROM address-width mismatch")
+          if binary_parameter("RD_PORTS") != 72:
+              raise SystemExit("M32 sine ROM read-port contour mismatch")
+          if binary_parameter("WR_PORTS") != 0:
+              raise SystemExit("M32 sine ROM unexpectedly has write ports")
+
+          lut_words = [
+              line.strip()
+              for line in lut_path.read_text(encoding="ascii").splitlines()
+              if line.strip()
+          ]
+          if len(lut_words) != 4096:
+              raise SystemExit("Canonical sine LUT depth mismatch")
+          if any(re.fullmatch(r"[0-9A-Fa-f]{8}", word) is None for word in lut_words):
+              raise SystemExit("Canonical sine LUT word format mismatch")
+
+          expected_init = "".join(
+              f"{int(word, 16):032b}" for word in reversed(lut_words)
+          )
+          actual_init = rom["parameters"]["INIT"]
+          if actual_init != expected_init:
+              raise SystemExit("Synthesized sine ROM differs from canonical LUT")
+
+          stat = json.loads(stat_1_path.read_text(encoding="utf-8"))
+          stat_module = stat["modules"].get("\\frp_m32_core")
+          if stat_module is None:
+              raise SystemExit("M32 synthesis statistics are missing")
+          if stat_module["num_processes"] != 0:
+              raise SystemExit("Unsynthesized processes remain in M32 netlist")
+          if stat_module["num_ports"] != 74:
+              raise SystemExit("M32 synthesis-stat port-count mismatch")
+          if stat_module["num_port_bits"] != 3135:
+              raise SystemExit("M32 synthesis-stat port-bit mismatch")
+          if stat_module["num_cells_by_type"].get("$mem_v2") != 2:
+              raise SystemExit("M32 synthesis memory-cell contour mismatch")
+
+          canonical_manifest = (
+              Path(os.environ["RUNNER_TEMP"])
+              / "m32-full-core-source-identities-manifest.sha256"
+          ).read_text(encoding="ascii").split()[0]
+          rom_bytes = b"".join(
+              int(word, 16).to_bytes(4, byteorder="big") for word in lut_words
+          )
+          evidence = {
+              "schema": "frp.m32.full-integrated-core-synthesis.v1",
+              "milestone": "M32",
+              "source_commit": os.environ["GITHUB_SHA"],
+              "top_module": "frp_m32_core",
+              "profile": {"cells": 8, "request_lanes": 2},
+              "synthesis": {
+                  "frontend": "read_slang",
+                  "standard": "1800-2017",
+                  "flow": "yosys-coarse-memory-preserving",
+                  "flattened_modules": 1,
+                  "processes": 0,
+                  "cells": len(cells),
+                  "cell_types": dict(sorted(Counter(
+                      record["type"] for record in cells.values()
+                  ).items())),
+              },
+              "ports": {
+                  "total": len(actual_ports),
+                  "bits": sum(width for _, width in actual_ports.values()),
+                  "inputs": 15,
+                  "outputs": 59,
+              },
+              "sine_rom": {
+                  "memory_id": rom["parameters"]["MEMID"],
+                  "width": 32,
+                  "depth": 4096,
+                  "address_bits": 12,
+                  "read_ports": 72,
+                  "write_ports": 0,
+                  "initialization_bits": len(actual_init),
+                  "content_sha256": hashlib.sha256(rom_bytes).hexdigest(),
+                  "matches_canonical_mem": True,
+              },
+              "determinism": {
+                  "replays": 2,
+                  "json_netlists_identical": True,
+                  "verilog_netlists_identical": True,
+                  "statistics_identical": True,
+              },
+              "digests": {
+                  "canonical_source_manifest_sha256": canonical_manifest,
+                  "json_netlist_sha256": hashlib.sha256(
+                      netlist_1_path.read_bytes()
+                  ).hexdigest(),
+                  "verilog_netlist_sha256": hashlib.sha256(
+                      verilog_1_path.read_bytes()
+                  ).hexdigest(),
+              },
+          }
+          evidence_path = results / "m32-full-core-synthesis-evidence.json"
+          evidence_path.write_text(
+              json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          test -s "$results_dir/m32-full-core-synthesis-evidence.json"
+          (
+            cd "$results_dir"
+            sha256sum \
+              m32-full-core-run-1.json \
+              m32-full-core-run-1.v \
+              m32-full-core-stat-run-1.json \
+              m32-full-core-synthesis-evidence.json \
+              > m32-full-core-synthesis-artifacts.sha256
+          )
+
+          printf '%s\n' "Complete M32 netlist and retained sine ROM: PASS"
+
+      - name: Upload full integrated-core synthesis evidence
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: frp-m32-full-integrated-core-synthesis-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/m32-full-core-source-identities.sha256
+            ${{ runner.temp }}/m32-full-core-source-identities-manifest.sha256
+            ${{ runner.temp }}/m32-synthesis-view.patch
+            ${{ runner.temp }}/m32-synthesis-toolchain.txt
+            ${{ runner.temp }}/m32-read-slang-help.txt
+            ${{ runner.temp }}/frp-m32-full-core-synthesis/m32-full-core-run-1.json
+            ${{ runner.temp }}/frp-m32-full-core-synthesis/m32-full-core-run-2.json
+            ${{ runner.temp }}/frp-m32-full-core-synthesis/m32-full-core-run-1.v
+            ${{ runner.temp }}/frp-m32-full-core-synthesis/m32-full-core-run-2.v
+            ${{ runner.temp }}/frp-m32-full-core-synthesis/m32-full-core-stat-run-1.json
+            ${{ runner.temp }}/frp-m32-full-core-synthesis/m32-full-core-stat-run-2.json
+            ${{ runner.temp }}/frp-m32-full-core-synthesis/m32-full-core-run-1.log
+            ${{ runner.temp }}/frp-m32-full-core-synthesis/m32-full-core-run-2.log
+            ${{ runner.temp }}/frp-m32-full-core-synthesis/m32-full-core-synthesis-evidence.json
+            ${{ runner.temp }}/frp-m32-full-core-synthesis/m32-full-core-synthesis-artifacts.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish M32 full synthesis summary
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          results_dir="${RUNNER_TEMP}/frp-m32-full-core-synthesis"
+          json_digest="$(sha256sum \
+            "$results_dir/m32-full-core-run-1.json" | cut -d' ' -f1)"
+          verilog_digest="$(sha256sum \
+            "$results_dir/m32-full-core-run-1.v" | cut -d' ' -f1)"
+
+          {
+            printf '%s\n' '# FRP M32 Full Integrated Core Synthesis'
+            printf '%s\n' ''
+            printf '%s\n' "- Source commit: \`${GITHUB_SHA}\`"
+            printf '%s\n' '- Top module: `frp_m32_core`'
+            printf '%s\n' '- Qualified profile: `8 cells / 2 request lanes`'
+            printf '%s\n' '- Complete top-level contract: `74 ports / 3135 bits`'
+            printf '%s\n' '- SystemVerilog frontend: `read_slang / IEEE 1800-2017`'
+            printf '%s\n' '- Synthesis flow: `Yosys coarse, flattened, memory-preserving`'
+            printf '%s\n' '- Remaining processes: `0`'
+            printf '%s\n' '- Final structural check: `0 problems`'
+            printf '%s\n' '- Deterministic synthesis replays: `2 / identical`'
+            printf '%s\n' '- Sine ROM: `4096 x 32 / 72 read ports / 0 write ports`'
+            printf '%s\n' '- Sine ROM matches canonical `.mem`: `yes`'
+            printf '%s\n' "- JSON netlist SHA-256: \`${json_digest}\`"
+            printf '%s\n' "- Verilog netlist SHA-256: \`${verilog_digest}\`"
+            printf '%s\n' '- Result: `PASS`'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          printf '%s\n' "FRP M32 full integrated core synthesis: PASS"
