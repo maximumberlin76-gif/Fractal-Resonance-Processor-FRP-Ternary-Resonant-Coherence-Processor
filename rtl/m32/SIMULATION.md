@@ -641,7 +641,7 @@ build_and_replay() {
 
   cmp \
     "${M32_WORK_DIR}/${record_prefix}-run-1.log" \
-    "${M32_WORK_DIR}/${record-prefix}-run-2.log"
+        "${M32_WORK_DIR}/${record_prefix}-run-2.log"
   test "$(grep -Fxc \
     "$pass_record" \
     "${M32_WORK_DIR}/${record_prefix}-run-1.log")" -eq 1
