@@ -1,7 +1,7 @@
-# FRP M32 Registered-Target and Deterministic RTL Trace Boundary
+# FRP M32 Registered-Target, Full Integrated-Core Synthesis, and Deterministic RTL Trace Boundary
 
-**SystemVerilog registered-target integration and deterministic trace
-publication over the qualified M31 RTL contour**
+**SystemVerilog registered-target integration, full integrated-core synthesis,
+and deterministic trace publication over the qualified M31 RTL contour**
 
 ## Boundary identity
 
@@ -12,11 +12,14 @@ publication over the qualified M31 RTL contour**
 | RTL source boundary commit | `c0bc0fbc2c1c2e500b19d0ba84b3431a813e3941` |
 | Top-level integration module | `frp_m32_core` |
 | Qualified integrated configuration | `8` cells, `2` request lanes |
+| Full integrated-core synthesis profile | `8` cells, `2` request lanes |
 | Registered-boundary synthesis profiles | `8`, `16`, and `32` cells |
 | Scheduler trace modes | `7/1` and `1/7` |
 | Canonical ternary notation | `-1/0/1` |
 | Trace schema | `frp.m32.deterministic_rtl_trace_bundle.v1` |
 | Trace qualification | `38 / 38 PASS` |
+| Full synthesis evidence schema | `frp.m32.full-integrated-core-synthesis.v1` |
+| Full synthesis qualification run | [`#1 SUCCESS`](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/34351066791) |
 | License | Apache-2.0 |
 
 M32 inserts a clocked registered boundary between the phase-derived target
@@ -28,6 +31,11 @@ The M32 integration consumes the existing M31 phase-interference, scheduler,
 request, pending-route, active-state-`0`, capacity, retained-writeback,
 thermal-proxy, and stability modules at their recorded source identities. M32
 does not duplicate those modules.
+
+The full integrated-core synthesis qualifies the complete `frp_m32_core`
+hierarchy at the canonical M32 configuration. Two synthesis executions produce
+byte-identical JSON netlists, Verilog netlists, and statistics records while
+retaining the initialized `4096 x 32` sine lookup table.
 
 ## Execution chain
 
@@ -212,15 +220,75 @@ deterministic key ordering and serialization.
 | [`frp_m32_mode_1_7_trace_tb.sv`](frp_m32_mode_1_7_trace_tb.sv) | full mode `1/7` trace wrapper |
 | [`../../formal/m32/frp_m32_registered_target_boundary_formal.sv`](../../formal/m32/frp_m32_registered_target_boundary_formal.sv) | bounded safety and capture-sequence harnesses |
 
+## Full integrated-core synthesis boundary
+
+The full synthesis workflow elaborates and synthesizes the complete
+`frp_m32_core` hierarchy with the following qualified boundary:
+
+| Property | Recorded value |
+|---|---:|
+| Qualified profile | `8` cells, `2` request lanes |
+| Exact source identities | `17 / 17` |
+| SystemVerilog frontend | Yosys `read_slang` |
+| Language standard | IEEE `1800-2017` |
+| Synthesis flow | coarse, flattened, memory-preserving |
+| Synthesis executions | `2` |
+| Flattened modules | `1` |
+| Remaining processes | `0` |
+| Synthesized cells | `7571` |
+| Synthesized cell types | `24` |
+| Unresolved or black-box cells | `0` |
+| Final structural problems | `0` |
+| Top-level ports | `74` |
+| Top-level port bits | `3135` |
+| Input ports | `15` |
+| Output ports | `59` |
+
+The canonical phase-interference source contains four post-load simulation
+checks implemented with `$fatal`. The workflow leaves the committed source
+unchanged and creates a runner-temporary synthesis view that removes exactly
+those four checks. The synthesis view retains the canonical `$readmemh`
+operation and the exact `frp_m31_sin_q30.mem` source identity.
+
+The synthesized `u_phase_interference.sin_lut` cell remains a `$mem_v2`
+memory with this recorded contract:
+
+| Property | Recorded value |
+|---|---:|
+| Width | `32` bits |
+| Depth | `4096` words |
+| Address width | `12` bits |
+| Read ports | `72` |
+| Write ports | `0` |
+| Initialization | `131072` bits |
+| Canonical contents | bit-exact match |
+
+The two synthesis executions produced byte-identical outputs:
+
+| Output | SHA-256 |
+|---|---|
+| JSON netlist | `8a3efadabc04e042f59345f40703a14da3d480f9d7870b7ed0fcf44ed12026c8` |
+| Verilog netlist | `12ed610244c495fcad3c6b9c6f2dce1101f4a2ce610e66b84a7d4656fbee5ce4` |
+| Synthesis statistics | `a1fc59d17f1a7e4250e2a711a597563e127bb5a0ddfbc4ffd0de046e3caf169a` |
+
+The successful manual workflow run qualified commit
+`4bd5f97422b6b749c4db33d5658cf98b211f8850` and uploaded the two replay
+netlists, two statistics records, two logs, source manifest, synthesis-view
+patch, toolchain record, structured evidence, and artifact digest manifest.
+
 ## Formal, synthesis, and simulation qualification
 
-The registered-target workflow records the following qualification scope:
+The registered-target and full integrated-core synthesis workflows record the
+following qualification scope:
 
 | Operation | Recorded result |
 |---|---|
 | Exact implementation identities | `28` RTL and formal source files |
 | Verilator lint | M31/M32 integrated and trace contours `PASS` |
 | Registered-boundary synthesis | deterministic `8`, `16`, and `32` cell profiles |
+| Full integrated-core synthesis | `8` cells, `2` request lanes, `2/2` deterministic executions |
+| Full integrated-core structure | `7571` cells, `74` ports, `3135` port bits, `0` processes |
+| Retained sine ROM | `4096 x 32`, `72` read ports, `0` write ports, canonical contents `PASS` |
 | Safety harness | `10` assertions, depth `4`, `2/2` deterministic replays |
 | Capture-sequence harness | `4` assertions, depth `4`, `2/2` deterministic replays |
 | Boundary execution | `2/2` deterministic executions |
@@ -231,10 +299,11 @@ The registered-target workflow records the following qualification scope:
 | Mode `7/1` full trace | `2/2` byte-identical executions |
 | Mode `1/7` full trace | `2/2` byte-identical executions |
 
-The synthesis records in this boundary apply to
+The registered-boundary synthesis applies to
 `frp_m32_registered_target_boundary` for the three listed cell profiles. The
-integrated `frp_m32_core` is compiled, linted, simulated, and traced by the
-current M32 workflows.
+full synthesis workflow separately qualifies `frp_m32_core` at `8` cells and
+`2` request lanes. The integrated top is also compiled, linted, simulated, and
+traced by the M32 qualification workflows.
 
 ## Canonical publication artifacts
 
@@ -254,14 +323,20 @@ The qualification record references the schema, bundle, and manifest and
 records `38 / 38 PASS`. The export workflow also compares all four generated
 outputs byte-for-byte with their tracked repository counterparts.
 
+The full integrated-core synthesis evidence is retained as a workflow-run
+artifact. It is separate from the four canonical deterministic trace
+publication outputs.
+
 ## Workflows
 
 | Workflow | Scope |
 |---|---|
 | [`FRP M32 Registered Target Core`](../../.github/workflows/frp-m32-registered-target-boundary-workflow.yml) | source identities, lint, registered-boundary synthesis, bounded proofs, deterministic simulations, scheduler traces, and uploaded records |
+| [`FRP M32 Full Integrated Core Synthesis`](../../.github/workflows/frp-m32-full-integrated-core-synthesis-workflow.yml) | exact source identities, memory-preserving full-core synthesis, deterministic netlists, complete port contract, retained sine ROM, and uploaded evidence |
 | [`FRP M32 Deterministic RTL Trace Export`](../../.github/workflows/frp-m32-deterministic-rtl-trace-export-workflow.yml) | transcript replay, exporter tests, canonical generation, schema validation, mutation rejection, published-artifact comparison, and uploaded records |
 
-Both workflows use `workflow_dispatch` and are executed manually on `main`.
+All three workflows use `workflow_dispatch` and are executed manually on
+`main`.
 
 ## Provenance boundary
 
