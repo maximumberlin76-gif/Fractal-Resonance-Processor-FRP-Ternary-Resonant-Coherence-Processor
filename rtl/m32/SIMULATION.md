@@ -9,13 +9,14 @@
 | RTL source boundary commit | `c0bc0fbc2c1c2e500b19d0ba84b3431a813e3941` |
 | Integrated top-level module | `frp_m32_core` |
 | Qualified integrated configuration | `8` cells, `2` request lanes |
+| Full integrated-core synthesis profile | `8` cells, `2` request lanes |
 | Registered-boundary synthesis profiles | `8`, `16`, and `32` cells |
 | Scheduler trace modes | `7/1` and `1/7` |
 | Canonical ternary notation | `-1/0/1` |
 
-This document reproduces the commands encoded in the M32 registered-target
-and deterministic trace-export workflows. Commands are executed from the
-repository root.
+This document reproduces the commands encoded in the M32 registered-target,
+full integrated-core synthesis, and deterministic trace-export workflows.
+Commands are executed from the repository root.
 
 ## Qualification boundaries
 
@@ -24,15 +25,22 @@ repository root.
 | Exact source identities | byte count and SHA-256 comparison |
 | M32 RTL and testbenches | Verilator lint |
 | Registered target boundary | Yosys synthesis for `8`, `16`, and `32` cells |
+| Full integrated core | Yosys `read_slang` synthesis for `8` cells and `2` request lanes |
+| Full integrated core | flattened netlist, complete port contract, and zero-process checks |
+| Phase-interference sine ROM | retained-memory geometry and bit-exact initialization check |
+| Full integrated synthesis | two byte-identical JSON, Verilog, and statistics replays |
 | Registered target boundary | bounded Yosys SAT proofs at depth `4` |
 | M32 testbenches | Verilator binary build and deterministic replay |
 | Scheduler traces | record cardinality, cadence, route-leg, and invariant checks |
 | Trace exporter | `49` independent Python tests |
 | Canonical outputs | deterministic generation, schema validation, mutation rejection, exact identity, and repository comparison |
 
-The synthesis procedure applies to
-`frp_m32_registered_target_boundary`. The integrated `frp_m32_core` procedure
-uses lint, deterministic simulation, assertion execution, and trace export.
+The registered-boundary synthesis qualifies
+`frp_m32_registered_target_boundary` at `8`, `16`, and `32` cells. The full
+integrated synthesis separately qualifies `frp_m32_core` at the canonical M32
+configuration of `8` cells and `2` request lanes. The integrated flow uses a
+memory-preserving coarse Yosys synthesis so that the `4096 x 32` sine lookup
+table remains initialized from the canonical M31 memory file.
 
 ## Toolchain
 
@@ -45,6 +53,7 @@ The GitHub Actions jobs use:
 | Verilator | Ubuntu runner package, version recorded in each run artifact |
 | C++ compiler | Ubuntu `g++`, C++20 mode |
 | Yosys | `yowasp-yosys==0.68.0.0.post1208` |
+| SystemVerilog synthesis frontend | Yosys `read_slang`, IEEE `1800-2017` |
 | JSON Schema validator | `jsonschema==4.25.1` |
 | Locale | `C.UTF-8` |
 | Time zone | `UTC` |
@@ -102,6 +111,12 @@ PY
 
 The complete identity table is recorded in
 [`ARTIFACTS.md`](ARTIFACTS.md).
+
+The full integrated-core workflow independently verifies the exact byte count
+and SHA-256 identity of the `17` source files required by `frp_m32_core`. It
+also verifies that the top includes the execution core, phase-interference
+engine, registered-target request path, thermal proxy, and stability monitor,
+and that the canonical sine memory contains exactly `4096` words.
 
 ## Verilator lint
 
@@ -198,6 +213,336 @@ synthesize_profile 32
 
 Each profile requires a non-empty netlist, zero reported Yosys problems, a
 completed script, and byte-identical replay netlists.
+
+## Full integrated-core synthesis
+
+The full synthesis boundary is the complete `frp_m32_core` hierarchy at the
+canonical M32 profile:
+
+| Property | Required value |
+|---|---:|
+| Top module | `frp_m32_core` |
+| Cell count parameter | `8` |
+| Request-lane parameter | `2` |
+| Top-level ports | `74` |
+| Top-level port bits | `3135` |
+| Input ports | `15` |
+| Output ports | `59` |
+| Flattened modules | `1` |
+| Remaining RTL processes | `0` |
+| Sine ROM | `4096 x 32` |
+| Sine ROM read ports | `72` |
+| Sine ROM write ports | `0` |
+
+The canonical phase-interference source contains four post-load simulation
+checks implemented with `$fatal`. The synthesis workflow does not modify that
+tracked source. It creates a temporary synthesis view, removes exactly that
+simulation-only check block, and preserves the `$readmemh` statement and its
+canonical memory file.
+
+Prepare the synthesis view:
+
+```
+export M32_SYNTHESIS_VIEW="${M32_WORK_DIR}/frp-m32-full-core-source"
+export M32_SYNTHESIS_RESULTS="${M32_WORK_DIR}/frp-m32-full-core-synthesis"
+
+mkdir -p \
+  "${M32_SYNTHESIS_VIEW}/rtl/m31" \
+  "${M32_SYNTHESIS_VIEW}/rtl/m32" \
+  "${M32_SYNTHESIS_RESULTS}"
+cp -a rtl/m31/. "${M32_SYNTHESIS_VIEW}/rtl/m31/"
+cp -a rtl/m32/. "${M32_SYNTHESIS_VIEW}/rtl/m32/"
+
+SYNTHESIS_VIEW="${M32_SYNTHESIS_VIEW}" python - <<'PY'
+import hashlib
+import os
+from pathlib import Path
+
+view = Path(os.environ["SYNTHESIS_VIEW"])
+canonical_path = Path("rtl/m31/frp_m31_phase_interference.sv")
+staged_path = view / canonical_path
+
+canonical = canonical_path.read_bytes()
+staged = staged_path.read_bytes()
+if staged != canonical:
+    raise SystemExit("staged phase source differs before normalization")
+
+old = b"""    $readmemh(SIN_LUT_FILE, sin_lut);\n    if (sin_lut[0] !== 32'sd0)\n      $fatal(1, \"FRP M31 sine LUT zero-point mismatch\");\n    if (sin_lut[1024] !== FRP_M31_Q30_ONE)\n      $fatal(1, \"FRP M31 sine LUT quarter-cycle mismatch\");\n    if (sin_lut[2048] !== 32'sd0)\n      $fatal(1, \"FRP M31 sine LUT half-cycle mismatch\");\n    if (sin_lut[3072] !== -FRP_M31_Q30_ONE)\n      $fatal(1, \"FRP M31 sine LUT three-quarter-cycle mismatch\");\n"""
+new = b"""    $readmemh(SIN_LUT_FILE, sin_lut);\n"""
+
+if canonical.count(old) != 1:
+    raise SystemExit("expected LUT simulation-check block was not unique")
+
+normalized = canonical.replace(old, new, 1)
+if len(canonical) != 11245:
+    raise SystemExit("unexpected canonical phase-source length")
+if hashlib.sha256(canonical).hexdigest() != (
+    "e8ceb80feb0b30db5e28d70bc4d68d51506da4d596b46a73c0137465d1455fe0"
+):
+    raise SystemExit("unexpected canonical phase-source digest")
+if len(normalized) != 10853:
+    raise SystemExit("unexpected normalized phase-source length")
+if hashlib.sha256(normalized).hexdigest() != (
+    "571a1df102318fc5b62d2b0977aa57625e7abd999db3487e62fe2d270f190bb8"
+):
+    raise SystemExit("unexpected normalized phase-source digest")
+if normalized.count(b"$readmemh(SIN_LUT_FILE, sin_lut);") != 1:
+    raise SystemExit("LUT initialization was not preserved exactly once")
+
+staged_path.write_bytes(normalized)
+PY
+
+test "$(sha256sum rtl/m31/frp_m31_phase_interference.sv | cut -d' ' -f1)" = \
+  "e8ceb80feb0b30db5e28d70bc4d68d51506da4d596b46a73c0137465d1455fe0"
+test "$(sha256sum \
+  "${M32_SYNTHESIS_VIEW}/rtl/m31/frp_m31_phase_interference.sv" \
+  | cut -d' ' -f1)" = \
+  "571a1df102318fc5b62d2b0977aa57625e7abd999db3487e62fe2d270f190bb8"
+test "$(sha256sum \
+  "${M32_SYNTHESIS_VIEW}/rtl/m31/frp_m31_sin_q30.mem" \
+  | cut -d' ' -f1)" = \
+  "adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d"
+```
+
+Run two complete synthesis replays with the IEEE `1800-2017` `read_slang`
+frontend and the memory-preserving coarse Yosys flow:
+
+```
+export M32_CELLS=8
+export M32_REQUEST_LANES=2
+export M32_TOP_MODULE=frp_m32_core
+
+synthesize_full_core() {
+  local replay="$1"
+  local json_path="${M32_SYNTHESIS_RESULTS}/m32-full-core-run-${replay}.json"
+  local verilog_path="${M32_SYNTHESIS_RESULTS}/m32-full-core-run-${replay}.v"
+  local stat_path="${M32_SYNTHESIS_RESULTS}/m32-full-core-stat-run-${replay}.json"
+  local log_path="${M32_SYNTHESIS_RESULTS}/m32-full-core-run-${replay}.log"
+  local yosys_script
+
+  yosys_script="read_slang -j 1 --std 1800-2017 --ignore-assertions -G CELLS=${M32_CELLS} -G REQUEST_LANES=${M32_REQUEST_LANES} --top ${M32_TOP_MODULE} -Irtl/m31 -Irtl/m32 rtl/m32/frp_m32_core.sv; synth -top ${M32_TOP_MODULE} -run begin:fine; check -assert; tee -o ${stat_path} stat -json -top ${M32_TOP_MODULE}; write_json ${json_path}; write_verilog -noattr -noexpr -nodec ${verilog_path}"
+
+  (
+    cd "${M32_SYNTHESIS_VIEW}"
+    yowasp-yosys -Q -T -q -l "$log_path" -p "$yosys_script"
+  )
+
+  test -s "$json_path"
+  test -s "$verilog_path"
+  test -s "$stat_path"
+  test -s "$log_path"
+  test "$(grep -Fc \
+    'Build succeeded: 0 errors, 0 warnings' "$log_path")" -eq 1
+  test "$(grep -Fc \
+    'Found and reported 0 problems.' "$log_path")" -ge 1
+  test "$(grep -Fc \
+    'Executing MEMORY_COLLECT pass' "$log_path")" -eq 1
+  if grep -Fq 'ERROR:' "$log_path"; then
+    return 1
+  fi
+}
+
+synthesize_full_core 1
+synthesize_full_core 2
+
+cmp \
+  "${M32_SYNTHESIS_RESULTS}/m32-full-core-run-1.json" \
+  "${M32_SYNTHESIS_RESULTS}/m32-full-core-run-2.json"
+cmp \
+  "${M32_SYNTHESIS_RESULTS}/m32-full-core-run-1.v" \
+  "${M32_SYNTHESIS_RESULTS}/m32-full-core-run-2.v"
+cmp \
+  "${M32_SYNTHESIS_RESULTS}/m32-full-core-stat-run-1.json" \
+  "${M32_SYNTHESIS_RESULTS}/m32-full-core-stat-run-2.json"
+```
+
+Validate the complete flattened top-level contract and the retained sine ROM:
+
+```
+RESULTS_DIR="${M32_SYNTHESIS_RESULTS}" python - <<'PY'
+import json
+import os
+import re
+from collections import Counter
+from pathlib import Path
+
+results = Path(os.environ["RESULTS_DIR"])
+netlist = json.loads(
+    (results / "m32-full-core-run-1.json").read_text(encoding="utf-8")
+)
+stat = json.loads(
+    (results / "m32-full-core-stat-run-1.json").read_text(encoding="utf-8")
+)
+lut_path = Path("rtl/m31/frp_m31_sin_q30.mem")
+
+if set(netlist["modules"]) != {"frp_m32_core"}:
+    raise SystemExit("netlist is not the single flattened M32 top")
+module = netlist["modules"]["frp_m32_core"]
+if int(module["attributes"].get("top", "0"), 2) != 1:
+    raise SystemExit("M32 netlist top attribute is missing")
+
+expected_port_rows = """
+clk|input|1
+rst_n|input|1
+tick_enable|input|1
+clear_counters|input|1
+scheduler_mode|input|2
+phase_load_valid|input|1
+phase_load|input|256
+frequency_load_q16|input|256
+gamma_effective_word|input|256
+thermal_node_factor_q30|input|256
+auto_target_enable|input|1
+external_request_valid|input|2
+external_request_cell_index|input|6
+external_request_target|input|4
+external_target_bank|input|16
+phase_word_q|output|256
+frequency_current_q16|output|256
+coupling_field_q16|output|256
+phase_projection_q30|output|256
+phase_target_source|output|16
+registered_target_q|output|16
+registered_target_valid_q|output|1
+phase_target_domain_valid|output|1
+registered_target_domain_valid|output|1
+target_capture_accepted|output|1
+target_capture_rejected|output|1
+accepted_target_capture_events_q|output|32
+rejected_target_capture_events_q|output|32
+registered_request_enable|output|1
+phase_request_valid|output|2
+phase_request_cell_index|output|6
+phase_request_target|output|4
+execution_request_valid|output|2
+execution_request_cell_index|output|6
+execution_request_target|output|4
+execution_target_bank|output|16
+state_out|output|16
+pending_route_out|output|16
+scheduler_mode_q|output|2
+scheduler_state_q|output|3
+ticks_recorded_q|output|32
+scheduler_count_free_q|output|32
+scheduler_count_balance_q|output|32
+scheduler_count_commit_q|output|32
+scheduler_count_excite_q|output|32
+scheduler_count_neutralize_q|output|32
+request_accept|output|2
+request_reject|output|2
+accepted_cell_mask|output|8
+neutral_routed_cell_mask|output|8
+accepted_change_mask|output|8
+accepted_changes|output|32
+capacity_remaining|output|32
+capacity_exhausted|output|1
+switch_load_numerator|output|32
+requested_direct_events|output|32
+prevented_direct_events|output|32
+neutral_routed_events|output|32
+actual_direct_events|output|32
+reserved_state_events|output|32
+queue_overflow_events|output|32
+invariant_flags|output|10
+pair_coherence_q30|output|32
+cluster_coherence_q30|output|32
+global_coherence_q30|output|32
+organization_dispersion_q30|output|32
+normalized_cycle_cost_q16|output|32
+temperature_proxy_q16|output|32
+peak_temperature_proxy_q16|output|32
+thermal_sample_count_q|output|32
+coherence_capacity_q16|output|32
+pressure_q16|output|32
+stability_margin_q16|output|32
+stable|output|1
+"""
+expected_ports = {}
+for row in expected_port_rows.strip().splitlines():
+    name, direction, width = row.split("|")
+    expected_ports[name] = (direction, int(width))
+
+actual_ports = {
+    name: (record["direction"], len(record["bits"]))
+    for name, record in module["ports"].items()
+}
+if actual_ports != expected_ports:
+    raise SystemExit("M32 top-level port contract mismatch")
+if len(actual_ports) != 74:
+    raise SystemExit("M32 top-level port-count mismatch")
+if sum(width for _, width in actual_ports.values()) != 3135:
+    raise SystemExit("M32 top-level port-bit mismatch")
+if Counter(direction for direction, _ in actual_ports.values()) != {
+    "input": 15,
+    "output": 59,
+}:
+    raise SystemExit("M32 top-level port-direction mismatch")
+
+cells = module["cells"]
+if any(not record["type"].startswith("$") for record in cells.values()):
+    raise SystemExit("unexpected unresolved or black-box cell type")
+if len(cells) < 7000:
+    raise SystemExit("integrated M32 logic contour is incomplete")
+
+rom = cells.get("u_phase_interference.sin_lut")
+if rom is None or rom["type"] != "$mem_v2":
+    raise SystemExit("M32 sine ROM was not retained as memory")
+
+def binary_parameter(name):
+    return int(rom["parameters"][name], 2)
+
+if binary_parameter("WIDTH") != 32:
+    raise SystemExit("M32 sine ROM width mismatch")
+if binary_parameter("SIZE") != 4096:
+    raise SystemExit("M32 sine ROM depth mismatch")
+if binary_parameter("ABITS") != 12:
+    raise SystemExit("M32 sine ROM address-width mismatch")
+if binary_parameter("RD_PORTS") != 72:
+    raise SystemExit("M32 sine ROM read-port contour mismatch")
+if binary_parameter("WR_PORTS") != 0:
+    raise SystemExit("M32 sine ROM unexpectedly has write ports")
+
+lut_words = [
+    line.strip()
+    for line in lut_path.read_text(encoding="ascii").splitlines()
+    if line.strip()
+]
+if len(lut_words) != 4096:
+    raise SystemExit("canonical sine LUT depth mismatch")
+if any(re.fullmatch(r"[0-9A-Fa-f]{8}", word) is None for word in lut_words):
+    raise SystemExit("canonical sine LUT word format mismatch")
+
+expected_init = "".join(
+    f"{int(word, 16):032b}" for word in reversed(lut_words)
+)
+if rom["parameters"]["INIT"] != expected_init:
+    raise SystemExit("synthesized sine ROM differs from canonical LUT")
+
+stat_module = stat["modules"].get("\\frp_m32_core")
+if stat_module is None:
+    raise SystemExit("M32 synthesis statistics are missing")
+if stat_module["num_processes"] != 0:
+    raise SystemExit("unsynthesized processes remain in M32 netlist")
+if stat_module["num_ports"] != 74:
+    raise SystemExit("M32 synthesis-stat port-count mismatch")
+if stat_module["num_port_bits"] != 3135:
+    raise SystemExit("M32 synthesis-stat port-bit mismatch")
+if stat_module["num_cells_by_type"].get("$mem_v2") != 2:
+    raise SystemExit("M32 synthesis memory-cell contour mismatch")
+
+print("FRP M32 full integrated-core synthesis: PASS")
+PY
+
+sha256sum \
+  "${M32_SYNTHESIS_RESULTS}/m32-full-core-run-1.json" \
+  "${M32_SYNTHESIS_RESULTS}/m32-full-core-run-1.v" \
+  "${M32_SYNTHESIS_RESULTS}/m32-full-core-stat-run-1.json"
+```
+
+The GitHub Actions artifact additionally records both replay netlists, both
+logs, both statistics files, the exact source-identity manifest, the temporary
+synthesis-view patch, the toolchain record, the structured synthesis evidence,
+and a SHA-256 artifact manifest.
 
 ## Bounded formal qualification
 
@@ -296,7 +641,7 @@ build_and_replay() {
 
   cmp \
     "${M32_WORK_DIR}/${record_prefix}-run-1.log" \
-    "${M32_WORK_DIR}/${record_prefix}-run-2.log"
+    "${M32_WORK_DIR}/${record-prefix}-run-2.log"
   test "$(grep -Fxc \
     "$pass_record" \
     "${M32_WORK_DIR}/${record_prefix}-run-1.log")" -eq 1
@@ -533,6 +878,15 @@ and:
 
 ```
 Actions
+-> FRP M32 Full Integrated Core Synthesis
+-> Run workflow
+-> main
+```
+
+and:
+
+```
+Actions
 -> FRP M32 Deterministic RTL Trace Export
 -> Run workflow
 -> main
@@ -548,6 +902,7 @@ Uploading or committing a workflow file does not start a
 | Boundary specification | [`README.md`](README.md) |
 | Artifact identities | [`ARTIFACTS.md`](ARTIFACTS.md) |
 | Registered-target workflow | [`../../.github/workflows/frp-m32-registered-target-boundary-workflow.yml`](../../.github/workflows/frp-m32-registered-target-boundary-workflow.yml) |
+| Full integrated-core synthesis workflow | [`../../.github/workflows/frp-m32-full-integrated-core-synthesis-workflow.yml`](../../.github/workflows/frp-m32-full-integrated-core-synthesis-workflow.yml) |
 | Deterministic export workflow | [`../../.github/workflows/frp-m32-deterministic-rtl-trace-export-workflow.yml`](../../.github/workflows/frp-m32-deterministic-rtl-trace-export-workflow.yml) |
 | Trace schema | [`../../schemas/m32/frp.m32.deterministic_rtl_trace_bundle.v1.schema.json`](../../schemas/m32/frp.m32.deterministic_rtl_trace_bundle.v1.schema.json) |
 | Trace bundle | [`../../artifacts/m32/exports/m32-deterministic-rtl-trace-bundle.json`](../../artifacts/m32/exports/m32-deterministic-rtl-trace-bundle.json) |
