@@ -7,21 +7,24 @@
 | Project | `Fractal Resonance Processor (FRP)` |
 | Released upstream baseline | `FRP v3.3.0 / M31` |
 | Implementation milestone | `M32` |
-| M32 boundary | registered target and deterministic RTL trace export |
+| M32 boundary | registered target, full integrated-core synthesis, and deterministic RTL trace export |
 | RTL source boundary commit | `c0bc0fbc2c1c2e500b19d0ba84b3431a813e3941` |
 | Integrated top module | `frp_m32_core` |
 | Qualified integrated configuration | `8` cells, `2` request lanes |
+| Full integrated-core synthesis profile | `8` cells, `2` request lanes |
 | Registered-boundary synthesis profiles | `8`, `16`, and `32` cells |
 | Scheduler modes | `7/1` and `1/7` |
 | Canonical ternary notation | `-1/0/1` |
 | Canonical trace schema | `frp.m32.deterministic_rtl_trace_bundle.v1` |
 | Canonical trace qualification | `38 / 38 PASS` |
+| Full synthesis evidence schema | `frp.m32.full-integrated-core-synthesis.v1` |
 
-This transcript records two successful manual GitHub Actions runs: the M32
-registered-target source qualification and the deterministic trace-export
-publication qualification. Stable terminal records below are literal records
-required by the corresponding workflow. Counts, byte lengths, and SHA-256
-identities are reproduced from the workflows and tracked M32 artifacts.
+This transcript records three successful manual GitHub Actions runs: the M32
+registered-target source qualification, full integrated-core synthesis, and
+deterministic trace-export publication qualification. Stable terminal records
+below are literal records required by the corresponding workflows. Counts,
+byte lengths, and SHA-256 identities are reproduced from the workflows,
+generated synthesis evidence, and tracked M32 artifacts.
 
 Runner-generated toolchain records, synthesis identities, bounded-proof
 records, and intermediate trace identities are retained in the uploaded
@@ -44,6 +47,24 @@ stable workflow record are not reconstructed here.
 | Run created | `2026-09-08T17:00:01Z` |
 | Run updated | `2026-09-08T17:03:14Z` |
 | Recorded duration | `3m 13s` |
+| Status | `completed` |
+| Conclusion | `success` |
+
+### Full integrated-core synthesis
+
+| Field | Recorded value |
+|---|---|
+| Workflow | `FRP M32 Full Integrated Core Synthesis` |
+| Workflow file | `.github/workflows/frp-m32-full-integrated-core-synthesis-workflow.yml` |
+| Trigger | `workflow_dispatch` |
+| Branch | `main` |
+| Successful run | [`#1`](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/34351066791) |
+| Run ID | `34351066791` |
+| Job ID | `102464192260` |
+| Qualified commit | `4bd5f97422b6b749c4db33d5658cf98b211f8850` |
+| Run created | `2026-09-09T12:26:53Z` |
+| Run updated | `2026-09-09T12:28:39Z` |
+| Recorded duration | `1m 46s` |
 | Status | `completed` |
 | Conclusion | `success` |
 
@@ -72,21 +93,23 @@ canonical bundle.
 
 ## Execution environment
 
-| Record | Registered-target run | Trace-export run |
-|---|---|---|
-| Runner | `ubuntu-24.04` | `ubuntu-24.04` |
-| Locale | `C.UTF-8` | `C.UTF-8` |
-| Time zone | `UTC` | `UTC` |
-| Python | `3.12` | `3.12` |
-| RTL simulator and lint tool | `verilator` | `verilator` |
-| Native compiler | `g++` | `g++` |
-| Formal and synthesis package | `yowasp-yosys==0.68.0.0.post1208` | not used |
-| Schema validator | not used | `jsonschema==4.25.1` |
-| Python hash seed | workflow default | `0` |
+| Record | Registered-target run | Full-synthesis run | Trace-export run |
+|---|---|---|---|
+| Runner | `ubuntu-24.04` | `ubuntu-24.04` | `ubuntu-24.04` |
+| Locale | `C.UTF-8` | `C.UTF-8` | `C.UTF-8` |
+| Time zone | `UTC` | `UTC` | `UTC` |
+| Python | `3.12` | `3.12` | `3.12` |
+| RTL simulator and lint tool | `verilator` | not used | `verilator` |
+| Native compiler | `g++` | not used | `g++` |
+| SystemVerilog synthesis frontend | Yosys `read_verilog` | Yosys `read_slang`, IEEE `1800-2017` | not used |
+| Formal and synthesis package | `yowasp-yosys==0.68.0.0.post1208` | `yowasp-yosys==0.68.0.0.post1208` | not used |
+| Synthesis flow | `synth -noabc` | coarse, flattened, memory-preserving | not used |
+| Schema validator | not used | not used | `jsonschema==4.25.1` |
+| Python hash seed | workflow default | workflow default | `0` |
 
 The workflows wrote the resolved runtime version strings to
-`m32-toolchain.txt` and `m32-trace-export-toolchain.txt` inside their uploaded
-qualification artifacts.
+`m32-toolchain.txt`, `m32-synthesis-toolchain.txt`, and
+`m32-trace-export-toolchain.txt` inside their uploaded qualification artifacts.
 
 ## Registered-target qualification sequence
 
@@ -182,8 +205,177 @@ FRP M32 deterministic synthesis profiles: PASS
 ```
 
 This synthesis record applies to the registered-target boundary module. The
-integrated `frp_m32_core` record in this M32 workflow consists of lint,
-deterministic simulation, assertion execution, and trace generation.
+separate full integrated-core workflow record follows.
+
+## Full integrated-core synthesis qualification sequence
+
+The successful full integrated-core run completed these ordered gates:
+
+| Gate | Recorded result |
+|---|---|
+| checkout of the dispatched commit with credentials disabled | `PASS` |
+| Python 3.12 setup | `PASS` |
+| manual `workflow_dispatch` and `main` branch guard | `PASS` |
+| clean checked-out repository guard | `PASS` |
+| exact integrated-core source identity verification | `17 / 17 PASS` |
+| complete integrated hierarchy and sine-memory preflight | `PASS` |
+| temporary memory-preserving synthesis view | `PASS` |
+| canonical phase source preserved | `PASS` |
+| exact Yosys package installation | `PASS` |
+| `read_slang` frontend availability check | `PASS` |
+| full integrated-core synthesis executions | `2 / 2 PASS` |
+| JSON netlist replay comparison | byte-identical |
+| Verilog netlist replay comparison | byte-identical |
+| synthesis-statistics replay comparison | byte-identical |
+| complete flattened top-level contract | `PASS` |
+| unresolved or black-box cell rejection | `PASS` |
+| retained sine-ROM geometry and contents | `PASS` |
+| synthesis evidence artifact upload | `PASS` |
+| final M32 synthesis summary | `PASS` |
+
+Overall full integrated-core synthesis workflow result:
+
+```
+SUCCESS
+```
+
+## Full integrated-core source boundary
+
+The workflow checked `17` exact source identities required by
+`frp_m32_core`:
+
+| Source class | Count |
+|---|---:|
+| inherited M31 packages, RTL modules, and sine memory | `14` |
+| M32 registered-target and integrated-core RTL modules | `3` |
+| total checked by the full synthesis workflow | `17` |
+
+The source-identity manifest recorded:
+
+| Record | Value |
+|---|---|
+| source identity count | `17 / 17 exact` |
+| source-manifest SHA-256 | `762962e82a310c648ffa98f904fd654811801d9de38f22149a8de53c43f4e9e0` |
+| canonical phase source bytes | `11245` |
+| canonical phase source SHA-256 | `e8ceb80feb0b30db5e28d70bc4d68d51506da4d596b46a73c0137465d1455fe0` |
+| canonical sine-memory bytes | `36864` |
+| canonical sine-memory SHA-256 | `adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d` |
+
+The workflow verified the direct `frp_m32_core` inclusion of the execution
+core, phase-interference engine, registered-target request path, thermal
+proxy, and stability monitor.
+
+## Memory-preserving synthesis-view record
+
+The workflow copied `rtl/m31` and `rtl/m32` into runner-temporary storage. It
+removed exactly four simulation-only post-load `$fatal` checks from the staged
+phase-interference source while retaining exactly one canonical `$readmemh`
+statement.
+
+| Record | Canonical source | Temporary synthesis view |
+|---|---:|---:|
+| phase source bytes | `11245` | `10853` |
+| phase source SHA-256 | `e8ceb80feb0b30db5e28d70bc4d68d51506da4d596b46a73c0137465d1455fe0` | `571a1df102318fc5b62d2b0977aa57625e7abd999db3487e62fe2d270f190bb8` |
+| `$readmemh` statements | `1` | `1` |
+| committed source modified | no | not applicable |
+
+The temporary copy retained the exact canonical sine-memory SHA-256
+`adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d`.
+
+Stable workflow record:
+
+```
+Memory-preserving synthesis view: PASS
+```
+
+## Full integrated-core synthesis record
+
+| Property | Recorded value |
+|---|---|
+| evidence schema | `frp.m32.full-integrated-core-synthesis.v1` |
+| top module | `frp_m32_core` |
+| qualified profile | `8` cells, `2` request lanes |
+| frontend | Yosys `read_slang` |
+| language standard | IEEE `1800-2017` |
+| synthesis flow | `yosys-coarse-memory-preserving` |
+| synthesis executions | `2` |
+| flattened modules | `1` |
+| remaining processes | `0` |
+| synthesized cells | `7571` |
+| synthesized cell types | `24` |
+| unresolved or black-box cells | `0` |
+| final structural problems | `0` |
+| frontend errors | `0` |
+| frontend warnings | `0` |
+
+The complete synthesized cell distribution was:
+
+| Cell type | Count | Cell type | Count |
+|---|---:|---|---:|
+| `$adff` | `9` | `$adffe` | `26` |
+| `$alu` | `1181` | `$and` | `13` |
+| `$bmux` | `17` | `$bwmux` | `20` |
+| `$demux` | `9` | `$eq` | `249` |
+| `$logic_and` | `549` | `$logic_not` | `252` |
+| `$logic_or` | `323` | `$macc_v2` | `580` |
+| `$mem_v2` | `2` | `$mux` | `2353` |
+| `$ne` | `36` | `$not` | `258` |
+| `$or` | `212` | `$pmux` | `20` |
+| `$reduce_and` | `424` | `$reduce_bool` | `8` |
+| `$reduce_or` | `290` | `$shift` | `16` |
+| `$shiftx` | `18` | `$xor` | `706` |
+
+The flattened top-level contract was checked by exact port name, direction,
+and width:
+
+| Port record | Recorded value |
+|---|---:|
+| total ports | `74` |
+| total port bits | `3135` |
+| input ports | `15` |
+| output ports | `59` |
+
+Stable workflow records:
+
+```
+Build succeeded: 0 errors, 0 warnings
+Found and reported 0 problems.
+Deterministic full-core synthesis replays: PASS
+```
+
+## Retained sine-ROM record
+
+The synthesized cell `u_phase_interference.sin_lut` remained a `$mem_v2`
+memory with initialization reconstructed exactly from the canonical memory
+file.
+
+| Property | Recorded value |
+|---|---:|
+| width | `32` bits |
+| depth | `4096` words |
+| address width | `12` bits |
+| read ports | `72` |
+| write ports | `0` |
+| initialization length | `131072` bits |
+| canonical big-endian word-stream SHA-256 | `74d1dcc6b7a1e55409c24fcf05b08f14b28ea4614d11d9eddcfe2dcbc7014816` |
+| synthesized initialization matches canonical memory | `true` |
+
+Stable workflow record:
+
+```
+Complete M32 netlist and retained sine ROM: PASS
+```
+
+## Deterministic synthesis-output identities
+
+| Output | Executions | Bytes per output | SHA-256 | Comparison |
+|---|---:|---:|---|---|
+| JSON netlist | `2` | `13768027` | `8a3efadabc04e042f59345f40703a14da3d480f9d7870b7ed0fcf44ed12026c8` | byte-identical |
+| Verilog netlist | `2` | `2482578` | `12ed610244c495fcad3c6b9c6f2dce1101f4a2ce610e66b84a7d4656fbee5ce4` | byte-identical |
+| synthesis statistics | `2` | `2435` | `a1fc59d17f1a7e4250e2a711a597563e127bb5a0ddfbc4ffd0de046e3caf169a` | byte-identical |
+
+Both synthesis executions used the same source identities, parameters,
+frontend, language standard, pass boundary, and output commands.
 
 ## Bounded formal record
 
@@ -335,6 +527,36 @@ The artifact contains:
 - SHA-256 identity records for synthesis, proofs, simulations, and traces.
 
 The workflow retention setting is `90` days.
+
+## Full integrated-core synthesis artifact upload
+
+The successful workflow uploaded one artifact named:
+
+```
+frp-m32-full-integrated-core-synthesis-4bd5f97422b6b749c4db33d5658cf98b211f8850
+```
+
+| Artifact metadata | Recorded value |
+|---|---|
+| artifact ID | `10103769648` |
+| archive size | `4458199` bytes |
+| archive SHA-256 | `ecfd84de6eb0a0f12e5c3b997cc3223be661ded3f53ecd5241948201b17b1e94` |
+| created | `2026-09-09T12:28:36Z` |
+| expiration | `2026-10-09T12:28:35Z` |
+| recorded retention setting | `30` days |
+
+The artifact contains:
+
+- the `17`-source identity record and its manifest;
+- the exact temporary synthesis-view patch;
+- the resolved synthesis toolchain record;
+- the `read_slang` frontend capability record;
+- two JSON netlists;
+- two Verilog netlists;
+- two synthesis-statistics records;
+- two synthesis logs;
+- the structured full-core synthesis evidence record;
+- the synthesis-output SHA-256 manifest.
 
 ## Deterministic trace-export qualification sequence
 
@@ -506,6 +728,18 @@ FRP M32 scheduler and full traces: PASS
 Repository preservation: PASS
 ```
 
+Full integrated-core synthesis workflow:
+
+```
+Manual main-branch synthesis boundary: PASS
+Exact full-core source identities: PASS
+Memory-preserving synthesis view: PASS
+Exact synthesis toolchain: PASS
+Deterministic full-core synthesis replays: PASS
+Complete M32 netlist and retained sine ROM: PASS
+FRP M32 full integrated core synthesis: PASS
+```
+
 Deterministic trace-export workflow:
 
 ```
@@ -526,8 +760,13 @@ The recorded M32 qualification establishes:
 |---|---|
 | registered-target source identities | `28 / 28 exact` |
 | canonical source identities | `29 / 29 exact` |
+| full integrated-core synthesis source identities | `17 / 17 exact` |
 | registered-target and trace lint tops | `11 / 11 PASS` |
 | registered-boundary synthesis profiles | `8`, `16`, and `32` cells, deterministic replay `PASS` |
+| full integrated-core synthesis profile | `8` cells and `2` request lanes, deterministic replay `PASS` |
+| full integrated-core netlist | `1` flattened module, `7571` cells, `0` processes, `0` unresolved cells |
+| full integrated-core port contract | `74` ports, `3135` bits, exact name/direction/width comparison `PASS` |
+| retained sine ROM | `4096 x 32`, `72` read ports, `0` write ports, canonical contents `PASS` |
 | bounded registered-target properties | `14` assertions at depth `4`, deterministic replay `PASS` |
 | deterministic RTL testbenches | `7`, each `2 / 2` byte-identical |
 | scheduler modes | separate `7/1` and `1/7` records `PASS` |
@@ -536,7 +775,8 @@ The recorded M32 qualification establishes:
 | mutation rejections | `4 / 4 PASS` |
 | canonical qualification checks | `38 / 38 PASS` |
 | published canonical outputs | `4 / 4` byte-identical with generated outputs |
-| repository preservation | `PASS` in both qualification runs |
+| repository preservation | `PASS` in the registered-target and trace-export qualification runs |
+| full-synthesis source staging | runner-temporary view; canonical tracked source identity retained |
 
 The M32 implementation boundary is additive over the released
 `FRP v3.3.0 / M31` upstream baseline. No release identifier is assigned by
@@ -550,6 +790,7 @@ this transcript.
 | exact artifact index | [`ARTIFACTS.md`](ARTIFACTS.md) |
 | reproducible execution procedure | [`SIMULATION.md`](SIMULATION.md) |
 | registered-target workflow | [`../../.github/workflows/frp-m32-registered-target-boundary-workflow.yml`](../../.github/workflows/frp-m32-registered-target-boundary-workflow.yml) |
+| full integrated-core synthesis workflow | [`../../.github/workflows/frp-m32-full-integrated-core-synthesis-workflow.yml`](../../.github/workflows/frp-m32-full-integrated-core-synthesis-workflow.yml) |
 | deterministic trace-export workflow | [`../../.github/workflows/frp-m32-deterministic-rtl-trace-export-workflow.yml`](../../.github/workflows/frp-m32-deterministic-rtl-trace-export-workflow.yml) |
 | bounded formal harness | [`../../formal/m32/frp_m32_registered_target_boundary_formal.sv`](../../formal/m32/frp_m32_registered_target_boundary_formal.sv) |
 | trace exporter | [`../../frp_m32_deterministic_rtl_trace_export.py`](../../frp_m32_deterministic_rtl_trace_export.py) |
