@@ -1,0 +1,648 @@
+name: FRP M32 FPGA Integration Qualification
+
+run-name: "FRP M32 FPGA Integration Qualification @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-m32-fpga-integration-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-m32-fpga:
+    name: Simulate and synthesize the complete M32 FPGA integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      M32_EVIDENCE: ${{ runner.temp }}/frp-m32-fpga-evidence
+      M32_SOURCE: ${{ runner.temp }}/frp-m32-fpga-source
+      M32_BUILD: ${{ runner.temp }}/frp-m32-fpga-build
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Check out dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Require manual main execution and prepare reports
+        run: |
+          set -euo pipefail
+          mkdir -p "$M32_EVIDENCE" "$M32_SOURCE" "$M32_BUILD"
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          printf '%s\n' "Manual main execution: PASS"
+
+      - name: Verify exact sources and include closure
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_EVIDENCE"])
+          identity_rows = """
+          rtl/m31/frp_m31_pkg.sv|18531|762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94
+          rtl/m31/frp_m31_fixed_point_pkg.sv|7278|6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24
+          rtl/m31/frp_m31_scheduler.sv|10560|fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f
+          rtl/m31/frp_m31_request_lanes.sv|18290|32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109
+          rtl/m31/frp_m31_pending_routes.sv|17005|18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411
+          rtl/m31/frp_m31_active_neutral.sv|25909|765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0
+          rtl/m31/frp_m31_capacity_guard.sv|20787|d0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123
+          rtl/m31/frp_m31_state_update.sv|18147|ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90
+          rtl/m31/frp_m31_execution_core.sv|33724|e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92
+          rtl/m31/frp_m31_phase_interference.sv|11245|e8ceb80feb0b30db5e28d70bc4d68d51506da4d596b46a73c0137465d1455fe0
+          rtl/m31/frp_m31_phase_request_adapter.sv|2251|fa78bcfe965270cc74855908aa392989d857575a2097a126539aabb1aab8990d
+          rtl/m31/frp_m31_thermal_proxy.sv|1883|34df4ebfc5dfad8e3e5e454e560404585de5c881e6f75abaae367d3bd9fb11bd
+          rtl/m31/frp_m31_stability.sv|2203|69c06833e6dfbb28e25b74a5787dcd03756dddf0f66726de3ea47c1ad2931931
+          rtl/m31/frp_m31_sin_q30.mem|36864|adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d
+          rtl/m32/frp_m32_registered_target_boundary.sv|3947|9626474b49d32b411e107d7ccc8ee5aa7f42728e9a6f70d634d16d3f2a414c5e
+          rtl/m32/frp_m32_registered_target_request_path.sv|3244|02250069a68737f055a419cd67bf2d439b3f63b3f6a7a245f40e9bf29d1958eb
+          rtl/m32/frp_m32_core.sv|10564|925342326b7ad555a1382e8ee3bc5754ed3012ba60e0eabf512113731e0ee6c9
+          fpga/m32/frp_m32_fpga_top.sv|11355|4893b157fba0ce090766d73429bce154a8b06dbb4118ec4a6dcb7e4a4c4a3348
+          fpga/m32/frp_m32_fpga_tb.sv|37172|75a0b2e261fff6a8b955c758415c60f360d58c091b598e0af5d2e61ade6a6c18
+          """
+          records = []
+          for row in identity_rows.strip().splitlines():
+              name, expected_bytes, expected_sha = row.strip().split("|")
+              path = Path(name)
+              if path.is_symlink() or not path.is_file():
+                  raise SystemExit(f"Missing regular source file: {name}")
+              subprocess.run(
+                  ["git", "ls-files", "--error-unmatch", name],
+                  check=True, stdout=subprocess.DEVNULL,
+              )
+              raw = path.read_bytes()
+              actual_sha = hashlib.sha256(raw).hexdigest()
+              if len(raw) != int(expected_bytes) or actual_sha != expected_sha:
+                  raise SystemExit(
+                      f"Source identity mismatch: {name}\n"
+                      f"Expected: {expected_bytes} bytes, SHA-256 {expected_sha}\n"
+                      f"Actual: {len(raw)} bytes, SHA-256 {actual_sha}"
+                  )
+              records.append({"path": name, "bytes": len(raw), "sha256": actual_sha})
+          if len(records) != 19:
+              raise SystemExit("Expected nineteen canonical input files")
+
+          allowed = {r["path"] for r in records if r["path"].endswith(".sv")}
+          visited = set()
+          include_dirs = [Path("rtl/m31"), Path("rtl/m32"), Path("fpga/m32")]
+
+          def visit(name):
+              if name in visited:
+                  return
+              if name not in allowed:
+                  raise SystemExit(f"Unpinned RTL include: {name}")
+              visited.add(name)
+              path = Path(name)
+              includes = re.findall(
+                  r'`include\s+"([^"]+)"', path.read_text(encoding="utf-8")
+              )
+              for include in includes:
+                  candidates = {
+                      str(directory / include)
+                      for directory in [path.parent, *include_dirs]
+                      if (directory / include).is_file()
+                  }
+                  if len(candidates) != 1:
+                      raise SystemExit(f"Ambiguous or missing include: {include}")
+                  visit(candidates.pop())
+
+          visit("fpga/m32/frp_m32_fpga_top.sv")
+          visit("fpga/m32/frp_m32_fpga_tb.sv")
+          if visited != allowed:
+              raise SystemExit("Pinned source set differs from the include closure")
+
+          workflow = Path(
+              ".github/workflows/frp-m32-fpga-integration-qualification.yml"
+          )
+          subprocess.run(
+              ["git", "ls-files", "--error-unmatch", str(workflow)],
+              check=True, stdout=subprocess.DEVNULL,
+          )
+          manifest = {
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "source_commit": os.environ["GITHUB_SHA"],
+              "files": records,
+              "workflow": {
+                  "path": str(workflow),
+                  "sha256": hashlib.sha256(workflow.read_bytes()).hexdigest(),
+              },
+          }
+          (evidence / "source-manifest.json").write_text(
+              json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          (evidence / "canonical-sources.sha256").write_text(
+              "".join(f'{r["sha256"]}  {r["path"]}\n' for r in records),
+              encoding="ascii",
+          )
+          print("Exact sources: 18 SystemVerilog files and one sine ROM: PASS")
+          PY
+
+      - name: Install and record simulation and synthesis tools
+        run: |
+          set -euo pipefail
+          {
+            sudo apt-get update
+            sudo apt-get install --yes verilator g++ make
+            python -m pip install --disable-pip-version-check \
+              yowasp-yosys==0.68.0.0.post1208
+            python -m pip check
+            python --version
+            verilator --version
+            g++ --version
+            make --version
+            yowasp-yosys -V
+          } 2>&1 | tee "$M32_EVIDENCE/toolchain.log"
+          python -m pip freeze > "$M32_EVIDENCE/python-packages.txt"
+          yowasp-yosys -Q -T -p 'help read_slang' \
+            > "$M32_EVIDENCE/read-slang-help.log" 2>&1
+
+      - name: Lint the complete FPGA top
+        run: |
+          set -euo pipefail
+          verilator --sv --lint-only --timing --assert -Wall -Wno-fatal \
+            --top-module frp_m32_fpga_top \
+            -Irtl/m31 -Irtl/m32 -Ifpga/m32 \
+            fpga/m32/frp_m32_fpga_top.sv \
+            2>&1 | tee "$M32_EVIDENCE/top-lint.log"
+
+      - name: Build the complete FPGA integration testbench
+        run: |
+          set -euo pipefail
+          verilator --sv --timing --assert --binary -Wall -Wno-fatal \
+            -CFLAGS -std=c++20 \
+            -MAKEFLAGS VK_PCH_I_FAST= -MAKEFLAGS VK_PCH_I_SLOW= \
+            -j 2 --top-module frp_m32_fpga_tb \
+            --Mdir "$M32_BUILD" \
+            -Irtl/m31 -Irtl/m32 -Ifpga/m32 \
+            fpga/m32/frp_m32_fpga_tb.sv \
+            2>&1 | tee "$M32_EVIDENCE/testbench-build.log"
+          test -x "$M32_BUILD/Vfrp_m32_fpga_tb"
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+          evidence = Path(os.environ["M32_EVIDENCE"])
+          for name in ("top-lint.log", "testbench-build.log"):
+              log = (evidence / name).read_text(encoding="utf-8")
+              if re.search(r"%Warning-(PINMISSING|IMPLICIT|MULTIDRIVEN):", log):
+                  raise SystemExit(f"Invalid connection or multiple driver: {name}")
+          PY
+
+      - name: Execute and compare two complete simulation runs
+        run: |
+          set -euo pipefail
+          for replay in 1 2; do
+            timeout 120s "$M32_BUILD/Vfrp_m32_fpga_tb" \
+              2>&1 | tee "$M32_EVIDENCE/simulation-run-$replay.log"
+          done
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_EVIDENCE"])
+          expected = [
+              "PASS: startup pulses discarded; phase load without tick",
+              "PASS: 1 -> 0 -> -1 and -1 -> 0 -> 1; pending retained during pause",
+              "PASS: reset reassertion restarts both release stages",
+              "PASS: free, 97 ticks, pause, isolated and concurrent clear",
+              "PASS: 7/1, 84 balance + 12 commit, reset FREE tick, clear",
+              "PASS: 1/7, 12 excite + 84 neutralize, reset FREE tick, clear",
+              "PASS: 59 outputs match standalone M32 across 1019 samples",
+              "FRP M32 FPGA integration testbench PASS",
+          ]
+          for replay in (1, 2):
+              log = (evidence / f"simulation-run-{replay}.log").read_text(
+                  encoding="utf-8"
+              )
+              actual = [
+                  line for line in log.splitlines()
+                  if line.startswith(("PASS:", "FRP M32 FPGA integration"))
+              ]
+              if actual != expected:
+                  raise SystemExit(f"Incomplete simulation transcript: run {replay}")
+              (evidence / f"simulation-run-{replay}.txt").write_text(
+                  "\n".join(actual) + "\n", encoding="utf-8"
+              )
+          if (evidence / "simulation-run-1.txt").read_bytes() != (
+              evidence / "simulation-run-2.txt"
+          ).read_bytes():
+              raise SystemExit("Simulation replay mismatch")
+          print("Two complete simulation transcripts match: PASS")
+          PY
+
+      - name: Prepare the verified synthesis source view
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import difflib
+          import hashlib
+          import json
+          import os
+          import shutil
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_EVIDENCE"])
+          view = Path(os.environ["M32_SOURCE"])
+          manifest = json.loads((evidence / "source-manifest.json").read_text())
+          for record in manifest["files"]:
+              source = Path(record["path"])
+              target = view / source
+              target.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copyfile(source, target)
+              if hashlib.sha256(target.read_bytes()).hexdigest() != record["sha256"]:
+                  raise SystemExit(f"Staged source mismatch: {source}")
+
+          relative = Path("rtl/m31/frp_m31_phase_interference.sv")
+          original = relative.read_bytes()
+          old = b"""    $readmemh(SIN_LUT_FILE, sin_lut);\n    if (sin_lut[0] !== 32'sd0)\n      $fatal(1, "FRP M31 sine LUT zero-point mismatch");\n    if (sin_lut[1024] !== FRP_M31_Q30_ONE)\n      $fatal(1, "FRP M31 sine LUT quarter-cycle mismatch");\n    if (sin_lut[2048] !== 32'sd0)\n      $fatal(1, "FRP M31 sine LUT half-cycle mismatch");\n    if (sin_lut[3072] !== -FRP_M31_Q30_ONE)\n      $fatal(1, "FRP M31 sine LUT three-quarter-cycle mismatch");\n"""
+          new = b"    $readmemh(SIN_LUT_FILE, sin_lut);\n"
+          if original.count(old) != 1:
+              raise SystemExit("Expected four ROM simulation checks were not unique")
+          normalized = original.replace(old, new, 1)
+          if len(normalized) != 10853 or hashlib.sha256(normalized).hexdigest() != (
+              "571a1df102318fc5b62d2b0977aa57625e7abd999db3487e62fe2d270f190bb8"
+          ):
+              raise SystemExit("Synthesis phase-source identity mismatch")
+          if normalized.count(new) != 1:
+              raise SystemExit("Sine ROM initialization was not preserved")
+
+          (view / relative).write_bytes(normalized)
+          patch = difflib.unified_diff(
+              original.decode().splitlines(keepends=True),
+              normalized.decode().splitlines(keepends=True),
+              fromfile=f"canonical/{relative}",
+              tofile=f"synthesis-view/{relative}",
+          )
+          (evidence / "synthesis-view.patch").write_text(
+              "".join(patch), encoding="utf-8"
+          )
+          print("Verified synthesis view; canonical files retained: PASS")
+          PY
+
+      - name: Synthesize the complete FPGA integration twice
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_EVIDENCE"])
+          view = Path(os.environ["M32_SOURCE"])
+          top = "frp_m32_fpga_top"
+          for replay in (1, 2):
+              paths = {
+                  "json": evidence / f"netlist-run-{replay}.json",
+                  "v": evidence / f"netlist-run-{replay}.v",
+                  "stat": evidence / f"stat-run-{replay}.json",
+                  "log": evidence / f"synthesis-run-{replay}.log",
+              }
+              script = (
+                  "read_slang -j 1 --std 1800-2017 --ignore-assertions "
+                  "-G CELLS=8 -G REQUEST_LANES=2 "
+                  f"--top {top} -Irtl/m31 -Irtl/m32 -Ifpga/m32 "
+                  "fpga/m32/frp_m32_fpga_top.sv; "
+                  f"synth -top {top} -run begin:fine; check -assert; "
+                  f'tee -o {json.dumps(str(paths["stat"]))} stat -json -top {top}; '
+                  f'write_json {json.dumps(str(paths["json"]))}; '
+                  f'write_verilog -noattr -noexpr -nodec {json.dumps(str(paths["v"]))}'
+              )
+              (evidence / f"synthesis-run-{replay}.ys").write_text(
+                  script + "\n", encoding="utf-8"
+              )
+              print(f"Starting synthesis replay {replay}", flush=True)
+              subprocess.run(
+                  ["yowasp-yosys", "-Q", "-T", "-q", "-l", str(paths["log"]),
+                   "-p", script],
+                  cwd=view, check=True, timeout=300,
+              )
+              for path in paths.values():
+                  if not path.is_file() or path.stat().st_size == 0:
+                      raise SystemExit(f"Missing synthesis output: {path.name}")
+              log = paths["log"].read_text(encoding="utf-8")
+              if "ERROR:" in log or "Found and reported 0 problems." not in log:
+                  raise SystemExit(f"Structural synthesis check failed: run {replay}")
+              print(f"Completed synthesis replay {replay}", flush=True)
+
+          for stem, suffix in (("netlist", "json"), ("netlist", "v"), ("stat", "json")):
+              first = evidence / f"{stem}-run-1.{suffix}"
+              second = evidence / f"{stem}-run-2.{suffix}"
+              if first.read_bytes() != second.read_bytes():
+                  raise SystemExit(f"Synthesis replay mismatch: {stem}.{suffix}")
+          print("Two JSON netlists, Verilog netlists, and statistics match: PASS")
+          PY
+
+      - name: Validate ports, reset stages, ROM, and repository integrity
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          from collections import Counter
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_EVIDENCE"])
+          top = "frp_m32_fpga_top"
+
+          def require(condition, message):
+              if not condition:
+                  raise SystemExit(message)
+
+          netlist = json.loads((evidence / "netlist-run-1.json").read_text())
+          require(set(netlist["modules"]) == {top}, "Expected one flattened FPGA top")
+          module = netlist["modules"][top]
+          require(int(module["attributes"].get("top", "0"), 2) == 1,
+                  "Missing top attribute")
+          port_rows = """
+          clk|input|1
+          rst_n_async|input|1
+          tick_enable|input|1
+          clear_counters|input|1
+          scheduler_mode|input|2
+          phase_load_valid|input|1
+          phase_load|input|256
+          frequency_load_q16|input|256
+          gamma_effective_word|input|256
+          thermal_node_factor_q30|input|256
+          auto_target_enable|input|1
+          external_request_valid|input|2
+          external_request_cell_index|input|6
+          external_request_target|input|4
+          external_target_bank|input|16
+          phase_word_q|output|256
+          frequency_current_q16|output|256
+          coupling_field_q16|output|256
+          phase_projection_q30|output|256
+          phase_target_source|output|16
+          registered_target_q|output|16
+          registered_target_valid_q|output|1
+          phase_target_domain_valid|output|1
+          registered_target_domain_valid|output|1
+          target_capture_accepted|output|1
+          target_capture_rejected|output|1
+          accepted_target_capture_events_q|output|32
+          rejected_target_capture_events_q|output|32
+          registered_request_enable|output|1
+          phase_request_valid|output|2
+          phase_request_cell_index|output|6
+          phase_request_target|output|4
+          execution_request_valid|output|2
+          execution_request_cell_index|output|6
+          execution_request_target|output|4
+          execution_target_bank|output|16
+          state_out|output|16
+          pending_route_out|output|16
+          scheduler_mode_q|output|2
+          scheduler_state_q|output|3
+          ticks_recorded_q|output|32
+          scheduler_count_free_q|output|32
+          scheduler_count_balance_q|output|32
+          scheduler_count_commit_q|output|32
+          scheduler_count_excite_q|output|32
+          scheduler_count_neutralize_q|output|32
+          request_accept|output|2
+          request_reject|output|2
+          accepted_cell_mask|output|8
+          neutral_routed_cell_mask|output|8
+          accepted_change_mask|output|8
+          accepted_changes|output|32
+          capacity_remaining|output|32
+          capacity_exhausted|output|1
+          switch_load_numerator|output|32
+          requested_direct_events|output|32
+          prevented_direct_events|output|32
+          neutral_routed_events|output|32
+          actual_direct_events|output|32
+          reserved_state_events|output|32
+          queue_overflow_events|output|32
+          invariant_flags|output|10
+          pair_coherence_q30|output|32
+          cluster_coherence_q30|output|32
+          global_coherence_q30|output|32
+          organization_dispersion_q30|output|32
+          normalized_cycle_cost_q16|output|32
+          temperature_proxy_q16|output|32
+          peak_temperature_proxy_q16|output|32
+          thermal_sample_count_q|output|32
+          coherence_capacity_q16|output|32
+          pressure_q16|output|32
+          stability_margin_q16|output|32
+          stable|output|1
+          core_ready|output|1
+          """
+          expected_ports = {}
+          for row in port_rows.strip().splitlines():
+              name, direction, width = row.strip().split("|")
+              expected_ports[name] = (direction, int(width))
+          actual_ports = {
+              name: (port["direction"], len(port["bits"]))
+              for name, port in module["ports"].items()
+          }
+          require(actual_ports == expected_ports, "FPGA port contract mismatch")
+          require(len(actual_ports) == 75, "Expected 75 FPGA ports")
+          require(sum(width for _, width in actual_ports.values()) == 3136,
+                  "Expected 3136 FPGA port bits")
+          require(Counter(d for d, _ in actual_ports.values()) == {
+              "input": 15, "output": 60,
+          }, "FPGA port direction mismatch")
+
+          cells = module["cells"]
+          cell_types = Counter(cell["type"] for cell in cells.values())
+          require(len(cells) >= 7000, "Complete integrated-core logic is missing")
+          require(all(t.startswith("$") and "latch" not in t.lower() for t in cell_types),
+                  "Unresolved module or latch cell in synthesized design")
+          require(not module.get("processes"), "Unsynthesized processes remain")
+
+          ports = module["ports"]
+          sync = module["netnames"]["reset_sync_q"]["bits"]
+          ready = ports["core_ready"]["bits"]
+          require(len(sync) == 2 and sync[0] != sync[1] and ready == [sync[1]],
+                  "Reset stage or readiness wiring mismatch")
+          reset_cells = [
+              cell for cell in cells.values()
+              if cell["type"] == "$adff"
+              and cell["connections"]["Q"] == sync
+          ]
+          require(len(reset_cells) == 1, "Reset synchronizer register missing")
+          reset = reset_cells[0]
+          connections = reset["connections"]
+          parameters = reset["parameters"]
+          require(connections["D"] == ["1", sync[0]]
+                  and connections["CLK"] == ports["clk"]["bits"]
+                  and connections["ARST"] == ports["rst_n_async"]["bits"],
+                  "Reset synchronizer connections mismatch")
+          require(int(parameters["WIDTH"], 2) == 2
+                  and int(parameters["CLK_POLARITY"], 2) == 1
+                  and int(parameters["ARST_POLARITY"], 2) == 0
+                  and int(parameters["ARST_VALUE"], 2) == 0,
+                  "Reset synchronizer polarity or reset value mismatch")
+          consumers = [
+              cell for cell in cells.values()
+              if "ARST" in cell["connections"] and cell is not reset
+          ]
+          require(bool(consumers) and all(
+              cell["connections"]["ARST"] == ready for cell in consumers
+          ), "Core reset bypasses the second synchronizer stage")
+
+          rom = cells.get("u_m32_core.u_phase_interference.sin_lut")
+          require(rom is not None and rom["type"] == "$mem_v2",
+                  "Canonical sine ROM was not retained as memory")
+          expected_rom = {"WIDTH": 32, "SIZE": 4096, "ABITS": 12,
+                          "RD_PORTS": 72, "WR_PORTS": 0}
+          for name, value in expected_rom.items():
+              require(int(rom["parameters"][name], 2) == value,
+                      f"Sine ROM parameter mismatch: {name}")
+          lut = Path("rtl/m31/frp_m31_sin_q30.mem")
+          words = lut.read_text(encoding="ascii").splitlines()
+          require(len(words) == 4096 and all(
+              re.fullmatch(r"[0-9A-Fa-f]{8}", word) for word in words
+          ), "Canonical sine ROM word format mismatch")
+          expected_init = "".join(f"{int(word, 16):032b}" for word in reversed(words))
+          require(rom["parameters"]["INIT"] == expected_init,
+                  "Synthesized sine ROM content differs from canonical source")
+
+          stat = json.loads((evidence / "stat-run-1.json").read_text())
+          stat_module = stat["modules"].get("\\" + top)
+          require(stat_module is not None, "Missing FPGA synthesis statistics")
+          require(stat_module["num_processes"] == 0
+                  and stat_module["num_ports"] == 75
+                  and stat_module["num_port_bits"] == 3136
+                  and stat_module["num_cells"] == len(cells)
+                  and stat_module["num_cells_by_type"] == dict(cell_types)
+                  and cell_types["$mem_v2"] == 2,
+                  "FPGA synthesis statistics mismatch")
+
+          manifest = json.loads((evidence / "source-manifest.json").read_text())
+          for record in manifest["files"]:
+              raw = Path(record["path"]).read_bytes()
+              require(len(raw) == record["bytes"]
+                      and hashlib.sha256(raw).hexdigest() == record["sha256"],
+                      f'Canonical source changed: {record["path"]}')
+          workflow = manifest["workflow"]
+          require(hashlib.sha256(Path(workflow["path"]).read_bytes()).hexdigest()
+                  == workflow["sha256"], "Workflow source changed")
+          require(subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+                  == os.environ["GITHUB_SHA"], "Checkout commit changed")
+          subprocess.run(["git", "diff", "--exit-code"], check=True)
+          require(not subprocess.check_output(["git", "status", "--porcelain"]),
+                  "Repository working tree changed")
+
+          result = {
+              "schema": "frp.m32.fpga-integration-qualification.v1",
+              "result": "PASS",
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "source_commit": os.environ["GITHUB_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "profile": {"cells": 8, "request_lanes": 2},
+              "source_files": 19,
+              "simulation": {
+                  "top": "frp_m32_fpga_tb", "replays": 2,
+                  "compared_outputs": 59, "samples_per_replay": 1019,
+                  "modes": ["free", "7/1", "1/7"], "transcripts_identical": True,
+              },
+              "synthesis": {
+                  "top": top, "frontend": "read_slang", "standard": "1800-2017",
+                  "flow": "Yosys synth -run begin:fine",
+                  "flattened_modules": 1, "processes": 0,
+                  "ports": 75, "port_bits": 3136, "cells": len(cells),
+                  "cell_types": dict(sorted(cell_types.items())),
+                  "replays": 2, "json_verilog_statistics_identical": True,
+              },
+              "reset": {"stages": 2, "asynchronous_assertion": True,
+                        "core_uses_second_stage": True},
+              "sine_rom": {"width": 32, "depth": 4096, "read_ports": 72,
+                           "write_ports": 0, "matches_canonical_mem": True},
+              "repository_unchanged": True,
+          }
+          (evidence / "qualification.json").write_text(
+              json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          checksum_rows = [
+              f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n"
+              for path in sorted(evidence.iterdir())
+              if path.is_file() and path.name != "artifacts.sha256"
+          ]
+          (evidence / "artifacts.sha256").write_text(
+              "".join(checksum_rows), encoding="ascii"
+          )
+          print("FRP M32 FPGA integration qualification: PASS")
+          PY
+
+      - name: Upload qualification reports and diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: frp-m32-fpga-qualification-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-m32-fpga-evidence/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Publish qualification summary
+        if: always()
+        env:
+          M32_JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          lines = [
+              "# FRP M32 FPGA Integration Qualification", "",
+              f'- Job result: {os.environ["M32_JOB_STATUS"]}',
+              f'- Source commit: {os.environ["GITHUB_SHA"]}',
+          ]
+          report = Path(os.environ["M32_EVIDENCE"]) / "qualification.json"
+          if report.is_file():
+              result = json.loads(report.read_text())
+              lines.extend([
+                  "- Profile: 8 cells / 2 request lanes",
+                  "- Simulation: 2 identical complete transcripts",
+                  "- Compared core outputs: 59 / 1019 samples per replay",
+                  "- Scheduler modes: free, 7/1, 1/7",
+                  "- Synthesis: Yosys begin:fine, flattened, memory-preserving",
+                  "- Synthesis replays: identical JSON, Verilog, and statistics",
+                  "- FPGA interface: 75 ports / 3136 bits",
+                  f'- Synthesized cells: {result["synthesis"]["cells"]}',
+                  "- Remaining processes and latch cells: 0",
+                  "- Reset release: 2 stages / core driven by second stage",
+                  "- Sine ROM: 4096 x 32 / 72 read ports / canonical content",
+                  "- Repository unchanged: yes",
+                  f'- Qualification result: {result["result"]}',
+              ])
+          else:
+              lines.append("- Qualification report was not produced; see diagnostic logs.")
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
+              stream.write("\n".join(lines) + "\n")
+          PY
