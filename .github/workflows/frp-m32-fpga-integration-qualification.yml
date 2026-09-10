@@ -21,15 +21,20 @@ jobs:
       run:
         shell: bash
     env:
-      M32_EVIDENCE: ${{ runner.temp }}/frp-m32-fpga-evidence
-      M32_SOURCE: ${{ runner.temp }}/frp-m32-fpga-source
-      M32_BUILD: ${{ runner.temp }}/frp-m32-fpga-build
       LC_ALL: C.UTF-8
       TZ: UTC
       PYTHONHASHSEED: "0"
       PYTHONDONTWRITEBYTECODE: "1"
 
     steps:
+      - name: Initialize temporary paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "M32_EVIDENCE=$RUNNER_TEMP/frp-m32-fpga-evidence" \
+            "M32_SOURCE=$RUNNER_TEMP/frp-m32-fpga-source" \
+            "M32_BUILD=$RUNNER_TEMP/frp-m32-fpga-build" >> "$GITHUB_ENV"
+
       - name: Check out dispatched commit
         uses: actions/checkout@v5
         with:
