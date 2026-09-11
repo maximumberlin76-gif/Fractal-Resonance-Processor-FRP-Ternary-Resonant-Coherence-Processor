@@ -20,6 +20,14 @@ and deterministic trace publication over the qualified M31 RTL contour**
 | Trace qualification | `38 / 38 PASS` |
 | Full synthesis evidence schema | `frp.m32.full-integrated-core-synthesis.v1` |
 | Full synthesis qualification run | [`#1 SUCCESS`](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/34351066791) |
+| FPGA integration top | `frp_m32_fpga_top` |
+| FPGA qualification profile | `8` cells, `2` request lanes |
+| Canonical inputs per FPGA qualification | `19 / 19 exact` |
+| FPGA integration evidence schema | `frp.m32.fpga-integration-qualification.v1` |
+| FPGA integration qualification run | [`#2 SUCCESS`](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/34531635873) |
+| Generated post-synthesis DUT | `frp_m32_fpga_netlist` |
+| FPGA post-synthesis evidence schema | `frp.m32.fpga-post-synthesis-qualification.v1` |
+| FPGA post-synthesis qualification run | `#1 SUCCESS`, recorded duration `13m 36s` |
 | License | Apache-2.0 |
 
 M32 inserts a clocked registered boundary between the phase-derived target
@@ -37,30 +45,31 @@ hierarchy at the canonical M32 configuration. Two synthesis executions produce
 byte-identical JSON netlists, Verilog netlists, and statistics records while
 retaining the initialized `4096 x 32` sine lookup table.
 
+The FPGA wrapper instantiates the complete M32 core and adds reset-release
+control, operation gating, and `core_ready`. Integration simulation and
+post-synthesis simulation each compare all `59` forwarded core outputs
+against a separate M32 RTL reference over `1019` samples per replay.
+
 ## Execution chain
 
 The automatic phase-derived path is:
 
-```
-M31 retained phase dynamics
--> M31 relative-phase interference with local effective gamma
--> M31 phase-to-ternary source target
--> M32 registered target boundary
--> M32 registered request gate
--> M31 deterministic request formation
--> M31 scheduler and request handling
--> M31 pending opposite-polarity routing
--> active state 0
--> M31 capacity control
--> M31 retained writeback
--> M31 invariant, thermal, and stability records
-```
+    M31 retained phase dynamics
+    -> M31 relative-phase interference with local effective gamma
+    -> M31 phase-to-ternary source target
+    -> M32 registered target boundary
+    -> M32 registered request gate
+    -> M31 deterministic request formation
+    -> M31 scheduler and request handling
+    -> M31 pending opposite-polarity routing
+    -> active state 0
+    -> M31 capacity control
+    -> M31 retained writeback
+    -> M31 invariant, thermal, and stability records
 
 The relative-phase term remains:
 
-```
-sin(theta_j - theta_i - gamma_effective_i)
-```
+    sin(theta_j - theta_i - gamma_effective_i)
 
 `gamma_effective_i` is local to cell `i`. The phase word remains an unsigned
 32-bit value normalized by modular wrap over one complete turn.
@@ -80,12 +89,10 @@ sin(theta_j - theta_i - gamma_effective_i)
 
 The following identities are therefore false:
 
-```
-phase_target_source == executed state
-registered_target_q == executed state
-request target == retained writeback
-phase-order record == coherence-capacity record
-```
+    phase_target_source == executed state
+    registered_target_q == executed state
+    request target == retained writeback
+    phase-order record == coherence-capacity record
 
 Each equality may occur for a particular sample, but none is an architectural
 identity.
@@ -95,11 +102,9 @@ identity.
 `frp_m32_registered_target_boundary` accepts a source bank only when all of
 the following are true:
 
-```
-tick_enable
-&& phase_target_valid
-&& phase_target_domain_valid
-```
+    tick_enable
+    && phase_target_valid
+    && phase_target_domain_valid
 
 Every cell symbol is checked against the canonical encodings for `-1`, `0`,
 and `1`. A reserved encoding rejects the complete capture transaction. A
@@ -118,11 +123,9 @@ replacing the retained registered target bank.
 
 `frp_m32_registered_target_request_path` enables automatic requests only when:
 
-```
-auto_target_enable
-&& registered_target_valid_q
-&& registered_target_domain_valid
-```
+    auto_target_enable
+    && registered_target_valid_q
+    && registered_target_domain_valid
 
 The inherited request adapter receives the registered target together with
 the current retained state, pending-route bank, and scheduler state. An
@@ -141,17 +144,13 @@ retained-state, pending-route, and controlled-neutralization roles.
 
 Direct opposite-polarity retained transitions are excluded:
 
-```
--1 -> 1
-1 -> -1
-```
+    -1 -> 1
+    1 -> -1
 
 The required routes are:
 
-```
--1 -> 0 -> 1
-1 -> 0 -> -1
-```
+    -1 -> 0 -> 1
+    1 -> 0 -> -1
 
 The first route leg commits active state `0` and retains the requested
 destination in `pending_route_out`. The second route leg commits that retained
@@ -178,14 +177,12 @@ records, and replay identities.
 
 The combined canonical bundle contains:
 
-```
-33 source ticks
-33 sample records
-33 packed-bank records
-264 per-cell records
-66 request-lane records
-396 structured records
-```
+    33 source ticks
+    33 sample records
+    33 packed-bank records
+    264 per-cell records
+    66 request-lane records
+    396 structured records
 
 ## Trace record classes
 
@@ -276,6 +273,147 @@ The successful manual workflow run qualified commit
 netlists, two statistics records, two logs, source manifest, synthesis-view
 patch, toolchain record, structured evidence, and artifact digest manifest.
 
+## FPGA integration and post-synthesis qualification
+
+The FPGA qualification source manifests each contain the same `17`
+full-core inputs, the FPGA top, and one selected testbench. Their `18`
+common non-testbench inputs have identical byte lengths and SHA-256
+values. Integration simulation selects `frp_m32_fpga_tb.sv`;
+post-synthesis simulation selects `frp_m32_fpga_post_synthesis_tb.sv`.
+
+### Complete FPGA integration
+
+The integration qualification is recorded by successful manual run
+[`#2`](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/34531635873)
+at commit `e40e90d8e32847aa783030aba7e1e5f7963ef312`, with recorded duration
+`2m 44s`.
+
+| Qualification property | Recorded boundary |
+|---|---|
+| FPGA top | `frp_m32_fpga_top` |
+| Complete core | `frp_m32_core` |
+| Qualified configuration | `8` cells, `2` request lanes |
+| Integration testbench | `frp_m32_fpga_tb` |
+| Complete interface | `75` ports, `3136` bits, `15` inputs, `60` outputs |
+| Forwarded core interface | all `59` outputs compared against a separate M32 core |
+| Readiness | `core_ready`, checked against independent reset-release expectations |
+| Simulation executions | two replays, `1019` comparison samples per replay |
+| Synthesis package | `yowasp-yosys==0.68.0.0.post1208` |
+| Synthesis frontend | `read_slang`, IEEE `1800-2017` |
+| Synthesis flow | `synth -top frp_m32_fpga_top -run begin:fine`, followed by `check -assert` |
+| Synthesis executions | two byte-identical JSON netlists, Verilog netlists, and statistics records |
+| Flattened top | one module named `frp_m32_fpga_top` |
+| Remaining processes, latch cells, and unresolved instances | `0` |
+| Retained memories | two `$mem_v2` cells |
+| Sine ROM | `4096 x 32`, `72` read ports, `0` write ports, exact canonical initialization |
+
+External reset assertion is asynchronous. Release passes through two
+clocked stages; enabled core operation is first sampled on the following
+rising edge. Tick, counter clear, phase load, automatic request selection,
+and external request validity are gated before readiness. A reset that
+interrupts release restarts both stages.
+
+The synthesis view uses the verified temporary phase-source transformation
+described above, retaining the canonical ROM initialization. The exact
+FPGA cell count and cell-type inventory are recorded in the integration
+qualification report and both statistics files.
+
+### Synthesized-netlist comparison
+
+The successful manual post-synthesis qualification run `#1`, with recorded
+duration `13m 36s`, is documented in
+[POST_SYNTHESIS_TRANSCRIPT.md](../../fpga/m32/POST_SYNTHESIS_TRANSCRIPT.md)
+against source baseline `16a40d0687df20ea62dacdfb72e39ef6c22ec9c1`.
+The [workflow run list](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m32-fpga-post-synthesis-qualification.yml)
+records the manual execution.
+
+| Qualification property | Workflow acceptance contract |
+|---|---|
+| Synthesis input | complete `frp_m32_fpga_top` hierarchy at `8` cells and `2` request lanes |
+| Generated DUT | `frp_m32_fpga_netlist` |
+| Simulation top | `frp_m32_fpga_post_synthesis_tb` |
+| Reference | separate complete `frp_m32_core` RTL instance |
+| Synthesis replay | two identical JSON netlists, Verilog netlists, and statistics records |
+| Simulation export replay | two identical JSON exports and two identical Verilog exports |
+| Exported interface | port names, directions, widths, and signedness preserved |
+| Exported memories | all `$mem_v2` parameters and initialization preserved |
+| Simulation models | `simlib.v` from the same pinned Yosys package |
+| Core output comparison | all `59` forwarded outputs at each of `1019` samples per replay |
+| Reference reset and readiness | independently supplied scenario expectations |
+| Simulation replay | two identical ordered semantic terminal records |
+
+The workflow reads each synthesized JSON into Yosys, applies the standard
+`$shiftx` map from `techmap.v`, and renames the exported top to
+`frp_m32_fpga_netlist`. It checks that no `$shiftx` or `$connect` cell
+remains and that both original synthesis JSON files retain their byte
+identities. The distinct DUT name requires the generated netlist as a
+simulator input.
+
+Five flattened reset-qualified control wires are observed by the
+testbench. Their names and widths are checked during export; the RTL
+reference reset follows the independent test scenario. The reference
+reads the canonical sine ROM file, while the synthesized DUT uses the
+initialization embedded in its netlist.
+
+### Active-zero, scheduler, pause, and clear scenarios
+
+Both FPGA testbenches exercise startup control blocking, interrupted
+reset release, phase loading without a tick, registered-target capture,
+and both opposite-polarity routes:
+
+    -1 -> 0 -> 1
+    1 -> 0 -> -1
+
+Active zero and the pending destination polarity remain retained during
+three paused cycles. Each route then completes on an enabled tick without
+a new request. Direct polarity transitions, reserved states, and pending
+overflow events are rejected throughout the checked samples.
+
+Each FPGA scheduler scenario records `97` ticks and `97` accepted target
+captures. The initial tick executes the reset scheduler state `FREE`;
+the following `96` ticks cover twelve complete periods for `7/1` and
+`1/7`.
+
+| FPGA scenario | FREE | BALANCE | COMMIT | EXCITE | NEUTRALIZE |
+|---|---:|---:|---:|---:|---:|
+| `free` | `97` | `0` | `0` | `0` | `0` |
+| `7/1` | `1` | `84` | `12` | `0` | `0` |
+| `1/7` | `1` | `0` | `0` | `12` | `84` |
+
+Four paused cycles preserve retained state, pending routes, registered
+targets, phase, frequency, scheduler state, and thermal sample count.
+Isolated counter clear preserves retained data. Concurrent clear and tick
+record one scheduler tick while target-capture and thermal event counters
+retain clear priority.
+
+### FPGA artifacts and evidence
+
+| Artifact | Recorded scope |
+|---|---|
+| [frp_m32_fpga_top.sv](../../fpga/m32/frp_m32_fpga_top.sv) | complete core integration, reset-release control, operation gating, and readiness |
+| [frp_m32_fpga_tb.sv](../../fpga/m32/frp_m32_fpga_tb.sv) | deterministic integration simulation and output comparison |
+| [frp_m32_fpga_post_synthesis_tb.sv](../../fpga/m32/frp_m32_fpga_post_synthesis_tb.sv) | deterministic generated-netlist comparison against the separate RTL reference |
+| [FPGA integration transcript](../../fpga/m32/SIMULATION_TRANSCRIPT.md) | successful run, source identities, simulation, synthesis, and published artifact metadata |
+| [FPGA post-synthesis transcript](../../fpga/m32/POST_SYNTHESIS_TRANSCRIPT.md) | successful run, source baseline, simulation export, ordered terminal records, and evidence inventory |
+| [FPGA closure](../../fpga/m32/CLOSURE.md) | integration and post-synthesis closure at `8` cells and `2` request lanes |
+
+The integration workflow defines `24` evidence files. The post-synthesis
+workflow requires `35` nonempty files before writing `qualification.json`;
+that report records their sizes and SHA-256 values. `artifacts.sha256`
+covers the other `36` files, including the final report, giving a complete
+post-synthesis evidence directory of `37` files.
+
+Both workflows retain complete simulation logs separately from the ordered
+semantic records compared between replays. Source identities, workflow
+identity, checked-out commit, and working-tree integrity are rechecked
+before the final result; the post-synthesis workflow also rechecks its
+recorded Yosys support files.
+
+The FPGA closure records:
+
+    M32 FPGA INTEGRATION BOUNDARY CLOSED
+    M32 FPGA POST-SYNTHESIS BOUNDARY CLOSED
+
 ## Formal, synthesis, and simulation qualification
 
 The registered-target and full integrated-core synthesis workflows record the
@@ -323,9 +461,10 @@ The qualification record references the schema, bundle, and manifest and
 records `38 / 38 PASS`. The export workflow also compares all four generated
 outputs byte-for-byte with their tracked repository counterparts.
 
-The full integrated-core synthesis evidence is retained as a workflow-run
-artifact. It is separate from the four canonical deterministic trace
-publication outputs.
+The full integrated-core synthesis, FPGA integration, and FPGA
+post-synthesis evidence are retained as separate workflow-run artifacts.
+The four canonical deterministic trace publication outputs retain their
+recorded identities.
 
 ## Workflows
 
@@ -333,10 +472,21 @@ publication outputs.
 |---|---|
 | [`FRP M32 Registered Target Core`](../../.github/workflows/frp-m32-registered-target-boundary-workflow.yml) | source identities, lint, registered-boundary synthesis, bounded proofs, deterministic simulations, scheduler traces, and uploaded records |
 | [`FRP M32 Full Integrated Core Synthesis`](../../.github/workflows/frp-m32-full-integrated-core-synthesis-workflow.yml) | exact source identities, memory-preserving full-core synthesis, deterministic netlists, complete port contract, retained sine ROM, and uploaded evidence |
+| [`FRP M32 FPGA Integration Qualification`](../../.github/workflows/frp-m32-fpga-integration-qualification.yml) | exact sources, complete wrapper simulation, reset and operation gating, full integration synthesis, and uploaded evidence |
+| [`FRP M32 FPGA Post-Synthesis Qualification`](../../.github/workflows/frp-m32-fpga-post-synthesis-qualification.yml) | full FPGA synthesis, verified simulation export, generated-netlist comparison, deterministic replays, and evidence binding |
 | [`FRP M32 Deterministic RTL Trace Export`](../../.github/workflows/frp-m32-deterministic-rtl-trace-export-workflow.yml) | transcript replay, exporter tests, canonical generation, schema validation, mutation rejection, published-artifact comparison, and uploaded records |
 
-All three workflows use `workflow_dispatch` and are executed manually on
+All five workflows use `workflow_dispatch` and are executed manually on
 `main`.
+
+## Documentation
+
+| Document | Scope |
+|---|---|
+| [SIMULATION.md](SIMULATION.md) | reproducible RTL, formal, full-core synthesis, and trace-export procedures |
+| [SIMULATION_TRANSCRIPT.md](SIMULATION_TRANSCRIPT.md) | recorded RTL, formal, full-core synthesis, and trace qualification evidence |
+| [ARTIFACTS.md](ARTIFACTS.md) | canonical source identities, synthesis and FPGA input sets, workflows, evidence inventories, and documentation revisions |
+| [CLOSURE.md](CLOSURE.md) | registered-target RTL, formal, deterministic trace, and full integrated-core synthesis closure |
 
 ## Provenance boundary
 
