@@ -8,6 +8,7 @@
 
 [![FRP M31 Complete](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m31-complete.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m31-complete.yml)
 [![FRP M32 FPGA Integration Qualification](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m32-fpga-integration-qualification.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m32-fpga-integration-qualification.yml)
+[![FRP M32 FPGA Post-Synthesis Qualification](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m32-fpga-post-synthesis-qualification.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m32-fpga-post-synthesis-qualification.yml)
 [![FRP Self Test](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml)
 [![FRP Benchmark Smoke Test](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-benchmark-smoke.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-benchmark-smoke.yml)
 [![FRP Structured Output](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-structured-output.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-structured-output.yml)
@@ -45,7 +46,8 @@ Current release records:
 
 M32 implements a clocked registered-target boundary over the M31 RTL
 modules, deterministic RTL trace publication, full integrated-core
-synthesis, and FPGA integration of the complete registered-target core.
+synthesis, FPGA integration of the complete registered-target core, and
+post-synthesis netlist qualification against a separate M32 RTL reference.
 
 | Boundary | Qualified scope | Qualification record |
 |---|---|---|
@@ -53,6 +55,7 @@ synthesis, and FPGA integration of the complete registered-target core.
 | Deterministic RTL trace publication | `7/1` and `1/7`, `396` structured records, `38 / 38 PASS` | [M32 trace qualification](artifacts/m32/qualification/m32-deterministic-rtl-trace-qualification.json) |
 | Full integrated-core synthesis | complete `frp_m32_core`, `8` cells, `2` request lanes | [Full Integrated Core Synthesis #1: SUCCESS](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/34351066791) |
 | FPGA integration qualification | complete `frp_m32_fpga_top`, `8` cells, `2` request lanes | [FPGA Integration Qualification #2: SUCCESS](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/34531635873) |
+| FPGA post-synthesis qualification | generated `frp_m32_fpga_netlist`, `59` core outputs, two replays of `1019` samples | [FPGA Post-Synthesis Qualification #1: SUCCESS](fpga/m32/POST_SYNTHESIS_TRANSCRIPT.md) |
 
 The FPGA top exposes all `59` core outputs and a separate `core_ready`
 output. Its complete interface contains `75` ports and `3136` port bits.
@@ -69,26 +72,65 @@ counter-clear priority, both opposite-polarity routes through active state
 `0`, and the `free`, `7/1`, and `1/7` scheduler modes. Two simulation replays
 produce identical ordered semantic PASS records.
 
-Both synthesis workflows use the Yosys `read_slang` frontend and a coarse,
-flattened, memory-preserving flow over their complete top-level hierarchies.
-Two synthesis executions produce byte-identical JSON netlists, Verilog
-netlists, and statistics records. The initialized sine ROM retains all
-`4096` canonical `32`-bit words. FPGA structural qualification checks the
+The full-core, FPGA integration, and post-synthesis workflows use the Yosys
+`read_slang` frontend and a coarse, flattened, memory-preserving
+`synth -run begin:fine` flow over their complete top-level hierarchies.
+Each workflow compares two synthesis executions for byte-identical JSON
+netlists, Verilog netlists, and statistics records. The initialized sine ROM
+retains all `4096` canonical `32`-bit words. FPGA structural qualification checks the
 complete port contract, two-stage reset structure, and zero remaining
 processes, latch cells, or unresolved module instances.
 
-The successful FPGA qualification run records source commit
+Post-synthesis qualification exports the generated `frp_m32_fpga_netlist`
+from each verified FPGA synthesis JSON. The standard Yosys `$shiftx` map
+produces explicit selection logic before Verilog emission. The export
+checks preserve port names, directions, widths, signedness, and all memory
+parameters and initialization; the original synthesis JSON remains
+unchanged. Both simulation JSON exports match byte for byte, as do both
+simulation Verilog exports.
+
+The [post-synthesis testbench](fpga/m32/frp_m32_fpga_post_synthesis_tb.sv)
+compares all `59` synthesized core outputs against a separate
+`frp_m32_core` across `1019` samples per replay, with independent readiness
+checks. Both replays exercise reset and control gating, registered-target
+capture, retained active zero and pending polarity, pause, counter clear,
+and the `free`, `7/1`, and `1/7` modes. They produce identical ordered
+semantic PASS records.
+
+The successful FPGA integration qualification run records source commit
 `e40e90d8e32847aa783030aba7e1e5f7963ef312`. Its committed
 [simulation and synthesis transcript](fpga/m32/SIMULATION_TRANSCRIPT.md)
 records the run, source identities, checked behavior, synthesis scope, and
-artifact inventory. The [FPGA closure](fpga/m32/CLOSURE.md) records
-`M32 FPGA INTEGRATION BOUNDARY CLOSED`.
+artifact inventory.
+
+The [post-synthesis transcript](fpga/m32/POST_SYNTHESIS_TRANSCRIPT.md)
+records successful manual run `#1`, its `13m 36s` duration, source baseline
+`16a40d0687df20ea62dacdfb72e39ef6c22ec9c1`, acceptance checks, and evidence
+layout. The [FPGA closure](fpga/m32/CLOSURE.md) records
+`M32 FPGA INTEGRATION BOUNDARY CLOSED` and
+`M32 FPGA POST-SYNTHESIS BOUNDARY CLOSED`.
 
 The [FPGA integration workflow](.github/workflows/frp-m32-fpga-integration-qualification.yml)
-runs manually through `workflow_dispatch` on `main`. It uploads the source
-manifest, toolchain record, simulation logs, synthesis netlists and
-statistics, structured qualification, and artifact hashes. RTL reproduction
-procedures and the source inventory are linked from the
+and [post-synthesis workflow](.github/workflows/frp-m32-fpga-post-synthesis-qualification.yml)
+run manually through `workflow_dispatch` on `main`.
+
+| Manual workflow | Qualification |
+|---|---|
+| [FRP M32 FPGA Integration Qualification](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m32-fpga-integration-qualification.yml) | complete FPGA RTL simulation and repeated synthesis |
+| [FRP M32 FPGA Post-Synthesis Qualification](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m32-fpga-post-synthesis-qualification.yml) | repeated FPGA synthesis, simulation export, and netlist-to-RTL comparison |
+
+Open the selected workflow in **Actions**, choose **Run workflow**, and
+select branch `main`.
+
+Each workflow uploads source identities, toolchain records, simulation
+logs, synthesis netlists and statistics, structured qualification, and
+artifact hashes. Post-synthesis evidence additionally contains the Yosys
+cell models, export scripts and logs, both simulation netlists,
+`structure.json`, and `simulation-export.json`. Its final report uses
+schema `frp.m32.fpga-post-synthesis-qualification.v1` and binds the result
+to the source commit, run ID, and run attempt.
+
+RTL reproduction procedures and the source inventory are linked from the
 [M32 RTL documentation](rtl/m32/README.md).
 
 ## Processor model
@@ -257,12 +299,12 @@ The M28 upstream interchange records remain available under
 | M17–M29 | Published-artifact, trace, registry, Observatory, and qualification progression | `PASS` |
 | M30 | Reproducibility, qualification, and archival release closure | `PASS` |
 | M31 | Phase-interference, active-zero, and thermal-evidence publication | `PASS` |
-| M32 | Registered-target RTL, deterministic RTL traces, full integrated-core synthesis, and complete FPGA integration qualification | `PASS` |
+| M32 | Registered-target RTL, deterministic RTL traces, full integrated-core synthesis, FPGA integration, and post-synthesis netlist qualification | `PASS` |
 
 M32 RTL records are stored under [`rtl/m32/`](rtl/m32/), with inherited M31
-modules under [`rtl/m31/`](rtl/m31/). M32 FPGA integration records are stored
-under [`fpga/m32/`](fpga/m32/). The M16 implementation remains available under
-[`rtl/m16/`](rtl/m16/) and [`fpga/m16/`](fpga/m16/). Milestone artifacts and
+modules under [`rtl/m31/`](rtl/m31/). M32 FPGA integration and post-synthesis
+records are stored under [`fpga/m32/`](fpga/m32/). The M16 implementation
+remains available under [`rtl/m16/`](rtl/m16/) and [`fpga/m16/`](fpga/m16/). Milestone artifacts and
 schemas are stored under [`artifacts/`](artifacts/) and [`schemas/`](schemas/).
 
 ## Repository navigation
@@ -281,12 +323,16 @@ schemas are stored under [`artifacts/`](artifacts/) and [`schemas/`](schemas/).
 | M32 RTL closure | [rtl/m32/CLOSURE.md](rtl/m32/CLOSURE.md) |
 | M32 FPGA integration top | [fpga/m32/frp_m32_fpga_top.sv](fpga/m32/frp_m32_fpga_top.sv) |
 | M32 FPGA integration testbench | [fpga/m32/frp_m32_fpga_tb.sv](fpga/m32/frp_m32_fpga_tb.sv) |
+| M32 FPGA post-synthesis testbench | [fpga/m32/frp_m32_fpga_post_synthesis_tb.sv](fpga/m32/frp_m32_fpga_post_synthesis_tb.sv) |
 | M32 FPGA qualification record | [fpga/m32/SIMULATION_TRANSCRIPT.md](fpga/m32/SIMULATION_TRANSCRIPT.md) |
+| M32 FPGA post-synthesis record | [fpga/m32/POST_SYNTHESIS_TRANSCRIPT.md](fpga/m32/POST_SYNTHESIS_TRANSCRIPT.md) |
+| M32 FPGA integration workflow | [.github/workflows/frp-m32-fpga-integration-qualification.yml](.github/workflows/frp-m32-fpga-integration-qualification.yml) |
+| M32 FPGA post-synthesis workflow | [.github/workflows/frp-m32-fpga-post-synthesis-qualification.yml](.github/workflows/frp-m32-fpga-post-synthesis-qualification.yml) |
 | M32 FPGA closure | [fpga/m32/CLOSURE.md](fpga/m32/CLOSURE.md) |
 | M16 RTL Core Realization | [rtl/m16/README.md](rtl/m16/README.md) |
 | M16 FPGA baseline | [fpga/m16/CLOSURE.md](fpga/m16/CLOSURE.md) |
 | M31 validation index | [FRP_VALIDATION_INDEX_v3_3_0.md](FRP_VALIDATION_INDEX_v3_3_0.md) |
-| M31 release notes | [RELEASE_NOTES_v3_3_0.md](RELEASE_NOTES_v3_3_0.md) |
+| M31 release notes | [FRP v3.3.0 release notes](RELEASE_NOTES_v3_3_0.md) |
 | M31 test report | [TEST_REPORT_v3_3_0.md](TEST_REPORT_v3_3_0.md) |
 
 All historical evidence, benchmark results, schemas, qualification records,
