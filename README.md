@@ -7,6 +7,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 
 [![FRP M31 Complete](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m31-complete.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m31-complete.yml)
+[![FRP M32 FPGA Integration Qualification](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m32-fpga-integration-qualification.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-m32-fpga-integration-qualification.yml)
 [![FRP Self Test](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-self-test.yml)
 [![FRP Benchmark Smoke Test](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-benchmark-smoke.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-benchmark-smoke.yml)
 [![FRP Structured Output](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-structured-output.yml/badge.svg)](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/workflows/frp-structured-output.yml)
@@ -31,7 +32,7 @@ neutralization.
 | M31 qualification checks | `13 / 13 PASS` |
 | Canonical M31 outputs | `4 / 4 exact` |
 | Executable semantic reference | `frp_prototype_v1_7_0.py` |
-| RTL and FPGA implementation anchor | `M16 — PASS` |
+| Release RTL and FPGA baseline | `M16 — PASS` |
 | Preserved archival baseline | `FRP v3.2.0 / M30 — PASS` |
 
 Current release records:
@@ -39,6 +40,56 @@ Current release records:
 - [FRP v3.3.0 validation index](FRP_VALIDATION_INDEX_v3_3_0.md)
 - [FRP v3.3.0 release notes](RELEASE_NOTES_v3_3_0.md)
 - [FRP v3.3.0 test report](TEST_REPORT_v3_3_0.md)
+
+## M32 RTL and FPGA integration
+
+M32 implements a clocked registered-target boundary over the M31 RTL
+modules, deterministic RTL trace publication, full integrated-core
+synthesis, and FPGA integration of the complete registered-target core.
+
+| Boundary | Qualified scope | Qualification record |
+|---|---|---|
+| Registered-target RTL | capture, request formation, active-state-`0` routing, and scheduler execution | [M32 RTL closure](rtl/m32/CLOSURE.md) |
+| Deterministic RTL trace publication | `7/1` and `1/7`, `396` structured records, `38 / 38 PASS` | [M32 trace qualification](artifacts/m32/qualification/m32-deterministic-rtl-trace-qualification.json) |
+| Full integrated-core synthesis | complete `frp_m32_core`, `8` cells, `2` request lanes | [Full Integrated Core Synthesis #1: SUCCESS](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/34351066791) |
+| FPGA integration qualification | complete `frp_m32_fpga_top`, `8` cells, `2` request lanes | [FPGA Integration Qualification #2: SUCCESS](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/34531635873) |
+
+The FPGA top exposes all `59` core outputs and a separate `core_ready`
+output. Its complete interface contains `75` ports and `3136` port bits.
+External reset assertion is asynchronous; release passes through two
+clocked stages. Enabled core operation is first sampled on the following
+rising edge. Tick, counter-clear, phase-load, automatic-request, and
+external-request controls are gated until readiness.
+
+The integration testbench compares every forwarded core output against a
+separate `frp_m32_core` across `1019` samples per replay and checks readiness
+independently. Its scenarios cover startup pulses, held controls,
+interrupted reset release, phase and frequency loading, paused execution,
+counter-clear priority, both opposite-polarity routes through active state
+`0`, and the `free`, `7/1`, and `1/7` scheduler modes. Two simulation replays
+produce identical ordered semantic PASS records.
+
+Both synthesis workflows use the Yosys `read_slang` frontend and a coarse,
+flattened, memory-preserving flow over their complete top-level hierarchies.
+Two synthesis executions produce byte-identical JSON netlists, Verilog
+netlists, and statistics records. The initialized sine ROM retains all
+`4096` canonical `32`-bit words. FPGA structural qualification checks the
+complete port contract, two-stage reset structure, and zero remaining
+processes, latch cells, or unresolved module instances.
+
+The successful FPGA qualification run records source commit
+`e40e90d8e32847aa783030aba7e1e5f7963ef312`. Its committed
+[simulation and synthesis transcript](fpga/m32/SIMULATION_TRANSCRIPT.md)
+records the run, source identities, checked behavior, synthesis scope, and
+artifact inventory. The [FPGA closure](fpga/m32/CLOSURE.md) records
+`M32 FPGA INTEGRATION BOUNDARY CLOSED`.
+
+The [FPGA integration workflow](.github/workflows/frp-m32-fpga-integration-qualification.yml)
+runs manually through `workflow_dispatch` on `main`. It uploads the source
+manifest, toolchain record, simulation logs, synthesis netlists and
+statistics, structured qualification, and artifact hashes. RTL reproduction
+procedures and the source inventory are linked from the
+[M32 RTL documentation](rtl/m32/README.md).
 
 ## Processor model
 
@@ -85,27 +136,19 @@ Required Python version:
 
 Install the exact repository dependencies:
 
-```
-python -m pip install -r requirements.txt
-```
+    python -m pip install -r requirements.txt
 
 Verify the committed M31 publication:
 
-```
-python frp_m31_phase_interference_thermal_evidence.py --verify
-```
+    python frp_m31_phase_interference_thermal_evidence.py --verify
 
 Run the deterministic M31 self-test:
 
-```
-python frp_m31_phase_interference_thermal_evidence.py --self-test
-```
+    python frp_m31_phase_interference_thermal_evidence.py --self-test
 
 Run all focused M31 qualification tests:
 
-```
-python -m unittest tests.test_frp_m31_phase_interference_thermal_evidence -v
-```
+    python -m unittest tests.test_frp_m31_phase_interference_thermal_evidence -v
 
 Recorded result:
 
@@ -113,15 +156,11 @@ Recorded result:
 
 Run the executable semantic reference:
 
-```
-python frp_prototype_v1_7_0.py --mode demo --output json --include-trace
-```
+    python frp_prototype_v1_7_0.py --mode demo --output json --include-trace
 
 Run its qualified self-test:
 
-```
-python frp_prototype_v1_7_0.py --mode self-test --output json
-```
+    python frp_prototype_v1_7_0.py --mode self-test --output json
 
 Additional commands are documented in [USAGE.md](USAGE.md) and
 [REPRODUCIBILITY.md](REPRODUCIBILITY.md).
@@ -218,10 +257,13 @@ The M28 upstream interchange records remain available under
 | M17–M29 | Published-artifact, trace, registry, Observatory, and qualification progression | `PASS` |
 | M30 | Reproducibility, qualification, and archival release closure | `PASS` |
 | M31 | Phase-interference, active-zero, and thermal-evidence publication | `PASS` |
+| M32 | Registered-target RTL, deterministic RTL traces, full integrated-core synthesis, and complete FPGA integration qualification | `PASS` |
 
-RTL records are stored under [`rtl/m16/`](rtl/m16/). FPGA preparation records
-are stored under [`fpga/m16/`](fpga/m16/). Milestone artifacts and schemas are
-stored under [`artifacts/`](artifacts/) and [`schemas/`](schemas/).
+M32 RTL records are stored under [`rtl/m32/`](rtl/m32/), with inherited M31
+modules under [`rtl/m31/`](rtl/m31/). M32 FPGA integration records are stored
+under [`fpga/m32/`](fpga/m32/). The M16 implementation remains available under
+[`rtl/m16/`](rtl/m16/) and [`fpga/m16/`](fpga/m16/). Milestone artifacts and
+schemas are stored under [`artifacts/`](artifacts/) and [`schemas/`](schemas/).
 
 ## Repository navigation
 
@@ -233,8 +275,16 @@ stored under [`artifacts/`](artifacts/) and [`schemas/`](schemas/).
 | Architecture progression | [ROADMAP.md](ROADMAP.md) |
 | Release history | [CHANGELOG.md](CHANGELOG.md) |
 | Structured output | [docs/output_schema.md](docs/output_schema.md) |
-| RTL implementation | [rtl/m16/README.md](rtl/m16/README.md) |
-| FPGA preparation | [fpga/m16/CLOSURE.md](fpga/m16/CLOSURE.md) |
+| M32 RTL implementation | [rtl/m32/README.md](rtl/m32/README.md) |
+| M32 artifact index | [rtl/m32/ARTIFACTS.md](rtl/m32/ARTIFACTS.md) |
+| M32 RTL reproduction | [rtl/m32/SIMULATION.md](rtl/m32/SIMULATION.md) |
+| M32 RTL closure | [rtl/m32/CLOSURE.md](rtl/m32/CLOSURE.md) |
+| M32 FPGA integration top | [fpga/m32/frp_m32_fpga_top.sv](fpga/m32/frp_m32_fpga_top.sv) |
+| M32 FPGA integration testbench | [fpga/m32/frp_m32_fpga_tb.sv](fpga/m32/frp_m32_fpga_tb.sv) |
+| M32 FPGA qualification record | [fpga/m32/SIMULATION_TRANSCRIPT.md](fpga/m32/SIMULATION_TRANSCRIPT.md) |
+| M32 FPGA closure | [fpga/m32/CLOSURE.md](fpga/m32/CLOSURE.md) |
+| M16 RTL Core Realization | [rtl/m16/README.md](rtl/m16/README.md) |
+| M16 FPGA baseline | [fpga/m16/CLOSURE.md](fpga/m16/CLOSURE.md) |
 | M31 validation index | [FRP_VALIDATION_INDEX_v3_3_0.md](FRP_VALIDATION_INDEX_v3_3_0.md) |
 | M31 release notes | [RELEASE_NOTES_v3_3_0.md](RELEASE_NOTES_v3_3_0.md) |
 | M31 test report | [TEST_REPORT_v3_3_0.md](TEST_REPORT_v3_3_0.md) |
