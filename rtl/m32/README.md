@@ -1,7 +1,8 @@
 # FRP M32 Registered-Target, Full Integrated-Core Synthesis, and Deterministic RTL Trace Boundary
 
 **SystemVerilog registered-target integration, full integrated-core synthesis,
-and deterministic trace publication over the qualified M31 RTL contour**
+CSR control and telemetry, and deterministic trace publication over the
+qualified M31 RTL contour**
 
 ## Boundary identity
 
@@ -28,6 +29,14 @@ and deterministic trace publication over the qualified M31 RTL contour**
 | Generated post-synthesis DUT | `frp_m32_fpga_netlist` |
 | FPGA post-synthesis evidence schema | `frp.m32.fpga-post-synthesis-qualification.v1` |
 | FPGA post-synthesis qualification run | `#1 SUCCESS`, recorded duration `13m 36s` |
+| CSR integration top | `frp_m32_csr_top` |
+| CSR qualification profile | `8` cells, `2` request lanes, `32`-bit words and counters |
+| Canonical inputs per CSR qualification | `21 / 21 exact` |
+| CSR integration evidence schema | `frp.m32.csr-integration-qualification.v1` |
+| CSR integration qualification run | [`#1 SUCCESS`](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/34689613270) |
+| Generated CSR post-synthesis DUT | `frp_m32_csr_netlist` |
+| CSR post-synthesis evidence schema | `frp.m32.csr-post-synthesis-qualification.v1` |
+| CSR post-synthesis qualification run | [`#1 SUCCESS`](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/34699370701) |
 | License | Apache-2.0 |
 
 M32 inserts a clocked registered boundary between the phase-derived target
@@ -49,6 +58,11 @@ The FPGA wrapper instantiates the complete M32 core and adds reset-release
 control, operation gating, and `core_ready`. Integration simulation and
 post-synthesis simulation each compare all `59` forwarded core outputs
 against a separate M32 RTL reference over `1019` samples per replay.
+
+The CSR wrapper adds synchronous host access to execution commands,
+staged configuration, live telemetry and last-tick results around the
+complete FPGA integration. Its RTL and post-synthesis qualifications each
+compare all `59` core outputs against an independent M32 RTL reference.
 
 ## Execution chain
 
@@ -414,6 +428,131 @@ The FPGA closure records:
     M32 FPGA INTEGRATION BOUNDARY CLOSED
     M32 FPGA POST-SYNTHESIS BOUNDARY CLOSED
 
+## CSR integration and post-synthesis qualification
+
+The CSR top wraps `frp_m32_fpga_top` and reaches the complete M32 core at
+`u_fpga.u_m32_core`. Each qualification manifest contains `21` canonical
+inputs: `20` SystemVerilog files and one sine ROM file. The two manifests
+share `20` identical non-testbench inputs and select
+`frp_m32_csr_tb.sv` or `frp_m32_csr_post_synthesis_tb.sv`.
+
+### Host control and telemetry contract
+
+| Property | Qualified behavior |
+|---|---|
+| CSR top | `frp_m32_csr_top` |
+| Configuration | `8` cells, `2` request lanes, `32`-bit words and counters |
+| Host interface | `9` ports, `78` bits: `6` inputs and `3` outputs |
+| Host clock | CSR inputs synchronous to `clk` |
+| Transfer | each rising edge with `csr_valid && csr_ready` completes one transfer |
+| Addressing | aligned `32`-bit words at `8`-bit byte addresses |
+| Reset | asynchronous assertion and two-stage synchronous release |
+| Startup commands | commands withdrawn before qualified readiness are discarded |
+| CONTROL at `0x00` | exact command words: `1` tick, `2` clear counters/results, `4` clear staged requests, `8` load phase/frequency bank |
+| Mode at `0x04` | `0` free, `1` for `7/1`, `2` for `1/7` |
+| Request staging | two independently selected lanes; each tick clears both staged valid bits |
+| Phase/frequency loading | all eight staged pairs loaded atomically without issuing a tick |
+| Configuration windows | per-cell phase, frequency, gamma and thermal-factor words |
+| Live telemetry | phase, frequency, targets, executed states, pending routes, scheduler counters, coherence, thermal and stability values |
+| Last-tick telemetry | saved request, routing and capture results, retained until tick, clear or reset |
+| Interface identity | `0x46523201` at `0xFC` |
+
+CONTROL accepts one exact command word. A rejected transfer reports an
+error without changing registers or issuing an execution tick. Consecutive
+accepted edges perform successive transfers.
+
+The core registers a CSR mode write on the next rising edge. A tick
+immediately following that write uses the prior scheduler state; the host
+allows one idle clock or reads `MODE_ACTIVE` at `0x20` before ticking in
+the new mode. The complete register map is defined in
+[frp_m32_csr_top.sv](../../fpga/m32_csr/frp_m32_csr_top.sv).
+
+### Qualified RTL and generated-netlist comparisons
+
+| Record | CSR integration | CSR post-synthesis |
+|---|---|---|
+| Successful manual run | [#1 SUCCESS](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/34689613270) | [#1 SUCCESS](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/34699370701) |
+| Qualified source commit | `8e619504c7826ba6351d4967d5944685963363f0` | `dcade95d59457dbd7bd296f7dc2d902f4fa61ddf` |
+| Recorded duration | `2m 36s` | `13m 47s` |
+| Testbench | `frp_m32_csr_tb` | `frp_m32_csr_post_synthesis_tb` |
+| DUT | `frp_m32_csr_top` | generated `frp_m32_csr_netlist` |
+| Reference | separate `frp_m32_core` | separate `frp_m32_core` |
+| Complete simulation replays | `2`, byte-identical logs | `2`, byte-identical logs |
+
+Each replay requires `6905` aggregate checks, `306` stimulus ticks across
+reset epochs, `449` rejected CSR transfers and `59` compared core outputs.
+The aggregate check count includes full core-output comparison rounds and
+explicit CSR read checks. Reference inputs and reset come from the host
+stimulus; expected CSR responses are independent of DUT ready/error decisions.
+
+The rejected transfers cover both reads and writes at all `192` unaligned
+addresses, writes to `52` read-only addresses and `13` other invalid
+command or payload cases: `384 + 52 + 13 = 449`.
+
+Both testbenches exercise the retained kernel `-1/0/1`, active state `0`
+and both routes through zero on separate enabled ticks:
+
+    -1 -> 0 -> 1
+    1 -> 0 -> -1
+
+The intermediate state and pending target survive CSR reads; the directed
+counter-clear scenario also preserves the pending route. Scenario
+checkpoints require zero `actual_direct_events`, `reserved_state_events`
+and `queue_overflow_events`.
+
+Each CSR scheduler scenario configures its mode during idle clocks before
+its first tick and records `97` ticks and `97` accepted target captures.
+
+| CSR scenario | FREE | BALANCE | COMMIT | EXCITE | NEUTRALIZE |
+|---|---:|---:|---:|---:|---:|
+| `free` | `97` | `0` | `0` | `0` | `0` |
+| `7/1` | `0` | `85` | `12` | `0` | `0` |
+| `1/7` | `0` | `0` | `0` | `13` | `84` |
+
+A separate immediate mode-write/tick scenario checks the prior FREE state
+on its first tick and BALANCE on a later tick. Three consecutive accepted
+tick transfers are also checked. Both testbenches exercise atomic loading
+of all eight phase/frequency pairs, signed frequencies, phase wraparound,
+both request lanes, duplicate-cell arbitration and live/last-tick telemetry.
+
+Both workflows synthesize the complete CSR hierarchy using
+`synth -top frp_m32_csr_top -noshare -run begin:fine` and `check -assert`
+with the pinned `yowasp-yosys==0.68.0.0.post1208` package. The two synthesis
+replays must produce identical JSON netlists, Verilog netlists and statistics.
+Structural checks enforce the CSR port contract, two-stage reset wiring,
+zero remaining processes or latch cells, two read-only memories and exact
+canonical sine-ROM initialization.
+
+The post-synthesis workflow exports each synthesis JSON as
+`frp_m32_csr_netlist` and verifies identical exports, preserved port and
+memory contracts, and all `59` flattened core-observation wire contracts.
+The reference reads the canonical sine ROM file; the generated DUT uses
+its embedded initialization. Simulation uses the recorded Yosys cell
+models and compares both complete logs before sealing the qualification.
+
+### CSR artifacts and evidence
+
+| Artifact | Recorded scope |
+|---|---|
+| [frp_m32_csr_top.sv](../../fpga/m32_csr/frp_m32_csr_top.sv) | host interface, command delivery, staged configuration and telemetry |
+| [frp_m32_csr_tb.sv](../../fpga/m32_csr/frp_m32_csr_tb.sv) | independent RTL integration comparison and host scenarios |
+| [frp_m32_csr_post_synthesis_tb.sv](../../fpga/m32_csr/frp_m32_csr_post_synthesis_tb.sv) | generated CSR netlist comparison against the independent RTL reference |
+| [CSR integration transcript](../../fpga/m32_csr/SIMULATION_TRANSCRIPT.md) | successful run, source identities, checked scenarios and published artifact metadata |
+| [CSR post-synthesis transcript](../../fpga/m32_csr/POST_SYNTHESIS_TRANSCRIPT.md) | successful netlist qualification, export checks, simulation records and artifact metadata |
+| [CSR closure](../../fpga/m32_csr/CLOSURE.md) | integration and post-synthesis closure scopes and accepted contracts |
+| [CSR artifact index](ARTIFACTS.md#csr-integration-and-post-synthesis-artifacts) | exact source sets, workflow identities, archive identities and committed documentation |
+
+Each workflow publishes its source manifest, tool records, diagnostics,
+replay outputs, `qualification.json` and `artifacts.sha256`. The final
+report binds the results to `source_commit`, `run_id` and `run_attempt`
+after source and repository-integrity checks. Post-synthesis evidence also
+retains the verified simulation exports and recorded Yosys support files.
+
+The CSR closure records:
+
+    M32 CSR INTEGRATION BOUNDARY CLOSED
+    M32 CSR POST-SYNTHESIS BOUNDARY CLOSED
+
 ## Formal, synthesis, and simulation qualification
 
 The registered-target and full integrated-core synthesis workflows record the
@@ -461,8 +600,9 @@ The qualification record references the schema, bundle, and manifest and
 records `38 / 38 PASS`. The export workflow also compares all four generated
 outputs byte-for-byte with their tracked repository counterparts.
 
-The full integrated-core synthesis, FPGA integration, and FPGA
-post-synthesis evidence are retained as separate workflow-run artifacts.
+The full integrated-core synthesis, FPGA integration, FPGA post-synthesis,
+CSR integration and CSR post-synthesis evidence are retained as separate
+workflow-run artifacts.
 The four canonical deterministic trace publication outputs retain their
 recorded identities.
 
@@ -474,9 +614,11 @@ recorded identities.
 | [`FRP M32 Full Integrated Core Synthesis`](../../.github/workflows/frp-m32-full-integrated-core-synthesis-workflow.yml) | exact source identities, memory-preserving full-core synthesis, deterministic netlists, complete port contract, retained sine ROM, and uploaded evidence |
 | [`FRP M32 FPGA Integration Qualification`](../../.github/workflows/frp-m32-fpga-integration-qualification.yml) | exact sources, complete wrapper simulation, reset and operation gating, full integration synthesis, and uploaded evidence |
 | [`FRP M32 FPGA Post-Synthesis Qualification`](../../.github/workflows/frp-m32-fpga-post-synthesis-qualification.yml) | full FPGA synthesis, verified simulation export, generated-netlist comparison, deterministic replays, and evidence binding |
+| [FRP M32 CSR Integration Qualification](../../.github/workflows/frp-m32-csr-integration-qualification.yml) | exact sources, host scenarios, complete CSR simulation, structural synthesis and uploaded evidence |
+| [FRP M32 CSR Post-Synthesis Qualification](../../.github/workflows/frp-m32-csr-post-synthesis-qualification.yml) | full CSR synthesis, verified simulation export, generated-netlist comparison, deterministic replays and evidence binding |
 | [`FRP M32 Deterministic RTL Trace Export`](../../.github/workflows/frp-m32-deterministic-rtl-trace-export-workflow.yml) | transcript replay, exporter tests, canonical generation, schema validation, mutation rejection, published-artifact comparison, and uploaded records |
 
-All five workflows use `workflow_dispatch` and are executed manually on
+The seven listed workflows use `workflow_dispatch` and are executed manually on
 `main`.
 
 ## Documentation
@@ -485,7 +627,7 @@ All five workflows use `workflow_dispatch` and are executed manually on
 |---|---|
 | [SIMULATION.md](SIMULATION.md) | reproducible RTL, formal, full-core synthesis, and trace-export procedures |
 | [SIMULATION_TRANSCRIPT.md](SIMULATION_TRANSCRIPT.md) | recorded RTL, formal, full-core synthesis, and trace qualification evidence |
-| [ARTIFACTS.md](ARTIFACTS.md) | canonical source identities, synthesis and FPGA input sets, workflows, evidence inventories, and documentation revisions |
+| [ARTIFACTS.md](ARTIFACTS.md) | canonical source identities, synthesis, FPGA and CSR input sets, workflows, evidence inventories, and documentation revisions |
 | [CLOSURE.md](CLOSURE.md) | registered-target RTL, formal, deterministic trace, and full integrated-core synthesis closure |
 
 ## Provenance boundary
