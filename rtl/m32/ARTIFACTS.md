@@ -609,6 +609,144 @@ post-synthesis closure scopes. The post-synthesis terminal result is:
 
     FRP M32 FPGA post-synthesis qualification: PASS
 
+## CSR integration and post-synthesis artifacts
+
+The CSR qualification covers the complete M32 FPGA integration through
+`frp_m32_csr_top` at `8` cells, `2` request lanes and `32`-bit words and
+counters. Its host interface contains `9` ports and `78` port bits.
+
+| Artifact | Role |
+|---|---|
+| [frp_m32_csr_top.sv](../../fpga/m32_csr/frp_m32_csr_top.sv) | host transactions, command delivery, configuration staging and telemetry |
+| [frp_m32_csr_tb.sv](../../fpga/m32_csr/frp_m32_csr_tb.sv) | deterministic RTL integration scenarios with independent host and core expectations |
+| [frp_m32_csr_post_synthesis_tb.sv](../../fpga/m32_csr/frp_m32_csr_post_synthesis_tb.sv) | generated `frp_m32_csr_netlist` compared against a separate `frp_m32_core` RTL reference |
+
+### Exact CSR qualification input sets
+
+Both manifests include the same `17` inputs from the
+[full integrated-core synthesis source set](#full-integrated-core-synthesis-source-set),
+plus the M22 CSR package, FPGA top and CSR top. They select different
+testbenches from the exact identities below.
+
+| Path | Bytes | SHA-256 |
+|---|---:|---|
+| `rtl/m22/frp_m22_csr_pkg.sv` | `5586` | `0f3de8054e3704548088b035c43e993d194d5182a2ac1bc32cdad92663a11206` |
+| `fpga/m32/frp_m32_fpga_top.sv` | `11355` | `4893b157fba0ce090766d73429bce154a8b06dbb4118ec4a6dcb7e4a4c4a3348` |
+| `fpga/m32_csr/frp_m32_csr_top.sv` | `21826` | `c3d5e9060f8142acfb39310f2e47cca5a3f38c786a9bfdbb6686b2c86ff60344` |
+| `fpga/m32_csr/frp_m32_csr_tb.sv` | `30914` | `af2795bf906c4c0c9aa2c2eac502bb3aa952fd5c179e2760c228a69bbc6a5a33` |
+| `fpga/m32_csr/frp_m32_csr_post_synthesis_tb.sv` | `32248` | `788a90ed854871f71f05cd6fac5d2052a289781a011083ff6a58301a5f185281` |
+
+| Qualification input set | Files | Bytes |
+|---|---:|---:|
+| Shared inputs, including the canonical sine ROM | `20` | `281199` |
+| Complete CSR integration set, including its RTL testbench | `21` | `312113` |
+| Complete CSR post-synthesis set, including its netlist testbench | `21` | `313447` |
+
+The shared `20` inputs have identical byte lengths and SHA-256 values in
+both manifests. Each complete set contains `20` SystemVerilog files and
+one sine ROM file. These are overlapping qualification scopes; the
+workflow file is recorded separately from each input set.
+
+### CSR workflow identities and successful runs
+
+| Path | Bytes | SHA-256 |
+|---|---:|---|
+| `.github/workflows/frp-m32-csr-integration-qualification.yml` | `27500` | `ec1aa8b7c0132c40f1b17718630e27fb51f139ad443e176b411491ebf7db966e` |
+| `.github/workflows/frp-m32-csr-post-synthesis-qualification.yml` | `36875` | `f5f0be52c41de12130b84fa0f809783049b7d8b8b88df64bc1dbafa16b2f1dca` |
+
+| Record | CSR integration | CSR post-synthesis |
+|---|---|---|
+| Workflow | [FRP M32 CSR Integration Qualification](../../.github/workflows/frp-m32-csr-integration-qualification.yml) | [FRP M32 CSR Post-Synthesis Qualification](../../.github/workflows/frp-m32-csr-post-synthesis-qualification.yml) |
+| Qualified source commit | `8e619504c7826ba6351d4967d5944685963363f0` | `dcade95d59457dbd7bd296f7dc2d902f4fa61ddf` |
+| Successful run | [#1 SUCCESS](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/34689613270) | [#1 SUCCESS](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/34699370701) |
+| Run ID / attempt | `34689613270` / `1` | `34699370701` / `1` |
+| Job ID | `103542454966` | `103568293849` |
+| Trigger / branch | `workflow_dispatch` / `main` | `workflow_dispatch` / `main` |
+| Recorded duration | `2m 36s` | `13m 47s` |
+| Successful workflow-defined steps | `14` | `17` |
+| Evidence schema | `frp.m32.csr-integration-qualification.v1` | `frp.m32.csr-post-synthesis-qualification.v1` |
+
+Both workflows verify the complete include closure and exact source
+identities, execute two synthesis replays, and compare both JSON
+netlists, Verilog netlists and statistics byte for byte. Their synthesis
+flow is `synth -top frp_m32_csr_top -noshare -run begin:fine` with
+`yowasp-yosys==0.68.0.0.post1208` and the `read_slang` frontend.
+
+The post-synthesis workflow additionally verifies two simulation exports:
+the CSR port contract, both memory parameter sets and all `59` flattened
+core-observation wire contracts are preserved. The generated DUT uses
+embedded ROM initialization; its independent RTL reference reads the
+canonical sine ROM file.
+
+Each simulation qualification requires two byte-identical complete logs
+and the following result per replay: `6905` aggregate checks, `306`
+stimulus ticks, `449` rejected CSR transfers and `59` compared core outputs.
+The required simulation terminal records are:
+
+    FRP_M32_CSR_TB: PASS checks=6905 ticks=306 rejected_transfers=449 core_outputs=59
+    FRP_M32_CSR_POST_SYNTHESIS_TB: PASS checks=6905 ticks=306 rejected_transfers=449 core_outputs=59
+
+Both qualifications exercise `free`, `7/1` and `1/7`. The retained kernel
+is `-1/0/1`; state `0` is active. Both routes, `1 -> 0 -> -1` and
+`-1 -> 0 -> 1`, retain their intermediate state and pending target between
+separate enabled ticks. Direct opposite-polarity transitions are forbidden.
+
+### Published CSR qualification artifacts
+
+The archive identities below are recorded in the public
+[integration artifact metadata](https://api.github.com/repos/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/34689613270/artifacts)
+and [post-synthesis artifact metadata](https://api.github.com/repos/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/34699370701/artifacts).
+
+| Archive field | CSR integration | CSR post-synthesis |
+|---|---|---|
+| Artifact ID | `10297126685` | `10300161633` |
+| Artifact name | `frp-m32-csr-qualification-8e619504c7826ba6351d4967d5944685963363f0-1` | `frp-m32-csr-post-synthesis-qualification-dcade95d59457dbd7bd296f7dc2d902f4fa61ddf-1` |
+| Size reported by GitHub | `4605171` bytes | `9530965` bytes |
+| SHA-256 digest reported by GitHub | `9b72c35d479060365a55dc033c5ddfa4489ad15860131db56d6319f18974ad81` | `b67e2349c124316e96ee1e55610081b7b5c6e63c77d2f7749dc669ca03cd8fa6` |
+| Configured retention | `30` days | `30` days |
+| Final report | `qualification.json` | `qualification.json` |
+| Evidence checksums | `artifacts.sha256` | `artifacts.sha256` |
+
+Each workflow writes `source-manifest.json`, `canonical-sources.sha256`,
+tool records, lint and build logs, both simulation logs, the verified
+synthesis source patch, both synthesis scripts, logs, netlists and
+statistics. Its final report binds the result to `source_commit`,
+`run_id` and `run_attempt` after the source and repository-integrity checks.
+
+Post-synthesis evidence also includes `synthesis-structure.json`, both
+simulation export scripts, logs and netlists, `simulation-export.json`,
+`yosys-simlib.v`, `yosys-techmap.v` and `cell-models.json`. The final result
+is written after the structural checks, verified export, both simulation
+replays and repository-integrity checks succeed.
+
+The complete inventories and acceptance records are preserved in the
+[integration transcript](../../fpga/m32_csr/SIMULATION_TRANSCRIPT.md)
+and [post-synthesis transcript](../../fpga/m32_csr/POST_SYNTHESIS_TRANSCRIPT.md).
+
+### Committed CSR documentation identities
+
+These identities apply at documentation commit
+`4f1f97e70df93c164996fd5a31b6a5cc221d9a03`.
+
+| Path | Bytes | SHA-256 |
+|---|---:|---|
+| `fpga/m32_csr/SIMULATION_TRANSCRIPT.md` | `14770` | `89d88c223b42fdbc91a614ad4aa7afeb9c7cc24353eb925972f3b910d47aa81f` |
+| `fpga/m32_csr/POST_SYNTHESIS_TRANSCRIPT.md` | `17189` | `05da64b417d86fd216b19665ee3fcc0f6f540d6824c1f8221c9de44f9025bd8f` |
+| `fpga/m32_csr/CLOSURE.md` | `22414` | `f08cc8514df4f242c1fe7d1014fbed21d13bebabbe69edd5cb93a74bb08a7bff` |
+
+The transcripts were committed at `6567d6cfd45705931b89a88a782b0f0fb1112ffd`
+and `4074fbfdac3621883b2b1a0ecad171510214def0`, respectively. The
+[CSR closure](../../fpga/m32_csr/CLOSURE.md), updated at the documentation
+commit above, records both accepted boundaries:
+
+    M32 CSR INTEGRATION BOUNDARY CLOSED
+    M32 CSR POST-SYNTHESIS BOUNDARY CLOSED
+
+The qualification workflows require these final terminal results:
+
+    FRP M32 CSR integration qualification: PASS
+    FRP M32 CSR post-synthesis qualification: PASS
+
 ## Deterministic transcript identities
 
 | Scheduler mode | Replay | Artifact member | Bytes | SHA-256 |
