@@ -1,0 +1,454 @@
+name: FRP M32 Milestones Qualification
+
+run-name: FRP M32 Milestones Qualification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-m32-milestones-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  qualify-milestones:
+    name: Qualify the M0-M32 register and preserved evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      MILESTONES_BASE_COMMIT: 6a7484a9bdfaad4a8b99ee2c8f7623e292fc1462
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      PYTHONUTF8: "1"
+      LC_ALL: C.UTF-8
+      TZ: UTC
+
+    steps:
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require manual main execution and prepare temporary paths
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain --untracked-files=all)"
+          git merge-base --is-ancestor "$MILESTONES_BASE_COMMIT" "$GITHUB_SHA"
+          python - <<'PY'
+          import os
+          import tempfile
+          from pathlib import Path
+
+          temporary = Path(tempfile.mkdtemp(prefix="frp-m32-milestones-", dir=os.environ["RUNNER_TEMP"]))
+          evidence = temporary / "evidence"
+          evidence.mkdir()
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as stream:
+              stream.write(f"M32_MILESTONES_TEMP={temporary}\n")
+              stream.write(f"M32_MILESTONES_EVIDENCE={evidence}\n")
+          PY
+
+      - name: Prepare and execute the milestone and source validator
+        run: |
+          set -euo pipefail
+          cat > "$M32_MILESTONES_TEMP/qualify.py" <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+          from pathlib import Path, PurePosixPath
+          from urllib.parse import unquote, urlsplit
+
+          ROOT = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+          TEMP = Path(os.environ["M32_MILESTONES_TEMP"])
+          EVIDENCE = Path(os.environ["M32_MILESTONES_EVIDENCE"])
+          BASE = os.environ["MILESTONES_BASE_COMMIT"]
+          WORKFLOW = ".github/workflows/frp-m32-milestones-qualification.yml"
+          sys.path.insert(0, str(ROOT))
+
+          def require(condition, message):
+              if not condition:
+                  raise SystemExit(message)
+
+          def read(relative):
+              path = PurePosixPath(relative)
+              require(not path.is_absolute() and "\\" not in relative, f"Unsafe path: {relative}")
+              require(all(part not in {"", ".", ".."} for part in relative.split("/")), f"Unsafe path: {relative}")
+              target = ROOT
+              for part in path.parts:
+                  target = target / part
+                  require(not target.is_symlink(), f"Symlink rejected: {relative}")
+              require(target.is_file(), f"Missing regular file: {relative}")
+              return target.read_bytes()
+
+          def digest(raw):
+              return hashlib.sha256(raw).hexdigest()
+
+          def load(relative):
+              return json.loads(read(relative))
+
+          def save(name, value):
+              (EVIDENCE / name).write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+          def git(*arguments):
+              return subprocess.check_output(["git", *arguments], cwd=ROOT).decode()
+
+          def protected(path):
+              directories = ("artifacts/", "benchmarks/", "schemas/", "rtl/m31/", "rtl/m32/", "formal/m32/", "fpga/m32/")
+              exact = {
+                  "MILESTONES.md", "requirements.txt",
+                  "frp_m31_phase_interference_thermal_evidence.py",
+                  "frp_m32_deterministic_rtl_trace_export.py",
+                  "tests/test_frp_m31_phase_interference_thermal_evidence.py",
+                  "tests/test_frp_m32_deterministic_rtl_trace_export.py",
+                  ".github/workflows/frp-m31d8-milestones-v3-3-0-workflow.yml",
+              }
+              historical = re.fullmatch(r"(?:RELEASE_NOTES|TEST_REPORT|FRP_VALIDATION_INDEX|RELEASE_CHECKLIST)_v[^/]+\.md", path)
+              m32_workflow = path.startswith(".github/workflows/frp-m32-") and path != WORKFLOW
+              return path.startswith(directories) or path in exact or bool(historical) or m32_workflow
+
+          def snapshot():
+              require(not git("status", "--porcelain", "--untracked-files=all"), "Repository is not clean")
+              reference = {p for p in git("ls-tree", "-r", "--name-only", BASE).splitlines() if protected(p)}
+              current = {p for p in git("ls-files").splitlines() if protected(p)}
+              require(current == reference, "Protected file inventory changed from the recorded baseline")
+              changes = git("diff", "--name-only", BASE, "HEAD", "--", *sorted(reference)).splitlines()
+              require(not changes, f"Protected baseline files changed: {changes}")
+              return [{"path": p, "bytes": len(raw), "sha256": digest(raw)} for p in sorted(current) for raw in [read(p)]]
+
+          def verify_document():
+              raw = read("MILESTONES.md")
+              require((len(raw), raw.count(b"\n"), digest(raw)) == (
+                  73718, 2386, "05b639365d58513ed9a25b3eb2b0583e844f220cc07049d4d7e60b77bd9fb130"
+              ), "Current M32 MILESTONES.md identity mismatch")
+              marker = b"<details>\n<summary>Exact historical MILESTONES.md body through the M17 planning baseline</summary>\n\n"
+              require(raw.count(marker) == 1, "Historical section marker mismatch")
+              prefix, tail = raw.split(marker)
+              historical, suffix = tail.rsplit(b"\n</details>", 1)
+              require(suffix == b"\n", "Historical section closing boundary mismatch")
+              require((len(historical), historical.count(b"\n"), digest(historical)) == (
+                  55806, 2098, "c3325932acdf97cc8db365348d49d210bef552949b08bc5a2b5b980d7df7315f"
+              ), "Preserved historical MILESTONES.md body changed")
+              text = prefix.decode("utf-8")
+              register = text.split("## Complete milestone register\n", 1)[1].split("## M17–M32 qualified progression", 1)[0]
+              require(re.findall(r"^\| M(\d+) \|", register, re.MULTILINE) == [str(i) for i in range(33)], "M0-M32 register is incomplete or out of order")
+              required = (
+                  "| Current version | `FRP v3.3.0` |",
+                  "| Released milestone | `M31 — Phase-Interference, Active-Zero, and Thermal-Evidence Publication` |",
+                  "| M32 implementation profile | `8` cells, `2` request lanes |",
+                  "`-1/0/1`", "`-1 → 0 → 1`", "`1 → 0 → -1`",
+                  "| Active neutral state | `0` |", "| Temporal scheduler modes | `1/7`, `7/1` |",
+                  "## M32 implementation and qualification record", "## M30 archival continuity",
+              )
+              require(all(value in text for value in required), "Milestone contract or release boundary missing")
+              require("-1/0/" + chr(43) + "1" not in text, "Noncanonical ternary notation in current register")
+              paths = set()
+              for target in re.findall(r"\[[^\]\n]*\]\(([^\s)]+)\)", text):
+                  parsed = urlsplit(target)
+                  if parsed.scheme in {"http", "https"}:
+                      continue
+                  require(not parsed.scheme and not parsed.netloc and not parsed.fragment, f"Unexpected local link: {target}")
+                  paths.add(unquote(parsed.path))
+              for value in re.findall(r"`([^`\n]+)`", text):
+                  if re.fullmatch(r"[A-Za-z0-9_./-]+\.(?:md|py|json|sv|mem|yml|gz)", value):
+                      paths.add(value)
+              for path in sorted(paths):
+                  read(path)
+              archive = read("artifacts/m30/packages/frp-v3.2.0-m30-archival-release.tar.gz")
+              require((len(archive), digest(archive)) == (
+                  10189989, "05ea33f6f3f505d315af930c2d51779f7189905308473f32a57375e477069caa"
+              ), "M30 archival release identity mismatch")
+              progression = text.split("## M17–M32 qualified progression\n", 1)[1].split("## M32 implementation and qualification record", 1)[0]
+              qualifications = sorted({p for p in paths if p.endswith(".json") and "qualification" in p and p in progression})
+              require(len(qualifications) == 16, "M18-M32 qualification record inventory mismatch")
+              closure = read("docs/m17_published_artifact_integration_closure.md").decode()
+              require("M17 QUALIFICATION BOUNDARY CLOSED" in closure and "PASS" in closure, "M17 closure mismatch")
+              for path in qualifications:
+                  record = load(path)
+                  states = [record[key] for key in ("status", "overall_status") if key in record]
+                  require(states and all(value == "PASS" for value in states), f"Qualification failed: {path}")
+                  checks = record.get("checks", record.get("records"))
+                  require(bool(checks), f"Missing qualification checks: {path}")
+                  if isinstance(checks, dict):
+                      require(all(value is True for value in checks.values()), f"Qualification predicate failed: {path}")
+                  else:
+                      values = [item.get("status", item.get("outcome", item.get("result", item.get("pass")))) for item in checks]
+                      require(all(value is True or value == "PASS" for value in values), f"Qualification check failed: {path}")
+                  if "check_count" in record:
+                      require(record["check_count"] == len(checks) == record["passed_count"] and record["failed_count"] == 0, f"Qualification count mismatch: {path}")
+              for path, status in (
+                  ("rtl/m32/CLOSURE.md", "M32 REGISTERED-TARGET, FULL INTEGRATED-CORE SYNTHESIS, AND DETERMINISTIC RTL TRACE BOUNDARY CLOSED"),
+                  ("fpga/m32/CLOSURE.md", "M32 FPGA INTEGRATION BOUNDARY CLOSED"),
+                  ("fpga/m32/CLOSURE.md", "M32 FPGA POST-SYNTHESIS BOUNDARY CLOSED"),
+              ):
+                  require(status in text and status in read(path).decode(), f"Closure status mismatch: {path}")
+              (EVIDENCE / "MILESTONES.md").write_bytes(raw)
+              save("document.json", {"status": "PASS", "milestone_count": 33, "document_bytes": len(raw), "historical_bytes": len(historical), "local_paths": sorted(paths), "qualification_records": qualifications})
+
+          def verify_source_bindings():
+              manifest = load("artifacts/m32/manifests/m32-deterministic-rtl-trace-manifest.json")
+              sources = manifest["source_identities"]
+              require(manifest["source_identity_count"] == len(sources) == 29, "M32 canonical source count mismatch")
+              require(len({item["path"] for item in sources}) == 29, "Duplicate M32 canonical source")
+              require(sum(item["byte_count"] for item in sources) == 442916, "M32 canonical source byte total mismatch")
+              for item in sources:
+                  raw = read(item["path"])
+                  require((len(raw), digest(raw)) == (item["byte_count"], item["raw_sha256"]), f"M32 source identity mismatch: {item['path']}")
+              groups = []
+              inventories = []
+              for path, expected_count, expected_bytes in (
+                  (".github/workflows/frp-m32-full-integrated-core-synthesis-workflow.yml", 17, 242432),
+                  (".github/workflows/frp-m32-fpga-integration-qualification.yml", 19, 290959),
+                  (".github/workflows/frp-m32-fpga-post-synthesis-qualification.yml", 19, 292228),
+              ):
+                  rows = re.findall(r"^\s*([^\s|]+)\|([0-9]+)\|([0-9a-f]{64})\s*$", read(path).decode(), re.MULTILINE)
+                  require(len(rows) == len({row[0] for row in rows}) == expected_count, f"Source manifest count mismatch: {path}")
+                  require(sum(int(row[1]) for row in rows) == expected_bytes, f"Source manifest byte total mismatch: {path}")
+                  inventory = {}
+                  for relative, size, sha in rows:
+                      raw = read(relative)
+                      require((len(raw), digest(raw)) == (int(size), sha), f"Synthesis or FPGA source changed: {relative}")
+                      inventory[relative] = (int(size), sha)
+                  inventories.append(inventory)
+                  groups.append({"workflow": path, "source_count": expected_count, "source_bytes": expected_bytes, "sources": inventory})
+              shared = set(inventories[1]) & set(inventories[2])
+              require(len(shared) == 18 and sum(inventories[1][p][0] for p in shared) == 253787, "Shared FPGA source boundary mismatch")
+              require(all(inventories[1][p] == inventories[2][p] for p in shared), "Shared FPGA source identities differ")
+              require(all(inventories[1].get(p) == identity for p, identity in inventories[0].items()), "Full-core source subset differs from FPGA inputs")
+              save("source-bindings.json", {"status": "PASS", "canonical_source_count": 29, "canonical_source_bytes": 442916, "shared_fpga_sources": 18, "groups": groups})
+
+          def verify_canonical():
+              import frp_m31_phase_interference_thermal_evidence as m31
+              import frp_m32_deterministic_rtl_trace_export as m32
+
+              outputs = []
+              for label, module, expected_bytes in (("m31", m31, 43801), ("m32", m32, 458096)):
+                  paths = (module.SCHEMA_PATH, module.MANIFEST_PATH, module.QUALIFICATION_PATH)
+                  paths += (module.EVIDENCE_PATH if label == "m31" else module.BUNDLE_PATH,)
+                  total = 0
+                  for path in paths:
+                      current = read(path)
+                      require(current == (TEMP / f"{label}-a" / path).read_bytes() == (TEMP / f"{label}-b" / path).read_bytes(), f"Canonical output reproduction mismatch: {path}")
+                      total += len(current)
+                      target = EVIDENCE / "canonical" / path
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      target.write_bytes(current)
+                      outputs.append({"path": path, "bytes": len(current), "sha256": digest(current)})
+                  require(total == expected_bytes, f"Canonical {label} byte total mismatch")
+                  for generation in ("a", "b"):
+                      result = json.loads((EVIDENCE / f"{label}-generation-{generation}.json").read_text())
+                      require(result["status"] == "PASS", f"Generation failed: {label}/{generation}")
+              q31 = load(m31.QUALIFICATION_PATH)
+              q32 = load(m32.QUALIFICATION_PATH)
+              require(len(q31["checks"]) == 13 and all(v is True for v in q31["checks"].values()), "M31 qualification mismatch")
+              require((q32["check_count"], q32["passed_count"], q32["failed_count"]) == (38, 38, 0), "M32 qualification mismatch")
+              self_test = json.loads((EVIDENCE / "m32-self-test.json").read_text())
+              require(self_test["status"] == "PASS" and self_test["deterministic_generation_replays"] == 2 and self_test["mutation_rejections"] == 4, "M32 self-test mismatch")
+              bundle = load(m32.BUNDLE_PATH)
+              m32.validate_bundle(bundle, load(m32.SCHEMA_PATH))
+              profiles = []
+              for trace, mode, ticks, records, active_zero, first, second, cadence in (
+                  (bundle["traces"][0], "7/1", 16, 192, 115, 9, 15, {"balance": 14, "commit": 2}),
+                  (bundle["traces"][1], "1/7", 17, 204, 123, 10, 16, {"excite": 3, "neutralize": 14}),
+              ):
+                  m32.validate_trace_records(trace, m32.TRACE_PROFILES[mode])
+                  require((trace["scheduler_mode"], trace["source_tick_count"], trace["record_count"], trace["active_zero_cell_observation_count"]) == (mode, ticks, records, active_zero), f"Milestone trace totals mismatch: {mode}")
+                  require(trace["scheduler_state_counts"] == cadence, f"Scheduler cadence mismatch: {mode}")
+                  require(trace["first_route_leg_coordinates"] == [{"source_cell": 0, "source_tick": first}], f"First route leg mismatch: {mode}")
+                  require(trace["second_route_leg_coordinates"] == [{"source_cell": 0, "source_tick": second}], f"Second route leg mismatch: {mode}")
+                  profiles.append({"scheduler_mode": mode, "source_ticks": ticks, "records": records, "active_zero_observations": active_zero})
+              save("canonical-reproduction.json", {"status": "PASS", "m31_files": 4, "m32_files": 4, "m31_checks": 13, "m32_checks": 38, "profiles": profiles, "outputs": outputs})
+
+          def finish():
+              before = json.loads((EVIDENCE / "protected-files.json").read_text())
+              require(snapshot() == before, "Protected files changed during qualification")
+              reports = {name: json.loads((EVIDENCE / name).read_text()) for name in ("document.json", "source-bindings.json", "focused-tests.json", "canonical-reproduction.json")}
+              require(all(record["status"] == "PASS" for record in reports.values()), "Incomplete qualification reports")
+              save("qualification.json", {"status": "PASS", "scope": "M0-M32 milestone register, preserved history, published source bindings, and canonical M31/M32 reproduction", "baseline_commit": BASE, "dispatched_commit": os.environ["GITHUB_SHA"], "run_id": os.environ["GITHUB_RUN_ID"], "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"], "workflow_sha256": digest(read(WORKFLOW)), "protected_file_count": len(before), "reports": sorted(reports)})
+              sums = [f"{digest(path.read_bytes())}  {path.relative_to(EVIDENCE).as_posix()}" for path in sorted(EVIDENCE.rglob("*")) if path.is_file() and path.name != "SHA256SUMS"]
+              (EVIDENCE / "SHA256SUMS").write_text("\n".join(sums) + "\n", encoding="utf-8")
+              lines = [
+                  "## FRP M32 Milestones Qualification: PASS", "",
+                  f"Dispatched commit: {os.environ['GITHUB_SHA']}", f"Recorded baseline: {BASE}", "",
+                  "| Check | Result |", "|---|---|",
+                  "| Complete milestone register | M0-M32, 33/33 PASS |",
+                  "| Current MILESTONES.md | 73,718 bytes, exact |",
+                  "| Preserved historical body | 55,806 bytes, exact |",
+                  "| M17 closure and M18-M32 qualification records | PASS |",
+                  "| M30 archival release | SHA-256 exact |",
+                  "| Canonical M31/M32 source boundary | 29 inputs, 442,916 bytes |",
+                  "| Published full-core synthesis source binding | 17 inputs, 242,432 bytes |",
+                  "| Published FPGA integration source binding | 19 inputs, 290,959 bytes |",
+                  "| Published FPGA post-synthesis source binding | 19 inputs, 292,228 bytes |",
+                  "| Focused M31 tests | 60/60 PASS |", "| Focused M32 tests | 49/49 PASS |",
+                  "| Independently reproduced M31 outputs | 4/4 exact; 13/13 checks |",
+                  "| Fresh RTL trace replays | 7/1 and 1/7, two exact runs each |",
+                  "| Independently reproduced M32 outputs | 4/4 exact; 38/38 checks |",
+                  "| Canonical M32 trace records | 33 source ticks, 396 records |",
+                  "| Active zero and separate neutral-mediated route legs | PASS |",
+                  "| Protected histories and repository | UNCHANGED |",
+              ]
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:
+                  stream.write("\n".join(lines) + "\n")
+
+          action = sys.argv[1]
+          if action == "before":
+              save("protected-files.json", snapshot())
+              verify_document()
+              verify_source_bindings()
+          elif action == "canonical":
+              verify_canonical()
+          elif action == "finish":
+              finish()
+          else:
+              raise SystemExit(f"Unknown qualification action: {action}")
+          print(f"M32_MILESTONES_{action.upper()}=PASS")
+          PY
+          python "$M32_MILESTONES_TEMP/qualify.py" before
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install and record qualification tools
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r requirements.txt
+          sudo apt-get update
+          sudo apt-get install --yes verilator g++ make
+          {
+            python --version
+            verilator --version
+            g++ --version
+            python -m pip freeze
+          } > "$M32_MILESTONES_EVIDENCE/toolchain.txt"
+          cat "$M32_MILESTONES_EVIDENCE/toolchain.txt"
+
+      - name: Run all 60 M31 tests and all 49 M32 tests
+        run: |
+          set -euo pipefail
+          timeout 900s python - <<'PY'
+          import json
+          import os
+          import unittest
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_MILESTONES_EVIDENCE"])
+          results = []
+          for name, expected in (
+              ("test_frp_m31_phase_interference_thermal_evidence.py", 60),
+              ("test_frp_m32_deterministic_rtl_trace_export.py", 49),
+          ):
+              loader = unittest.TestLoader()
+              suite = loader.discover("tests", pattern=name)
+              if loader.errors or suite.countTestCases() != expected:
+                  raise SystemExit(f"Focused test inventory mismatch: {name}: {loader.errors}")
+              log = evidence / name.replace(".py", ".log")
+              with log.open("w", encoding="utf-8") as stream:
+                  result = unittest.TextTestRunner(stream=stream, verbosity=2).run(suite)
+              print(log.read_text(), end="")
+              passed = result.wasSuccessful() and result.testsRun == expected and not result.skipped and not result.expectedFailures
+              results.append({"module": name, "tests_run": result.testsRun, "failures": len(result.failures), "errors": len(result.errors), "skipped": len(result.skipped), "expected_failures": len(result.expectedFailures), "status": "PASS" if passed else "FAIL"})
+          passed = all(item["status"] == "PASS" for item in results)
+          (evidence / "focused-tests.json").write_text(json.dumps({"status": "PASS" if passed else "FAIL", "results": results}, indent=2) + "\n", encoding="utf-8")
+          if not passed:
+              raise SystemExit("Focused M31/M32 qualification failed")
+          print("M31_M32_FOCUSED_TESTS=109/109 PASS")
+          PY
+
+      - name: Independently reproduce all four M31 outputs
+        run: |
+          set -euo pipefail
+          for generation in a b; do
+            timeout 300s python frp_m31_phase_interference_thermal_evidence.py \
+              --generate --repository-root . \
+              --output-root "$M32_MILESTONES_TEMP/m31-$generation" \
+              --output "$M32_MILESTONES_EVIDENCE/m31-generation-$generation.json"
+          done
+
+      - name: Build and replay both canonical M32 scheduler traces
+        run: |
+          set -euo pipefail
+          for mode in 7_1 1_7; do
+            top="frp_m32_mode_${mode}_trace_tb"
+            timeout 600s verilator --binary --sv --timing --assert \
+              -Wall -Wno-fatal -CFLAGS "-std=c++20" \
+              --output-split 999999999 \
+              --top-module "$top" --Mdir "$M32_MILESTONES_TEMP/obj-$mode" \
+              -Irtl/m31 -Irtl/m32 "rtl/m32/$top.sv" \
+              > "$M32_MILESTONES_EVIDENCE/build-$mode.log" 2>&1 || {
+                cat "$M32_MILESTONES_EVIDENCE/build-$mode.log"
+                exit 1
+              }
+            for replay in 1 2; do
+              timeout 120s "$M32_MILESTONES_TEMP/obj-$mode/V$top" \
+                > "$M32_MILESTONES_EVIDENCE/trace-$mode-$replay.log" 2>&1
+            done
+            cmp "$M32_MILESTONES_EVIDENCE/trace-$mode-1.log" \
+              "$M32_MILESTONES_EVIDENCE/trace-$mode-2.log"
+          done
+          python - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_MILESTONES_EVIDENCE"])
+          for mode, size, sha, marker in (
+              ("7_1", 105702, "9517a02cd1ce2c687365f3712a453a9370e505ee4267e151fd05b266977ce915", "FRP_M32_MODE_7_1_TRACE_TB: PASS samples=16"),
+              ("1_7", 112364, "41de8e92c28f150f8d163fc1438b4d4381fa42d76a970f9246bbda4679491d89", "FRP_M32_MODE_1_7_TRACE_TB: PASS samples=17"),
+          ):
+              for replay in (1, 2):
+                  raw = (evidence / f"trace-{mode}-{replay}.log").read_bytes()
+                  if (len(raw), hashlib.sha256(raw).hexdigest()) != (size, sha) or raw.decode().splitlines().count(marker) != 1:
+                      raise SystemExit(f"Canonical RTL transcript mismatch: {mode}/{replay}")
+          print("M32_CANONICAL_RTL_REPLAYS=4/4 EXACT")
+          PY
+
+      - name: Self-test and independently reproduce all four M32 outputs
+        run: |
+          set -euo pipefail
+          arguments=(
+            --repository-root .
+            --mode-7-1-primary "$M32_MILESTONES_EVIDENCE/trace-7_1-1.log"
+            --mode-7-1-replay "$M32_MILESTONES_EVIDENCE/trace-7_1-2.log"
+            --mode-1-7-primary "$M32_MILESTONES_EVIDENCE/trace-1_7-1.log"
+            --mode-1-7-replay "$M32_MILESTONES_EVIDENCE/trace-1_7-2.log"
+          )
+          timeout 180s python frp_m32_deterministic_rtl_trace_export.py \
+            "${arguments[@]}" --self-test \
+            > "$M32_MILESTONES_EVIDENCE/m32-self-test.json"
+          for generation in a b; do
+            timeout 180s python frp_m32_deterministic_rtl_trace_export.py \
+              "${arguments[@]}" --generate \
+              --output-root "$M32_MILESTONES_TEMP/m32-$generation" \
+              > "$M32_MILESTONES_EVIDENCE/m32-generation-$generation.json"
+          done
+          python "$M32_MILESTONES_TEMP/qualify.py" canonical
+
+      - name: Verify preservation and publish the milestone qualification
+        run: |
+          set -euo pipefail
+          python "$M32_MILESTONES_TEMP/qualify.py" finish
+
+      - name: Retain qualification evidence and diagnostic logs
+        if: ${{ always() && env.M32_MILESTONES_EVIDENCE != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-m32-milestones-qualification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M32_MILESTONES_EVIDENCE }}
+          if-no-files-found: error
+          retention-days: 90
