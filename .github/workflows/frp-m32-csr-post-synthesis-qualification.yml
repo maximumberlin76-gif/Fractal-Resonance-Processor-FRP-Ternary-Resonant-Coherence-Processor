@@ -1,0 +1,755 @@
+name: FRP M32 CSR Post-Synthesis Qualification
+
+run-name: "FRP M32 CSR Post-Synthesis Qualification @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-m32-csr-post-synthesis-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-m32-csr-post-synthesis:
+    name: Qualify the synthesized M32 CSR integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Initialize temporary paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "M32_EVIDENCE=$RUNNER_TEMP/frp-m32-csr-post-synthesis-evidence" \
+            "M32_SOURCE=$RUNNER_TEMP/frp-m32-csr-post-synthesis-source" \
+            "M32_BUILD=$RUNNER_TEMP/frp-m32-csr-post-synthesis-build" >> "$GITHUB_ENV"
+
+      - name: Check out dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Require manual main execution and prepare reports
+        run: |
+          set -euo pipefail
+          mkdir -p "$M32_EVIDENCE" "$M32_SOURCE" "$M32_BUILD"
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          printf '%s\n' "Manual main execution: PASS"
+
+      - name: Verify exact sources and include closure
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_EVIDENCE"])
+          identity_rows = """
+          fpga/m32/frp_m32_fpga_top.sv|11355|4893b157fba0ce090766d73429bce154a8b06dbb4118ec4a6dcb7e4a4c4a3348
+          fpga/m32_csr/frp_m32_csr_post_synthesis_tb.sv|32248|788a90ed854871f71f05cd6fac5d2052a289781a011083ff6a58301a5f185281
+          fpga/m32_csr/frp_m32_csr_top.sv|21826|c3d5e9060f8142acfb39310f2e47cca5a3f38c786a9bfdbb6686b2c86ff60344
+          rtl/m22/frp_m22_csr_pkg.sv|5586|0f3de8054e3704548088b035c43e993d194d5182a2ac1bc32cdad92663a11206
+          rtl/m31/frp_m31_active_neutral.sv|25909|765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0
+          rtl/m31/frp_m31_capacity_guard.sv|20787|d0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123
+          rtl/m31/frp_m31_execution_core.sv|33724|e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92
+          rtl/m31/frp_m31_fixed_point_pkg.sv|7278|6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24
+          rtl/m31/frp_m31_pending_routes.sv|17005|18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411
+          rtl/m31/frp_m31_phase_interference.sv|11245|e8ceb80feb0b30db5e28d70bc4d68d51506da4d596b46a73c0137465d1455fe0
+          rtl/m31/frp_m31_phase_request_adapter.sv|2251|fa78bcfe965270cc74855908aa392989d857575a2097a126539aabb1aab8990d
+          rtl/m31/frp_m31_pkg.sv|18531|762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94
+          rtl/m31/frp_m31_request_lanes.sv|18290|32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109
+          rtl/m31/frp_m31_scheduler.sv|10560|fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f
+          rtl/m31/frp_m31_sin_q30.mem|36864|adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d
+          rtl/m31/frp_m31_stability.sv|2203|69c06833e6dfbb28e25b74a5787dcd03756dddf0f66726de3ea47c1ad2931931
+          rtl/m31/frp_m31_state_update.sv|18147|ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90
+          rtl/m31/frp_m31_thermal_proxy.sv|1883|34df4ebfc5dfad8e3e5e454e560404585de5c881e6f75abaae367d3bd9fb11bd
+          rtl/m32/frp_m32_core.sv|10564|925342326b7ad555a1382e8ee3bc5754ed3012ba60e0eabf512113731e0ee6c9
+          rtl/m32/frp_m32_registered_target_boundary.sv|3947|9626474b49d32b411e107d7ccc8ee5aa7f42728e9a6f70d634d16d3f2a414c5e
+          rtl/m32/frp_m32_registered_target_request_path.sv|3244|02250069a68737f055a419cd67bf2d439b3f63b3f6a7a245f40e9bf29d1958eb
+          """
+          records = []
+          for row in identity_rows.strip().splitlines():
+              name, expected_bytes, expected_sha = row.strip().split("|")
+              path = Path(name)
+              if path.is_symlink() or not path.is_file():
+                  raise SystemExit(f"Missing regular source file: {name}")
+              subprocess.run(
+                  ["git", "ls-files", "--error-unmatch", name],
+                  check=True, stdout=subprocess.DEVNULL,
+              )
+              raw = path.read_bytes()
+              actual_sha = hashlib.sha256(raw).hexdigest()
+              if len(raw) != int(expected_bytes) or actual_sha != expected_sha:
+                  raise SystemExit(
+                      f"Source identity mismatch: {name}\n"
+                      f"Expected: {expected_bytes} bytes, SHA-256 {expected_sha}\n"
+                      f"Actual: {len(raw)} bytes, SHA-256 {actual_sha}"
+                  )
+              records.append({"path": name, "bytes": len(raw), "sha256": actual_sha})
+          if len(records) != 21:
+              raise SystemExit("Expected twenty-one canonical input files")
+
+          allowed = {r["path"] for r in records if r["path"].endswith(".sv")}
+          visited = set()
+          include_dirs = [Path(p) for p in (
+              "rtl/m22", "rtl/m31", "rtl/m32", "fpga/m32", "fpga/m32_csr",
+          )]
+
+          def visit(name):
+              if name in visited:
+                  return
+              if name not in allowed:
+                  raise SystemExit(f"Unpinned RTL include: {name}")
+              visited.add(name)
+              path = Path(name)
+              includes = re.findall(
+                  r'`include\s+"([^"]+)"', path.read_text(encoding="utf-8")
+              )
+              for include in includes:
+                  candidates = {
+                      str(directory / include)
+                      for directory in [path.parent, *include_dirs]
+                      if (directory / include).is_file()
+                  }
+                  if len(candidates) != 1:
+                      raise SystemExit(f"Ambiguous or missing include: {include}")
+                  visit(candidates.pop())
+
+          visit("fpga/m32_csr/frp_m32_csr_top.sv")
+          visit("fpga/m32_csr/frp_m32_csr_post_synthesis_tb.sv")
+          if visited != allowed:
+              raise SystemExit("Pinned source set differs from the include closure")
+
+          workflow = Path(
+              ".github/workflows/frp-m32-csr-post-synthesis-qualification.yml"
+          )
+          subprocess.run(
+              ["git", "ls-files", "--error-unmatch", str(workflow)],
+              check=True, stdout=subprocess.DEVNULL,
+          )
+          manifest = {
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "source_commit": os.environ["GITHUB_SHA"],
+              "files": records,
+              "workflow": {
+                  "path": str(workflow),
+                  "sha256": hashlib.sha256(workflow.read_bytes()).hexdigest(),
+              },
+          }
+          (evidence / "source-manifest.json").write_text(
+              json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          (evidence / "canonical-sources.sha256").write_text(
+              "".join(f'{r["sha256"]}  {r["path"]}\n' for r in records),
+              encoding="ascii",
+          )
+          print("Exact sources: 20 SystemVerilog files and one sine ROM: PASS")
+          PY
+
+      - name: Install and record simulation and synthesis tools
+        run: |
+          set -euo pipefail
+          {
+            sudo apt-get update
+            sudo apt-get install --yes verilator g++ make
+            python -m pip install --disable-pip-version-check \
+              yowasp-yosys==0.68.0.0.post1208
+            python -m pip check
+            python --version
+            verilator --version
+            g++ --version
+            make --version
+            yowasp-yosys -V
+          } 2>&1 | tee "$M32_EVIDENCE/toolchain.log"
+          python -m pip freeze > "$M32_EVIDENCE/python-packages.txt"
+          yowasp-yosys -Q -T -p 'help read_slang' \
+            > "$M32_EVIDENCE/read-slang-help.log" 2>&1
+
+      - name: Record the pinned synthesis cell models
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import shutil
+          from pathlib import Path
+          import yowasp_yosys
+
+          evidence = Path(os.environ["M32_EVIDENCE"])
+          version = importlib.metadata.version("yowasp-yosys")
+          if version != "0.68.0.0.post1208":
+              raise SystemExit(f"Unexpected Yosys package version: {version}")
+          share = Path(yowasp_yosys.__file__).resolve().parent / "share"
+          records = []
+          for name in ("simlib.v", "techmap.v"):
+              source = share / name
+              if not source.is_file():
+                  raise SystemExit(f"Missing Yosys support file: {name}")
+              target = evidence / f"yosys-{name}"
+              shutil.copyfile(source, target)
+              raw = target.read_bytes()
+              records.append({"path": target.name, "bytes": len(raw),
+                              "sha256": hashlib.sha256(raw).hexdigest()})
+          (evidence / "cell-models.json").write_text(
+              json.dumps({"package": "yowasp-yosys", "version": version,
+                          "files": records}, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          print("Pinned cell models and technology map recorded: PASS")
+          PY
+
+      - name: Lint the complete CSR top
+        run: |
+          set -euo pipefail
+          verilator --sv --lint-only --timing --assert -Wall -Wno-fatal \
+            --top-module frp_m32_csr_top \
+            -Irtl/m22 -Irtl/m31 -Irtl/m32 -Ifpga/m32 -Ifpga/m32_csr \
+            fpga/m32_csr/frp_m32_csr_top.sv \
+            2>&1 | tee "$M32_EVIDENCE/top-lint.log"
+
+      - name: Prepare the verified synthesis source view
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import difflib
+          import hashlib
+          import json
+          import os
+          import shutil
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_EVIDENCE"])
+          view = Path(os.environ["M32_SOURCE"])
+          manifest = json.loads((evidence / "source-manifest.json").read_text())
+          for record in manifest["files"]:
+              source = Path(record["path"])
+              target = view / source
+              target.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copyfile(source, target)
+              if hashlib.sha256(target.read_bytes()).hexdigest() != record["sha256"]:
+                  raise SystemExit(f"Staged source mismatch: {source}")
+
+          relative = Path("rtl/m31/frp_m31_phase_interference.sv")
+          original = relative.read_bytes()
+          old = b"""    $readmemh(SIN_LUT_FILE, sin_lut);\n    if (sin_lut[0] !== 32'sd0)\n      $fatal(1, "FRP M31 sine LUT zero-point mismatch");\n    if (sin_lut[1024] !== FRP_M31_Q30_ONE)\n      $fatal(1, "FRP M31 sine LUT quarter-cycle mismatch");\n    if (sin_lut[2048] !== 32'sd0)\n      $fatal(1, "FRP M31 sine LUT half-cycle mismatch");\n    if (sin_lut[3072] !== -FRP_M31_Q30_ONE)\n      $fatal(1, "FRP M31 sine LUT three-quarter-cycle mismatch");\n"""
+          new = b"    $readmemh(SIN_LUT_FILE, sin_lut);\n"
+          if original.count(old) != 1:
+              raise SystemExit("Expected four ROM simulation checks were not unique")
+          normalized = original.replace(old, new, 1)
+          if len(normalized) != 10853 or hashlib.sha256(normalized).hexdigest() != (
+              "571a1df102318fc5b62d2b0977aa57625e7abd999db3487e62fe2d270f190bb8"
+          ):
+              raise SystemExit("Synthesis phase-source identity mismatch")
+          if normalized.count(new) != 1:
+              raise SystemExit("Sine ROM initialization was not preserved")
+
+          (view / relative).write_bytes(normalized)
+          patch = difflib.unified_diff(
+              original.decode().splitlines(keepends=True),
+              normalized.decode().splitlines(keepends=True),
+              fromfile=f"canonical/{relative}",
+              tofile=f"synthesis-view/{relative}",
+          )
+          (evidence / "synthesis-view.patch").write_text(
+              "".join(patch), encoding="utf-8"
+          )
+          print("Verified synthesis view; canonical files retained: PASS")
+          PY
+
+      - name: Synthesize the complete CSR integration twice
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_EVIDENCE"])
+          view = Path(os.environ["M32_SOURCE"])
+          top = "frp_m32_csr_top"
+          for replay in (1, 2):
+              paths = {
+                  "json": evidence / f"netlist-run-{replay}.json",
+                  "v": evidence / f"netlist-run-{replay}.v",
+                  "stat": evidence / f"stat-run-{replay}.json",
+                  "log": evidence / f"synthesis-run-{replay}.log",
+              }
+              script = (
+                  "read_slang -j 1 --std 1800-2017 --ignore-assertions "
+                  f"--top {top} -Irtl/m22 -Irtl/m31 -Irtl/m32 -Ifpga/m32 -Ifpga/m32_csr "
+                  "fpga/m32_csr/frp_m32_csr_top.sv; "
+                  f"synth -top {top} -noshare -run begin:fine; check -assert; "
+                  f'tee -o {json.dumps(str(paths["stat"]))} stat -json -top {top}; '
+                  f'write_json {json.dumps(str(paths["json"]))}; '
+                  f'write_verilog -noattr -noexpr -nodec {json.dumps(str(paths["v"]))}'
+              )
+              (evidence / f"synthesis-run-{replay}.ys").write_text(
+                  script + "\n", encoding="utf-8"
+              )
+              print(f"Starting synthesis replay {replay}", flush=True)
+              subprocess.run(
+                  ["yowasp-yosys", "-Q", "-T", "-q", "-l", str(paths["log"]),
+                   "-p", script],
+                  cwd=view, check=True, timeout=300,
+              )
+              for path in paths.values():
+                  if not path.is_file() or path.stat().st_size == 0:
+                      raise SystemExit(f"Missing synthesis output: {path.name}")
+              log = paths["log"].read_text(encoding="utf-8")
+              if "ERROR:" in log or "Found and reported 0 problems." not in log:
+                  raise SystemExit(f"Structural synthesis check failed: run {replay}")
+              print(f"Completed synthesis replay {replay}", flush=True)
+
+          for stem, suffix in (("netlist", "json"), ("netlist", "v"), ("stat", "json")):
+              first = evidence / f"{stem}-run-1.{suffix}"
+              second = evidence / f"{stem}-run-2.{suffix}"
+              if first.read_bytes() != second.read_bytes():
+                  raise SystemExit(f"Synthesis replay mismatch: {stem}.{suffix}")
+          print("Two JSON netlists, Verilog netlists, and statistics match: PASS")
+          PY
+
+      - name: Validate the synthesized CSR structure and ROM
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from collections import Counter
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_EVIDENCE"])
+          top = "frp_m32_csr_top"
+
+          def require(condition, message):
+              if not condition:
+                  raise SystemExit(message)
+
+          netlist = json.loads((evidence / "netlist-run-1.json").read_text())
+          require(set(netlist["modules"]) == {top}, "Expected one flattened CSR top")
+          module = netlist["modules"][top]
+          require(int(module["attributes"].get("top", "0"), 2) == 1,
+                  "Missing top attribute")
+          expected_ports = {
+              "clk": ("input", 1), "rst_n_async": ("input", 1),
+              "csr_valid": ("input", 1), "csr_write": ("input", 1),
+              "csr_addr": ("input", 8), "csr_wdata": ("input", 32),
+              "csr_ready": ("output", 1), "csr_error": ("output", 1),
+              "csr_rdata": ("output", 32),
+          }
+          actual_ports = {
+              name: (port["direction"], len(port["bits"]))
+              for name, port in module["ports"].items()
+          }
+          require(actual_ports == expected_ports, "CSR port contract mismatch")
+          require(len(actual_ports) == 9, "Expected 9 CSR ports")
+          require(sum(width for _, width in actual_ports.values()) == 78,
+                  "Expected 78 CSR port bits")
+
+          cells = module["cells"]
+          cell_types = Counter(cell["type"] for cell in cells.values())
+          require(len(cells) >= 7000, "Complete integrated-core logic is missing")
+          require(all(t.startswith("$") and "latch" not in t.lower() for t in cell_types),
+                  "Unresolved module or latch cell in synthesized design")
+          require(not module.get("processes"), "Unsynthesized processes remain")
+
+          ports = module["ports"]
+          sync = module["netnames"]["u_fpga.reset_sync_q"]["bits"]
+          ready = module["netnames"]["core_ready"]["bits"]
+          require(len(sync) == 2 and sync[0] != sync[1] and ready == [sync[1]],
+                  "Reset stage or readiness wiring mismatch")
+          reset_cells = [
+              cell for cell in cells.values()
+              if cell["type"] == "$adff"
+              and cell["connections"]["Q"] == sync
+          ]
+          require(len(reset_cells) == 1, "Reset synchronizer register missing")
+          reset = reset_cells[0]
+          connections = reset["connections"]
+          parameters = reset["parameters"]
+          require(connections["D"] == ["1", sync[0]]
+                  and connections["CLK"] == ports["clk"]["bits"]
+                  and connections["ARST"] == ports["rst_n_async"]["bits"],
+                  "Reset synchronizer connections mismatch")
+          require(int(parameters["WIDTH"], 2) == 2
+                  and int(parameters["CLK_POLARITY"], 2) == 1
+                  and int(parameters["ARST_POLARITY"], 2) == 0
+                  and int(parameters["ARST_VALUE"], 2) == 0,
+                  "Reset synchronizer polarity or reset value mismatch")
+          consumers = [
+              cell for cell in cells.values()
+              if "ARST" in cell["connections"] and cell is not reset
+          ]
+          require(bool(consumers) and all(
+              cell["connections"]["ARST"] == ready for cell in consumers
+          ), "Core reset bypasses the second synchronizer stage")
+
+          rom = cells.get("u_fpga.u_m32_core.u_phase_interference.sin_lut")
+          require(rom is not None and rom["type"] == "$mem_v2",
+                  "Canonical sine ROM was not retained as memory")
+          expected_rom = {"WIDTH": 32, "SIZE": 4096, "ABITS": 12,
+                          "RD_PORTS": 72, "WR_PORTS": 0}
+          for name, value in expected_rom.items():
+              require(int(rom["parameters"][name], 2) == value,
+                      f"Sine ROM parameter mismatch: {name}")
+          lut = Path("rtl/m31/frp_m31_sin_q30.mem")
+          words = lut.read_text(encoding="ascii").splitlines()
+          require(len(words) == 4096 and all(
+              re.fullmatch(r"[0-9A-Fa-f]{8}", word) for word in words
+          ), "Canonical sine ROM word format mismatch")
+          expected_init = "".join(f"{int(word, 16):032b}" for word in reversed(words))
+          require(rom["parameters"]["INIT"] == expected_init,
+                  "Synthesized sine ROM content differs from canonical source")
+          require(all(int(cell["parameters"]["WR_PORTS"], 2) == 0
+                      for cell in cells.values() if cell["type"] == "$mem_v2"),
+                  "Unexpected writable memory in the fixed CSR profile")
+
+          stat = json.loads((evidence / "stat-run-1.json").read_text())
+          stat_module = stat["modules"].get("\\" + top)
+          require(stat_module is not None, "Missing CSR synthesis statistics")
+          require(stat_module["num_processes"] == 0
+                  and stat_module["num_ports"] == 9
+                  and stat_module["num_port_bits"] == 78
+                  and stat_module["num_cells"] == len(cells)
+                  and stat_module["num_cells_by_type"] == dict(cell_types)
+                  and cell_types["$mem_v2"] == 2,
+                  "CSR synthesis statistics mismatch")
+
+          result = {
+              "result": "PASS",
+              "source_commit": os.environ["GITHUB_SHA"],
+              "synthesis": {
+                  "top": top, "frontend": "read_slang", "standard": "1800-2017",
+                  "flow": "Yosys synth -noshare -run begin:fine",
+                  "flattened_modules": 1, "processes": 0,
+                  "ports": 9, "port_bits": 78, "cells": len(cells),
+                  "cell_types": dict(sorted(cell_types.items())),
+                  "replays": 2, "json_verilog_statistics_identical": True,
+              },
+              "reset": {"stages": 2, "asynchronous_assertion": True,
+                        "core_uses_second_stage": True},
+              "sine_rom": {"width": 32, "depth": 4096, "read_ports": 72,
+                           "write_ports": 0, "matches_canonical_mem": True},
+          }
+          (evidence / "synthesis-structure.json").write_text(
+              json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print("CSR ports, two-stage reset, and canonical sine ROM: PASS")
+          PY
+
+      - name: Export and verify two simulation netlists
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_EVIDENCE"])
+          top = "frp_m32_csr_top"
+          simulation_top = "frp_m32_csr_netlist"
+
+          def require(condition, message):
+              if not condition:
+                  raise SystemExit(message)
+
+          def port_contract(module):
+              return {name: (p["direction"], len(p["bits"]), p.get("signed", 0))
+                      for name, p in module["ports"].items()}
+
+          def memory_parameters(module):
+              return {name: cell["parameters"] for name, cell in module["cells"].items()
+                      if cell["type"] == "$mem_v2"}
+
+          testbench = Path("fpga/m32_csr/frp_m32_csr_post_synthesis_tb.sv").read_text()
+          observed = re.findall(r"dut\.\\(u_fpga\.\w+)\s", testbench)
+          require(len(observed) == len(set(observed)) == 59,
+                  "Expected 59 distinct read-only core observation wires")
+          records = []
+          for replay in (1, 2):
+              original = evidence / f"netlist-run-{replay}.json"
+              raw = original.read_bytes()
+              module = json.loads(raw)["modules"][top]
+              paths = {suffix: evidence / f"simulation-netlist-{replay}.{suffix}"
+                       for suffix in ("json", "v", "ys", "log")}
+              script = (
+                  f"read_json {json.dumps(str(original))}; "
+                  "techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; "
+                  "select -assert-none t:$shiftx t:$connect; "
+                  f"rename {top} {simulation_top}; "
+                  f"write_json {json.dumps(str(paths['json']))}; "
+                  f"write_verilog -noattr {json.dumps(str(paths['v']))}"
+              )
+              paths["ys"].write_text(script + "\n", encoding="utf-8")
+              subprocess.run(
+                  ["yowasp-yosys", "-Q", "-T", "-q", "-l", str(paths["log"]),
+                   "-s", str(paths["ys"])], check=True, timeout=300,
+              )
+              require(original.read_bytes() == raw, "Original synthesis JSON changed")
+              for path in paths.values():
+                  require(path.is_file() and path.stat().st_size > 0,
+                          f"Missing simulation export: {path.name}")
+              exported = json.loads(paths["json"].read_text())
+              require(set(exported["modules"]) == {simulation_top},
+                      "Unexpected simulation module set")
+              mapped = exported["modules"][simulation_top]
+              require(port_contract(mapped) == port_contract(module),
+                      "Simulation port contract differs from synthesis")
+              require(memory_parameters(mapped) == memory_parameters(module),
+                      "Simulation memory parameters or initialization changed")
+              require(not mapped.get("processes"), "Simulation export retains processes")
+              for cell in mapped["cells"].values():
+                  cell_type = cell["type"]
+                  require(cell_type.startswith("$") and "latch" not in cell_type.lower()
+                          and cell_type not in {"$shiftx", "$connect"},
+                          f"Unsupported simulation export cell: {cell_type}")
+              for name in observed:
+                  require(name in mapped["netnames"] and name in module["netnames"],
+                          f"Missing core observation wire: {name}")
+                  before, after = module["netnames"][name], mapped["netnames"][name]
+                  require(len(before["bits"]) == len(after["bits"])
+                          and before.get("signed", 0) == after.get("signed", 0),
+                          f"Core observation wire contract changed: {name}")
+              records.append({
+                  "replay": replay,
+                  "input_sha256": hashlib.sha256(raw).hexdigest(),
+                  "simulation_json_sha256": hashlib.sha256(paths["json"].read_bytes()).hexdigest(),
+                  "simulation_verilog_sha256": hashlib.sha256(paths["v"].read_bytes()).hexdigest(),
+                  "mapped_shiftx_cells": sum(c["type"] == "$shiftx" for c in module["cells"].values()),
+              })
+          for suffix in ("json", "v"):
+              require((evidence / f"simulation-netlist-1.{suffix}").read_bytes()
+                      == (evidence / f"simulation-netlist-2.{suffix}").read_bytes(),
+                      f"Simulation export replay mismatch: {suffix}")
+          (evidence / "simulation-export.json").write_text(
+              json.dumps({"result": "PASS", "top": simulation_top,
+                          "ports_and_memories_preserved": True,
+                          "observation_wires": sorted(observed),
+                          "replays_identical": True, "files": records},
+                         indent=2, sort_keys=True) + "\n", encoding="utf-8",
+          )
+          print("Two simulation exports match; ports, ROM, and 59 core wires preserved: PASS")
+          PY
+
+      - name: Build the CSR post-synthesis testbench
+        run: |
+          set -euo pipefail
+          verilator -DSIMLIB_NOCONNECT --sv --timing --assert --binary -Wall -Wno-fatal \
+            -CFLAGS "-std=c++20 -O0" --output-split 20000 \
+            -MAKEFLAGS VK_PCH_I_FAST= -MAKEFLAGS VK_PCH_I_SLOW= \
+            -j 2 --top-module frp_m32_csr_post_synthesis_tb \
+            --Mdir "$M32_BUILD" \
+            -Irtl/m31 -Irtl/m32 \
+            -v "$M32_EVIDENCE/yosys-simlib.v" \
+            "$M32_EVIDENCE/simulation-netlist-1.v" \
+            fpga/m32_csr/frp_m32_csr_post_synthesis_tb.sv \
+            2>&1 | tee "$M32_EVIDENCE/post-synthesis-build.log"
+          test -x "$M32_BUILD/Vfrp_m32_csr_post_synthesis_tb"
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+          evidence = Path(os.environ["M32_EVIDENCE"])
+          for name in ("top-lint.log", "post-synthesis-build.log"):
+              log = (evidence / name).read_text(encoding="utf-8")
+              if re.search(r"%Warning-(PINMISSING|IMPLICIT|MULTIDRIVEN):", log):
+                  raise SystemExit(f"Invalid connection or multiple driver: {name}")
+          PY
+
+      - name: Execute and compare two post-synthesis simulations
+        run: |
+          set -euo pipefail
+          for replay in 1 2; do
+            timeout 120s "$M32_BUILD/Vfrp_m32_csr_post_synthesis_tb" \
+              2>&1 | tee "$M32_EVIDENCE/post-synthesis-run-$replay.log"
+          done
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_EVIDENCE"])
+          expected = (
+              "FRP_M32_CSR_POST_SYNTHESIS_TB: PASS checks=6905 ticks=306 "
+              "rejected_transfers=449 core_outputs=59"
+          )
+          for replay in (1, 2):
+              raw = (evidence / f"post-synthesis-run-{replay}.log").read_bytes()
+              markers = [line for line in raw.decode().splitlines()
+                         if line.startswith("FRP_M32_CSR_POST_SYNTHESIS_TB:")]
+              if markers != [expected]:
+                  raise SystemExit(f"Incomplete CSR post-synthesis simulation: run {replay}")
+          if (evidence / "post-synthesis-run-1.log").read_bytes() != (
+              evidence / "post-synthesis-run-2.log"
+          ).read_bytes():
+              raise SystemExit("CSR post-synthesis replay mismatch")
+          print("Two complete CSR post-synthesis logs match: PASS")
+          PY
+
+      - name: Verify repository integrity and seal qualification reports
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_EVIDENCE"])
+
+          def require(condition, message):
+              if not condition:
+                  raise SystemExit(message)
+
+          manifest = json.loads((evidence / "source-manifest.json").read_text())
+          for record in manifest["files"]:
+              raw = Path(record["path"]).read_bytes()
+              require(len(raw) == record["bytes"]
+                      and hashlib.sha256(raw).hexdigest() == record["sha256"],
+                      f'Canonical source changed: {record["path"]}')
+          workflow = manifest["workflow"]
+          require(hashlib.sha256(Path(workflow["path"]).read_bytes()).hexdigest()
+                  == workflow["sha256"], "Workflow source changed")
+          require(subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+                  == os.environ["GITHUB_SHA"], "Checkout commit changed")
+          subprocess.run(["git", "diff", "--exit-code"], check=True)
+          require(not subprocess.check_output(["git", "status", "--porcelain"]),
+                  "Repository working tree changed")
+
+          structure = json.loads((evidence / "synthesis-structure.json").read_text())
+          exported = json.loads((evidence / "simulation-export.json").read_text())
+          require(structure["result"] == exported["result"] == "PASS",
+                  "Missing successful synthesis or simulation-export verification")
+          require(structure["source_commit"] == os.environ["GITHUB_SHA"],
+                  "Synthesis report source commit differs from checkout")
+          expected = (
+              "FRP_M32_CSR_POST_SYNTHESIS_TB: PASS checks=6905 ticks=306 "
+              "rejected_transfers=449 core_outputs=59"
+          )
+          first = (evidence / "post-synthesis-run-1.log").read_bytes()
+          second = (evidence / "post-synthesis-run-2.log").read_bytes()
+          require(first == second and first.decode().splitlines().count(expected) == 1,
+                  "Missing identical complete post-synthesis transcripts")
+          result = {
+              "schema": "frp.m32.csr-post-synthesis-qualification.v1",
+              "result": "PASS",
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "source_commit": os.environ["GITHUB_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "profile": {"cells": 8, "request_lanes": 2},
+              "source_files": 21,
+              "simulation": {
+                  "top": "frp_m32_csr_post_synthesis_tb", "replays": 2,
+                  "dut": "frp_m32_csr_netlist", "reference": "frp_m32_core",
+                  "compared_outputs": 59, "checks_per_replay": 6905,
+                  "ticks_per_replay": 306, "rejected_transfers_per_replay": 449,
+                  "modes": ["free", "7/1", "1/7"], "transcripts_identical": True,
+                  "opposite_routes": ["-1 -> 0 -> 1", "1 -> 0 -> -1"],
+                  "active_zero_and_pending_retention_checked": True,
+              },
+              "synthesis": structure["synthesis"],
+              "reset": structure["reset"],
+              "sine_rom": structure["sine_rom"],
+              "simulation_export": exported,
+              "cell_models": json.loads((evidence / "cell-models.json").read_text()),
+              "repository_unchanged": True,
+          }
+          (evidence / "qualification.json").write_text(
+              json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          checksum_rows = [
+              f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n"
+              for path in sorted(evidence.iterdir())
+              if path.is_file() and path.name != "artifacts.sha256"
+          ]
+          (evidence / "artifacts.sha256").write_text(
+              "".join(checksum_rows), encoding="ascii"
+          )
+          print("FRP M32 CSR post-synthesis qualification: PASS")
+          PY
+
+      - name: Upload qualification reports and diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: frp-m32-csr-post-synthesis-qualification-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-m32-csr-post-synthesis-evidence/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Publish qualification summary
+        if: always()
+        env:
+          M32_JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          lines = [
+              "# FRP M32 CSR Post-Synthesis Qualification", "",
+              f'- Job result: {os.environ["M32_JOB_STATUS"]}',
+              f'- Source commit: {os.environ["GITHUB_SHA"]}',
+          ]
+          report = (Path(os.environ["RUNNER_TEMP"])
+                    / "frp-m32-csr-post-synthesis-evidence" / "qualification.json")
+          if report.is_file():
+              result = json.loads(report.read_text())
+              lines.extend([
+                  "- Profile: 8 cells / 2 request lanes",
+                  "- Post-synthesis simulation: 2 identical complete transcripts",
+                  "- DUT: generated CSR netlist / reference: M32 RTL core",
+                  "- Simulation export: ports, both ROMs, and 59 observation wires preserved",
+                  "- Compared core outputs: 59 / 6905 checks per replay",
+                  "- Scheduler modes: free, 7/1, 1/7",
+                  "- CSR ticks: 306 / rejected transfers: 449 per replay",
+                  "- Polarity routes: -1 -> 0 -> 1 and 1 -> 0 -> -1",
+                  "- Synthesis: Yosys begin:fine / -noshare / complete flattened CSR top",
+                  "- Synthesis replays: identical JSON, Verilog, and statistics",
+                  "- CSR interface: 9 ports / 78 bits",
+                  f'- Synthesized cells: {result["synthesis"]["cells"]}',
+                  "- Remaining processes and latch cells: 0",
+                  "- Reset release: 2 stages / core driven by second stage",
+                  "- Sine ROM: 4096 x 32 / 72 read ports / canonical content",
+                  "- Repository unchanged: yes",
+                  f'- Qualification result: {result["result"]}',
+              ])
+          else:
+              lines.append("- Qualification report was not produced; see diagnostic logs.")
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
+              stream.write("\n".join(lines) + "\n")
+          PY
