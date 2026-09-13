@@ -1,0 +1,320 @@
+name: FRP M32 CSR CDC Qualification
+
+run-name: "FRP M32 CSR CDC Qualification @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-m32-csr-cdc-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-csr-cdc:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Initialize build and evidence paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "M32_CDC_WORK=$RUNNER_TEMP/frp-m32-csr-cdc-work" \
+            "M32_CDC_EVIDENCE=$RUNNER_TEMP/frp-m32-csr-cdc-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m32-csr-cdc-evidence"
+
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install simulation and synthesis tools
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            sudo apt-get update
+            sudo apt-get install --yes verilator g++ make
+            python -m pip install --disable-pip-version-check \
+              yowasp-yosys==0.68.0.0.post1208
+            python --version
+            verilator --version
+            g++ --version
+          } 2>&1 | tee "$M32_CDC_EVIDENCE/toolchain.log"
+
+      - name: Qualify CDC transactions, recovery, and synthesis
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          from pathlib import Path
+
+          root = Path.cwd().resolve()
+          work = Path(os.environ["M32_CDC_WORK"])
+          evidence = Path(os.environ["M32_CDC_EVIDENCE"])
+          evidence.mkdir(parents=True, exist_ok=True)
+          view, build = work / "source", work / "build"
+          top = "frp_m32_csr_cdc_top"
+          bench = "frp_m32_csr_cdc_tb"
+          tb = "fpga/m32_csr/" + bench + ".sv"
+          workflow = ".github/workflows/frp-m32-csr-cdc-qualification.yml"
+          include_dirs = ["rtl/m22", "rtl/m23", "rtl/m31", "rtl/m32",
+                          "fpga/m32", "fpga/m32_csr"]
+          profiles = [(5, 7, 1), (3, 11, 4), (13, 2, 3)]
+          expected = {
+              "checks": 9117, "launches": 1802, "completions": 1800,
+              "core_completions": 1801, "host_responses": 1800,
+              "aborts": 2, "aborts_after_core": 1, "ticks": 177,
+              "errors": 460, "routes": 8, "resets": 14,
+          }
+          report = {
+              "status": "FAIL", "source_commit": os.environ["GITHUB_SHA"],
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "expected_metrics": expected, "commands": [], "profiles": [],
+          }
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          def sha(raw):
+              return hashlib.sha256(raw).hexdigest()
+
+          def execute(command, label, directory, limit):
+              report["commands"].append({"label": label, "argv": command})
+              print(label, flush=True)
+              log_path = evidence / (label + ".log")
+              with log_path.open("w") as log:
+                  result = subprocess.run(command, cwd=directory, stdout=log,
+                      stderr=subprocess.STDOUT, timeout=limit)
+              if result.returncode:
+                  print("\n".join(log_path.read_text(errors="replace").splitlines()[-40:]))
+                  raise RuntimeError(f"{label} failed: exit {result.returncode}")
+              return log_path
+
+          def result_records(text, profile):
+              prefix = "FRP_M32_CSR_CDC_TB: PASS "
+              records = [line for line in text.splitlines()
+                         if line.startswith(("CSR_CDC seed=", "FRP_M32_CSR_CDC_TB:"))]
+              require(len(records) == 2 and records[0] == "CSR_CDC seed=13579bdf PASS",
+                      "Incomplete or repeated CDC results")
+              wanted = dict(zip(("host_half", "core_half", "phase"), profile)) | expected
+              match = re.fullmatch(prefix + " ".join(k + r"=(\d+)" for k in wanted),
+                                   records[1])
+              require(match is not None, "Malformed CDC terminal result")
+              require(dict(zip(wanted, map(int, match.groups()))) == wanted,
+                      "Unexpected CDC metrics or clock profile")
+              return records
+
+          try:
+              require(importlib.metadata.version("yowasp-yosys") == "0.68.0.0.post1208",
+                      "Unexpected synthesis package")
+              sources = set()
+
+              def visit(name):
+                  if name in sources:
+                      return
+                  path = root / name
+                  require(path.is_file() and not path.is_symlink(), "Missing source: " + name)
+                  sources.add(name)
+                  for inc in re.findall(r'`include\s+"([^"]+)"', path.read_text()):
+                      matches = {(directory / inc).resolve()
+                                 for directory in [path.parent, *[root / d for d in include_dirs]]
+                                 if (directory / inc).is_file()}
+                      require(len(matches) == 1, "Missing or ambiguous include: " + inc)
+                      resolved = matches.pop()
+                      require(resolved.is_relative_to(root), "Include leaves the repository")
+                      visit(resolved.relative_to(root).as_posix())
+
+              visit(tb)
+              sources.add("rtl/m31/frp_m31_sin_q30.mem")
+              rows, identities = [], {}
+              for name in sorted(sources):
+                  raw = (root / name).read_bytes()
+                  identities[name] = {"bytes": len(raw), "sha256": sha(raw)}
+                  rows.append(f"{name}|{len(raw)}|{sha(raw)}")
+              digest = sha(("\n".join(rows) + "\n").encode())
+              report.update(sources=identities, source_set_sha256=digest,
+                            workflow_sha256=sha((root / workflow).read_bytes()))
+              require(len(sources) == 25 and digest ==
+                      "ab58b910f3b7aa8a0592ac2bda3387623d7a77960c2a434d59e9953f66145cfe",
+                      "Source set differs from the validated CDC inputs")
+              for name in sources:
+                  target = view / name
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(root / name, target)
+
+              command = ["verilator", "--binary", "--sv", "--timing", "--assert",
+                         "-Wall", "-Wno-fatal", "-CFLAGS", "-std=c++20 -O0",
+                         "--output-split", "20000", "-MAKEFLAGS", "VK_PCH_I_FAST=",
+                         "-MAKEFLAGS", "VK_PCH_I_SLOW=", "-j", "2",
+                         "--top-module", bench, "--Mdir", str(build)]
+              command += ["-I" + d for d in include_dirs] + [tb]
+              execute(command, "build", root, 600)
+              for profile in profiles:
+                  h, c, p = profile
+                  replays = []
+                  for attempt in (1, 2):
+                      log = execute([str(build / ("V" + bench)), f"+HOST_HALF={h}",
+                                     f"+CORE_HALF={c}", f"+PHASE={p}"],
+                                    f"run-{h}-{c}-{p}-{attempt}", root, 180)
+                      replays.append(result_records(log.read_text(), profile))
+                  require(replays[0] == replays[1], "CDC replay records differ")
+                  report["profiles"].append({"host_half_ns": h, "core_half_ns": c,
+                      "phase_ns": p, "replays": 2, "records": replays[0]})
+                  print("\n".join(replays[0]), flush=True)
+
+              phase = view / "rtl/m31/frp_m31_phase_interference.sv"
+              text = phase.read_text()
+              first = text.index("    if (sin_lut[0] !== 32'sd0)")
+              last = text.index('      $fatal(1, "FRP M31 sine LUT three-quarter-cycle mismatch");', first)
+              normalized = text[:first] + text[text.index("\n", last) + 1:]
+              require(sha(normalized.encode()) ==
+                      "571a1df102318fc5b62d2b0977aa57625e7abd999db3487e62fe2d270f190bb8",
+                      "Unexpected synthesis source normalization")
+              phase.write_text(normalized)
+              netlist = evidence / "frp_m32_csr_cdc_netlist.json"
+              script = (
+                  "read_slang -j 1 --std 1800-2017 --ignore-assertions --top " + top
+                  + " " + " ".join("-I" + d for d in include_dirs)
+                  + " fpga/m32_csr/" + top + ".sv; "
+                  + "synth -top " + top + " -noshare -run begin:fine; "
+                  + "check -assert; write_json " + json.dumps(str(netlist)) + "; stat"
+              )
+              script_path = evidence / "synthesis.ys"
+              script_path.write_text(script + "\n")
+              execute(["yowasp-yosys", "-Q", "-T", "-s", str(script_path)],
+                      "synthesis", view, 600)
+              modules = json.loads(netlist.read_text())["modules"]
+              require(set(modules) == {top}, "Unexpected synthesized hierarchy")
+              module = modules[top]
+              cells, nets = module["cells"], module["netnames"]
+              ports = {name: (item["direction"], len(item["bits"]))
+                       for name, item in module["ports"].items()}
+              wanted_ports = {name: ("input", 1) for name in
+                  ("host_clk", "core_clk", "rst_n_async", "csr_valid", "csr_write")}
+              wanted_ports.update(csr_addr=("input", 8), csr_wdata=("input", 32),
+                                  csr_rdata=("output", 32))
+              wanted_ports.update({name: ("output", 1) for name in (
+                  "csr_ready", "csr_error", "host_reset_released", "core_reset_released",
+                  "interface_ready", "interface_busy", "protocol_error",
+                  "invalid_before_ready", "invalid_while_busy", "invalid_valid_held")})
+              require(ports == wanted_ports, "CDC port contract changed")
+              require(not module.get("processes") and not any(
+                  "latch" in cell["type"].lower() for cell in cells.values()),
+                  "Remaining processes or latch cells")
+              memories = [cell["parameters"] for cell in cells.values()
+                          if cell["type"] == "$mem_v2"]
+              require(len(memories) == 2 and all(int(m["WR_PORTS"], 2) == 0
+                      for m in memories), "Read-only memory contract changed")
+              roms = [m for m in memories if int(m["SIZE"], 2) == 4096
+                      and int(m["WIDTH"], 2) == 32]
+              require(len(roms) == 1, "Missing canonical sine ROM")
+              words = [int(word, 16) for word in
+                       (root / "rtl/m31/frp_m31_sin_q30.mem").read_text().split()]
+              require(len(words) == 4096 and roms[0]["INIT"] ==
+                      "".join(f"{word:032b}" for word in reversed(words)),
+                      "Synthesized sine ROM contents changed")
+
+              def bit(name):
+                  bits = nets[name]["bits"]
+                  require(len(bits) == 1, "Expected one-bit net: " + name)
+                  return bits[0]
+
+              syncs = [
+                  ("host_reset_sync.release_q", "host_clk", "rst_n_async", "1"),
+                  ("core_reset_sync.release_q", "core_clk", "rst_n_async", "1"),
+                  ("core_release_host_sync_q", "host_clk", "host_reset_released",
+                   bit("core_reset_released")),
+                  ("cdc_bridge.request_toggle_core_sync_q", "core_clk",
+                   "core_reset_released", bit("cdc_bridge.request_toggle_host_q")),
+                  ("cdc_bridge.response_toggle_host_sync_q", "host_clk",
+                   "host_reset_released", bit("cdc_bridge.response_toggle_core_q")),
+              ]
+              for name, clock, reset, source in syncs:
+                  net = nets[name]
+                  require(net.get("attributes", {}).get("ASYNC_REG") == "TRUE"
+                          and len(net["bits"]) == 2, "Lost synchronizer: " + name)
+                  for index, q in enumerate(net["bits"]):
+                      drivers = [cell for cell in cells.values()
+                                 if q in cell.get("connections", {}).get("Q", [])]
+                      require(len(drivers) == 1, "Ambiguous synchronizer driver")
+                      cell = drivers[0]
+                      conn, params = cell["connections"], cell["parameters"]
+                      require(cell["type"] == "$adff" and conn["CLK"] == [bit(clock)]
+                              and conn["ARST"] == [bit(reset)]
+                              and int(params["CLK_POLARITY"], 2) == 1
+                              and int(params["ARST_POLARITY"], 2) == 0
+                              and int(params["ARST_VALUE"], 2) == 0,
+                              "Synchronizer clock/reset mismatch: " + name)
+                      require(conn["D"][conn["Q"].index(q)] ==
+                              (source if index == 0 else net["bits"][0]),
+                              "Synchronizer stage wiring mismatch: " + name)
+              report["synthesis"] = {"cells": len(cells), "ports": ports,
+                  "processes": 0, "latches": 0, "read_only_memories": 2,
+                  "sine_rom_exact": True, "two_stage_synchronizers": len(syncs),
+                  "netlist_sha256": sha(netlist.read_bytes())}
+              for name, identity in identities.items():
+                  require(sha((root / name).read_bytes()) == identity["sha256"],
+                          "Source changed during qualification: " + name)
+              require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
+                      "Workflow changed during qualification")
+              subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
+              report.update(status="PASS", simulation_runs=6, sources_unchanged=True)
+              summary = ["# FRP M32 CSR CDC Qualification: PASS", "",
+                  "Source commit: " + os.environ["GITHUB_SHA"], "",
+                  "Three clock profiles; two matching replays per profile.", "",
+                  "| Measurement per replay | Result |", "| --- | ---: |"]
+              summary += [f"| {name} | {value} |" for name, value in expected.items()]
+              summary += ["", "errors counts intentionally rejected CSR transfers.", "",
+                  "Synthesis: zero latches/processes, exact sine ROM,",
+                  "and five verified two-stage synchronizers."]
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
+                  stream.write("\n".join(summary) + "\n")
+              print("FRP M32 CSR CDC qualification: PASS", flush=True)
+          except Exception as error:
+              report["error"] = str(error)
+              raise
+          finally:
+              (evidence / "result.json").write_text(
+                  json.dumps(report, indent=2, sort_keys=True) + "\n")
+          PY
+
+      - name: Retain CDC logs, synthesized netlist, and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-m32-csr-cdc-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M32_CDC_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
