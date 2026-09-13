@@ -1,0 +1,250 @@
+name: FRP M32 CSR Stream Post-Synthesis Qualification
+
+run-name: "FRP M32 CSR Stream Post-Synthesis @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-m32-csr-stream-post-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-stream-post-synthesis:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Initialize build and evidence paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "M32_STREAM_POST_WORK=$RUNNER_TEMP/frp-m32-stream-post-work" \
+            "M32_STREAM_POST_EVIDENCE=$RUNNER_TEMP/frp-m32-stream-post-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m32-stream-post-evidence"
+
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install simulation and synthesis tools
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            sudo apt-get update
+            sudo apt-get install --yes verilator g++ make
+            python -m pip install --disable-pip-version-check \
+              yowasp-yosys==0.68.0.0.post1208
+            python --version
+            verilator --version
+            g++ --version
+          } 2>&1 | tee "$M32_STREAM_POST_EVIDENCE/toolchain.log"
+
+      - name: Synthesize and qualify continuous CSR traffic
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          from pathlib import Path
+          import yowasp_yosys
+
+          root = Path.cwd().resolve()
+          work = Path(os.environ["M32_STREAM_POST_WORK"])
+          evidence = Path(os.environ["M32_STREAM_POST_EVIDENCE"])
+          view, build = work / "source", work / "build"
+          top = "frp_m32_csr_stream_post_synthesis_tb"
+          tb = "fpga/m32_csr/" + top + ".sv"
+          include_dirs = ["rtl/m22", "rtl/m31", "rtl/m32", "fpga/m32", "fpga/m32_csr"]
+          expected = {
+              "checks": 37085, "transfers": 12703, "ticks": 1742,
+              "errors": 1212, "routes": 32, "resets": 20,
+              "longest_run": 1605, "bus_comparisons": 26096, "idle_cycles": 275,
+          }
+          report = {
+              "status": "FAIL", "source_commit": os.environ["GITHUB_SHA"],
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "expected_metrics": expected, "commands": [],
+          }
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          def sha(raw):
+              return hashlib.sha256(raw).hexdigest()
+
+          def execute(command, label, directory, limit):
+              report["commands"].append({"label": label, "argv": command})
+              print(label, flush=True)
+              log_path = evidence / (label + ".log")
+              with log_path.open("w") as log:
+                  result = subprocess.run(command, cwd=directory, stdout=log,
+                      stderr=subprocess.STDOUT, timeout=limit)
+              if result.returncode:
+                  print("\n".join(log_path.read_text(errors="replace").splitlines()[-40:]))
+                  raise RuntimeError(f"{label} failed: exit {result.returncode}")
+              return log_path
+
+          def result_records(text):
+              prefix = "FRP_M32_CSR_STREAM_POST_SYNTHESIS_TB: PASS "
+              records = [line for line in text.splitlines()
+                         if line.startswith(("CSR_STREAM_POST_SYNTHESIS seed=", prefix))]
+              seeds = [f"CSR_STREAM_POST_SYNTHESIS seed={seed} PASS"
+                       for seed in ("13579bdf", "2468ace1", "c001d00d")]
+              require(len(records) == 4 and records[:3] == seeds,
+                      "Incomplete or repeated stream results")
+              pattern = prefix + " ".join(name + r"=(\d+)" for name in expected)
+              match = re.fullmatch(pattern, records[3])
+              require(match is not None, "Malformed terminal result")
+              metrics = dict(zip(expected, map(int, match.groups())))
+              require(metrics == expected, "Unexpected stream metrics")
+              return records
+
+          try:
+              require(importlib.metadata.version("yowasp-yosys") == "0.68.0.0.post1208",
+                      "Unexpected synthesis package")
+              sources = set()
+
+              def visit(name):
+                  if name in sources:
+                      return
+                  path = root / name
+                  require(path.is_file() and not path.is_symlink(), "Missing source: " + name)
+                  sources.add(name)
+                  for inc in re.findall(r'`include\s+"([^"]+)"', path.read_text()):
+                      matches = {(directory / inc).resolve()
+                                 for directory in [path.parent, *[root / d for d in include_dirs]]
+                                 if (directory / inc).is_file()}
+                      require(len(matches) == 1, "Missing or ambiguous include: " + inc)
+                      resolved = matches.pop()
+                      require(resolved.is_relative_to(root), "Include leaves the repository")
+                      visit(resolved.relative_to(root).as_posix())
+
+              visit(tb)
+              sources.add("rtl/m31/frp_m31_sin_q30.mem")
+              rows, identities = [], {}
+              for name in sorted(sources):
+                  raw = (root / name).read_bytes()
+                  identities[name] = {"bytes": len(raw), "sha256": sha(raw)}
+                  rows.append(f"{name}|{len(raw)}|{sha(raw)}")
+              source_digest = sha(("\n".join(rows) + "\n").encode())
+              require(len(sources) == 21 and source_digest ==
+                      "c26f8b416eadabef0c778662872241c4cc37cad366d2f65bf4c48760de674199",
+                      "Source set differs from the qualified testbench inputs")
+              report["sources"] = identities
+              report["source_set_sha256"] = source_digest
+              for name in sources:
+                  target = view / name
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(root / name, target)
+
+              phase = view / "rtl/m31/frp_m31_phase_interference.sv"
+              text = phase.read_text()
+              first = text.index("    if (sin_lut[0] !== 32'sd0)")
+              last = text.index('      $fatal(1, "FRP M31 sine LUT three-quarter-cycle mismatch");', first)
+              normalized = text[:first] + text[text.index("\n", last) + 1:]
+              require(sha(normalized.encode()) ==
+                      "571a1df102318fc5b62d2b0977aa57625e7abd999db3487e62fe2d270f190bb8",
+                      "Unexpected synthesis source normalization")
+              phase.write_text(normalized)
+
+              share = Path(yowasp_yosys.__file__).resolve().parent / "share"
+              simlib = evidence / "yosys-simlib.v"
+              shutil.copyfile(share / "simlib.v", simlib)
+              netlist = evidence / "frp_m32_csr_netlist.v"
+              script = (
+                  "read_slang -j 1 --std 1800-2017 --ignore-assertions "
+                  "--top frp_m32_csr_top " + " ".join("-I" + d for d in include_dirs)
+                  + " fpga/m32_csr/frp_m32_csr_top.sv; "
+                  "synth -top frp_m32_csr_top -noshare -run begin:fine; check -assert; "
+                  "techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; "
+                  "select -assert-none t:$shiftx t:$connect; "
+                  "rename frp_m32_csr_top frp_m32_csr_netlist; "
+                  "write_verilog -noattr " + json.dumps(str(netlist))
+              )
+              script_path = evidence / "synthesis.ys"
+              script_path.write_text(script + "\n")
+              execute(["yowasp-yosys", "-Q", "-T", "-q", "-s", str(script_path)],
+                      "synthesis", view, 600)
+              require(netlist.is_file() and netlist.stat().st_size > 0, "Missing netlist")
+              report["netlist_sha256"] = sha(netlist.read_bytes())
+              report["cell_models_sha256"] = sha(simlib.read_bytes())
+
+              command = ["verilator", "-DSIMLIB_NOCONNECT", "--binary", "--sv",
+                         "--timing", "--assert", "-Wall", "-Wno-fatal",
+                         "-CFLAGS", "-std=c++20 -O0", "--output-split", "20000",
+                         "-MAKEFLAGS", "VK_PCH_I_FAST=", "-MAKEFLAGS", "VK_PCH_I_SLOW=",
+                         "-j", "2", "--top-module", top, "--Mdir", str(build)]
+              command += ["-I" + d for d in include_dirs]
+              command += ["-v", str(simlib), str(netlist), tb]
+              execute(command, "build", root, 600)
+              replays = []
+              for attempt in (1, 2):
+                  log = execute([str(build / ("V" + top))], f"run-{attempt}", root, 180)
+                  replays.append(result_records(log.read_text()))
+              require(replays[0] == replays[1], "Stream result records differ between replays")
+              for name, identity in identities.items():
+                  require(sha((root / name).read_bytes()) == identity["sha256"],
+                          "Source changed during qualification: " + name)
+              subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
+              report.update(status="PASS", metrics=expected, replays=2,
+                            result_records_identical=True, sources_unchanged=True)
+              summary = [
+                  "# FRP M32 CSR Stream Post-Synthesis: PASS", "",
+                  "Source commit: " + os.environ["GITHUB_SHA"], "",
+                  "DUT: synthesized CSR netlist; reference: CSR RTL.", "",
+                  "Two successful replays with identical stream result records.", "",
+                  "| Measurement | Result |", "| --- | ---: |",
+              ]
+              summary += [f"| {name} | {value} |" for name, value in expected.items()]
+              summary += ["", "errors counts intentionally rejected transfers."]
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
+                  stream.write("\n".join(summary) + "\n")
+              print("\n".join(replays[0]))
+          except Exception as error:
+              report["error"] = str(error)
+              raise
+          finally:
+              (evidence / "result.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+          PY
+
+      - name: Retain build logs, netlist, and test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-m32-stream-post-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M32_STREAM_POST_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
