@@ -1,6 +1,6 @@
 name: FRP M32 Milestones Qualification
 
-run-name: FRP M32 Milestones Qualification
+run-name: "FRP M32 Milestones Qualification @ ${{ github.sha }}"
 
 on:
   workflow_dispatch:
@@ -18,11 +18,12 @@ defaults:
 
 jobs:
   qualify-milestones:
-    name: Qualify the M0-M32 register and preserved evidence
+    name: Qualify the M0-M32 register, CSR records, and preserved evidence
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       MILESTONES_BASE_COMMIT: 6a7484a9bdfaad4a8b99ee2c8f7623e292fc1462
+      CSR_CLOSURE_COMMIT: 5dcc9bcd807706e67834dd9120728e9ecd3708d0
       PYTHONHASHSEED: "0"
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
@@ -45,7 +46,8 @@ jobs:
           test "$GITHUB_REF" = refs/heads/main
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test -z "$(git status --porcelain --untracked-files=all)"
-          git merge-base --is-ancestor "$MILESTONES_BASE_COMMIT" "$GITHUB_SHA"
+          git merge-base --is-ancestor "$MILESTONES_BASE_COMMIT" "$CSR_CLOSURE_COMMIT"
+          git merge-base --is-ancestor "$CSR_CLOSURE_COMMIT" "$GITHUB_SHA"
           python - <<'PY'
           import os
           import tempfile
@@ -76,6 +78,7 @@ jobs:
           TEMP = Path(os.environ["M32_MILESTONES_TEMP"])
           EVIDENCE = Path(os.environ["M32_MILESTONES_EVIDENCE"])
           BASE = os.environ["MILESTONES_BASE_COMMIT"]
+          CLOSURE = os.environ["CSR_CLOSURE_COMMIT"]
           WORKFLOW = ".github/workflows/frp-m32-milestones-qualification.yml"
           sys.path.insert(0, str(ROOT))
 
@@ -107,7 +110,7 @@ jobs:
               return subprocess.check_output(["git", *arguments], cwd=ROOT).decode()
 
           def protected(path):
-              directories = ("artifacts/", "benchmarks/", "schemas/", "rtl/m31/", "rtl/m32/", "formal/m32/", "fpga/m32/")
+              directories = ("artifacts/", "benchmarks/", "schemas/", "rtl/m31/", "rtl/m32/", "formal/m32/", "fpga/m32/", "fpga/m32_csr/")
               exact = {
                   "MILESTONES.md", "requirements.txt",
                   "frp_m31_phase_interference_thermal_evidence.py",
@@ -122,11 +125,47 @@ jobs:
 
           def snapshot():
               require(not git("status", "--porcelain", "--untracked-files=all"), "Repository is not clean")
-              reference = {p for p in git("ls-tree", "-r", "--name-only", BASE).splitlines() if protected(p)}
+              git("merge-base", "--is-ancestor", BASE, CLOSURE)
+              git("merge-base", "--is-ancestor", CLOSURE, "HEAD")
+              historical = {p for p in git("ls-tree", "-r", "--name-only", BASE).splitlines() if protected(p)}
+              reference = {p for p in git("ls-tree", "-r", "--name-only", CLOSURE).splitlines() if protected(p)}
               current = {p for p in git("ls-files").splitlines() if protected(p)}
-              require(current == reference, "Protected file inventory changed from the recorded baseline")
-              changes = git("diff", "--name-only", BASE, "HEAD", "--", *sorted(reference)).splitlines()
-              require(not changes, f"Protected baseline files changed: {changes}")
+              require(current == reference, "Protected file inventory differs from the CSR closure commit")
+              identity_rows = """
+              A|.github/workflows/frp-m32-csr-integration-qualification.yml|27500|ec1aa8b7c0132c40f1b17718630e27fb51f139ad443e176b411491ebf7db966e
+              A|.github/workflows/frp-m32-csr-post-synthesis-qualification.yml|36875|f5f0be52c41de12130b84fa0f809783049b7d8b8b88df64bc1dbafa16b2f1dca
+              A|fpga/m32_csr/CLOSURE.md|22414|f08cc8514df4f242c1fe7d1014fbed21d13bebabbe69edd5cb93a74bb08a7bff
+              A|fpga/m32_csr/POST_SYNTHESIS_TRANSCRIPT.md|17189|05da64b417d86fd216b19665ee3fcc0f6f540d6824c1f8221c9de44f9025bd8f
+              A|fpga/m32_csr/SIMULATION_TRANSCRIPT.md|14770|89d88c223b42fdbc91a614ad4aa7afeb9c7cc24353eb925972f3b910d47aa81f
+              A|fpga/m32_csr/frp_m32_csr_post_synthesis_tb.sv|32248|788a90ed854871f71f05cd6fac5d2052a289781a011083ff6a58301a5f185281
+              A|fpga/m32_csr/frp_m32_csr_tb.sv|30914|af2795bf906c4c0c9aa2c2eac502bb3aa952fd5c179e2760c228a69bbc6a5a33
+              A|fpga/m32_csr/frp_m32_csr_top.sv|21826|c3d5e9060f8142acfb39310f2e47cca5a3f38c786a9bfdbb6686b2c86ff60344
+              M|rtl/m32/ARTIFACTS.md|59596|21d61384316d79e18872d49c48aadafa215dba360c4a0908176735580cf611dd
+              M|rtl/m32/CLOSURE.md|59884|df972c74195bd11128939adab61dd2bf862742f7d005f01978d26171d7a9b155
+              M|rtl/m32/README.md|35323|1dee89f1bd91d1042ec4f3668718b174160db29d45f5556b642881b4a3a79a46
+              M|rtl/m32/SIMULATION.md|61450|816cd69238b26a61f38bce5d2e3c801543ab4fa7de304ff94407cda346c7c5b2
+              """
+              approved = {}
+              for row in identity_rows.strip().splitlines():
+                  status, path, size, sha = row.strip().split("|")
+                  require(path not in approved, f"Duplicate approved change: {path}")
+                  raw = read(path)
+                  require((len(raw), digest(raw)) == (int(size), sha), f"Approved CSR closure identity mismatch: {path}")
+                  approved[path] = {"change": status, "bytes": int(size), "sha256": sha}
+              additions = {p for p, record in approved.items() if record["change"] == "A"}
+              modifications = {p for p, record in approved.items() if record["change"] == "M"}
+              require(len(additions) == 8 and len(modifications) == 4, "Approved transition inventory mismatch")
+              require(not historical - reference and reference - historical == additions, "Unapproved historical addition or removal")
+              changed = set(git("diff", "--no-renames", "--name-only", BASE, CLOSURE, "--", *sorted(historical)).splitlines())
+              require(changed == modifications, f"Unapproved historical modification: {sorted(changed ^ modifications)}")
+              changes = git("diff", "--name-only", CLOSURE, "HEAD", "--", *sorted(reference)).splitlines()
+              require(not changes, f"Protected CSR closure files changed: {changes}")
+              save("baseline-transition.json", {
+                  "status": "PASS", "historical_baseline_commit": BASE,
+                  "csr_closure_commit": CLOSURE, "approved_changes": approved,
+                  "unchanged_historical_files": len(historical - modifications),
+                  "protected_file_count": len(reference),
+              })
               return [{"path": p, "bytes": len(raw), "sha256": digest(raw)} for p in sorted(current) for raw in [read(p)]]
 
           def verify_document():
@@ -213,6 +252,8 @@ jobs:
                   (".github/workflows/frp-m32-full-integrated-core-synthesis-workflow.yml", 17, 242432),
                   (".github/workflows/frp-m32-fpga-integration-qualification.yml", 19, 290959),
                   (".github/workflows/frp-m32-fpga-post-synthesis-qualification.yml", 19, 292228),
+                  (".github/workflows/frp-m32-csr-integration-qualification.yml", 21, 312113),
+                  (".github/workflows/frp-m32-csr-post-synthesis-qualification.yml", 21, 313447),
               ):
                   rows = re.findall(r"^\s*([^\s|]+)\|([0-9]+)\|([0-9a-f]{64})\s*$", read(path).decode(), re.MULTILINE)
                   require(len(rows) == len({row[0] for row in rows}) == expected_count, f"Source manifest count mismatch: {path}")
@@ -228,7 +269,96 @@ jobs:
               require(len(shared) == 18 and sum(inventories[1][p][0] for p in shared) == 253787, "Shared FPGA source boundary mismatch")
               require(all(inventories[1][p] == inventories[2][p] for p in shared), "Shared FPGA source identities differ")
               require(all(inventories[1].get(p) == identity for p, identity in inventories[0].items()), "Full-core source subset differs from FPGA inputs")
-              save("source-bindings.json", {"status": "PASS", "canonical_source_count": 29, "canonical_source_bytes": 442916, "shared_fpga_sources": 18, "groups": groups})
+              csr_shared = set(inventories[3]) & set(inventories[4])
+              require(len(csr_shared) == 20 and sum(inventories[3][p][0] for p in csr_shared) == 281199, "Shared CSR source boundary mismatch")
+              require(all(inventories[3][p] == inventories[4][p] for p in csr_shared), "Shared CSR source identities differ")
+              require(all(inventories[3].get(p) == identity for p, identity in inventories[0].items()), "Full-core source subset differs from CSR inputs")
+              fpga_top = "fpga/m32/frp_m32_fpga_top.sv"
+              require(inventories[3][fpga_top] == inventories[1][fpga_top], "CSR inherited FPGA top changed")
+              for inventory, testbench in (
+                  (inventories[3], "fpga/m32_csr/frp_m32_csr_tb.sv"),
+                  (inventories[4], "fpga/m32_csr/frp_m32_csr_post_synthesis_tb.sv"),
+              ):
+                  allowed = {p for p in inventory if p.endswith(".sv")}
+                  visited = set()
+                  include_dirs = [ROOT / p for p in ("rtl/m22", "rtl/m31", "rtl/m32", "fpga/m32", "fpga/m32_csr")]
+
+                  def visit(relative):
+                      if relative in visited:
+                          return
+                      require(relative in allowed, f"Unpinned CSR include: {relative}")
+                      visited.add(relative)
+                      source = ROOT / relative
+                      for name in re.findall(r'`include\s+"([^"]+)"', read(relative).decode()):
+                          candidates = {(directory / name).resolve() for directory in [source.parent, *include_dirs] if (directory / name).is_file()}
+                          require(len(candidates) == 1, f"Ambiguous or missing CSR include: {name}")
+                          visit(candidates.pop().relative_to(ROOT).as_posix())
+
+                  visit("fpga/m32_csr/frp_m32_csr_top.sv")
+                  visit(testbench)
+                  require(visited == allowed, "CSR source set differs from its complete include closure")
+              save("source-bindings.json", {"status": "PASS", "canonical_source_count": 29, "canonical_source_bytes": 442916, "shared_fpga_sources": 18, "shared_csr_sources": 20, "csr_include_closures": "PASS", "groups": groups})
+
+          def verify_csr_records():
+              records = []
+              for kind, source, run_id, job_id, artifact_id, transcript, marker, closure_status in (
+                  ("integration", "8e619504c7826ba6351d4967d5944685963363f0", "34689613270", "103542454966", "10297126685",
+                   "fpga/m32_csr/SIMULATION_TRANSCRIPT.md", "FRP_M32_CSR_TB", "M32 CSR INTEGRATION BOUNDARY CLOSED"),
+                  ("post-synthesis", "dcade95d59457dbd7bd296f7dc2d902f4fa61ddf", "34699370701", "103568293849", "10300161633",
+                   "fpga/m32_csr/POST_SYNTHESIS_TRANSCRIPT.md", "FRP_M32_CSR_POST_SYNTHESIS_TB", "M32 CSR POST-SYNTHESIS BOUNDARY CLOSED"),
+              ):
+                  path = f".github/workflows/frp-m32-csr-{kind}-qualification.yml"
+                  workflow_raw = read(path)
+                  qualified_raw = subprocess.check_output(["git", "show", f"{source}:{path}"], cwd=ROOT)
+                  require(workflow_raw == qualified_raw, f"Qualified CSR workflow changed: {path}")
+                  terminal = f"{marker}: PASS checks=6905 ticks=306 rejected_transfers=449 core_outputs=59"
+                  text = read(transcript).decode()
+                  closure = read("fpga/m32_csr/CLOSURE.md").decode()
+                  for value in (source, run_id, job_id, artifact_id, terminal):
+                      require(value in text and value in closure, f"CSR qualification record mismatch: {kind}: {value}")
+                  require(closure_status in closure and closure_status in read("rtl/m32/CLOSURE.md").decode(), f"Missing linked CSR closure: {kind}")
+                  records.append({"kind": kind, "qualified_commit": source, "recorded_run_id": run_id,
+                                  "recorded_job_id": job_id, "recorded_artifact_id": artifact_id,
+                                  "workflow": path, "workflow_sha256": digest(workflow_raw),
+                                  "transcript": transcript, "transcript_sha256": digest(read(transcript)),
+                                  "terminal_record": terminal, "closure_status": closure_status})
+              documents = [
+                  "rtl/m32/README.md", "rtl/m32/ARTIFACTS.md", "rtl/m32/SIMULATION.md", "rtl/m32/CLOSURE.md",
+                  "fpga/m32_csr/CLOSURE.md", "fpga/m32_csr/SIMULATION_TRANSCRIPT.md", "fpga/m32_csr/POST_SYNTHESIS_TRANSCRIPT.md",
+              ]
+              links = []
+              for path in documents:
+                  text = read(path).decode()
+                  for target in re.findall(r"\[[^\]\n]*\]\(([^\s)]+)\)", text):
+                      parsed = urlsplit(target)
+                      if parsed.scheme in {"http", "https"}:
+                          continue
+                      require(not parsed.scheme and not parsed.netloc and not parsed.query, f"Unexpected document link: {target}")
+                      linked = (ROOT / path).parent / unquote(parsed.path) if parsed.path else ROOT / path
+                      linked = linked.resolve()
+                      require(linked.is_relative_to(ROOT), f"Document link leaves repository: {target}")
+                      linked_text = read(linked.relative_to(ROOT).as_posix()).decode()
+                      if parsed.fragment:
+                          headings = re.findall(r"^#{1,6} (.+?)\s*$", linked_text, re.MULTILINE)
+                          anchors = {re.sub(r"[^\w -]", "", heading.lower()).replace(" ", "-") for heading in headings}
+                          require(unquote(parsed.fragment) in anchors, f"Missing document anchor: {path}: {target}")
+                      links.append({"source": path, "target": target})
+              linked_closure = read("rtl/m32/CLOSURE.md").decode()
+              snapshot_text = linked_closure.split("### Documentation snapshot after CSR procedure integration\n", 1)[1].split("## Provenance closure", 1)[0]
+              snapshot_rows = re.findall(r"^\| `([^`]+)` \| `(\d+)` \| `([0-9a-f]{64})` \|$", snapshot_text, re.MULTILINE)
+              require(len(snapshot_rows) == 4, "M32 documentation snapshot inventory mismatch")
+              total = 0
+              for name, size, sha in snapshot_rows:
+                  raw = read(f"rtl/m32/{name}")
+                  require((len(raw), digest(raw)) == (int(size), sha), f"M32 document snapshot changed: {name}")
+                  total += len(raw)
+              require(total == 189670, "M32 documentation snapshot byte total mismatch")
+              save("csr-closure.json", {
+                  "status": "PASS", "scope": "Exact CSR sources and committed qualification records",
+                  "csr_closure_commit": CLOSURE, "qualifications": records,
+                  "linked_documents": documents, "verified_relative_links": links,
+                  "m32_document_snapshot_bytes": total,
+              })
 
           def verify_canonical():
               import frp_m31_phase_interference_thermal_evidence as m31
@@ -275,14 +405,14 @@ jobs:
           def finish():
               before = json.loads((EVIDENCE / "protected-files.json").read_text())
               require(snapshot() == before, "Protected files changed during qualification")
-              reports = {name: json.loads((EVIDENCE / name).read_text()) for name in ("document.json", "source-bindings.json", "focused-tests.json", "canonical-reproduction.json")}
+              reports = {name: json.loads((EVIDENCE / name).read_text()) for name in ("baseline-transition.json", "document.json", "source-bindings.json", "csr-closure.json", "focused-tests.json", "canonical-reproduction.json")}
               require(all(record["status"] == "PASS" for record in reports.values()), "Incomplete qualification reports")
-              save("qualification.json", {"status": "PASS", "scope": "M0-M32 milestone register, preserved history, published source bindings, and canonical M31/M32 reproduction", "baseline_commit": BASE, "dispatched_commit": os.environ["GITHUB_SHA"], "run_id": os.environ["GITHUB_RUN_ID"], "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"], "workflow_sha256": digest(read(WORKFLOW)), "protected_file_count": len(before), "reports": sorted(reports)})
+              save("qualification.json", {"status": "PASS", "scope": "M0-M32 milestone register, preserved history, CSR source and committed qualification records, and canonical M31/M32 reproduction", "baseline_commit": BASE, "csr_closure_commit": CLOSURE, "dispatched_commit": os.environ["GITHUB_SHA"], "run_id": os.environ["GITHUB_RUN_ID"], "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"], "workflow_sha256": digest(read(WORKFLOW)), "protected_file_count": len(before), "reports": sorted(reports)})
               sums = [f"{digest(path.read_bytes())}  {path.relative_to(EVIDENCE).as_posix()}" for path in sorted(EVIDENCE.rglob("*")) if path.is_file() and path.name != "SHA256SUMS"]
               (EVIDENCE / "SHA256SUMS").write_text("\n".join(sums) + "\n", encoding="utf-8")
               lines = [
                   "## FRP M32 Milestones Qualification: PASS", "",
-                  f"Dispatched commit: {os.environ['GITHUB_SHA']}", f"Recorded baseline: {BASE}", "",
+                  f"Dispatched commit: {os.environ['GITHUB_SHA']}", f"Historical baseline: {BASE}", f"CSR closure commit: {CLOSURE}", "",
                   "| Check | Result |", "|---|---|",
                   "| Complete milestone register | M0-M32, 33/33 PASS |",
                   "| Current MILESTONES.md | 73,718 bytes, exact |",
@@ -293,6 +423,13 @@ jobs:
                   "| Published full-core synthesis source binding | 17 inputs, 242,432 bytes |",
                   "| Published FPGA integration source binding | 19 inputs, 290,959 bytes |",
                   "| Published FPGA post-synthesis source binding | 19 inputs, 292,228 bytes |",
+                  "| Approved historical transition | 8 CSR additions, 4 document updates, exact |",
+                  "| Published CSR integration source binding | 21 inputs, 312,113 bytes |",
+                  "| Published CSR post-synthesis source binding | 21 inputs, 313,447 bytes |",
+                  "| CSR source include closures | 2/2 exact |",
+                  "| Committed CSR qualification records | integration #1 and post-synthesis #1, exact |",
+                  "| M32 documentation snapshot | 4 documents, 189,670 bytes, exact |",
+                  "| M32 and CSR document links | PASS |",
                   "| Focused M31 tests | 60/60 PASS |", "| Focused M32 tests | 49/49 PASS |",
                   "| Independently reproduced M31 outputs | 4/4 exact; 13/13 checks |",
                   "| Fresh RTL trace replays | 7/1 and 1/7, two exact runs each |",
@@ -309,6 +446,7 @@ jobs:
               save("protected-files.json", snapshot())
               verify_document()
               verify_source_bindings()
+              verify_csr_records()
           elif action == "canonical":
               verify_canonical()
           elif action == "finish":
