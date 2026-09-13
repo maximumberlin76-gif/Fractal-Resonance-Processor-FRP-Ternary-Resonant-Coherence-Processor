@@ -14,6 +14,10 @@
 | FPGA qualification profile | `8` cells, `2` request lanes |
 | Canonical inputs per FPGA qualification | `19 / 19 exact` |
 | Generated post-synthesis DUT | `frp_m32_fpga_netlist` |
+| CSR integration top | `frp_m32_csr_top` |
+| CSR qualification profile | `8` cells, `2` request lanes, `32`-bit words and counters |
+| Canonical inputs per CSR qualification | `21 / 21 exact` |
+| Generated CSR post-synthesis DUT | `frp_m32_csr_netlist` |
 | Registered-boundary synthesis profiles | `8`, `16`, and `32` cells |
 | Scheduler trace modes | `7/1` and `1/7` |
 | Canonical ternary notation | `-1/0/1` |
@@ -21,8 +25,8 @@
 This document reproduces the commands encoded in the M32 registered-target,
 full integrated-core synthesis, and deterministic trace-export workflows.
 It also records the execution procedure and acceptance checks for the FPGA
-integration and post-synthesis workflows. Shell commands are executed from
-the repository root unless a different working directory is stated.
+and CSR integration and post-synthesis workflows. Shell commands are executed
+from the repository root unless a different working directory is stated.
 
 ## Qualification boundaries
 
@@ -40,6 +44,10 @@ the repository root unless a different working directory is stated.
 | FPGA post-synthesis simulation | all `59` forwarded core outputs compared against a separate M32 RTL reference across `1019` samples per replay |
 | FPGA replay | two complete simulations per workflow, with identical ordered semantic terminal records |
 | FPGA evidence | source, workflow, execution, support-file, and output identities retained in qualification records |
+| CSR integration | host transfers, control commands, staged requests, telemetry, reset release, and full CSR synthesis |
+| CSR post-synthesis export | generated simulation netlist with preserved ports, memory parameters, initialization, and `59` core observation wires |
+| CSR simulation | `6905` checks, `306` enabled ticks, `449` rejected CSR transfers, and `59` compared core outputs per replay |
+| CSR replay and evidence | two byte-identical complete simulation logs, two identical synthesis replays, and source/run-bound qualification reports |
 | Registered target boundary | bounded Yosys SAT proofs at depth `4` |
 | M32 testbenches | Verilator binary build and deterministic replay |
 | Scheduler traces | record cardinality, cadence, route-leg, and invariant checks |
@@ -132,6 +140,19 @@ qualification selects `frp_m32_fpga_post_synthesis_tb.sv`.
 Both FPGA workflows verify complete include closure from the FPGA top and
 their selected testbench, record their own workflow identity separately,
 and recheck input byte lengths and SHA-256 values before finalization.
+
+Each CSR workflow independently verifies `21` inputs: the same `17`
+full-core inputs, `rtl/m22/frp_m22_csr_pkg.sv`, the FPGA top, the CSR top,
+and its selected CSR testbench. These are `20` SystemVerilog files and
+one sine ROM. The two CSR manifests share `20` exact non-testbench inputs.
+Integration selects `frp_m32_csr_tb.sv`; post-synthesis selects
+`frp_m32_csr_post_synthesis_tb.sv` from `fpga/m32_csr/`.
+
+Both CSR workflows verify complete include closure from the CSR top and
+selected testbench, record their workflow identity separately, and
+recheck all source byte lengths and SHA-256 values before finalization.
+The exact identities are listed in
+[CSR integration and post-synthesis artifacts](ARTIFACTS.md#csr-integration-and-post-synthesis-artifacts).
 
 ## Verilator lint
 
@@ -590,7 +611,7 @@ frontend help in `read-slang-help.log`.
 4. Execute the compiled testbench twice, with a `120`-second timeout per replay, and compare the complete ordered semantic records.
 5. Copy the verified inputs into `M32_SOURCE` and apply the verified four-check phase-source transformation while retaining canonical ROM initialization.
 6. Synthesize the complete FPGA top twice at `CELLS=8` and `REQUEST_LANES=2`; compare both JSON netlists, both Verilog netlists, and both statistics records byte for byte.
-7. Validate the complete interface, flattened structure, reset-release wiring, statistics, and canonical sine ROM.
+7. Validate the complete interface, flattened structure, reset-release stages, statistics, and canonical sine ROM.
 8. Recheck repository integrity, write the qualification report and checksum list, and upload the evidence directory.
 
 Each simulation compares all `59` forwarded core outputs against a
@@ -722,6 +743,230 @@ Both workflows retain artifacts for `30` days and execute upload and
 summary steps with `always()`. A diagnostic archive can therefore be
 present after a failed execution; qualification requires the successful
 job result and its completed `PASS` report.
+
+## CSR integration and post-synthesis procedure
+
+Run the selected workflow manually on `main` using
+[Manual GitHub Actions execution](#manual-github-actions-execution).
+Each workflow contains the complete source manifest, tool setup, build,
+simulation replay, structural checks, and evidence finalization.
+
+| Qualification | Workflow | Simulation top |
+|---|---|---|
+| CSR integration | [FRP M32 CSR Integration Qualification](../../.github/workflows/frp-m32-csr-integration-qualification.yml) | `frp_m32_csr_tb` |
+| CSR post-synthesis | [FRP M32 CSR Post-Synthesis Qualification](../../.github/workflows/frp-m32-csr-post-synthesis-qualification.yml) | `frp_m32_csr_post_synthesis_tb` |
+
+### CSR execution preflight and temporary directories
+
+Both jobs require `workflow_dispatch`, `refs/heads/main`, the dispatched
+`github.sha`, a clean checkout, and all `21` exact source inputs.
+Checkout credentials are not persisted. The fixed CSR profile is `8`
+cells, `2` request lanes, and `32`-bit words and counters.
+
+The first step initializes these paths through `GITHUB_ENV`:
+
+| Variable | CSR integration directory | CSR post-synthesis directory |
+|---|---|---|
+| `M32_EVIDENCE` | `$RUNNER_TEMP/frp-m32-csr-evidence` | `$RUNNER_TEMP/frp-m32-csr-post-synthesis-evidence` |
+| `M32_SOURCE` | `$RUNNER_TEMP/frp-m32-csr-source` | `$RUNNER_TEMP/frp-m32-csr-post-synthesis-source` |
+| `M32_BUILD` | `$RUNNER_TEMP/frp-m32-csr-build` | `$RUNNER_TEMP/frp-m32-csr-post-synthesis-build` |
+
+Both jobs use `ubuntu-24.04`, Python `3.12`, Verilator, `g++`, `make`, and
+`yowasp-yosys==0.68.0.0.post1208`. They record the resolved tool versions,
+installed Python packages, and `read_slang` help. The job environment sets
+`LC_ALL=C.UTF-8`, `TZ=UTC`, `PYTHONHASHSEED=0`, and
+`PYTHONDONTWRITEBYTECODE=1`. Job timeouts are `20` minutes for integration
+and `30` minutes for post-synthesis qualification.
+
+The build commands below are the commands executed by these workflows
+after their temporary directories and required inputs have been prepared.
+
+### CSR integration sequence and build
+
+1. Lint `frp_m32_csr_top` with all M22, M31, M32, FPGA, and CSR include directories.
+2. Build the complete CSR integration testbench with the command below.
+3. Reject `PINMISSING`, `IMPLICIT`, and `MULTIDRIVEN` diagnostics in `top-lint.log` and `testbench-build.log`.
+4. Execute `Vfrp_m32_csr_tb` twice with a `120`-second timeout per replay; require the exact terminal record and byte-identical complete logs.
+5. Copy the verified sources into `M32_SOURCE`; remove only the four verified ROM startup `$fatal` checks from the temporary phase source, retaining `$readmemh` and recording `synthesis-view.patch`.
+6. Synthesize the complete CSR top twice with a `300`-second timeout per replay; compare both JSON netlists, Verilog netlists, and statistics files byte for byte.
+7. Validate the CSR interface, flattened logic, reset-release wiring, statistics, and canonical ROM.
+8. Recheck canonical sources, workflow identity, checkout commit, and working-tree integrity; write `qualification.json` and `artifacts.sha256`, then upload the evidence.
+
+The integration build command is:
+
+    verilator --sv --timing --assert --binary -Wall -Wno-fatal \
+      -CFLAGS "-std=c++20 -O0" --output-split 999999999 \
+      -MAKEFLAGS VK_PCH_I_FAST= -MAKEFLAGS VK_PCH_I_SLOW= \
+      -j 2 --top-module frp_m32_csr_tb \
+      --Mdir "$M32_BUILD" \
+      -Irtl/m22 -Irtl/m31 -Irtl/m32 -Ifpga/m32 -Ifpga/m32_csr \
+      fpga/m32_csr/frp_m32_csr_tb.sv \
+      2>&1 | tee "$M32_EVIDENCE/testbench-build.log"
+
+The DUT is the complete `frp_m32_csr_top`. A separate `frp_m32_core`
+reference receives inputs constructed from the host scenario. CSR
+ready/error expectations and reference reset release are checked from
+that scenario. All `59` core outputs are compared by the testbench.
+
+### CSR post-synthesis sequence, export, and build
+
+1. Record the pinned Yosys package and copy its `simlib.v` and `techmap.v` to `yosys-simlib.v` and `yosys-techmap.v`; record their identities in `cell-models.json`.
+2. Lint the complete CSR top and prepare the same verified temporary synthesis view.
+3. Run two complete CSR synthesis replays and compare JSON, Verilog, and statistics outputs byte for byte.
+4. Validate the complete structure and canonical ROM; write `synthesis-structure.json`.
+5. Export both synthesis JSON files as simulation netlists, validate preserved contracts, and require identical exported JSON and Verilog; write `simulation-export.json`.
+6. Build the post-synthesis testbench with `simulation-netlist-1.v` and the recorded cell models using the command below.
+7. Reject the same three diagnostic classes in `top-lint.log` and `post-synthesis-build.log`; execute two simulations and require identical complete logs and the exact terminal record.
+8. Recheck source and repository identities, successful structure/export reports, and complete replay logs; write the final qualification report and checksums, then upload the evidence.
+
+Each synthesis uses `read_slang -j 1 --std 1800-2017 --ignore-assertions`
+on the complete CSR top in `M32_SOURCE`, followed by:
+
+    synth -top frp_m32_csr_top -noshare -run begin:fine
+    check -assert
+
+Each simulation export reads its original synthesis JSON and executes:
+
+    techmap -map +/techmap.v t:$shiftx
+    opt_clean
+    check -assert
+    select -assert-none t:$shiftx t:$connect
+    rename frp_m32_csr_top frp_m32_csr_netlist
+
+Synthesis and export have a `300`-second timeout per replay. Original
+synthesis JSON files retain their byte identities. Export preserves all
+port names, directions, widths, and signedness, both memory parameter
+sets including initialization, and the names, widths, and signedness of
+all `59` observed `u_fpga.*` core wires.
+
+    verilator -DSIMLIB_NOCONNECT --sv --timing --assert --binary -Wall -Wno-fatal \
+      -CFLAGS "-std=c++20 -O0" --output-split 20000 \
+      -MAKEFLAGS VK_PCH_I_FAST= -MAKEFLAGS VK_PCH_I_SLOW= \
+      -j 2 --top-module frp_m32_csr_post_synthesis_tb \
+      --Mdir "$M32_BUILD" \
+      -Irtl/m31 -Irtl/m32 \
+      -v "$M32_EVIDENCE/yosys-simlib.v" \
+      "$M32_EVIDENCE/simulation-netlist-1.v" \
+      fpga/m32_csr/frp_m32_csr_post_synthesis_tb.sv \
+      2>&1 | tee "$M32_EVIDENCE/post-synthesis-build.log"
+
+The DUT is the generated `frp_m32_csr_netlist`. The independent
+`frp_m32_core` reference reads the canonical sine ROM, while the DUT uses
+its embedded initialization. The `59` retained core wires are read-only
+observations. Host stimulus and the reference reset model determine the
+reference inputs and expected CSR responses.
+
+### Required CSR structural checks
+
+| Check | Required result |
+|---|---|
+| Synthesis flow | `synth -top frp_m32_csr_top -noshare -run begin:fine`, followed by `check -assert` |
+| Flattened synthesis top | one module named `frp_m32_csr_top` |
+| CSR interface | `9` ports, `78` bits, `6` inputs, `3` outputs |
+| Integrated logic size guard | at least `7000` synthesized cells |
+| Remaining processes, latch cells, and unresolved instances | `0` |
+| Retained memories | two read-only `$mem_v2` cells |
+| Reset synchronizer | two-bit `$adff`, rising-edge clock, active-low asynchronous clear to zero |
+| Reset-release connectivity | constant `1` into stage one; stage one into stage two; stage two drives core readiness and remaining asynchronous reset consumers |
+| Primary sine ROM | `4096 x 32`, `12` address bits, `72` read ports, `0` write ports |
+| Primary ROM initialization | exact match to all `4096` canonical words |
+| Statistics | cell count and cell-type inventory agree with the JSON netlist |
+| Exported simulation top | one module named `frp_m32_csr_netlist` |
+| Exported unsupported cells | no `$shiftx`, `$connect`, latch cells, or unresolved module instances |
+
+### Required CSR replay records and scenarios
+
+Each integration replay must contain exactly one terminal record:
+
+    FRP_M32_CSR_TB: PASS checks=6905 ticks=306 rejected_transfers=449 core_outputs=59
+
+Each post-synthesis replay must contain exactly one terminal record:
+
+    FRP_M32_CSR_POST_SYNTHESIS_TB: PASS checks=6905 ticks=306 rejected_transfers=449 core_outputs=59
+
+Both workflows run their executable twice with a `120`-second timeout per
+simulation. Integration compares `simulation-run-1.log` with
+`simulation-run-2.log`; post-synthesis compares `post-synthesis-run-1.log`
+with `post-synthesis-run-2.log`. The complete logs must match byte for
+byte, including the required record. The `6905` checks combine complete
+core-output comparisons and explicit CSR read checks; `306` counts the
+enabled ticks across the complete testbench, including reset-separated
+scenarios. Each replay compares all `59` core outputs.
+
+The `449` rejected CSR transfers comprise `384` unaligned reads and
+writes, `52` writes to read-only words, and `13` invalid operations or
+payloads. These transfers complete with `csr_error` and no accepted-write
+side effects. Core rejection of a duplicate request lane is checked
+separately. Three consecutive valid/ready tick-command transfers must
+produce three enabled ticks.
+
+Both testbenches check control-command decoding, both staged request
+lanes, request consumption and clearing, atomic phase/frequency loading
+across all eight cells, signed frequencies and phase wraparound, per-cell
+gamma and thermal configuration, automatic targets, live telemetry, and
+last-tick result snapshots. Reset checks cover asynchronous assertion,
+two-stage release, discarded unacknowledged startup commands, and
+cancellation of staged requests, automatic mode, and saved results.
+
+The ternary kernel is `-1/0/1`. Both `-1 -> 0 -> 1` and
+`1 -> 0 -> -1` traverse active zero with their legs on separate enabled
+ticks. Reads and counter clearing retain the pending destination while
+execution is paused. The scenario checkpoints require zero
+`actual_direct_events`, `reserved_state_events`, and
+`queue_overflow_events`.
+
+The CSR cadence scenarios configure the mode during idle clocks before
+their first tick. Each records `97` enabled ticks and `97` accepted target
+captures:
+
+| Mode | FREE | BALANCE | COMMIT | EXCITE | NEUTRALIZE |
+|---|---:|---:|---:|---:|---:|
+| `free` | `97` | `0` | `0` | `0` | `0` |
+| `7/1` | `0` | `85` | `12` | `0` | `0` |
+| `1/7` | `0` | `0` | `0` | `13` | `84` |
+
+A separate scenario writes the mode and immediately issues a tick on the
+next clock: that tick uses the previous scheduler state. The following
+tick uses the registered new mode. This separately verifies the mode
+registration timing alongside the preconfigured cadence scenarios.
+
+### CSR qualification reports and evidence
+
+| Workflow | Required report schema |
+|---|---|
+| CSR integration | `frp.m32.csr-integration-qualification.v1` |
+| CSR post-synthesis | `frp.m32.csr-post-synthesis-qualification.v1` |
+
+Both workflows write `qualification.json` with `result: PASS`, the
+repository, `source_commit`, `run_id`, and `run_attempt`. The reports
+record the `21` source inputs, two simulation replays, required counters,
+compared outputs, synthesis replay identity, reset structure, canonical
+ROM agreement, and unchanged repository. The post-synthesis report also
+includes the simulation-export verification and recorded cell models.
+
+Required final workflow records are:
+
+    FRP M32 CSR integration qualification: PASS
+    FRP M32 CSR post-synthesis qualification: PASS
+
+Open the successful run, download its evidence artifact, and check the
+report schema, result, source commit, run ID, and attempt against that
+run. From the extracted artifact directory, verify the evidence files:
+
+    sha256sum -c artifacts.sha256
+
+Artifacts use the prefix `frp-m32-csr-qualification-` for integration or
+`frp-m32-csr-post-synthesis-qualification-` for post-synthesis, followed by
+the dispatched SHA and run attempt. Both workflows retain them for `30`
+days. Upload and summary steps use `always()`; qualification requires the
+successful job and completed `PASS` report in addition to the archive.
+
+The recorded execution identities and evidence inventories are retained
+in the [CSR integration transcript](../../fpga/m32_csr/SIMULATION_TRANSCRIPT.md),
+[CSR post-synthesis transcript](../../fpga/m32_csr/POST_SYNTHESIS_TRANSCRIPT.md),
+and [CSR closure](../../fpga/m32_csr/CLOSURE.md). Source and published
+artifact identities are indexed in
+[ARTIFACTS.md](ARTIFACTS.md#csr-integration-and-post-synthesis-artifacts).
 
 ## Bounded formal qualification
 
@@ -1043,6 +1288,8 @@ Run the workflows separately from the GitHub interface:
 | `FRP M32 Full Integrated Core Synthesis` | complete M32 core synthesis, replay identity, port contract, and retained sine ROM |
 | `FRP M32 FPGA Integration Qualification` | complete FPGA wrapper simulation, reset and operation gating, full synthesis, and evidence |
 | `FRP M32 FPGA Post-Synthesis Qualification` | complete FPGA synthesis, verified simulation export, generated-netlist comparison, and evidence binding |
+| `FRP M32 CSR Integration Qualification` | CSR transfers and control, telemetry, complete RTL comparison, full CSR synthesis, and evidence |
+| `FRP M32 CSR Post-Synthesis Qualification` | complete CSR synthesis, verified simulation export, generated-netlist comparison, and evidence binding |
 | `FRP M32 Deterministic RTL Trace Export` | exporter tests, canonical publication generation, verification, and exact repository comparison |
 
 Uploading or committing a workflow file does not start a
@@ -1061,6 +1308,11 @@ Uploading or committing a workflow file does not start a
 | FPGA integration transcript | [`../../fpga/m32/SIMULATION_TRANSCRIPT.md`](../../fpga/m32/SIMULATION_TRANSCRIPT.md) |
 | FPGA post-synthesis transcript | [`../../fpga/m32/POST_SYNTHESIS_TRANSCRIPT.md`](../../fpga/m32/POST_SYNTHESIS_TRANSCRIPT.md) |
 | FPGA integration and post-synthesis closure | [`../../fpga/m32/CLOSURE.md`](../../fpga/m32/CLOSURE.md) |
+| CSR integration workflow | [`../../.github/workflows/frp-m32-csr-integration-qualification.yml`](../../.github/workflows/frp-m32-csr-integration-qualification.yml) |
+| CSR post-synthesis workflow | [`../../.github/workflows/frp-m32-csr-post-synthesis-qualification.yml`](../../.github/workflows/frp-m32-csr-post-synthesis-qualification.yml) |
+| CSR integration transcript | [`../../fpga/m32_csr/SIMULATION_TRANSCRIPT.md`](../../fpga/m32_csr/SIMULATION_TRANSCRIPT.md) |
+| CSR post-synthesis transcript | [`../../fpga/m32_csr/POST_SYNTHESIS_TRANSCRIPT.md`](../../fpga/m32_csr/POST_SYNTHESIS_TRANSCRIPT.md) |
+| CSR integration and post-synthesis closure | [`../../fpga/m32_csr/CLOSURE.md`](../../fpga/m32_csr/CLOSURE.md) |
 | Deterministic export workflow | [`../../.github/workflows/frp-m32-deterministic-rtl-trace-export-workflow.yml`](../../.github/workflows/frp-m32-deterministic-rtl-trace-export-workflow.yml) |
 | Trace schema | [`../../schemas/m32/frp.m32.deterministic_rtl_trace_bundle.v1.schema.json`](../../schemas/m32/frp.m32.deterministic_rtl_trace_bundle.v1.schema.json) |
 | Trace bundle | [`../../artifacts/m32/exports/m32-deterministic-rtl-trace-bundle.json`](../../artifacts/m32/exports/m32-deterministic-rtl-trace-bundle.json) |
