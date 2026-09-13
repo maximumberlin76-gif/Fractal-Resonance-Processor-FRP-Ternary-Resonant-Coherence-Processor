@@ -1,0 +1,367 @@
+name: FRP M32 CSR Stream Qualification
+
+run-name: "FRP M32 CSR Stream Qualification @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-m32-csr-stream-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-m32-csr-stream:
+    name: Verify continuous CSR traffic and mutation detection
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Initialize temporary paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "M32_STREAM_EVIDENCE=$RUNNER_TEMP/frp-m32-csr-stream-evidence" \
+            "M32_STREAM_WORK=$RUNNER_TEMP/frp-m32-csr-stream-work" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m32-csr-stream-evidence"
+
+      - name: Check out dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify manual execution and exact source closure
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_STREAM_EVIDENCE"])
+          rows = """
+          fpga/m32/frp_m32_fpga_top.sv|11355|4893b157fba0ce090766d73429bce154a8b06dbb4118ec4a6dcb7e4a4c4a3348
+          fpga/m32_csr/frp_m32_csr_stream_tb.sv|13287|26bb95ab6708d4edbc0626834f616a6e7660350bd521cf816b5794545e47859b
+          fpga/m32_csr/frp_m32_csr_top.sv|21826|c3d5e9060f8142acfb39310f2e47cca5a3f38c786a9bfdbb6686b2c86ff60344
+          rtl/m22/frp_m22_csr_pkg.sv|5586|0f3de8054e3704548088b035c43e993d194d5182a2ac1bc32cdad92663a11206
+          rtl/m31/frp_m31_active_neutral.sv|25909|765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0
+          rtl/m31/frp_m31_capacity_guard.sv|20787|d0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123
+          rtl/m31/frp_m31_execution_core.sv|33724|e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92
+          rtl/m31/frp_m31_fixed_point_pkg.sv|7278|6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24
+          rtl/m31/frp_m31_pending_routes.sv|17005|18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411
+          rtl/m31/frp_m31_phase_interference.sv|11245|e8ceb80feb0b30db5e28d70bc4d68d51506da4d596b46a73c0137465d1455fe0
+          rtl/m31/frp_m31_phase_request_adapter.sv|2251|fa78bcfe965270cc74855908aa392989d857575a2097a126539aabb1aab8990d
+          rtl/m31/frp_m31_pkg.sv|18531|762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94
+          rtl/m31/frp_m31_request_lanes.sv|18290|32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109
+          rtl/m31/frp_m31_scheduler.sv|10560|fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f
+          rtl/m31/frp_m31_sin_q30.mem|36864|adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d
+          rtl/m31/frp_m31_stability.sv|2203|69c06833e6dfbb28e25b74a5787dcd03756dddf0f66726de3ea47c1ad2931931
+          rtl/m31/frp_m31_state_update.sv|18147|ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90
+          rtl/m31/frp_m31_thermal_proxy.sv|1883|34df4ebfc5dfad8e3e5e454e560404585de5c881e6f75abaae367d3bd9fb11bd
+          rtl/m32/frp_m32_core.sv|10564|925342326b7ad555a1382e8ee3bc5754ed3012ba60e0eabf512113731e0ee6c9
+          rtl/m32/frp_m32_registered_target_boundary.sv|3947|9626474b49d32b411e107d7ccc8ee5aa7f42728e9a6f70d634d16d3f2a414c5e
+          rtl/m32/frp_m32_registered_target_request_path.sv|3244|02250069a68737f055a419cd67bf2d439b3f63b3f6a7a245f40e9bf29d1958eb
+          """
+          tracked = subprocess.check_output(
+              ["git", "ls-files", "-z"], text=True
+          ).split("\0")[:-1]
+          snapshot = {}
+          for name in tracked:
+              path = Path(name)
+              if path.is_symlink() or not path.is_file():
+                  raise SystemExit(f"Not a regular tracked file: {name}")
+              snapshot[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+          records = []
+          for row in rows.strip().splitlines():
+              name, size, digest = row.strip().split("|")
+              if (snapshot.get(name) != digest
+                      or Path(name).stat().st_size != int(size)):
+                  raise SystemExit(f"Source identity mismatch: {name}")
+              records.append({"path": name, "bytes": int(size), "sha256": digest})
+          if len(records) != 21 or len({r["path"] for r in records}) != 21:
+              raise SystemExit("Expected 21 distinct pinned input files")
+          allowed = {r["path"] for r in records if r["path"].endswith(".sv")}
+          include_dirs = [Path(d) for d in (
+              "rtl/m22", "rtl/m31", "rtl/m32", "fpga/m32", "fpga/m32_csr"
+          )]
+          visited = set()
+
+          def visit(name):
+              if name in visited:
+                  return
+              if name not in allowed:
+                  raise SystemExit(f"Unpinned include: {name}")
+              visited.add(name)
+              path = Path(name)
+              for inc in re.findall(r'`include\s+"([^"]+)"', path.read_text()):
+                  candidates = {str(d / inc) for d in [path.parent, *include_dirs]
+                                if (d / inc).is_file()}
+                  if len(candidates) != 1:
+                      raise SystemExit(f"Missing or ambiguous include: {inc}")
+                  visit(candidates.pop())
+
+          visit("fpga/m32_csr/frp_m32_csr_stream_tb.sv")
+          if visited != allowed:
+              raise SystemExit("Pinned sources differ from the include closure")
+          manifest = {
+              "schema": "frp.m32.csr-stream-sources.v1",
+              "reference_commit": "a81deb77f660d09c9e7a597d5351f03a7d73d5b9",
+              "source_commit": os.environ["GITHUB_SHA"],
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "files": records,
+          }
+          for name, data in (("source-manifest.json", manifest),
+                             ("repository-before.json", snapshot)):
+              (evidence / name).write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+          print("Exact source closure: 20 SystemVerilog files and one sine ROM: PASS")
+          PY
+
+      - name: Install and record simulation tools
+        run: |
+          set -euo pipefail
+          {
+            sudo apt-get update
+            sudo apt-get install --yes verilator g++ make
+            python --version
+            verilator --version
+            g++ --version
+            make --version
+          } 2>&1 | tee "$M32_STREAM_EVIDENCE/toolchain.log"
+
+      - name: Run deterministic replays and three mutation checks
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import difflib
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          from concurrent.futures import ThreadPoolExecutor
+          from pathlib import Path
+
+          root = Path.cwd()
+          evidence = Path(os.environ["M32_STREAM_EVIDENCE"])
+          work = Path(os.environ["M32_STREAM_WORK"])
+          manifest = json.loads((evidence / "source-manifest.json").read_text())
+          top = "frp_m32_csr_stream_tb"
+          tb = "fpga/m32_csr/" + top + ".sv"
+          includes = ("rtl/m22", "rtl/m31", "rtl/m32", "fpga/m32", "fpga/m32_csr")
+          cases = {
+              "baseline": None,
+              "uncleared_lane_one": (
+                  "fpga/m32_csr/frp_m32_csr_top.sv",
+                  "last_tick_q <= tick_result;\n        request_valid_q <= '0;",
+                  "last_tick_q <= tick_result;\n        request_valid_q <= request_valid_q & 2'b10;",
+                  "CSR 14: got=00000001 expected=00000000"),
+              "mode_bypass": (
+                  "fpga/m32_csr/frp_m32_csr_top.sv",
+                  ".scheduler_mode(mode_control_q), .phase_load_valid(load_pulse),",
+                  ".scheduler_mode((accepted_write && csr_addr == 8'h04) ? frp_m31_scheduler_mode_e'(csr_wdata[1:0]) : mode_control_q), .phase_load_valid(load_pulse),",
+                  "CSR a0: got=00000102 expected=00000103"),
+              "clear_resets_period": (
+                  "rtl/m31/frp_m31_scheduler.sv",
+                  "if (clear_counters) begin\n      ticks_recorded_d = '0;",
+                  "if (clear_counters) begin\n      tick_index_d = '0;\n      ticks_recorded_d = '0;",
+                  "Explicit CSR 34: got=00000000 expected=00000003"),
+          }
+          metric_names = ("checks", "transfers", "ticks", "errors", "routes", "resets", "longest_run")
+          expected = dict(zip(metric_names, (37085, 12703, 1742, 1212, 32, 20, 1605)))
+          report = {
+              "schema": "frp.m32.csr-stream-qualification.v1",
+              "source_commit": os.environ["GITHUB_SHA"],
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "expected_metrics": expected, "cases": [], "status": "FAIL",
+          }
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def run_case(name):
+              logs = evidence / name
+              source = work / name / "source"
+              build = work / name / "build"
+              logs.mkdir(parents=True, exist_ok=True)
+              result = {"name": name, "status": "FAIL"}
+              try:
+                  for item in manifest["files"]:
+                      target = source / item["path"]
+                      raw = (root / item["path"]).read_bytes()
+                      require(hashlib.sha256(raw).hexdigest() == item["sha256"],
+                              "Source changed after preflight: " + item["path"])
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      target.write_bytes(raw)
+                  mutation = cases[name]
+                  if mutation:
+                      path, before, after, diagnostic = mutation
+                      target = source / path
+                      original = target.read_text()
+                      require(original.count(before) == 1, "Mutation anchor is not unique")
+                      modified = original.replace(before, after)
+                      target.write_text(modified)
+                      (logs / "mutation.patch").write_text("".join(difflib.unified_diff(
+                          original.splitlines(True), modified.splitlines(True),
+                          fromfile="a/" + path, tofile="b/" + path)))
+                  command = ["verilator", "--sv", "--timing", "--assert", "--binary",
+                             "-Wall", "-Wno-fatal", "-CFLAGS", "-std=c++20 -O0",
+                             "-j", "2", "--top-module", top, "--Mdir", str(build)]
+                  command += ["-I" + d for d in includes] + [tb]
+                  (logs / "build-command.json").write_text(json.dumps(command, indent=2) + "\n")
+                  print("Building " + name, flush=True)
+                  with (logs / "build.log").open("w") as log:
+                      compiled = subprocess.run(command, cwd=source, stdout=log,
+                                                stderr=subprocess.STDOUT, timeout=600)
+                  result["build_exit"] = compiled.returncode
+                  require(compiled.returncode == 0, "Compilation failed")
+                  runs = []
+                  for attempt in range(2 if mutation is None else 1):
+                      log_path = logs / f"run-{attempt + 1}.log"
+                      with log_path.open("w") as log:
+                          completed = subprocess.run([str(build / ("V" + top))],
+                              cwd=source, stdout=log, stderr=subprocess.STDOUT, timeout=120)
+                      raw = log_path.read_bytes()
+                      runs.append((completed.returncode, raw))
+                  result["runs"] = [{"exit": code, "bytes": len(raw),
+                                     "sha256": hashlib.sha256(raw).hexdigest()}
+                                    for code, raw in runs]
+                  text = runs[0][1].decode("utf-8")
+                  if mutation is None:
+                      require(all(code == 0 for code, _ in runs), "Baseline execution failed")
+                      require(runs[0][1] == runs[1][1], "Replay logs differ")
+                      for seed in ("13579bdf", "2468ace1", "c001d00d"):
+                          require(text.count(f"CSR_STREAM seed={seed} PASS") == 1,
+                                  "Missing or repeated seed result: " + seed)
+                      prefix = "FRP_M32_CSR_STREAM_TB: PASS "
+                      lines = [s for s in text.splitlines() if s.startswith(prefix)]
+                      require(len(lines) == 1, "Missing or repeated terminal result")
+                      pattern = prefix + " ".join(k + r"=(\d+)" for k in metric_names)
+                      match = re.fullmatch(pattern, lines[0])
+                      require(match is not None, "Malformed terminal result")
+                      metrics = dict(zip(metric_names, map(int, match.groups())))
+                      require(metrics == expected, "Unexpected qualification metrics")
+                      result["metrics"] = metrics
+                      result["byte_identical_replays"] = True
+                  else:
+                      require(runs[0][0] != 0, "Mutation escaped detection")
+                      require(diagnostic in text, "Expected assertion diagnostic missing")
+                      require("FRP_M32_CSR_STREAM_TB: PASS" not in text,
+                              "Mutated design reported terminal PASS")
+                      result["detected"] = True
+                      result["diagnostic"] = diagnostic
+                  result["status"] = "PASS"
+              except Exception as error:
+                  result["error"] = str(error)
+              (logs / "result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+              print(name + ": " + result["status"], flush=True)
+              return result
+
+          report["cases"].append(run_case("baseline"))
+          if report["cases"][0]["status"] == "PASS":
+              with ThreadPoolExecutor(max_workers=2) as pool:
+                  report["cases"].extend(pool.map(run_case, [n for n in cases if n != "baseline"]))
+          if len(report["cases"]) == 4 and all(c["status"] == "PASS" for c in report["cases"]):
+              report["status"] = "PASS"
+          (evidence / "qualification.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+          require(report["status"] == "PASS", "CSR stream qualification failed; inspect retained logs")
+          print("Two deterministic replays and three detected mutations: PASS")
+          PY
+
+      - name: Verify repository preservation and finalize evidence
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain)"
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_STREAM_EVIDENCE"])
+          before = json.loads((evidence / "repository-before.json").read_text())
+          names = subprocess.check_output(["git", "ls-files", "-z"], text=True).split("\0")[:-1]
+          after = {n: hashlib.sha256(Path(n).read_bytes()).hexdigest() for n in names}
+          if before != after:
+              raise SystemExit("Tracked repository files changed during qualification")
+          report_path = evidence / "qualification.json"
+          report = json.loads(report_path.read_text())
+          expected_cases = {"baseline", "uncleared_lane_one", "mode_bypass", "clear_resets_period"}
+          if (report.get("status") != "PASS" or len(report.get("cases", [])) != 4
+                  or {c["name"] for c in report["cases"]} != expected_cases
+                  or any(c["status"] != "PASS" for c in report["cases"])):
+              raise SystemExit("Incomplete qualification report")
+          report["repository_unchanged"] = True
+          report["tracked_files_preserved"] = len(after)
+          report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+          (evidence / "repository-after.json").write_text(json.dumps(after, indent=2, sort_keys=True) + "\n")
+          files = sorted(p for p in evidence.rglob("*") if p.is_file() and p.name != "SHA256SUMS")
+          (evidence / "SHA256SUMS").write_text("".join(
+              hashlib.sha256(p.read_bytes()).hexdigest() + "  "
+              + str(p.relative_to(evidence)) + "\n" for p in files))
+          print(f"Repository preservation: {len(after)} tracked files unchanged: PASS")
+          PY
+
+      - name: Retain qualification logs and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-m32-csr-stream-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M32_STREAM_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish qualification summary
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_STREAM_EVIDENCE"])
+          report = json.loads((evidence / "qualification.json").read_text())
+          if report["status"] != "PASS" or not report.get("repository_unchanged"):
+              raise SystemExit("Qualification is incomplete")
+          metrics = next(c["metrics"] for c in report["cases"] if c["name"] == "baseline")
+          summary = "# FRP M32 CSR Stream Qualification\n\n"
+          summary += f"Source commit: {report['source_commit']}\n\n"
+          summary += "Status: PASS\n\n"
+          summary += "| Measurement | Result |\n| --- | ---: |\n"
+          summary += "".join(f"| {name} | {value} |\n" for name, value in metrics.items())
+          summary += "\nTwo byte-identical replays; three control mutations detected.\n"
+          summary += "Both 1 -> 0 -> -1 and -1 -> 0 -> 1 routes checked for all eight cells in modes 7/1 and 1/7.\n"
+          summary += f"\nTracked files preserved: {report['tracked_files_preserved']}.\n"
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as stream:
+              stream.write(summary)
+          print("FRP M32 CSR stream qualification: PASS")
+          PY
