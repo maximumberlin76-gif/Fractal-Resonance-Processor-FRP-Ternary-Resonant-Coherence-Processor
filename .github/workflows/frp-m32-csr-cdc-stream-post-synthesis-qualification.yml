@@ -63,7 +63,7 @@ jobs:
             g++ --version
           } 2>&1 | tee "$M32_CDC_STREAM_POST_EVIDENCE/toolchain.log"
 
-      - name: Synthesize CDC stream and compare all external outputs with RTL
+      - name: Qualify frequency range and compare synthesized CDC stream with RTL
         run: |
           set -euo pipefail
           ulimit -c 0
@@ -86,6 +86,8 @@ jobs:
           top = "frp_m32_csr_cdc_stream_top"
           bench = "frp_m32_csr_cdc_stream_post_synthesis_tb"
           tb = "fpga/m32_csr/" + bench + ".sv"
+          frequency_bench = "frp_m31_frequency_range_tb"
+          frequency_tb = "rtl/m31/" + frequency_bench + ".sv"
           workflow = ".github/workflows/frp-m32-csr-cdc-stream-post-synthesis-qualification.yml"
           include_dirs = ["rtl/m22", "rtl/m23", "rtl/m31", "rtl/m32",
                           "fpga/m32", "fpga/m32_csr"]
@@ -95,12 +97,17 @@ jobs:
               "aborted": 4, "aborted_after_core": 2, "simultaneous": 127,
               "pulses": 426, "rejected": 41, "routes": 8, "resets": 10,
           }
+          frequency_expected = {
+              "vectors": 144, "scheduler_states": 5, "updates": 720,
+              "loads": 90, "hold_edges": 360, "reset_checks": 3,
+          }
           report = {
               "status": "FAIL", "source_commit": os.environ["GITHUB_SHA"],
               "repository": os.environ["GITHUB_REPOSITORY"],
               "run_id": os.environ["GITHUB_RUN_ID"],
               "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
               "expected_metrics": expected, "commands": [], "profiles": [],
+              "frequency_expected_metrics": frequency_expected,
           }
 
           def require(condition, message):
@@ -160,6 +167,17 @@ jobs:
                       "Unexpected post-synthesis metrics or clock profile")
               return records, rtl_metrics, metrics
 
+          def frequency_record(text):
+              prefix = "FRP_M31_FREQUENCY_RANGE_TB:"
+              records = [line for line in text.splitlines() if line.startswith(prefix)]
+              require(len(records) == 1, "Incomplete or repeated frequency range result")
+              match = re.fullmatch(prefix + " PASS " +
+                  " ".join(k + r"=(\d+)" for k in frequency_expected), records[0])
+              require(match is not None, "Malformed frequency range result")
+              metrics = dict(zip(frequency_expected, map(int, match.groups())))
+              require(metrics == frequency_expected, "Incomplete frequency range coverage")
+              return records[0], metrics
+
           try:
               require(importlib.metadata.version("yowasp-yosys") == "0.68.0.0.post1208",
                       "Unexpected synthesis package")
@@ -181,6 +199,7 @@ jobs:
                       visit(resolved.relative_to(root).as_posix())
 
               visit(tb)
+              visit(frequency_tb)
               sources.add("rtl/m31/frp_m31_sin_q30.mem")
               rows, identities = [], {}
               for name in sorted(sources):
@@ -190,13 +209,34 @@ jobs:
               digest = sha(("\n".join(rows) + "\n").encode())
               report.update(sources=identities, source_set_sha256=digest,
                             workflow_sha256=sha((root / workflow).read_bytes()))
-              require(len(sources) == 27 and digest ==
-                      "414575caf7f85f7a70975046521f48b11a990391b3a577112d4e3512b1f538b7",
+              require(len(sources) == 28 and digest ==
+                      "f0dccbe75af1fca6fac79da92aafc1e2e4e47f34e9ff3c30d156f77c36b4b64c",
                       "Source set differs from the validated post-synthesis inputs")
               for name in sources:
                   target = view / name
                   target.parent.mkdir(parents=True, exist_ok=True)
                   shutil.copyfile(root / name, target)
+
+              compiler = ["verilator", "--binary", "--sv", "--timing", "--assert",
+                  "-Wall", "-Wno-fatal", "-CFLAGS", "-std=c++20 -O0",
+                  "--output-split", "20000", "-MAKEFLAGS", "VK_PCH_I_FAST=",
+                  "-MAKEFLAGS", "VK_PCH_I_SLOW=", "-j", "2"]
+              compiler += ["-I" + d for d in include_dirs]
+              frequency_build = work / "frequency-build"
+              execute(compiler + ["--top-module", frequency_bench,
+                  "--Mdir", str(frequency_build), frequency_tb],
+                  "frequency-build", root, 600)
+              frequency_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(frequency_build / ("V" + frequency_bench))],
+                                f"frequency-run-{attempt}", root, 180)
+                  record, metrics = frequency_record(log.read_text())
+                  frequency_replays.append(record)
+              require(frequency_replays[0] == frequency_replays[1],
+                      "Frequency range replay records differ")
+              report["frequency_range"] = {"implementation": "RTL", "replays": 2,
+                  "metrics": metrics, "record": frequency_replays[0]}
+              print(frequency_replays[0], flush=True)
 
               phase = view / "rtl/m31/frp_m31_phase_interference.sv"
               text = phase.read_text()
@@ -204,7 +244,7 @@ jobs:
               last = text.index('      $fatal(1, "FRP M31 sine LUT three-quarter-cycle mismatch");', first)
               normalized = text[:first] + text[text.index("\n", last) + 1:]
               require(sha(normalized.encode()) ==
-                      "571a1df102318fc5b62d2b0977aa57625e7abd999db3487e62fe2d270f190bb8",
+                      "09302236b4a7734be9ac0890df4a7a577541a73c441ae7db3e70da8465f1c3ef",
                       "Unexpected synthesis source normalization")
               phase.write_text(normalized)
 
@@ -230,13 +270,8 @@ jobs:
               report["netlist_sha256"] = sha(netlist.read_bytes())
               report["cell_models_sha256"] = sha(simlib.read_bytes())
 
-              command = ["verilator", "-DSIMLIB_NOCONNECT", "--binary", "--sv",
-                         "--timing", "--assert", "-Wall", "-Wno-fatal",
-                         "-CFLAGS", "-std=c++20 -O0", "--output-split", "20000",
-                         "-MAKEFLAGS", "VK_PCH_I_FAST=", "-MAKEFLAGS", "VK_PCH_I_SLOW=",
-                         "-j", "2", "--top-module", bench, "--Mdir", str(build)]
-              command += ["-I" + d for d in include_dirs]
-              command += ["-v", str(simlib), str(netlist), tb]
+              command = compiler + ["-DSIMLIB_NOCONNECT", "--top-module", bench,
+                  "--Mdir", str(build), "-v", str(simlib), str(netlist), tb]
               execute(command, "build", root, 900)
               for profile in profiles:
                   h, c, p = profile
@@ -259,10 +294,14 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=6,
+              report.update(status="PASS", simulation_runs=8,
+                            stream_simulation_runs=6, frequency_simulation_runs=2,
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
+                  "Frequency range RTL regression: two matching replays; "
+                  "144 vectors in five scheduler states, 720 updates per replay.",
+                  "Load priority, 360 disabled-tick hold edges and three reset checks per replay.", "",
                   "DUT: synthesized CDC stream netlist; reference: CDC stream RTL.", "",
                   "All 43 external output bits match; two matching replays per profile.", "",
                   "| Host half (ns) | Core half (ns) | Phase (ns) | Comparisons per replay | Accepted | Completed |",
