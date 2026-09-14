@@ -63,7 +63,7 @@ jobs:
             g++ --version
           } 2>&1 | tee "$M32_CDC_STREAM_POST_EVIDENCE/toolchain.log"
 
-      - name: Qualify phase dynamics, geometry, frequency range, and synthesized CDC stream
+      - name: Qualify phase, frequency, thermal stability, and synthesized CDC stream
         run: |
           set -euo pipefail
           ulimit -c 0
@@ -92,6 +92,8 @@ jobs:
           geometry_tb = "rtl/m31/" + geometry_bench + ".sv"
           dynamics_bench = "frp_m31_phase_dynamics_tb"
           dynamics_tb = "rtl/m31/" + dynamics_bench + ".sv"
+          thermal_bench = "frp_m31_thermal_dynamics_tb"
+          thermal_tb = "rtl/m31/" + thermal_bench + ".sv"
           workflow = ".github/workflows/frp-m32-csr-cdc-stream-post-synthesis-qualification.yml"
           include_dirs = ["rtl/m22", "rtl/m23", "rtl/m31", "rtl/m32",
                           "fpga/m32", "fpga/m32_csr"]
@@ -116,6 +118,11 @@ jobs:
               "balance_ticks": 14, "commit_ticks": 2, "excite_ticks": 2,
               "neutralize_ticks": 14,
           }
+          thermal_expected = {
+              "profiles": 2, "vectors": 64, "cooling_ticks": 256, "warmup_ticks": 4,
+              "updates": 324, "hold_edges": 128, "clears": 4, "resets": 3,
+              "capacity_cases": 36, "boundary_cases": 108, "saturation_cases": 22,
+          }
           report = {
               "status": "FAIL", "source_commit": os.environ["GITHUB_SHA"],
               "repository": os.environ["GITHUB_REPOSITORY"],
@@ -125,6 +132,7 @@ jobs:
               "frequency_expected_metrics": frequency_expected,
               "geometry_expected_metrics": geometry_expected,
               "dynamics_expected_metrics": dynamics_expected,
+              "thermal_expected_metrics": thermal_expected,
           }
 
           def require(condition, message):
@@ -220,6 +228,21 @@ jobs:
                       index += 1
               return records, metrics
 
+          def thermal_records(text):
+              terminal, metrics = regression_record(text,
+                  "FRP_M31_THERMAL_DYNAMICS_TB:", thermal_expected)
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M31_THERMAL_DYNAMICS_")]
+              expected_profiles = [
+                  "FRP_M31_THERMAL_DYNAMICS_PROFILE: PASS workload=0 samples=160 "
+                  "temperature=0000000a peak=00000f4c",
+                  "FRP_M31_THERMAL_DYNAMICS_PROFILE: PASS workload=1 samples=160 "
+                  "temperature=0004b190 peak=1066b54c",
+              ]
+              require(records == expected_profiles + [terminal],
+                      "Incomplete, repeated, out-of-order or incorrect thermal results")
+              return records, metrics
+
           try:
               require(importlib.metadata.version("yowasp-yosys") == "0.68.0.0.post1208",
                       "Unexpected synthesis package")
@@ -256,6 +279,19 @@ jobs:
               require(len(sources) == 30 and digest ==
                       "f43a8d74d8d1489cea29caf05a9cdd289cf15c89d26ac75f332c79af3d0eeba4",
                       "Source set differs from the validated post-synthesis inputs")
+
+              visit(thermal_tb)
+              require(sources == set(identities) | {thermal_tb},
+                      "Unexpected thermal regression dependencies")
+              thermal_raw = (root / thermal_tb).read_bytes()
+              require(len(thermal_raw) == 14757 and sha(thermal_raw) ==
+                      "cd76bf09bf1ec362faa94f6a5aff6e52c4a51fb17be22eb6f5bd950c1d766467",
+                      "Thermal regression differs from the validated testbench")
+              identities[thermal_tb] = {
+                  "bytes": len(thermal_raw), "sha256": sha(thermal_raw)}
+              rows.append(f"{thermal_tb}|{len(thermal_raw)}|{sha(thermal_raw)}")
+              report.update(base_source_set_sha256=digest,
+                            source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
                   target = view / name
                   target.parent.mkdir(parents=True, exist_ok=True)
@@ -317,6 +353,23 @@ jobs:
                   "records_sha256": sha(("\n".join(dynamics_replays[0]) + "\n").encode())}
               print(dynamics_replays[0][-1], flush=True)
 
+              thermal_build = work / "thermal-build"
+              execute(compiler + ["--top-module", thermal_bench,
+                  "--Mdir", str(thermal_build), thermal_tb],
+                  "thermal-build", root, 600)
+              thermal_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(thermal_build / ("V" + thermal_bench))],
+                                f"thermal-run-{attempt}", root, 180)
+                  records, metrics = thermal_records(log.read_text())
+                  thermal_replays.append(records)
+              require(thermal_replays[0] == thermal_replays[1],
+                      "Thermal dynamics replay records differ")
+              report["thermal_dynamics"] = {"implementation": "RTL", "replays": 2,
+                  "metrics": metrics, "records": thermal_replays[0],
+                  "records_sha256": sha(("\n".join(thermal_replays[0]) + "\n").encode())}
+              print("\n".join(thermal_replays[0]), flush=True)
+
               phase = view / "rtl/m31/frp_m31_phase_interference.sv"
               text = phase.read_text()
               first = text.index("    if (sin_lut[0] !== 32'sd0)")
@@ -373,9 +426,10 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=12,
+              report.update(status="PASS", simulation_runs=14,
                             stream_simulation_runs=6, frequency_simulation_runs=2,
                             geometry_simulation_runs=2, dynamics_simulation_runs=2,
+                            thermal_simulation_runs=2,
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
@@ -391,6 +445,12 @@ jobs:
                   "48 ticks, 384 phase words and 384 frequency words checked against fixed "
                   "reference vectors per replay; phase wrap and multi-turn steps.",
                   "96 disabled-tick hold edges, six loads and six resets per replay.", "",
+                  "Thermal dynamics and stability RTL regression: two matching replays; "
+                  "64 cost vectors, 256 cooling ticks and four warmup ticks per replay.",
+                  "324 exact updates, 128 disabled-tick hold edges, four clears "
+                  "and three asynchronous resets per replay.",
+                  "36 capacity cases with zero through eight active-zero cells; "
+                  "108 strict stability-boundary cases and 22 pressure-saturation cases.", "",
                   "DUT: synthesized CDC stream netlist; reference: CDC stream RTL.", "",
                   "All 43 external output bits match; two matching replays per profile.", "",
                   "| Host half (ns) | Core half (ns) | Phase (ns) | Comparisons per replay | Accepted | Completed |",
