@@ -63,7 +63,7 @@ jobs:
             g++ --version
           } 2>&1 | tee "$M32_CDC_STREAM_POST_EVIDENCE/toolchain.log"
 
-      - name: Qualify frequency range and compare synthesized CDC stream with RTL
+      - name: Qualify phase geometry, frequency range, and synthesized CDC stream
         run: |
           set -euo pipefail
           ulimit -c 0
@@ -88,6 +88,8 @@ jobs:
           tb = "fpga/m32_csr/" + bench + ".sv"
           frequency_bench = "frp_m31_frequency_range_tb"
           frequency_tb = "rtl/m31/" + frequency_bench + ".sv"
+          geometry_bench = "frp_m31_phase_geometry_tb"
+          geometry_tb = "rtl/m31/" + geometry_bench + ".sv"
           workflow = ".github/workflows/frp-m32-csr-cdc-stream-post-synthesis-qualification.yml"
           include_dirs = ["rtl/m22", "rtl/m23", "rtl/m31", "rtl/m32",
                           "fpga/m32", "fpga/m32_csr"]
@@ -101,6 +103,11 @@ jobs:
               "vectors": 144, "scheduler_states": 5, "updates": 720,
               "loads": 90, "hold_edges": 360, "reset_checks": 3,
           }
+          geometry_expected = {
+              "loads": 634, "lut_samples": 4096, "target_samples": 4096,
+              "geometry_cases": 5, "gamma_cases": 8, "topology_cases": 16,
+              "thermal_cases": 13, "rotation_cases": 60, "coupling_checks": 296,
+          }
           report = {
               "status": "FAIL", "source_commit": os.environ["GITHUB_SHA"],
               "repository": os.environ["GITHUB_REPOSITORY"],
@@ -108,6 +115,7 @@ jobs:
               "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
               "expected_metrics": expected, "commands": [], "profiles": [],
               "frequency_expected_metrics": frequency_expected,
+              "geometry_expected_metrics": geometry_expected,
           }
 
           def require(condition, message):
@@ -167,15 +175,14 @@ jobs:
                       "Unexpected post-synthesis metrics or clock profile")
               return records, rtl_metrics, metrics
 
-          def frequency_record(text):
-              prefix = "FRP_M31_FREQUENCY_RANGE_TB:"
+          def regression_record(text, prefix, expected_metrics):
               records = [line for line in text.splitlines() if line.startswith(prefix)]
-              require(len(records) == 1, "Incomplete or repeated frequency range result")
+              require(len(records) == 1, prefix + " incomplete or repeated result")
               match = re.fullmatch(prefix + " PASS " +
-                  " ".join(k + r"=(\d+)" for k in frequency_expected), records[0])
-              require(match is not None, "Malformed frequency range result")
-              metrics = dict(zip(frequency_expected, map(int, match.groups())))
-              require(metrics == frequency_expected, "Incomplete frequency range coverage")
+                  " ".join(k + r"=(\d+)" for k in expected_metrics), records[0])
+              require(match is not None, prefix + " malformed result")
+              metrics = dict(zip(expected_metrics, map(int, match.groups())))
+              require(metrics == expected_metrics, prefix + " incomplete coverage")
               return records[0], metrics
 
           try:
@@ -200,6 +207,7 @@ jobs:
 
               visit(tb)
               visit(frequency_tb)
+              visit(geometry_tb)
               sources.add("rtl/m31/frp_m31_sin_q30.mem")
               rows, identities = [], {}
               for name in sorted(sources):
@@ -209,8 +217,8 @@ jobs:
               digest = sha(("\n".join(rows) + "\n").encode())
               report.update(sources=identities, source_set_sha256=digest,
                             workflow_sha256=sha((root / workflow).read_bytes()))
-              require(len(sources) == 28 and digest ==
-                      "f0dccbe75af1fca6fac79da92aafc1e2e4e47f34e9ff3c30d156f77c36b4b64c",
+              require(len(sources) == 29 and digest ==
+                      "dc7cb46719d4eb122f79a0394730d7c366e9b17157ba4424ebe7b958c0ad2719",
                       "Source set differs from the validated post-synthesis inputs")
               for name in sources:
                   target = view / name
@@ -230,13 +238,31 @@ jobs:
               for attempt in (1, 2):
                   log = execute([str(frequency_build / ("V" + frequency_bench))],
                                 f"frequency-run-{attempt}", root, 180)
-                  record, metrics = frequency_record(log.read_text())
+                  record, metrics = regression_record(log.read_text(),
+                      "FRP_M31_FREQUENCY_RANGE_TB:", frequency_expected)
                   frequency_replays.append(record)
               require(frequency_replays[0] == frequency_replays[1],
                       "Frequency range replay records differ")
               report["frequency_range"] = {"implementation": "RTL", "replays": 2,
                   "metrics": metrics, "record": frequency_replays[0]}
               print(frequency_replays[0], flush=True)
+
+              geometry_build = work / "geometry-build"
+              execute(compiler + ["--top-module", geometry_bench,
+                  "--Mdir", str(geometry_build), geometry_tb],
+                  "geometry-build", root, 600)
+              geometry_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(geometry_build / ("V" + geometry_bench))],
+                                f"geometry-run-{attempt}", root, 180)
+                  record, metrics = regression_record(log.read_text(),
+                      "FRP_M31_PHASE_GEOMETRY_TB:", geometry_expected)
+                  geometry_replays.append(record)
+              require(geometry_replays[0] == geometry_replays[1],
+                      "Phase geometry replay records differ")
+              report["phase_geometry"] = {"implementation": "RTL", "replays": 2,
+                  "metrics": metrics, "record": geometry_replays[0]}
+              print(geometry_replays[0], flush=True)
 
               phase = view / "rtl/m31/frp_m31_phase_interference.sv"
               text = phase.read_text()
@@ -294,14 +320,19 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=8,
+              report.update(status="PASS", simulation_runs=10,
                             stream_simulation_runs=6, frequency_simulation_runs=2,
+                            geometry_simulation_runs=2,
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
                   "Frequency range RTL regression: two matching replays; "
                   "144 vectors in five scheduler states, 720 updates per replay.",
                   "Load priority, 360 disabled-tick hold edges and three reset checks per replay.", "",
+                  "Phase geometry RTL regression: two matching replays; "
+                  "4096 sine projections and 4096 ternary targets per replay.",
+                  "Five phase-order cases, eight local-gamma cases, 16 topology cases, "
+                  "13 thermal cases and 60 common phase rotations per replay.", "",
                   "DUT: synthesized CDC stream netlist; reference: CDC stream RTL.", "",
                   "All 43 external output bits match; two matching replays per profile.", "",
                   "| Host half (ns) | Core half (ns) | Phase (ns) | Comparisons per replay | Accepted | Completed |",
