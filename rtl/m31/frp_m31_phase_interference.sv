@@ -149,7 +149,7 @@ module frp_m31_phase_interference #(
     logic signed [31:0] weighted_factor_q30;
     logic signed [31:0] pair_term_q30;
     logic signed [31:0] target_frequency_q16;
-    logic signed [31:0] frequency_delta_q16;
+    logic signed [63:0] frequency_delta_q16;
     logic signed [31:0] filtered_delta_q16;
     logic signed [31:0] velocity_q16;
     logic signed [31:0] phase_step;
@@ -229,10 +229,17 @@ module frp_m31_phase_interference #(
 
       target_frequency_q16 = FRP_M31_BASE_FREQUENCY_Q16
         + state_gain_q16 + switch_gain_q16;
-      frequency_delta_q16 = target_frequency_q16 - frequency_q[cell_index];
-      filtered_delta_q16 = frp_m31_mul_q16(
-        FRP_M31_DELAY_ALPHA_Q16,
-        frequency_delta_q16
+      // The difference of two signed Q16 words may require 33 bits.
+      // Keep the difference and product wide until rounding, so a valid
+      // negative frequency cannot wrap the correction toward the wrong sign.
+      frequency_delta_q16 =
+        {{32{target_frequency_q16[31]}}, target_frequency_q16} -
+        {{32{frequency_q[cell_index][31]}}, frequency_q[cell_index]};
+      filtered_delta_q16 = frp_m31_sat_s32(
+        frp_m31_round_shift_s64(
+          frequency_delta_q16 * FRP_M31_DELAY_ALPHA_Q16,
+          FRP_M31_Q16_FRACTION_BITS
+        )
       );
       frequency_d[cell_index] = frp_m31_sat_s32(
         {{32{frequency_q[cell_index][31]}}, frequency_q[cell_index]} +
