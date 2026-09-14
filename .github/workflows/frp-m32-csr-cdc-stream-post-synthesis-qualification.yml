@@ -63,7 +63,7 @@ jobs:
             g++ --version
           } 2>&1 | tee "$M32_CDC_STREAM_POST_EVIDENCE/toolchain.log"
 
-      - name: Qualify phase, frequency, thermal stability, and synthesized CDC stream
+      - name: Qualify phase, frequency, thermal stability, and synthesized netlists
         run: |
           set -euo pipefail
           ulimit -c 0
@@ -94,6 +94,8 @@ jobs:
           dynamics_tb = "rtl/m31/" + dynamics_bench + ".sv"
           thermal_bench = "frp_m31_thermal_dynamics_tb"
           thermal_tb = "rtl/m31/" + thermal_bench + ".sv"
+          thermal_post_bench = "frp_m31_thermal_dynamics_post_synthesis_tb"
+          thermal_post_tb = "rtl/m31/" + thermal_post_bench + ".sv"
           workflow = ".github/workflows/frp-m32-csr-cdc-stream-post-synthesis-qualification.yml"
           include_dirs = ["rtl/m22", "rtl/m23", "rtl/m31", "rtl/m32",
                           "fpga/m32", "fpga/m32_csr"]
@@ -123,6 +125,10 @@ jobs:
               "updates": 324, "hold_edges": 128, "clears": 4, "resets": 3,
               "capacity_cases": 36, "boundary_cases": 108, "saturation_cases": 22,
           }
+          thermal_post_expected = {
+              "output_bits": 193, "updates": 324, "clears": 4,
+              "resets": 3, "boundary_cases": 108,
+          }
           report = {
               "status": "FAIL", "source_commit": os.environ["GITHUB_SHA"],
               "repository": os.environ["GITHUB_REPOSITORY"],
@@ -133,6 +139,7 @@ jobs:
               "geometry_expected_metrics": geometry_expected,
               "dynamics_expected_metrics": dynamics_expected,
               "thermal_expected_metrics": thermal_expected,
+              "thermal_post_expected_metrics": thermal_post_expected,
           }
 
           def require(condition, message):
@@ -243,6 +250,25 @@ jobs:
                       "Incomplete, repeated, out-of-order or incorrect thermal results")
               return records, metrics
 
+          def thermal_post_records(text):
+              prefix = "FRP_M31_THERMAL_DYNAMICS_POST_SYNTHESIS_TB:"
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M31_THERMAL_DYNAMICS_")]
+              require(len(records) == 4 and records[-1].startswith(prefix),
+                      "Incomplete, repeated or out-of-order thermal post-synthesis results")
+              _, rtl_metrics = thermal_records("\n".join(records[:-1]))
+              fields = ["comparisons", "output_bits", "updates", "hold_edges",
+                        "clears", "resets", "boundary_cases"]
+              match = re.fullmatch(prefix + " PASS " +
+                  " ".join(k + r"=(\d+)" for k in fields), records[-1])
+              require(match is not None, "Malformed thermal post-synthesis result")
+              metrics = dict(zip(fields, map(int, match.groups())))
+              require(all(metrics[k] == v for k, v in thermal_post_expected.items())
+                      and metrics["hold_edges"] >= thermal_expected["hold_edges"]
+                      and metrics["comparisons"] >= 567,
+                      "Incomplete thermal post-synthesis coverage")
+              return records, rtl_metrics, metrics
+
           try:
               require(importlib.metadata.version("yowasp-yosys") == "0.68.0.0.post1208",
                       "Unexpected synthesis package")
@@ -290,6 +316,16 @@ jobs:
               identities[thermal_tb] = {
                   "bytes": len(thermal_raw), "sha256": sha(thermal_raw)}
               rows.append(f"{thermal_tb}|{len(thermal_raw)}|{sha(thermal_raw)}")
+              visit(thermal_post_tb)
+              require(sources == set(identities) | {thermal_post_tb},
+                      "Unexpected thermal post-synthesis dependencies")
+              thermal_post_raw = (root / thermal_post_tb).read_bytes()
+              require(len(thermal_post_raw) == 5858 and sha(thermal_post_raw) ==
+                      "2fb91ba029019ecc536f9ef1c5061ffa1eb362fa89367bd2c826c564c18029a4",
+                      "Thermal post-synthesis test differs from the validated testbench")
+              identities[thermal_post_tb] = {
+                  "bytes": len(thermal_post_raw), "sha256": sha(thermal_post_raw)}
+              rows.append(f"{thermal_post_tb}|{len(thermal_post_raw)}|{sha(thermal_post_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -383,6 +419,54 @@ jobs:
               share = Path(yowasp_yosys.__file__).resolve().parent / "share"
               simlib = evidence / "yosys-simlib.v"
               shutil.copyfile(share / "simlib.v", simlib)
+              report["cell_models_sha256"] = sha(simlib.read_bytes())
+
+              thermal_netlists = []
+              report["thermal_netlists"] = {}
+              for thermal_top in ("frp_m31_thermal_proxy", "frp_m31_stability"):
+                  renamed = thermal_top + "_netlist"
+                  thermal_netlist = evidence / (renamed + ".v")
+                  thermal_script = (
+                      "read_slang -j 1 --std 1800-2017 --ignore-assertions --top " + thermal_top
+                      + " " + " ".join("-I" + d for d in include_dirs)
+                      + " rtl/m31/" + thermal_top + ".sv; "
+                      + "synth -top " + thermal_top + " -noshare -run begin:fine; check -assert; "
+                      + "techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; "
+                      + "select -assert-none t:$shiftx t:$connect; "
+                      + "rename " + thermal_top + " " + renamed + "; "
+                      + "write_verilog -noattr " + json.dumps(str(thermal_netlist))
+                  )
+                  thermal_script_path = evidence / (thermal_top + "-synthesis.ys")
+                  thermal_script_path.write_text(thermal_script + "\n")
+                  execute(["yowasp-yosys", "-Q", "-T", "-q", "-s", str(thermal_script_path)],
+                          thermal_top + "-synthesis", view, 600)
+                  require(thermal_netlist.is_file() and thermal_netlist.stat().st_size > 0,
+                          "Missing thermal or stability netlist: " + thermal_top)
+                  report["thermal_netlists"][thermal_top] = {
+                      "module": renamed, "sha256": sha(thermal_netlist.read_bytes())}
+                  thermal_netlists.append(str(thermal_netlist))
+
+              thermal_post_build = work / "thermal-post-build"
+              execute(compiler + ["-DSIMLIB_NOCONNECT", "--top-module", thermal_post_bench,
+                  "--Mdir", str(thermal_post_build), "-v", str(simlib),
+                  *thermal_netlists, thermal_post_tb], "thermal-post-build", root, 600)
+              thermal_post_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(thermal_post_build / ("V" + thermal_post_bench))],
+                                f"thermal-post-run-{attempt}", root, 180)
+                  records, rtl_metrics, metrics = thermal_post_records(log.read_text())
+                  require(records[:-1] == thermal_replays[0],
+                          "Thermal post-synthesis reference differs from standalone RTL")
+                  thermal_post_replays.append(records)
+              require(thermal_post_replays[0] == thermal_post_replays[1],
+                      "Thermal post-synthesis replay records differ")
+              report["thermal_post_synthesis"] = {
+                  "implementation": "synthesized netlists with RTL reference", "replays": 2,
+                  "rtl_metrics": rtl_metrics, "metrics": metrics,
+                  "records": thermal_post_replays[0],
+                  "records_sha256": sha(("\n".join(thermal_post_replays[0]) + "\n").encode())}
+              print("\n".join(thermal_post_replays[0]), flush=True)
+
               netlist = evidence / "frp_m32_csr_cdc_stream_netlist.v"
               script = (
                   "read_slang -j 1 --std 1800-2017 --ignore-assertions --top " + top
@@ -400,7 +484,6 @@ jobs:
                       "synthesis", view, 600)
               require(netlist.is_file() and netlist.stat().st_size > 0, "Missing netlist")
               report["netlist_sha256"] = sha(netlist.read_bytes())
-              report["cell_models_sha256"] = sha(simlib.read_bytes())
 
               command = compiler + ["-DSIMLIB_NOCONNECT", "--top-module", bench,
                   "--Mdir", str(build), "-v", str(simlib), str(netlist), tb]
@@ -426,10 +509,10 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=14,
+              report.update(status="PASS", simulation_runs=16,
                             stream_simulation_runs=6, frequency_simulation_runs=2,
                             geometry_simulation_runs=2, dynamics_simulation_runs=2,
-                            thermal_simulation_runs=2,
+                            thermal_simulation_runs=2, thermal_post_simulation_runs=2,
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
@@ -451,6 +534,12 @@ jobs:
                   "and three asynchronous resets per replay.",
                   "36 capacity cases with zero through eight active-zero cells; "
                   "108 strict stability-boundary cases and 22 pressure-saturation cases.", "",
+                  "Thermal and stability post-synthesis regression: two matching replays "
+                  "of the same fixed-vector workload used by standalone RTL.",
+                  "All 193 output bits match, including temperature, peak, sample count, "
+                  "capacity, pressure, margin and stable flag.",
+                  "The synthesized thermal output feeds the synthesized stability block; "
+                  "324 updates, 108 boundary cases, holds, clears and asynchronous resets.", "",
                   "DUT: synthesized CDC stream netlist; reference: CDC stream RTL.", "",
                   "All 43 external output bits match; two matching replays per profile.", "",
                   "| Host half (ns) | Core half (ns) | Phase (ns) | Comparisons per replay | Accepted | Completed |",
@@ -474,7 +563,7 @@ jobs:
                   json.dumps(report, indent=2, sort_keys=True) + "\n")
           PY
 
-      - name: Retain CDC stream post-synthesis netlist, logs, and results
+      - name: Retain synthesized netlists, logs, and results
         if: always()
         uses: actions/upload-artifact@v4
         with:
