@@ -99,6 +99,8 @@ jobs:
           frequency_post_tb = "rtl/m31/" + frequency_post_bench + ".sv"
           geometry_bench = "frp_m31_phase_geometry_tb"
           geometry_tb = "rtl/m31/" + geometry_bench + ".sv"
+          geometry_post_bench = "frp_m31_phase_geometry_post_synthesis_tb"
+          geometry_post_tb = "rtl/m31/" + geometry_post_bench + ".sv"
           dynamics_bench = "frp_m31_phase_dynamics_tb"
           dynamics_tb = "rtl/m31/" + dynamics_bench + ".sv"
           dynamics_post_bench = "frp_m31_phase_dynamics_post_synthesis_tb"
@@ -132,6 +134,9 @@ jobs:
               "geometry_cases": 5, "gamma_cases": 8, "topology_cases": 16,
               "thermal_cases": 13, "rotation_cases": 60, "coupling_checks": 296,
           }
+          geometry_post_expected = geometry_expected | {
+              "output_bits": 1168, "reset_assertions": 1, "reset_clock_edges": 1,
+          }
           dynamics_expected = {
               "profiles": 6, "ticks": 48, "phase_words": 384, "frequency_words": 384,
               "hold_edges": 96, "loads": 6, "resets": 6, "free_ticks": 16,
@@ -161,6 +166,7 @@ jobs:
               "frequency_expected_metrics": frequency_expected,
               "frequency_post_expected_metrics": frequency_post_expected,
               "geometry_expected_metrics": geometry_expected,
+              "geometry_post_expected_metrics": geometry_post_expected,
               "dynamics_expected_metrics": dynamics_expected,
               "dynamics_post_expected_metrics": dynamics_post_expected,
               "thermal_expected_metrics": thermal_expected,
@@ -254,6 +260,27 @@ jobs:
                       and metrics["hold_edges"] >= frequency_expected["hold_edges"]
                       and metrics["comparisons"] >= 544,
                       "Incomplete frequency post-synthesis coverage")
+              return records, rtl_metrics, metrics
+
+          def geometry_post_records(text):
+              prefix = "FRP_M31_PHASE_GEOMETRY_POST_SYNTHESIS_TB:"
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M31_PHASE_GEOMETRY_")]
+              require(len(records) == 2 and records[-1].startswith(prefix),
+                      "Incomplete, repeated or out-of-order geometry post-synthesis results")
+              _, rtl_metrics = regression_record(records[0],
+                  "FRP_M31_PHASE_GEOMETRY_TB:", geometry_expected)
+              fields = ["comparisons", "output_bits", "loads", "hold_edges",
+                        "reset_assertions", "reset_clock_edges", "lut_samples",
+                        "target_samples", "geometry_cases", "gamma_cases", "topology_cases",
+                        "thermal_cases", "rotation_cases", "coupling_checks"]
+              match = re.fullmatch(prefix + " PASS " +
+                  " ".join(k + r"=(\d+)" for k in fields), records[-1])
+              require(match is not None, "Malformed geometry post-synthesis result")
+              metrics = dict(zip(fields, map(int, match.groups())))
+              require(all(metrics[k] == v for k, v in geometry_post_expected.items())
+                      and metrics["hold_edges"] >= 634 and metrics["comparisons"] >= 1270,
+                      "Incomplete geometry post-synthesis coverage")
               return records, rtl_metrics, metrics
 
           def dynamics_records(text):
@@ -425,6 +452,16 @@ jobs:
               identities[frequency_post_tb] = {
                   "bytes": len(frequency_post_raw), "sha256": sha(frequency_post_raw)}
               rows.append(f"{frequency_post_tb}|{len(frequency_post_raw)}|{sha(frequency_post_raw)}")
+              visit(geometry_post_tb)
+              require(sources == set(identities) | {geometry_post_tb},
+                      "Unexpected geometry post-synthesis dependencies")
+              geometry_post_raw = (root / geometry_post_tb).read_bytes()
+              require(len(geometry_post_raw) == 5646 and sha(geometry_post_raw) ==
+                      "7b453afaebc4d030c7155c7da5c49865f56b5b44313f7ff956beb9cab54fb719",
+                      "Geometry post-synthesis test differs from the validated testbench")
+              identities[geometry_post_tb] = {
+                  "bytes": len(geometry_post_raw), "sha256": sha(geometry_post_raw)}
+              rows.append(f"{geometry_post_tb}|{len(geometry_post_raw)}|{sha(geometry_post_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -586,6 +623,27 @@ jobs:
                       "Missing phase-engine netlist")
               report["phase_netlist_sha256"] = sha(phase_netlist.read_bytes())
 
+              geometry_post_build = work / "geometry-post-build"
+              execute(compiler + ["-DSIMLIB_NOCONNECT", "--top-module", geometry_post_bench,
+                  "--Mdir", str(geometry_post_build), "-v", str(simlib),
+                  str(phase_netlist), geometry_post_tb], "geometry-post-build", root, 900)
+              geometry_post_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(geometry_post_build / ("V" + geometry_post_bench))],
+                                f"geometry-post-run-{attempt}", root, 180)
+                  records, rtl_metrics, metrics = geometry_post_records(log.read_text())
+                  require(records[0] == geometry_replays[0],
+                          "Geometry post-synthesis reference differs from standalone RTL")
+                  geometry_post_replays.append(records)
+              require(geometry_post_replays[0] == geometry_post_replays[1],
+                      "Geometry post-synthesis replay records differ")
+              report["phase_geometry_post_synthesis"] = {
+                  "implementation": "synthesized netlist with RTL reference", "replays": 2,
+                  "rtl_metrics": rtl_metrics, "metrics": metrics,
+                  "records": geometry_post_replays[0],
+                  "records_sha256": sha(("\n".join(geometry_post_replays[0]) + "\n").encode())}
+              print("\n".join(geometry_post_replays[0]), flush=True)
+
               dynamics_post_build = work / "dynamics-post-build"
               execute(compiler + ["-DSIMLIB_NOCONNECT", "--top-module", dynamics_post_bench,
                   "--Mdir", str(dynamics_post_build), "-v", str(simlib),
@@ -670,16 +728,17 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=20,
+              report.update(status="PASS", simulation_runs=22,
                             stream_simulation_runs=6, frequency_simulation_runs=2,
                             frequency_post_simulation_runs=2,
-                            geometry_simulation_runs=2, dynamics_simulation_runs=2,
+                            geometry_simulation_runs=2, geometry_post_simulation_runs=2,
+                            dynamics_simulation_runs=2,
                             dynamics_post_simulation_runs=2,
                             thermal_simulation_runs=2, thermal_post_simulation_runs=2,
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
-                  "Simulation runs: 20.", "",
+                  "Simulation runs: 22.", "",
                   "Frequency range RTL regression: two matching replays; "
                   "144 vectors in five scheduler states, 720 updates per replay.",
                   "Load priority, 360 disabled-tick hold edges and three reset checks per replay.", "",
@@ -693,6 +752,13 @@ jobs:
                   "4096 sine projections and 4096 ternary targets per replay.",
                   "Five phase-order cases, eight local-gamma cases, 16 topology cases, "
                   "13 thermal cases and 60 common phase rotations per replay.", "",
+                  "Phase geometry post-synthesis regression: two matching replays; "
+                  "the reference result also matches standalone RTL.",
+                  "All 1168 output bits match over 634 loads, 4096 sine projections "
+                  "and 4096 ternary targets; local gamma, shell topology, thermal "
+                  "attenuation, node isolation and 60 common phase rotations.",
+                  "Disabled-tick holds, asynchronous reset and a clock edge under reset "
+                  "are checked.", "",
                   "Phase dynamics RTL regression: two matching replays of all 55 records; "
                   "two workloads in free, 7/1 and 1/7 with the RTL scheduler.",
                   "48 ticks, 384 phase words and 384 frequency words checked against fixed "
