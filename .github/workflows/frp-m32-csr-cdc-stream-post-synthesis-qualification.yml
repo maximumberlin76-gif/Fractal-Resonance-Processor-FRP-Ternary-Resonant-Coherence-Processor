@@ -25,6 +25,7 @@ jobs:
       PYTHONHASHSEED: "0"
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
+      CXXFLAGS: "--std=c++20 -DVL_TIME_CONTEXT"
 
     steps:
       - name: Initialize build and evidence paths
@@ -55,11 +56,17 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           {
             sudo apt-get update
-            sudo apt-get install --yes verilator g++ make
+            sudo apt-get install --yes g++ make
+            python -m pip install --disable-pip-version-check --only-binary=:all: \
+              verilator==5.48.0
             python -m pip install --disable-pip-version-check \
               yowasp-yosys==0.68.0.0.post1208
+            frp_verilator_root="$(python -c 'import importlib.util; from pathlib import Path; print(Path(importlib.util.find_spec("verilator").origin).parent)')"
+            test -x "$frp_verilator_root/bin/verilator_bin"
+            printf '%s\n' "VERILATOR_ROOT=$frp_verilator_root" >> "$GITHUB_ENV"
+            printf '%s\n' "$frp_verilator_root/bin" >> "$GITHUB_PATH"
             python --version
-            verilator --version
+            VERILATOR_ROOT="$frp_verilator_root" "$frp_verilator_root/bin/verilator" --version
             g++ --version
           } 2>&1 | tee "$M32_CDC_STREAM_POST_EVIDENCE/toolchain.log"
 
@@ -332,6 +339,18 @@ jobs:
           try:
               require(importlib.metadata.version("yowasp-yosys") == "0.68.0.0.post1208",
                       "Unexpected synthesis package")
+              require(importlib.metadata.version("verilator") == "5.48.0",
+                      "Unexpected simulation package")
+              simulator_root = Path(os.environ["VERILATOR_ROOT"]).resolve()
+              require(Path(shutil.which("verilator") or "").resolve() ==
+                      simulator_root / "bin" / "verilator",
+                      "Simulator path differs from the pinned package")
+              simulator_sha = sha((simulator_root / "bin" / "verilator_bin").read_bytes())
+              require(simulator_sha ==
+                      "7a308fe7b00607f3140fe0599efc107a3f591e631a44a1c3614e00e6c90c0dcc",
+                      "Simulator binary differs from the validated Linux x86-64 build")
+              report.update(simulation_package="verilator==5.48.0",
+                            simulation_binary_sha256=simulator_sha)
               sources = set()
 
               def visit(name):
@@ -573,7 +592,7 @@ jobs:
                   str(phase_netlist), dynamics_post_tb], "dynamics-post-build", root, 900)
               dynamics_post_replays = []
               for attempt in (1, 2):
-                  log = execute([str(dynamics_post_build / ("V" + dynamics_post_bench))],
+                  log = execute([str(dynamics_post_build / ("V" + dynamics_bench))],
                                 f"dynamics-post-run-{attempt}", root, 180)
                   records, rtl_metrics, metrics = dynamics_post_records(log.read_text())
                   require(records[:-1] == dynamics_replays[0],
