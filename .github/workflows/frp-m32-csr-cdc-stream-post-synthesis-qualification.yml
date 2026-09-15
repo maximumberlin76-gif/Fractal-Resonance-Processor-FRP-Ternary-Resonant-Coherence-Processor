@@ -88,6 +88,8 @@ jobs:
           tb = "fpga/m32_csr/" + bench + ".sv"
           frequency_bench = "frp_m31_frequency_range_tb"
           frequency_tb = "rtl/m31/" + frequency_bench + ".sv"
+          frequency_post_bench = "frp_m31_frequency_range_post_synthesis_tb"
+          frequency_post_tb = "rtl/m31/" + frequency_post_bench + ".sv"
           geometry_bench = "frp_m31_phase_geometry_tb"
           geometry_tb = "rtl/m31/" + geometry_bench + ".sv"
           dynamics_bench = "frp_m31_phase_dynamics_tb"
@@ -110,6 +112,13 @@ jobs:
           frequency_expected = {
               "vectors": 144, "scheduler_states": 5, "updates": 720,
               "loads": 90, "hold_edges": 360, "reset_checks": 3,
+          }
+          frequency_post_expected = {
+              "output_bits": 1168, "vectors": 144, "scheduler_states": 5,
+              "updates": 720, "ticks": 90, "loads": 90,
+              "reset_assertions": 2, "reset_clock_edges": 2,
+              "free_ticks": 18, "balance_ticks": 18, "commit_ticks": 18,
+              "excite_ticks": 18, "neutralize_ticks": 18,
           }
           geometry_expected = {
               "loads": 634, "lut_samples": 4096, "target_samples": 4096,
@@ -143,6 +152,7 @@ jobs:
               "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
               "expected_metrics": expected, "commands": [], "profiles": [],
               "frequency_expected_metrics": frequency_expected,
+              "frequency_post_expected_metrics": frequency_post_expected,
               "geometry_expected_metrics": geometry_expected,
               "dynamics_expected_metrics": dynamics_expected,
               "dynamics_post_expected_metrics": dynamics_post_expected,
@@ -216,6 +226,28 @@ jobs:
               metrics = dict(zip(expected_metrics, map(int, match.groups())))
               require(metrics == expected_metrics, prefix + " incomplete coverage")
               return records[0], metrics
+
+          def frequency_post_records(text):
+              prefix = "FRP_M31_FREQUENCY_RANGE_POST_SYNTHESIS_TB:"
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M31_FREQUENCY_RANGE_")]
+              require(len(records) == 2 and records[-1].startswith(prefix),
+                      "Incomplete, repeated or out-of-order frequency post-synthesis results")
+              _, rtl_metrics = regression_record(records[0],
+                  "FRP_M31_FREQUENCY_RANGE_TB:", frequency_expected)
+              fields = ["comparisons", "output_bits", "vectors", "scheduler_states",
+                        "updates", "ticks", "loads", "hold_edges", "reset_assertions",
+                        "reset_clock_edges", "free_ticks", "balance_ticks", "commit_ticks",
+                        "excite_ticks", "neutralize_ticks"]
+              match = re.fullmatch(prefix + " PASS " +
+                  " ".join(k + r"=(\d+)" for k in fields), records[-1])
+              require(match is not None, "Malformed frequency post-synthesis result")
+              metrics = dict(zip(fields, map(int, match.groups())))
+              require(all(metrics[k] == v for k, v in frequency_post_expected.items())
+                      and metrics["hold_edges"] >= frequency_expected["hold_edges"]
+                      and metrics["comparisons"] >= 544,
+                      "Incomplete frequency post-synthesis coverage")
+              return records, rtl_metrics, metrics
 
           def dynamics_records(text):
               terminal, metrics = regression_record(text,
@@ -364,6 +396,16 @@ jobs:
               identities[dynamics_post_tb] = {
                   "bytes": len(dynamics_post_raw), "sha256": sha(dynamics_post_raw)}
               rows.append(f"{dynamics_post_tb}|{len(dynamics_post_raw)}|{sha(dynamics_post_raw)}")
+              visit(frequency_post_tb)
+              require(sources == set(identities) | {frequency_post_tb},
+                      "Unexpected frequency post-synthesis dependencies")
+              frequency_post_raw = (root / frequency_post_tb).read_bytes()
+              require(len(frequency_post_raw) == 6928 and sha(frequency_post_raw) ==
+                      "782109dd3d081f896b44a764bd5e3173a0499dd96b237a47e6fe469668941486",
+                      "Frequency post-synthesis test differs from the validated testbench")
+              identities[frequency_post_tb] = {
+                  "bytes": len(frequency_post_raw), "sha256": sha(frequency_post_raw)}
+              rows.append(f"{frequency_post_tb}|{len(frequency_post_raw)}|{sha(frequency_post_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -546,6 +588,27 @@ jobs:
                   "records_sha256": sha(("\n".join(dynamics_post_replays[0]) + "\n").encode())}
               print("\n".join(dynamics_post_replays[0]), flush=True)
 
+              frequency_post_build = work / "frequency-post-build"
+              execute(compiler + ["-DSIMLIB_NOCONNECT", "--top-module", frequency_post_bench,
+                  "--Mdir", str(frequency_post_build), "-v", str(simlib),
+                  str(phase_netlist), frequency_post_tb], "frequency-post-build", root, 900)
+              frequency_post_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(frequency_post_build / ("V" + frequency_post_bench))],
+                                f"frequency-post-run-{attempt}", root, 180)
+                  records, rtl_metrics, metrics = frequency_post_records(log.read_text())
+                  require(records[0] == frequency_replays[0],
+                          "Frequency post-synthesis reference differs from standalone RTL")
+                  frequency_post_replays.append(records)
+              require(frequency_post_replays[0] == frequency_post_replays[1],
+                      "Frequency post-synthesis replay records differ")
+              report["frequency_range_post_synthesis"] = {
+                  "implementation": "synthesized netlist with RTL reference", "replays": 2,
+                  "rtl_metrics": rtl_metrics, "metrics": metrics,
+                  "records": frequency_post_replays[0],
+                  "records_sha256": sha(("\n".join(frequency_post_replays[0]) + "\n").encode())}
+              print("\n".join(frequency_post_replays[0]), flush=True)
+
               netlist = evidence / "frp_m32_csr_cdc_stream_netlist.v"
               script = (
                   "read_slang -j 1 --std 1800-2017 --ignore-assertions --top " + top
@@ -588,17 +651,25 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=18,
+              report.update(status="PASS", simulation_runs=20,
                             stream_simulation_runs=6, frequency_simulation_runs=2,
+                            frequency_post_simulation_runs=2,
                             geometry_simulation_runs=2, dynamics_simulation_runs=2,
                             dynamics_post_simulation_runs=2,
                             thermal_simulation_runs=2, thermal_post_simulation_runs=2,
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
+                  "Simulation runs: 20.", "",
                   "Frequency range RTL regression: two matching replays; "
                   "144 vectors in five scheduler states, 720 updates per replay.",
                   "Load priority, 360 disabled-tick hold edges and three reset checks per replay.", "",
+                  "Frequency range post-synthesis regression: two matching replays; "
+                  "the reference result also matches standalone RTL.",
+                  "All 1168 phase-engine output bits match across 144 signed-frequency "
+                  "vectors in five scheduler states, including signed endpoints and rounding.",
+                  "720 frequency-word updates, 90 loads, disabled-tick holds, two reset "
+                  "assertions and two clock edges under reset per replay.", "",
                   "Phase geometry RTL regression: two matching replays; "
                   "4096 sine projections and 4096 ternary targets per replay.",
                   "Five phase-order cases, eight local-gamma cases, 16 topology cases, "
