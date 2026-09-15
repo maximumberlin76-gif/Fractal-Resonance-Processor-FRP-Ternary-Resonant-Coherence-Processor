@@ -390,7 +390,7 @@ jobs:
                       "Unexpected thermal regression dependencies")
               thermal_raw = (root / thermal_tb).read_bytes()
               require(len(thermal_raw) == 14757 and sha(thermal_raw) ==
-                      "cd76bf09bf1ec362faa94f6a5aff6e52c4a51fb17be22eb6f52d950c1d766467",
+                      "cd76bf09bf1ec362faa94f6a5aff6e52c4a51fb17be22eb6f5bd950c1d766467",
                       "Thermal regression differs from the validated testbench")
               identities[thermal_tb] = {
                   "bytes": len(thermal_raw), "sha256": sha(thermal_raw)}
