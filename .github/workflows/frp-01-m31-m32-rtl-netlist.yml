@@ -95,6 +95,8 @@ jobs:
           tb = "fpga/m32_csr/" + bench + ".sv"
           routing_bench = "frp_m31_execution_routing_tb"
           routing_tb = "rtl/m31/" + routing_bench + ".sv"
+          routing_post_bench = "frp_m31_execution_routing_post_synthesis_tb"
+          routing_post_tb = "rtl/m31/" + routing_post_bench + ".sv"
           frequency_bench = "frp_m31_frequency_range_tb"
           frequency_tb = "rtl/m31/" + frequency_bench + ".sv"
           frequency_post_bench = "frp_m31_frequency_range_post_synthesis_tb"
@@ -125,6 +127,14 @@ jobs:
               "capacity_cases": 128, "backlog_cases": 32, "reserved_cases": 16,
               "counter_clears": 64, "resets": 1144, "enabled_ticks": 5664,
               "hold_edges": 1984, "first_legs": 496, "second_legs": 352,
+          }
+          routing_post_expected = {
+              "comparisons": 34199, "output_bits": 556, "enabled_ticks": 5664,
+              "hold_edges": 1984, "reset_assertions": 1144, "reset_clock_edges": 1144,
+              "clear_tick_edges": 32, "clear_hold_edges": 32,
+              "matrix_cases": 720, "duplicate_cases": 216, "pending_cases": 32,
+              "capacity_cases": 128, "backlog_cases": 32, "reserved_cases": 16,
+              "first_legs": 496, "second_legs": 352,
           }
           frequency_expected = {
               "vectors": 144, "scheduler_states": 5, "updates": 720,
@@ -172,6 +182,7 @@ jobs:
               "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
               "expected_metrics": expected, "commands": [], "profiles": [],
               "execution_routing_expected_metrics": routing_expected,
+              "execution_routing_post_expected_metrics": routing_post_expected,
               "frequency_expected_metrics": frequency_expected,
               "frequency_post_expected_metrics": frequency_post_expected,
               "geometry_expected_metrics": geometry_expected,
@@ -248,6 +259,17 @@ jobs:
               metrics = dict(zip(expected_metrics, map(int, match.groups())))
               require(metrics == expected_metrics, prefix + " incomplete coverage")
               return records[0], metrics
+
+          def routing_post_records(text):
+              prefix = "FRP_M31_EXECUTION_ROUTING_POST_SYNTHESIS_TB:"
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M31_EXECUTION_ROUTING_")]
+              require(len(records) == 2 and records[-1].startswith(prefix),
+                      "Incomplete, repeated or out-of-order execution post-synthesis results")
+              _, rtl_metrics = regression_record(records[0],
+                  "FRP_M31_EXECUTION_ROUTING_TB:", routing_expected)
+              _, metrics = regression_record(records[1], prefix, routing_post_expected)
+              return records, rtl_metrics, metrics
 
           def frequency_post_records(text):
               prefix = "FRP_M31_FREQUENCY_RANGE_POST_SYNTHESIS_TB:"
@@ -481,6 +503,16 @@ jobs:
               identities[routing_tb] = {
                   "bytes": len(routing_raw), "sha256": sha(routing_raw)}
               rows.append(f"{routing_tb}|{len(routing_raw)}|{sha(routing_raw)}")
+              visit(routing_post_tb)
+              require(sources == set(identities) | {routing_post_tb},
+                      "Unexpected execution post-synthesis dependencies")
+              routing_post_raw = (root / routing_post_tb).read_bytes()
+              require(len(routing_post_raw) == 9632 and sha(routing_post_raw) ==
+                      "3ee1d04fdd24ad6156fb857b1762233e873fb5a9215ce611e5273d477770c2b6",
+                      "Execution post-synthesis test differs from the validated testbench")
+              identities[routing_post_tb] = {
+                  "bytes": len(routing_post_raw), "sha256": sha(routing_post_raw)}
+              rows.append(f"{routing_post_tb}|{len(routing_post_raw)}|{sha(routing_post_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -592,6 +624,47 @@ jobs:
               simlib = evidence / "yosys-simlib.v"
               shutil.copyfile(share / "simlib.v", simlib)
               report["cell_models_sha256"] = sha(simlib.read_bytes())
+
+              execution_top = "frp_m31_execution_core"
+              execution_netlist = evidence / (execution_top + "_netlist.v")
+              execution_script = (
+                  "read_slang -j 1 --std 1800-2017 --ignore-assertions --top " + execution_top
+                  + " " + " ".join("-I" + d for d in include_dirs)
+                  + " rtl/m31/" + execution_top + ".sv; "
+                  + "synth -top " + execution_top + " -noshare -run begin:fine; check -assert; "
+                  + "techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; "
+                  + "select -assert-none t:$shiftx t:$connect; "
+                  + "rename " + execution_top + " " + execution_top + "_netlist; "
+                  + "write_verilog -noattr " + json.dumps(str(execution_netlist))
+              )
+              execution_script_path = evidence / "execution-synthesis.ys"
+              execution_script_path.write_text(execution_script + "\n")
+              execute(["yowasp-yosys", "-Q", "-T", "-q", "-s", str(execution_script_path)],
+                      "execution-synthesis", view, 600)
+              require(execution_netlist.is_file() and execution_netlist.stat().st_size > 0,
+                      "Missing execution-core netlist")
+              report["execution_netlist_sha256"] = sha(execution_netlist.read_bytes())
+
+              routing_post_build = work / "routing-post-build"
+              execute(compiler + ["-DSIMLIB_NOCONNECT", "--top-module", routing_post_bench,
+                  "--Mdir", str(routing_post_build), "-v", str(simlib),
+                  str(execution_netlist), routing_post_tb], "routing-post-build", root, 600)
+              routing_post_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(routing_post_build / ("V" + routing_post_bench))],
+                                f"routing-post-run-{attempt}", root, 180)
+                  records, rtl_metrics, metrics = routing_post_records(log.read_text())
+                  require(records[0] == routing_replays[0],
+                          "Execution post-synthesis reference differs from standalone RTL")
+                  routing_post_replays.append(records)
+              require(routing_post_replays[0] == routing_post_replays[1],
+                      "Execution post-synthesis replay records differ")
+              report["execution_routing_post_synthesis"] = {
+                  "implementation": "synthesized netlist with RTL reference", "replays": 2,
+                  "rtl_metrics": rtl_metrics, "metrics": metrics,
+                  "records": routing_post_replays[0],
+                  "records_sha256": sha(("\n".join(routing_post_replays[0]) + "\n").encode())}
+              print("\n".join(routing_post_replays[0]), flush=True)
 
               thermal_netlists = []
               report["thermal_netlists"] = {}
@@ -764,8 +837,8 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=24,
-                            routing_simulation_runs=2,
+              report.update(status="PASS", simulation_runs=26,
+                            routing_simulation_runs=2, routing_post_simulation_runs=2,
                             stream_simulation_runs=6, frequency_simulation_runs=2,
                             frequency_post_simulation_runs=2,
                             geometry_simulation_runs=2, geometry_post_simulation_runs=2,
@@ -775,7 +848,7 @@ jobs:
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
-                  "Simulation runs: 24.", "",
+                  "Simulation runs: 26.", "",
                   "Execution routing RTL regression: two matching replays; "
                   "720 single-request cases across eight cells, two lanes, five "
                   "scheduler states and all nine canonical -1/0/1 transitions.",
@@ -786,6 +859,14 @@ jobs:
                   "Pending destinations survive blocked ticks and counter clears; "
                   "completions precede new requests and same-state retention uses no "
                   "transition capacity.", "",
+                  "Execution routing post-synthesis regression: two matching replays; "
+                  "the reference result also matches standalone RTL.",
+                  "34199 comparisons of all 556 execution-core output bits per replay; "
+                  "the same transition matrix, lane conflicts, pending routes and "
+                  "capacity cases used by the RTL regression.",
+                  "5664 enabled ticks, 1984 disabled-tick hold edges, 1144 asynchronous "
+                  "reset assertions and 1144 clock edges under reset per replay.",
+                  "Counter clears are checked on 32 enabled and 32 disabled clock edges.", "",
                   "Frequency range RTL regression: two matching replays; "
                   "144 vectors in five scheduler states, 720 updates per replay.",
                   "Load priority, 360 disabled-tick hold edges and three reset checks per replay.", "",
