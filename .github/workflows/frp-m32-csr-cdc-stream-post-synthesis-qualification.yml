@@ -92,6 +92,8 @@ jobs:
           geometry_tb = "rtl/m31/" + geometry_bench + ".sv"
           dynamics_bench = "frp_m31_phase_dynamics_tb"
           dynamics_tb = "rtl/m31/" + dynamics_bench + ".sv"
+          dynamics_post_bench = "frp_m31_phase_dynamics_post_synthesis_tb"
+          dynamics_post_tb = "rtl/m31/" + dynamics_post_bench + ".sv"
           thermal_bench = "frp_m31_thermal_dynamics_tb"
           thermal_tb = "rtl/m31/" + thermal_bench + ".sv"
           thermal_post_bench = "frp_m31_thermal_dynamics_post_synthesis_tb"
@@ -120,6 +122,11 @@ jobs:
               "balance_ticks": 14, "commit_ticks": 2, "excite_ticks": 2,
               "neutralize_ticks": 14,
           }
+          dynamics_post_expected = {
+              "output_bits": 1168, "ticks": 48, "loads": 6, "resets": 6,
+              "free_ticks": 16, "balance_ticks": 14, "commit_ticks": 2,
+              "excite_ticks": 2, "neutralize_ticks": 14,
+          }
           thermal_expected = {
               "profiles": 2, "vectors": 64, "cooling_ticks": 256, "warmup_ticks": 4,
               "updates": 324, "hold_edges": 128, "clears": 4, "resets": 3,
@@ -138,6 +145,7 @@ jobs:
               "frequency_expected_metrics": frequency_expected,
               "geometry_expected_metrics": geometry_expected,
               "dynamics_expected_metrics": dynamics_expected,
+              "dynamics_post_expected_metrics": dynamics_post_expected,
               "thermal_expected_metrics": thermal_expected,
               "thermal_post_expected_metrics": thermal_post_expected,
           }
@@ -235,6 +243,26 @@ jobs:
                       index += 1
               return records, metrics
 
+          def dynamics_post_records(text):
+              prefix = "FRP_M31_PHASE_DYNAMICS_POST_SYNTHESIS_TB:"
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M31_PHASE_DYNAMICS_")]
+              require(len(records) == 56 and records[-1].startswith(prefix),
+                      "Incomplete, repeated or out-of-order phase post-synthesis results")
+              _, rtl_metrics = dynamics_records("\n".join(records[:-1]))
+              fields = ["comparisons", "output_bits", "ticks", "hold_edges", "loads",
+                        "resets", "free_ticks", "balance_ticks", "commit_ticks",
+                        "excite_ticks", "neutralize_ticks"]
+              match = re.fullmatch(prefix + " PASS " +
+                  " ".join(k + r"=(\d+)" for k in fields), records[-1])
+              require(match is not None, "Malformed phase post-synthesis result")
+              metrics = dict(zip(fields, map(int, match.groups())))
+              require(all(metrics[k] == v for k, v in dynamics_post_expected.items())
+                      and metrics["hold_edges"] >= dynamics_expected["hold_edges"]
+                      and metrics["comparisons"] >= 156,
+                      "Incomplete phase post-synthesis coverage")
+              return records, rtl_metrics, metrics
+
           def thermal_records(text):
               terminal, metrics = regression_record(text,
                   "FRP_M31_THERMAL_DYNAMICS_TB:", thermal_expected)
@@ -326,6 +354,16 @@ jobs:
               identities[thermal_post_tb] = {
                   "bytes": len(thermal_post_raw), "sha256": sha(thermal_post_raw)}
               rows.append(f"{thermal_post_tb}|{len(thermal_post_raw)}|{sha(thermal_post_raw)}")
+              visit(dynamics_post_tb)
+              require(sources == set(identities) | {dynamics_post_tb},
+                      "Unexpected phase post-synthesis dependencies")
+              dynamics_post_raw = (root / dynamics_post_tb).read_bytes()
+              require(len(dynamics_post_raw) == 6778 and sha(dynamics_post_raw) ==
+                      "ab43633b76ae500e5e747bb8f7d626bfa523f0e0922d73980a9d7a32c61d1d55",
+                      "Phase post-synthesis test differs from the validated testbench")
+              identities[dynamics_post_tb] = {
+                  "bytes": len(dynamics_post_raw), "sha256": sha(dynamics_post_raw)}
+              rows.append(f"{dynamics_post_tb}|{len(dynamics_post_raw)}|{sha(dynamics_post_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -467,6 +505,47 @@ jobs:
                   "records_sha256": sha(("\n".join(thermal_post_replays[0]) + "\n").encode())}
               print("\n".join(thermal_post_replays[0]), flush=True)
 
+              phase_top = "frp_m31_phase_interference"
+              phase_netlist = evidence / (phase_top + "_netlist.v")
+              phase_script = (
+                  "read_slang -j 1 --std 1800-2017 --ignore-assertions --top " + phase_top
+                  + " " + " ".join("-I" + d for d in include_dirs)
+                  + " rtl/m31/" + phase_top + ".sv; "
+                  + "synth -top " + phase_top + " -noshare -run begin:fine; check -assert; "
+                  + "techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; "
+                  + "select -assert-none t:$shiftx t:$connect; "
+                  + "rename " + phase_top + " " + phase_top + "_netlist; "
+                  + "write_verilog -noattr " + json.dumps(str(phase_netlist))
+              )
+              phase_script_path = evidence / "phase-synthesis.ys"
+              phase_script_path.write_text(phase_script + "\n")
+              execute(["yowasp-yosys", "-Q", "-T", "-q", "-s", str(phase_script_path)],
+                      "phase-synthesis", view, 600)
+              require(phase_netlist.is_file() and phase_netlist.stat().st_size > 0,
+                      "Missing phase-engine netlist")
+              report["phase_netlist_sha256"] = sha(phase_netlist.read_bytes())
+
+              dynamics_post_build = work / "dynamics-post-build"
+              execute(compiler + ["-DSIMLIB_NOCONNECT", "--top-module", dynamics_post_bench,
+                  "--Mdir", str(dynamics_post_build), "-v", str(simlib),
+                  str(phase_netlist), dynamics_post_tb], "dynamics-post-build", root, 900)
+              dynamics_post_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(dynamics_post_build / ("V" + dynamics_post_bench))],
+                                f"dynamics-post-run-{attempt}", root, 180)
+                  records, rtl_metrics, metrics = dynamics_post_records(log.read_text())
+                  require(records[:-1] == dynamics_replays[0],
+                          "Phase post-synthesis reference differs from standalone RTL")
+                  dynamics_post_replays.append(records)
+              require(dynamics_post_replays[0] == dynamics_post_replays[1],
+                      "Phase post-synthesis tick, profile or coverage replay records differ")
+              report["phase_dynamics_post_synthesis"] = {
+                  "implementation": "synthesized netlist with RTL reference", "replays": 2,
+                  "rtl_metrics": rtl_metrics, "metrics": metrics,
+                  "records": dynamics_post_replays[0],
+                  "records_sha256": sha(("\n".join(dynamics_post_replays[0]) + "\n").encode())}
+              print("\n".join(dynamics_post_replays[0]), flush=True)
+
               netlist = evidence / "frp_m32_csr_cdc_stream_netlist.v"
               script = (
                   "read_slang -j 1 --std 1800-2017 --ignore-assertions --top " + top
@@ -509,9 +588,10 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=16,
+              report.update(status="PASS", simulation_runs=18,
                             stream_simulation_runs=6, frequency_simulation_runs=2,
                             geometry_simulation_runs=2, dynamics_simulation_runs=2,
+                            dynamics_post_simulation_runs=2,
                             thermal_simulation_runs=2, thermal_post_simulation_runs=2,
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
@@ -528,6 +608,12 @@ jobs:
                   "48 ticks, 384 phase words and 384 frequency words checked against fixed "
                   "reference vectors per replay; phase wrap and multi-turn steps.",
                   "96 disabled-tick hold edges, six loads and six resets per replay.", "",
+                  "Phase dynamics post-synthesis regression: two matching replays of all "
+                  "56 records; the 55 reference records also match standalone RTL.",
+                  "All 1168 phase-engine output bits match, including phase and frequency "
+                  "banks, coupling, projections, ternary targets and phase-order observables.",
+                  "48 updates cover free, balance, commit, excite and neutralize; "
+                  "loads, asynchronous resets and disabled-tick hold edges are checked.", "",
                   "Thermal dynamics and stability RTL regression: two matching replays; "
                   "64 cost vectors, 256 cooling ticks and four warmup ticks per replay.",
                   "324 exact updates, 128 disabled-tick hold edges, four clears "
