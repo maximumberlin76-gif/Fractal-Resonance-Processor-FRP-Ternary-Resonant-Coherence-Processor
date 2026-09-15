@@ -1,0 +1,749 @@
+name: 01 - FRP M31-M32 RTL + Netlist
+
+run-name: "01 - FRP M31-M32 RTL + Netlist @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-01-m31-m32-rtl-netlist-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-01:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      CXXFLAGS: "--std=c++20 -DVL_TIME_CONTEXT"
+
+    steps:
+      - name: Initialize build and evidence paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "M32_CDC_STREAM_POST_WORK=$RUNNER_TEMP/frp-m32-csr-cdc-stream-post-work" \
+            "M32_CDC_STREAM_POST_EVIDENCE=$RUNNER_TEMP/frp-m32-csr-cdc-stream-post-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m32-csr-cdc-stream-post-evidence"
+
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install simulation and synthesis tools
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            sudo apt-get update
+            sudo apt-get install --yes g++ make
+            python -m pip install --disable-pip-version-check --only-binary=:all: \
+              verilator==5.48.0
+            python -m pip install --disable-pip-version-check \
+              yowasp-yosys==0.68.0.0.post1208
+            frp_verilator_root="$(python -c 'import importlib.util; from pathlib import Path; print(Path(importlib.util.find_spec("verilator").origin).parent)')"
+            test -x "$frp_verilator_root/bin/verilator_bin"
+            printf '%s\n' "VERILATOR_ROOT=$frp_verilator_root" >> "$GITHUB_ENV"
+            printf '%s\n' "$frp_verilator_root/bin" >> "$GITHUB_PATH"
+            python --version
+            VERILATOR_ROOT="$frp_verilator_root" "$frp_verilator_root/bin/verilator" --version
+            g++ --version
+          } 2>&1 | tee "$M32_CDC_STREAM_POST_EVIDENCE/toolchain.log"
+
+      - name: Qualify phase, frequency, thermal stability, and synthesized netlists
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          from pathlib import Path
+          import yowasp_yosys
+
+          root = Path.cwd().resolve()
+          work = Path(os.environ["M32_CDC_STREAM_POST_WORK"])
+          evidence = Path(os.environ["M32_CDC_STREAM_POST_EVIDENCE"])
+          evidence.mkdir(parents=True, exist_ok=True)
+          view, build = work / "source", work / "build"
+          top = "frp_m32_csr_cdc_stream_top"
+          bench = "frp_m32_csr_cdc_stream_post_synthesis_tb"
+          tb = "fpga/m32_csr/" + bench + ".sv"
+          frequency_bench = "frp_m31_frequency_range_tb"
+          frequency_tb = "rtl/m31/" + frequency_bench + ".sv"
+          frequency_post_bench = "frp_m31_frequency_range_post_synthesis_tb"
+          frequency_post_tb = "rtl/m31/" + frequency_post_bench + ".sv"
+          geometry_bench = "frp_m31_phase_geometry_tb"
+          geometry_tb = "rtl/m31/" + geometry_bench + ".sv"
+          dynamics_bench = "frp_m31_phase_dynamics_tb"
+          dynamics_tb = "rtl/m31/" + dynamics_bench + ".sv"
+          dynamics_post_bench = "frp_m31_phase_dynamics_post_synthesis_tb"
+          dynamics_post_tb = "rtl/m31/" + dynamics_post_bench + ".sv"
+          thermal_bench = "frp_m31_thermal_dynamics_tb"
+          thermal_tb = "rtl/m31/" + thermal_bench + ".sv"
+          thermal_post_bench = "frp_m31_thermal_dynamics_post_synthesis_tb"
+          thermal_post_tb = "rtl/m31/" + thermal_post_bench + ".sv"
+          workflow = ".github/workflows/frp-01-m31-m32-rtl-netlist.yml"
+          include_dirs = ["rtl/m22", "rtl/m23", "rtl/m31", "rtl/m32",
+                          "fpga/m32", "fpga/m32_csr"]
+          profiles = [(5, 7, 1), (3, 11, 4), (13, 2, 3)]
+          expected = {
+              "accepted": 427, "completed": 423, "core_completed": 425,
+              "aborted": 4, "aborted_after_core": 2, "simultaneous": 127,
+              "pulses": 426, "rejected": 41, "routes": 8, "resets": 10,
+          }
+          frequency_expected = {
+              "vectors": 144, "scheduler_states": 5, "updates": 720,
+              "loads": 90, "hold_edges": 360, "reset_checks": 3,
+          }
+          frequency_post_expected = {
+              "output_bits": 1168, "vectors": 144, "scheduler_states": 5,
+              "updates": 720, "ticks": 90, "loads": 90,
+              "reset_assertions": 2, "reset_clock_edges": 2,
+              "free_ticks": 18, "balance_ticks": 18, "commit_ticks": 18,
+              "excite_ticks": 18, "neutralize_ticks": 18,
+          }
+          geometry_expected = {
+              "loads": 634, "lut_samples": 4096, "target_samples": 4096,
+              "geometry_cases": 5, "gamma_cases": 8, "topology_cases": 16,
+              "thermal_cases": 13, "rotation_cases": 60, "coupling_checks": 296,
+          }
+          dynamics_expected = {
+              "profiles": 6, "ticks": 48, "phase_words": 384, "frequency_words": 384,
+              "hold_edges": 96, "loads": 6, "resets": 6, "free_ticks": 16,
+              "balance_ticks": 14, "commit_ticks": 2, "excite_ticks": 2,
+              "neutralize_ticks": 14,
+          }
+          dynamics_post_expected = {
+              "output_bits": 1168, "ticks": 48, "loads": 6, "resets": 6,
+              "free_ticks": 16, "balance_ticks": 14, "commit_ticks": 2,
+              "excite_ticks": 2, "neutralize_ticks": 14,
+          }
+          thermal_expected = {
+              "profiles": 2, "vectors": 64, "cooling_ticks": 256, "warmup_ticks": 4,
+              "updates": 324, "hold_edges": 128, "clears": 4, "resets": 3,
+              "capacity_cases": 36, "boundary_cases": 108, "saturation_cases": 22,
+          }
+          thermal_post_expected = {
+              "output_bits": 193, "updates": 324, "clears": 4,
+              "resets": 3, "boundary_cases": 108,
+          }
+          report = {
+              "status": "FAIL", "source_commit": os.environ["GITHUB_SHA"],
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "expected_metrics": expected, "commands": [], "profiles": [],
+              "frequency_expected_metrics": frequency_expected,
+              "frequency_post_expected_metrics": frequency_post_expected,
+              "geometry_expected_metrics": geometry_expected,
+              "dynamics_expected_metrics": dynamics_expected,
+              "dynamics_post_expected_metrics": dynamics_post_expected,
+              "thermal_expected_metrics": thermal_expected,
+              "thermal_post_expected_metrics": thermal_post_expected,
+          }
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          def sha(raw):
+              return hashlib.sha256(raw).hexdigest()
+
+          def execute(command, label, directory, limit):
+              report["commands"].append({"label": label, "argv": command})
+              print(label, flush=True)
+              log_path = evidence / (label + ".log")
+              try:
+                  with log_path.open("w") as log:
+                      subprocess.run(command, cwd=directory, stdout=log,
+                          stderr=subprocess.STDOUT, timeout=limit, check=True)
+              except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                  print("\n".join(log_path.read_text(errors="replace").splitlines()[-40:]))
+                  raise
+              return log_path
+
+          def result_records(text, profile):
+              rtl_prefix = "FRP_M32_CSR_CDC_STREAM_TB:"
+              post_prefix = "FRP_M32_CSR_CDC_STREAM_POST_SYNTHESIS_TB:"
+              records = [line for line in text.splitlines()
+                         if line.startswith((rtl_prefix, post_prefix))]
+              require(len(records) == 2,
+                      "Incomplete or repeated CDC stream post-synthesis results")
+              clocks = dict(zip(("host_half", "core_half", "phase"), profile))
+              fields = [*clocks, "checks", "accepted", "completed", "core_completed",
+                        "aborted", "aborted_after_core", "simultaneous",
+                        "stalled_responses", "stalled_requests", "pulses",
+                        "rejected", "routes", "resets"]
+              match = re.fullmatch(rtl_prefix + " PASS " +
+                  " ".join(k + r"=(\d+)" for k in fields), records[0])
+              require(match is not None, "Malformed reference RTL result")
+              rtl_metrics = dict(zip(fields, map(int, match.groups())))
+              wanted = clocks | expected
+              require(all(rtl_metrics[k] == v for k, v in wanted.items()),
+                      "Unexpected reference metrics or clock profile")
+              require(rtl_metrics["checks"] >= expected["completed"]
+                      and rtl_metrics["stalled_responses"] >= 100
+                      and rtl_metrics["stalled_requests"] >= 100,
+                      "Missing stalled request or response coverage")
+              fields = [*clocks, "comparisons", "output_bits", "accepted",
+                        "completed", "simultaneous"]
+              match = re.fullmatch(post_prefix + " PASS " +
+                  " ".join(k + r"=(\d+)" for k in fields), records[1])
+              require(match is not None, "Malformed post-synthesis result")
+              metrics = dict(zip(fields, map(int, match.groups())))
+              wanted = clocks | {k: expected[k]
+                                 for k in ("accepted", "completed", "simultaneous")}
+              require(all(metrics[k] == v for k, v in wanted.items())
+                      and metrics["output_bits"] == 43
+                      and metrics["comparisons"] >= 2 * expected["accepted"],
+                      "Unexpected post-synthesis metrics or clock profile")
+              return records, rtl_metrics, metrics
+
+          def regression_record(text, prefix, expected_metrics):
+              records = [line for line in text.splitlines() if line.startswith(prefix)]
+              require(len(records) == 1, prefix + " incomplete or repeated result")
+              match = re.fullmatch(prefix + " PASS " +
+                  " ".join(k + r"=(\d+)" for k in expected_metrics), records[0])
+              require(match is not None, prefix + " malformed result")
+              metrics = dict(zip(expected_metrics, map(int, match.groups())))
+              require(metrics == expected_metrics, prefix + " incomplete coverage")
+              return records[0], metrics
+
+          def frequency_post_records(text):
+              prefix = "FRP_M31_FREQUENCY_RANGE_POST_SYNTHESIS_TB:"
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M31_FREQUENCY_RANGE_")]
+              require(len(records) == 2 and records[-1].startswith(prefix),
+                      "Incomplete, repeated or out-of-order frequency post-synthesis results")
+              _, rtl_metrics = regression_record(records[0],
+                  "FRP_M31_FREQUENCY_RANGE_TB:", frequency_expected)
+              fields = ["comparisons", "output_bits", "vectors", "scheduler_states",
+                        "updates", "ticks", "loads", "hold_edges", "reset_assertions",
+                        "reset_clock_edges", "free_ticks", "balance_ticks", "commit_ticks",
+                        "excite_ticks", "neutralize_ticks"]
+              match = re.fullmatch(prefix + " PASS " +
+                  " ".join(k + r"=(\d+)" for k in fields), records[-1])
+              require(match is not None, "Malformed frequency post-synthesis result")
+              metrics = dict(zip(fields, map(int, match.groups())))
+              require(all(metrics[k] == v for k, v in frequency_post_expected.items())
+                      and metrics["hold_edges"] >= frequency_expected["hold_edges"]
+                      and metrics["comparisons"] >= 544,
+                      "Incomplete frequency post-synthesis coverage")
+              return records, rtl_metrics, metrics
+
+          def dynamics_records(text):
+              terminal, metrics = regression_record(text,
+                  "FRP_M31_PHASE_DYNAMICS_TB:", dynamics_expected)
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M31_PHASE_DYNAMICS_")]
+              require(len(records) == 55 and records[-1] == terminal,
+                      "Incomplete, repeated or out-of-order phase dynamics results")
+              index = 0
+              for workload in (0, 1):
+                  for mode in ("free", "7/1", "1/7"):
+                      for tick in range(1, 9):
+                          state = (0 if mode == "free" else
+                                   (2 if tick == 8 else 1) if mode == "7/1" else
+                                   (3 if tick == 1 else 4))
+                          pattern = (f"FRP_M31_PHASE_DYNAMICS_TICK: workload={workload} "
+                              f"mode={mode} tick={tick} scheduler={state}"
+                              + r" phase=[0-9a-f]{64} frequency=[0-9a-f]{64}")
+                          require(re.fullmatch(pattern, records[index]) is not None,
+                                  "Malformed or out-of-order phase dynamics tick")
+                          index += 1
+                      require(records[index] ==
+                          f"FRP_M31_PHASE_DYNAMICS_PROFILE: PASS workload={workload} "
+                          f"mode={mode} ticks=8", "Missing phase dynamics profile")
+                      index += 1
+              return records, metrics
+
+          def dynamics_post_records(text):
+              prefix = "FRP_M31_PHASE_DYNAMICS_POST_SYNTHESIS_TB:"
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M31_PHASE_DYNAMICS_")]
+              require(len(records) == 56 and records[-1].startswith(prefix),
+                      "Incomplete, repeated or out-of-order phase post-synthesis results")
+              _, rtl_metrics = dynamics_records("\n".join(records[:-1]))
+              fields = ["comparisons", "output_bits", "ticks", "hold_edges", "loads",
+                        "resets", "free_ticks", "balance_ticks", "commit_ticks",
+                        "excite_ticks", "neutralize_ticks"]
+              match = re.fullmatch(prefix + " PASS " +
+                  " ".join(k + r"=(\d+)" for k in fields), records[-1])
+              require(match is not None, "Malformed phase post-synthesis result")
+              metrics = dict(zip(fields, map(int, match.groups())))
+              require(all(metrics[k] == v for k, v in dynamics_post_expected.items())
+                      and metrics["hold_edges"] >= dynamics_expected["hold_edges"]
+                      and metrics["comparisons"] >= 156,
+                      "Incomplete phase post-synthesis coverage")
+              return records, rtl_metrics, metrics
+
+          def thermal_records(text):
+              terminal, metrics = regression_record(text,
+                  "FRP_M31_THERMAL_DYNAMICS_TB:", thermal_expected)
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M31_THERMAL_DYNAMICS_")]
+              expected_profiles = [
+                  "FRP_M31_THERMAL_DYNAMICS_PROFILE: PASS workload=0 samples=160 "
+                  "temperature=0000000a peak=00000f4c",
+                  "FRP_M31_THERMAL_DYNAMICS_PROFILE: PASS workload=1 samples=160 "
+                  "temperature=0004b190 peak=1066b54c",
+              ]
+              require(records == expected_profiles + [terminal],
+                      "Incomplete, repeated, out-of-order or incorrect thermal results")
+              return records, metrics
+
+          def thermal_post_records(text):
+              prefix = "FRP_M31_THERMAL_DYNAMICS_POST_SYNTHESIS_TB:"
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M31_THERMAL_DYNAMICS_")]
+              require(len(records) == 4 and records[-1].startswith(prefix),
+                      "Incomplete, repeated or out-of-order thermal post-synthesis results")
+              _, rtl_metrics = thermal_records("\n".join(records[:-1]))
+              fields = ["comparisons", "output_bits", "updates", "hold_edges",
+                        "clears", "resets", "boundary_cases"]
+              match = re.fullmatch(prefix + " PASS " +
+                  " ".join(k + r"=(\d+)" for k in fields), records[-1])
+              require(match is not None, "Malformed thermal post-synthesis result")
+              metrics = dict(zip(fields, map(int, match.groups())))
+              require(all(metrics[k] == v for k, v in thermal_post_expected.items())
+                      and metrics["hold_edges"] >= thermal_expected["hold_edges"]
+                      and metrics["comparisons"] >= 567,
+                      "Incomplete thermal post-synthesis coverage")
+              return records, rtl_metrics, metrics
+
+          try:
+              require(importlib.metadata.version("yowasp-yosys") == "0.68.0.0.post1208",
+                      "Unexpected synthesis package")
+              require(importlib.metadata.version("verilator") == "5.48.0",
+                      "Unexpected simulation package")
+              simulator_root = Path(os.environ["VERILATOR_ROOT"]).resolve()
+              require(Path(shutil.which("verilator") or "").resolve() ==
+                      simulator_root / "bin" / "verilator",
+                      "Simulator path differs from the pinned package")
+              simulator_sha = sha((simulator_root / "bin" / "verilator_bin").read_bytes())
+              require(simulator_sha ==
+                      "7a308fe7b00607f3140fe0599efc107a3f591e631a44a1c3614e00e6c90c0dcc",
+                      "Simulator binary differs from the validated Linux x86-64 build")
+              report.update(simulation_package="verilator==5.48.0",
+                            simulation_binary_sha256=simulator_sha)
+              sources = set()
+
+              def visit(name):
+                  if name in sources:
+                      return
+                  path = root / name
+                  require(path.is_file() and not path.is_symlink(), "Missing source: " + name)
+                  sources.add(name)
+                  for inc in re.findall(r'`include\s+"([^"]+)"', path.read_text()):
+                      matches = {(directory / inc).resolve()
+                                 for directory in [path.parent, *[root / d for d in include_dirs]]
+                                 if (directory / inc).is_file()}
+                      require(len(matches) == 1, "Missing or ambiguous include: " + inc)
+                      resolved = matches.pop()
+                      require(resolved.is_relative_to(root), "Include leaves the repository")
+                      visit(resolved.relative_to(root).as_posix())
+
+              visit(tb)
+              visit(frequency_tb)
+              visit(geometry_tb)
+              visit(dynamics_tb)
+              sources.add("rtl/m31/frp_m31_sin_q30.mem")
+              rows, identities = [], {}
+              for name in sorted(sources):
+                  raw = (root / name).read_bytes()
+                  identities[name] = {"bytes": len(raw), "sha256": sha(raw)}
+                  rows.append(f"{name}|{len(raw)}|{sha(raw)}")
+              digest = sha(("\n".join(rows) + "\n").encode())
+              report.update(sources=identities, source_set_sha256=digest,
+                            workflow_sha256=sha((root / workflow).read_bytes()))
+              require(len(sources) == 30 and digest ==
+                      "f43a8d74d8d1489cea29caf05a9cdd289cf15c89d26ac75f332c79af3d0eeba4",
+                      "Source set differs from the validated post-synthesis inputs")
+
+              visit(thermal_tb)
+              require(sources == set(identities) | {thermal_tb},
+                      "Unexpected thermal regression dependencies")
+              thermal_raw = (root / thermal_tb).read_bytes()
+              require(len(thermal_raw) == 14757 and sha(thermal_raw) ==
+                      "cd76bf09bf1ec362faa94f6a5aff6e52c4a51fb17be22eb6f52d950c1d766467",
+                      "Thermal regression differs from the validated testbench")
+              identities[thermal_tb] = {
+                  "bytes": len(thermal_raw), "sha256": sha(thermal_raw)}
+              rows.append(f"{thermal_tb}|{len(thermal_raw)}|{sha(thermal_raw)}")
+              visit(thermal_post_tb)
+              require(sources == set(identities) | {thermal_post_tb},
+                      "Unexpected thermal post-synthesis dependencies")
+              thermal_post_raw = (root / thermal_post_tb).read_bytes()
+              require(len(thermal_post_raw) == 5858 and sha(thermal_post_raw) ==
+                      "2fb91ba029019ecc536f9ef1c5061ffa1eb362fa89367bd2c826c564c18029a4",
+                      "Thermal post-synthesis test differs from the validated testbench")
+              identities[thermal_post_tb] = {
+                  "bytes": len(thermal_post_raw), "sha256": sha(thermal_post_raw)}
+              rows.append(f"{thermal_post_tb}|{len(thermal_post_raw)}|{sha(thermal_post_raw)}")
+              visit(dynamics_post_tb)
+              require(sources == set(identities) | {dynamics_post_tb},
+                      "Unexpected phase post-synthesis dependencies")
+              dynamics_post_raw = (root / dynamics_post_tb).read_bytes()
+              require(len(dynamics_post_raw) == 6778 and sha(dynamics_post_raw) ==
+                      "ab43633b76ae500e5e747bb8f7d626bfa523f0e0922d73980a9d7a32c61d1d55",
+                      "Phase post-synthesis test differs from the validated testbench")
+              identities[dynamics_post_tb] = {
+                  "bytes": len(dynamics_post_raw), "sha256": sha(dynamics_post_raw)}
+              rows.append(f"{dynamics_post_tb}|{len(dynamics_post_raw)}|{sha(dynamics_post_raw)}")
+              visit(frequency_post_tb)
+              require(sources == set(identities) | {frequency_post_tb},
+                      "Unexpected frequency post-synthesis dependencies")
+              frequency_post_raw = (root / frequency_post_tb).read_bytes()
+              require(len(frequency_post_raw) == 6928 and sha(frequency_post_raw) ==
+                      "782109dd3d081f896b44a764bd5e3173a0499dd96b237a47e6fe469668941486",
+                      "Frequency post-synthesis test differs from the validated testbench")
+              identities[frequency_post_tb] = {
+                  "bytes": len(frequency_post_raw), "sha256": sha(frequency_post_raw)}
+              rows.append(f"{frequency_post_tb}|{len(frequency_post_raw)}|{sha(frequency_post_raw)}")
+              report.update(base_source_set_sha256=digest,
+                            source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
+              for name in sources:
+                  target = view / name
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(root / name, target)
+
+              compiler = ["verilator", "--binary", "--sv", "--timing", "--assert",
+                  "-Wall", "-Wno-fatal", "-CFLAGS", "-std=c++20 -O0",
+                  "--output-split", "20000", "-MAKEFLAGS", "VK_PCH_I_FAST=",
+                  "-MAKEFLAGS", "VK_PCH_I_SLOW=", "-j", "2"]
+              compiler += ["-I" + d for d in include_dirs]
+              frequency_build = work / "frequency-build"
+              execute(compiler + ["--top-module", frequency_bench,
+                  "--Mdir", str(frequency_build), frequency_tb],
+                  "frequency-build", root, 600)
+              frequency_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(frequency_build / ("V" + frequency_bench))],
+                                f"frequency-run-{attempt}", root, 180)
+                  record, metrics = regression_record(log.read_text(),
+                      "FRP_M31_FREQUENCY_RANGE_TB:", frequency_expected)
+                  frequency_replays.append(record)
+              require(frequency_replays[0] == frequency_replays[1],
+                      "Frequency range replay records differ")
+              report["frequency_range"] = {"implementation": "RTL", "replays": 2,
+                  "metrics": metrics, "record": frequency_replays[0]}
+              print(frequency_replays[0], flush=True)
+
+              geometry_build = work / "geometry-build"
+              execute(compiler + ["--top-module", geometry_bench,
+                  "--Mdir", str(geometry_build), geometry_tb],
+                  "geometry-build", root, 600)
+              geometry_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(geometry_build / ("V" + geometry_bench))],
+                                f"geometry-run-{attempt}", root, 180)
+                  record, metrics = regression_record(log.read_text(),
+                      "FRP_M31_PHASE_GEOMETRY_TB:", geometry_expected)
+                  geometry_replays.append(record)
+              require(geometry_replays[0] == geometry_replays[1],
+                      "Phase geometry replay records differ")
+              report["phase_geometry"] = {"implementation": "RTL", "replays": 2,
+                  "metrics": metrics, "record": geometry_replays[0]}
+              print(geometry_replays[0], flush=True)
+
+              dynamics_build = work / "dynamics-build"
+              execute(compiler + ["--top-module", dynamics_bench,
+                  "--Mdir", str(dynamics_build), dynamics_tb],
+                  "dynamics-build", root, 600)
+              dynamics_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(dynamics_build / ("V" + dynamics_bench))],
+                                f"dynamics-run-{attempt}", root, 180)
+                  records, metrics = dynamics_records(log.read_text())
+                  dynamics_replays.append(records)
+              require(dynamics_replays[0] == dynamics_replays[1],
+                      "Phase dynamics tick or profile replay records differ")
+              report["phase_dynamics"] = {"implementation": "RTL", "replays": 2,
+                  "metrics": metrics, "records": dynamics_replays[0],
+                  "records_sha256": sha(("\n".join(dynamics_replays[0]) + "\n").encode())}
+              print(dynamics_replays[0][-1], flush=True)
+
+              thermal_build = work / "thermal-build"
+              execute(compiler + ["--top-module", thermal_bench,
+                  "--Mdir", str(thermal_build), thermal_tb],
+                  "thermal-build", root, 600)
+              thermal_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(thermal_build / ("V" + thermal_bench))],
+                                f"thermal-run-{attempt}", root, 180)
+                  records, metrics = thermal_records(log.read_text())
+                  thermal_replays.append(records)
+              require(thermal_replays[0] == thermal_replays[1],
+                      "Thermal dynamics replay records differ")
+              report["thermal_dynamics"] = {"implementation": "RTL", "replays": 2,
+                  "metrics": metrics, "records": thermal_replays[0],
+                  "records_sha256": sha(("\n".join(thermal_replays[0]) + "\n").encode())}
+              print("\n".join(thermal_replays[0]), flush=True)
+
+              phase = view / "rtl/m31/frp_m31_phase_interference.sv"
+              text = phase.read_text()
+              first = text.index("    if (sin_lut[0] !== 32'sd0)")
+              last = text.index('      $fatal(1, "FRP M31 sine LUT three-quarter-cycle mismatch");', first)
+              normalized = text[:first] + text[text.index("\n", last) + 1:]
+              require(sha(normalized.encode()) ==
+                      "09302236b4a7734be9ac0890df4a7a577541a73c441ae7db3e70da8465f1c3ef",
+                      "Unexpected synthesis source normalization")
+              phase.write_text(normalized)
+
+              share = Path(yowasp_yosys.__file__).resolve().parent / "share"
+              simlib = evidence / "yosys-simlib.v"
+              shutil.copyfile(share / "simlib.v", simlib)
+              report["cell_models_sha256"] = sha(simlib.read_bytes())
+
+              thermal_netlists = []
+              report["thermal_netlists"] = {}
+              for thermal_top in ("frp_m31_thermal_proxy", "frp_m31_stability"):
+                  renamed = thermal_top + "_netlist"
+                  thermal_netlist = evidence / (renamed + ".v")
+                  thermal_script = (
+                      "read_slang -j 1 --std 1800-2017 --ignore-assertions --top " + thermal_top
+                      + " " + " ".join("-I" + d for d in include_dirs)
+                      + " rtl/m31/" + thermal_top + ".sv; "
+                      + "synth -top " + thermal_top + " -noshare -run begin:fine; check -assert; "
+                      + "techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; "
+                      + "select -assert-none t:$shiftx t:$connect; "
+                      + "rename " + thermal_top + " " + renamed + "; "
+                      + "write_verilog -noattr " + json.dumps(str(thermal_netlist))
+                  )
+                  thermal_script_path = evidence / (thermal_top + "-synthesis.ys")
+                  thermal_script_path.write_text(thermal_script + "\n")
+                  execute(["yowasp-yosys", "-Q", "-T", "-q", "-s", str(thermal_script_path)],
+                          thermal_top + "-synthesis", view, 600)
+                  require(thermal_netlist.is_file() and thermal_netlist.stat().st_size > 0,
+                          "Missing thermal or stability netlist: " + thermal_top)
+                  report["thermal_netlists"][thermal_top] = {
+                      "module": renamed, "sha256": sha(thermal_netlist.read_bytes())}
+                  thermal_netlists.append(str(thermal_netlist))
+
+              thermal_post_build = work / "thermal-post-build"
+              execute(compiler + ["-DSIMLIB_NOCONNECT", "--top-module", thermal_post_bench,
+                  "--Mdir", str(thermal_post_build), "-v", str(simlib),
+                  *thermal_netlists, thermal_post_tb], "thermal-post-build", root, 600)
+              thermal_post_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(thermal_post_build / ("V" + thermal_post_bench))],
+                                f"thermal-post-run-{attempt}", root, 180)
+                  records, rtl_metrics, metrics = thermal_post_records(log.read_text())
+                  require(records[:-1] == thermal_replays[0],
+                          "Thermal post-synthesis reference differs from standalone RTL")
+                  thermal_post_replays.append(records)
+              require(thermal_post_replays[0] == thermal_post_replays[1],
+                      "Thermal post-synthesis replay records differ")
+              report["thermal_post_synthesis"] = {
+                  "implementation": "synthesized netlists with RTL reference", "replays": 2,
+                  "rtl_metrics": rtl_metrics, "metrics": metrics,
+                  "records": thermal_post_replays[0],
+                  "records_sha256": sha(("\n".join(thermal_post_replays[0]) + "\n").encode())}
+              print("\n".join(thermal_post_replays[0]), flush=True)
+
+              phase_top = "frp_m31_phase_interference"
+              phase_netlist = evidence / (phase_top + "_netlist.v")
+              phase_script = (
+                  "read_slang -j 1 --std 1800-2017 --ignore-assertions --top " + phase_top
+                  + " " + " ".join("-I" + d for d in include_dirs)
+                  + " rtl/m31/" + phase_top + ".sv; "
+                  + "synth -top " + phase_top + " -noshare -run begin:fine; check -assert; "
+                  + "techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; "
+                  + "select -assert-none t:$shiftx t:$connect; "
+                  + "rename " + phase_top + " " + phase_top + "_netlist; "
+                  + "write_verilog -noattr " + json.dumps(str(phase_netlist))
+              )
+              phase_script_path = evidence / "phase-synthesis.ys"
+              phase_script_path.write_text(phase_script + "\n")
+              execute(["yowasp-yosys", "-Q", "-T", "-q", "-s", str(phase_script_path)],
+                      "phase-synthesis", view, 600)
+              require(phase_netlist.is_file() and phase_netlist.stat().st_size > 0,
+                      "Missing phase-engine netlist")
+              report["phase_netlist_sha256"] = sha(phase_netlist.read_bytes())
+
+              dynamics_post_build = work / "dynamics-post-build"
+              execute(compiler + ["-DSIMLIB_NOCONNECT", "--top-module", dynamics_post_bench,
+                  "--Mdir", str(dynamics_post_build), "-v", str(simlib),
+                  str(phase_netlist), dynamics_post_tb], "dynamics-post-build", root, 900)
+              dynamics_post_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(dynamics_post_build / ("V" + dynamics_post_bench))],
+                                f"dynamics-post-run-{attempt}", root, 180)
+                  records, rtl_metrics, metrics = dynamics_post_records(log.read_text())
+                  require(records[:-1] == dynamics_replays[0],
+                          "Phase post-synthesis reference differs from standalone RTL")
+                  dynamics_post_replays.append(records)
+              require(dynamics_post_replays[0] == dynamics_post_replays[1],
+                      "Phase post-synthesis tick, profile or coverage replay records differ")
+              report["phase_dynamics_post_synthesis"] = {
+                  "implementation": "synthesized netlist with RTL reference", "replays": 2,
+                  "rtl_metrics": rtl_metrics, "metrics": metrics,
+                  "records": dynamics_post_replays[0],
+                  "records_sha256": sha(("\n".join(dynamics_post_replays[0]) + "\n").encode())}
+              print("\n".join(dynamics_post_replays[0]), flush=True)
+
+              frequency_post_build = work / "frequency-post-build"
+              execute(compiler + ["-DSIMLIB_NOCONNECT", "--top-module", frequency_post_bench,
+                  "--Mdir", str(frequency_post_build), "-v", str(simlib),
+                  str(phase_netlist), frequency_post_tb], "frequency-post-build", root, 900)
+              frequency_post_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(frequency_post_build / ("V" + frequency_post_bench))],
+                                f"frequency-post-run-{attempt}", root, 180)
+                  records, rtl_metrics, metrics = frequency_post_records(log.read_text())
+                  require(records[0] == frequency_replays[0],
+                          "Frequency post-synthesis reference differs from standalone RTL")
+                  frequency_post_replays.append(records)
+              require(frequency_post_replays[0] == frequency_post_replays[1],
+                      "Frequency post-synthesis replay records differ")
+              report["frequency_range_post_synthesis"] = {
+                  "implementation": "synthesized netlist with RTL reference", "replays": 2,
+                  "rtl_metrics": rtl_metrics, "metrics": metrics,
+                  "records": frequency_post_replays[0],
+                  "records_sha256": sha(("\n".join(frequency_post_replays[0]) + "\n").encode())}
+              print("\n".join(frequency_post_replays[0]), flush=True)
+
+              netlist = evidence / "frp_m32_csr_cdc_stream_netlist.v"
+              script = (
+                  "read_slang -j 1 --std 1800-2017 --ignore-assertions --top " + top
+                  + " " + " ".join("-I" + d for d in include_dirs)
+                  + " fpga/m32_csr/" + top + ".sv; "
+                  + "synth -top " + top + " -noshare -run begin:fine; check -assert; "
+                  + "techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; "
+                  + "select -assert-none t:$shiftx t:$connect; "
+                  + "rename " + top + " frp_m32_csr_cdc_stream_netlist; "
+                  + "write_verilog -noattr " + json.dumps(str(netlist))
+              )
+              script_path = evidence / "synthesis.ys"
+              script_path.write_text(script + "\n")
+              execute(["yowasp-yosys", "-Q", "-T", "-q", "-s", str(script_path)],
+                      "synthesis", view, 600)
+              require(netlist.is_file() and netlist.stat().st_size > 0, "Missing netlist")
+              report["netlist_sha256"] = sha(netlist.read_bytes())
+
+              command = compiler + ["-DSIMLIB_NOCONNECT", "--top-module", bench,
+                  "--Mdir", str(build), "-v", str(simlib), str(netlist), tb]
+              execute(command, "build", root, 900)
+              for profile in profiles:
+                  h, c, p = profile
+                  replays = []
+                  for attempt in (1, 2):
+                      log = execute([str(build / ("V" + bench)), f"+HOST_HALF={h}",
+                                     f"+CORE_HALF={c}", f"+PHASE={p}"],
+                                    f"run-{h}-{c}-{p}-{attempt}", root, 180)
+                      records, rtl_metrics, metrics = result_records(log.read_text(), profile)
+                      replays.append(records)
+                  require(replays[0] == replays[1], "CDC stream post-synthesis replay records differ")
+                  report["profiles"].append({"host_half_ns": h, "core_half_ns": c,
+                      "phase_ns": p, "replays": 2, "rtl_metrics": rtl_metrics,
+                      "metrics": metrics, "records": replays[0]})
+                  print("\n".join(replays[0]), flush=True)
+
+              for name, identity in identities.items():
+                  require(sha((root / name).read_bytes()) == identity["sha256"],
+                          "Source changed during qualification: " + name)
+              require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
+                      "Workflow changed during qualification")
+              subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
+              report.update(status="PASS", simulation_runs=20,
+                            stream_simulation_runs=6, frequency_simulation_runs=2,
+                            frequency_post_simulation_runs=2,
+                            geometry_simulation_runs=2, dynamics_simulation_runs=2,
+                            dynamics_post_simulation_runs=2,
+                            thermal_simulation_runs=2, thermal_post_simulation_runs=2,
+                            result_records_identical=True, sources_unchanged=True)
+              summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
+                  "Source commit: " + os.environ["GITHUB_SHA"], "",
+                  "Simulation runs: 20.", "",
+                  "Frequency range RTL regression: two matching replays; "
+                  "144 vectors in five scheduler states, 720 updates per replay.",
+                  "Load priority, 360 disabled-tick hold edges and three reset checks per replay.", "",
+                  "Frequency range post-synthesis regression: two matching replays; "
+                  "the reference result also matches standalone RTL.",
+                  "All 1168 phase-engine output bits match across 144 signed-frequency "
+                  "vectors in five scheduler states, including signed endpoints and rounding.",
+                  "720 frequency-word updates, 90 loads, disabled-tick holds, two reset "
+                  "assertions and two clock edges under reset per replay.", "",
+                  "Phase geometry RTL regression: two matching replays; "
+                  "4096 sine projections and 4096 ternary targets per replay.",
+                  "Five phase-order cases, eight local-gamma cases, 16 topology cases, "
+                  "13 thermal cases and 60 common phase rotations per replay.", "",
+                  "Phase dynamics RTL regression: two matching replays of all 55 records; "
+                  "two workloads in free, 7/1 and 1/7 with the RTL scheduler.",
+                  "48 ticks, 384 phase words and 384 frequency words checked against fixed "
+                  "reference vectors per replay; phase wrap and multi-turn steps.",
+                  "96 disabled-tick hold edges, six loads and six resets per replay.", "",
+                  "Phase dynamics post-synthesis regression: two matching replays of all "
+                  "56 records; the 55 reference records also match standalone RTL.",
+                  "All 1168 phase-engine output bits match, including phase and frequency "
+                  "banks, coupling, projections, ternary targets and phase-order observables.",
+                  "48 updates cover free, balance, commit, excite and neutralize; "
+                  "loads, asynchronous resets and disabled-tick hold edges are checked.", "",
+                  "Thermal dynamics and stability RTL regression: two matching replays; "
+                  "64 cost vectors, 256 cooling ticks and four warmup ticks per replay.",
+                  "324 exact updates, 128 disabled-tick hold edges, four clears "
+                  "and three asynchronous resets per replay.",
+                  "36 capacity cases with zero through eight active-zero cells; "
+                  "108 strict stability-boundary cases and 22 pressure-saturation cases.", "",
+                  "Thermal and stability post-synthesis regression: two matching replays "
+                  "of the same fixed-vector workload used by standalone RTL.",
+                  "All 193 output bits match, including temperature, peak, sample count, "
+                  "capacity, pressure, margin and stable flag.",
+                  "The synthesized thermal output feeds the synthesized stability block; "
+                  "324 updates, 108 boundary cases, holds, clears and asynchronous resets.", "",
+                  "DUT: synthesized CDC stream netlist; reference: CDC stream RTL.", "",
+                  "All 43 external output bits match; two matching replays per profile.", "",
+                  "| Host half (ns) | Core half (ns) | Phase (ns) | Comparisons per replay | Accepted | Completed |",
+                  "| ---: | ---: | ---: | ---: | ---: | ---: |"]
+              for item in report["profiles"]:
+                  m = item["metrics"]
+                  summary.append(f"| {m['host_half']} | {m['core_half']} | {m['phase']} | "
+                                 f"{m['comparisons']} | {m['accepted']} | {m['completed']} |")
+              summary += ["", "Schedules 7/1 and 1/7; active-zero routes; stopped clocks;",
+                  "continuous valid requests; response backpressure; simultaneous transfers;",
+                  "four reset-abort stages; 427 accepts and 423 consumed responses per replay."]
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
+                  stream.write("\n".join(summary) + "\n")
+              print("FRP M32 CSR CDC Stream post-synthesis qualification: PASS", flush=True)
+          except Exception as error:
+              report["status"] = "FAIL"
+              report["error"] = str(error)
+              raise
+          finally:
+              (evidence / "result.json").write_text(
+                  json.dumps(report, indent=2, sort_keys=True) + "\n")
+          PY
+
+      - name: Retain synthesized netlists, logs, and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-01-m31-m32-rtl-netlist-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M32_CDC_STREAM_POST_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
