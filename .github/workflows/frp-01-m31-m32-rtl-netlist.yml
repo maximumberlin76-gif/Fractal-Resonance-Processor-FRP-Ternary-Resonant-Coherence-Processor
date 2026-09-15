@@ -70,7 +70,7 @@ jobs:
             g++ --version
           } 2>&1 | tee "$M32_CDC_STREAM_POST_EVIDENCE/toolchain.log"
 
-      - name: Qualify phase, frequency, thermal stability, and synthesized netlists
+      - name: Qualify execution routing, phase, frequency, thermal stability, and netlists
         run: |
           set -euo pipefail
           ulimit -c 0
@@ -93,6 +93,8 @@ jobs:
           top = "frp_m32_csr_cdc_stream_top"
           bench = "frp_m32_csr_cdc_stream_post_synthesis_tb"
           tb = "fpga/m32_csr/" + bench + ".sv"
+          routing_bench = "frp_m31_execution_routing_tb"
+          routing_tb = "rtl/m31/" + routing_bench + ".sv"
           frequency_bench = "frp_m31_frequency_range_tb"
           frequency_tb = "rtl/m31/" + frequency_bench + ".sv"
           frequency_post_bench = "frp_m31_frequency_range_post_synthesis_tb"
@@ -117,6 +119,12 @@ jobs:
               "accepted": 427, "completed": 423, "core_completed": 425,
               "aborted": 4, "aborted_after_core": 2, "simultaneous": 127,
               "pulses": 426, "rejected": 41, "routes": 8, "resets": 10,
+          }
+          routing_expected = {
+              "matrix_cases": 720, "duplicate_cases": 216, "pending_cases": 32,
+              "capacity_cases": 128, "backlog_cases": 32, "reserved_cases": 16,
+              "counter_clears": 64, "resets": 1144, "enabled_ticks": 5664,
+              "hold_edges": 1984, "first_legs": 496, "second_legs": 352,
           }
           frequency_expected = {
               "vectors": 144, "scheduler_states": 5, "updates": 720,
@@ -163,6 +171,7 @@ jobs:
               "run_id": os.environ["GITHUB_RUN_ID"],
               "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
               "expected_metrics": expected, "commands": [], "profiles": [],
+              "execution_routing_expected_metrics": routing_expected,
               "frequency_expected_metrics": frequency_expected,
               "frequency_post_expected_metrics": frequency_post_expected,
               "geometry_expected_metrics": geometry_expected,
@@ -462,6 +471,16 @@ jobs:
               identities[geometry_post_tb] = {
                   "bytes": len(geometry_post_raw), "sha256": sha(geometry_post_raw)}
               rows.append(f"{geometry_post_tb}|{len(geometry_post_raw)}|{sha(geometry_post_raw)}")
+              visit(routing_tb)
+              require(sources == set(identities) | {routing_tb},
+                      "Unexpected execution routing dependencies")
+              routing_raw = (root / routing_tb).read_bytes()
+              require(len(routing_raw) == 16555 and sha(routing_raw) ==
+                      "c93e5bf9db6d0d7bcf2b108d2945c30a4cc17ad8ffa3fa1c9b7cea873f6f2d2d",
+                      "Execution routing test differs from the validated testbench")
+              identities[routing_tb] = {
+                  "bytes": len(routing_raw), "sha256": sha(routing_raw)}
+              rows.append(f"{routing_tb}|{len(routing_raw)}|{sha(routing_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -474,6 +493,23 @@ jobs:
                   "--output-split", "20000", "-MAKEFLAGS", "VK_PCH_I_FAST=",
                   "-MAKEFLAGS", "VK_PCH_I_SLOW=", "-j", "2"]
               compiler += ["-I" + d for d in include_dirs]
+              routing_build = work / "routing-build"
+              execute(compiler + ["--top-module", routing_bench,
+                  "--Mdir", str(routing_build), routing_tb],
+                  "routing-build", root, 600)
+              routing_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(routing_build / ("V" + routing_bench))],
+                                f"routing-run-{attempt}", root, 180)
+                  record, metrics = regression_record(log.read_text(),
+                      "FRP_M31_EXECUTION_ROUTING_TB:", routing_expected)
+                  routing_replays.append(record)
+              require(routing_replays[0] == routing_replays[1],
+                      "Execution routing replay records differ")
+              report["execution_routing"] = {"implementation": "RTL", "replays": 2,
+                  "metrics": metrics, "record": routing_replays[0]}
+              print(routing_replays[0], flush=True)
+
               frequency_build = work / "frequency-build"
               execute(compiler + ["--top-module", frequency_bench,
                   "--Mdir", str(frequency_build), frequency_tb],
@@ -728,7 +764,8 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=22,
+              report.update(status="PASS", simulation_runs=24,
+                            routing_simulation_runs=2,
                             stream_simulation_runs=6, frequency_simulation_runs=2,
                             frequency_post_simulation_runs=2,
                             geometry_simulation_runs=2, geometry_post_simulation_runs=2,
@@ -738,7 +775,17 @@ jobs:
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
-                  "Simulation runs: 22.", "",
+                  "Simulation runs: 24.", "",
+                  "Execution routing RTL regression: two matching replays; "
+                  "720 single-request cases across eight cells, two lanes, five "
+                  "scheduler states and all nine canonical -1/0/1 transitions.",
+                  "216 duplicate-lane cases, 32 pending-ownership cases, 128 capacity "
+                  "cases, 32 four-route backlog cases and 16 reserved-request cases.",
+                  "5664 enabled ticks, 1984 disabled-tick hold edges, 1144 resets and "
+                  "64 counter clears per replay; 496 first route legs and 352 second legs.",
+                  "Pending destinations survive blocked ticks and counter clears; "
+                  "completions precede new requests and same-state retention uses no "
+                  "transition capacity.", "",
                   "Frequency range RTL regression: two matching replays; "
                   "144 vectors in five scheduler states, 720 updates per replay.",
                   "Load priority, 360 disabled-tick hold edges and three reset checks per replay.", "",
