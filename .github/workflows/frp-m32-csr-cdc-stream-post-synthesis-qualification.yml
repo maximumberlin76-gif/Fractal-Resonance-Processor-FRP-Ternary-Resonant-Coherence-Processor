@@ -592,7 +592,7 @@ jobs:
                   str(phase_netlist), dynamics_post_tb], "dynamics-post-build", root, 900)
               dynamics_post_replays = []
               for attempt in (1, 2):
-                  log = execute([str(dynamics_post_build / ("V" + dynamics_bench))],
+                                    log = execute([str(dynamics_post_build / ("V" + dynamics_post_bench))],
                                 f"dynamics-post-run-{attempt}", root, 180)
                   records, rtl_metrics, metrics = dynamics_post_records(log.read_text())
                   require(records[:-1] == dynamics_replays[0],
