@@ -1,6 +1,6 @@
 name: 01 - FRP M31-M32 RTL + Netlist
 
-run-name: "01 - FRP M31-M32 RTL + Netlist @ ${{ github.sha }}"
+run-name: "01 - FRP M31-M32 RTL + Netlist | 32 runs @ ${{ github.sha }}"
 
 on:
   workflow_dispatch:
@@ -70,7 +70,7 @@ jobs:
             g++ --version
           } 2>&1 | tee "$M32_CDC_STREAM_POST_EVIDENCE/toolchain.log"
 
-      - name: Qualify phase requests, execution routing, phase, frequency, thermal stability, and netlists
+      - name: Qualify scheduler, phase requests, execution routing, phase, frequency, thermal stability, and netlists
         run: |
           set -euo pipefail
           ulimit -c 0
@@ -93,6 +93,8 @@ jobs:
           top = "frp_m32_csr_cdc_stream_top"
           bench = "frp_m32_csr_cdc_stream_post_synthesis_tb"
           tb = "fpga/m32_csr/" + bench + ".sv"
+          scheduler_bench = "frp_m31_scheduler_control_tb"
+          scheduler_tb = "rtl/m31/" + scheduler_bench + ".sv"
           adapter_bench = "frp_m31_phase_request_adapter_tb"
           adapter_tb = "rtl/m31/" + adapter_bench + ".sv"
           adapter_post_bench = "frp_m31_phase_request_adapter_post_synthesis_tb"
@@ -126,6 +128,18 @@ jobs:
               "aborted": 4, "aborted_after_core": 2, "simultaneous": 127,
               "pulses": 426, "rejected": 41, "routes": 8, "resets": 10,
           }
+          scheduler_expected = {
+              "profiles": 3, "matrix_cases": 1536, "steady_ticks": 4608,
+              "recovery_cases": 9, "observations": 47691,
+          }
+          scheduler_profile_expected = [{
+              "counter_bits": bits, "output_bits": 7 * bits + 17,
+              "matrix_cases": 512, "steady_ticks": 1536, "recovery_cases": 3,
+              "resets": 534, "enabled_edges": 3604, "hold_edges": 983,
+              "clear_edges": 276, "observations": 15897,
+              "index_wraps": wraps[0], "recorded_wraps": wraps[1],
+              "counter_wraps": wraps[2],
+          } for bits, wraps in ((3, (224, 208, 196)), (8, (6, 6, 4)), (32, (0, 0, 0)))]
           adapter_expected = {
               "matrix_cases": 6144, "mask_cases": 2560, "disable_checks": 2560,
               "reenable_checks": 2560, "observations": 13824, "empty_outputs": 8580,
@@ -198,6 +212,8 @@ jobs:
               "run_id": os.environ["GITHUB_RUN_ID"],
               "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
               "expected_metrics": expected, "commands": [], "profiles": [],
+              "scheduler_control_expected_metrics": scheduler_expected,
+              "scheduler_control_expected_profiles": scheduler_profile_expected,
               "phase_request_adapter_expected_metrics": adapter_expected,
               "phase_request_adapter_post_expected_metrics": adapter_post_expected,
               "execution_routing_expected_metrics": routing_expected,
@@ -278,6 +294,20 @@ jobs:
               metrics = dict(zip(expected_metrics, map(int, match.groups())))
               require(metrics == expected_metrics, prefix + " incomplete coverage")
               return records[0], metrics
+
+          def scheduler_records(text):
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M31_SCHEDULER_CONTROL_")]
+              require(len(records) == 4,
+                      "Incomplete or repeated scheduler control results")
+              observed_profiles = []
+              for index, expected_metrics in enumerate(scheduler_profile_expected):
+                  _, metrics = regression_record(records[index],
+                      "FRP_M31_SCHEDULER_CONTROL_PROFILE:", expected_metrics)
+                  observed_profiles.append(metrics)
+              _, metrics = regression_record(records[-1],
+                  "FRP_M31_SCHEDULER_CONTROL_TB:", scheduler_expected)
+              return records, observed_profiles, metrics
 
           def adapter_post_records(text):
               prefix = "FRP_M31_PHASE_REQUEST_ADAPTER_POST_SYNTHESIS_TB:"
@@ -563,6 +593,16 @@ jobs:
               identities[adapter_post_tb] = {
                   "bytes": len(adapter_post_raw), "sha256": sha(adapter_post_raw)}
               rows.append(f"{adapter_post_tb}|{len(adapter_post_raw)}|{sha(adapter_post_raw)}")
+              visit(scheduler_tb)
+              require(sources == set(identities) | {scheduler_tb},
+                      "Unexpected scheduler control dependencies")
+              scheduler_raw = (root / scheduler_tb).read_bytes()
+              require(len(scheduler_raw) == 10936 and sha(scheduler_raw) ==
+                      "86ce7389863741446dd69da4505e4cc8470cf81931b84c6219b70b56892a4a04",
+                      "Scheduler control test differs from the validated testbench")
+              identities[scheduler_tb] = {
+                  "bytes": len(scheduler_raw), "sha256": sha(scheduler_raw)}
+              rows.append(f"{scheduler_tb}|{len(scheduler_raw)}|{sha(scheduler_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -575,6 +615,24 @@ jobs:
                   "--output-split", "20000", "-MAKEFLAGS", "VK_PCH_I_FAST=",
                   "-MAKEFLAGS", "VK_PCH_I_SLOW=", "-j", "2"]
               compiler += ["-I" + d for d in include_dirs]
+              scheduler_build = work / "scheduler-build"
+              execute(compiler + ["--top-module", scheduler_bench,
+                  "--Mdir", str(scheduler_build), scheduler_tb],
+                  "scheduler-build", root, 600)
+              scheduler_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(scheduler_build / ("V" + scheduler_bench))],
+                                f"scheduler-run-{attempt}", root, 180)
+                  records, profile_metrics, metrics = scheduler_records(log.read_text())
+                  scheduler_replays.append(records)
+              require(scheduler_replays[0] == scheduler_replays[1],
+                      "Scheduler control profile or summary replay records differ")
+              report["scheduler_control"] = {"implementation": "RTL", "replays": 2,
+                  "profiles": profile_metrics, "metrics": metrics,
+                  "records": scheduler_replays[0],
+                  "records_sha256": sha(("\n".join(scheduler_replays[0]) + "\n").encode())}
+              print("\n".join(scheduler_replays[0]), flush=True)
+
               adapter_build = work / "adapter-build"
               execute(compiler + ["--top-module", adapter_bench,
                   "--Mdir", str(adapter_build), adapter_tb],
@@ -945,7 +1003,8 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=30,
+              report.update(status="PASS", simulation_runs=32,
+                            scheduler_control_simulation_runs=2,
                             phase_request_adapter_simulation_runs=2,
                             phase_request_adapter_post_simulation_runs=2,
                             routing_simulation_runs=2, routing_post_simulation_runs=2,
@@ -958,7 +1017,20 @@ jobs:
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
-                  "Simulation runs: 30.", "",
+                  "Simulation runs: 32.", "",
+                  "Scheduler control RTL regression: two matching replays of all four "
+                  "records; counter widths 3, 8 and 32, with all output bits checked.",
+                  "Each width covers 512 old-mode/position/new-mode/tick/clear cases, "
+                  "1536 steady ticks in free, 7/1 and 1/7, and three reserved-mode "
+                  "recovery sequences.",
+                  "534 asynchronous reset assertions, 3604 enabled edges, 983 disabled "
+                  "edges and 276 counter-clear edges per width; 47691 output checks "
+                  "across all widths per replay.",
+                  "The edge counts the previously presented scheduler state; mode changes "
+                  "are registered, and counter clears preserve scheduler position.",
+                  "The 3-bit profile checks 224 index, 208 recorded-tick and 196 "
+                  "state-counter wraps; the 8-bit profile checks 6, 6 and 4 wraps. "
+                  "The 32-bit profile exercises the production counter width.", "",
                   "Phase-request adapter RTL regression: two matching replays; "
                   "6144 single-cell cases across both enable values, eight cells, "
                   "all eight scheduler codes, four retained and target encodings, "
