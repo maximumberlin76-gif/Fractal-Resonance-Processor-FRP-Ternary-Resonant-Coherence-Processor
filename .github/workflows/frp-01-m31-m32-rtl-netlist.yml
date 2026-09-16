@@ -95,6 +95,8 @@ jobs:
           tb = "fpga/m32_csr/" + bench + ".sv"
           adapter_bench = "frp_m31_phase_request_adapter_tb"
           adapter_tb = "rtl/m31/" + adapter_bench + ".sv"
+          adapter_post_bench = "frp_m31_phase_request_adapter_post_synthesis_tb"
+          adapter_post_tb = "rtl/m31/" + adapter_post_bench + ".sv"
           routing_bench = "frp_m31_execution_routing_tb"
           routing_tb = "rtl/m31/" + routing_bench + ".sv"
           routing_post_bench = "frp_m31_execution_routing_post_synthesis_tb"
@@ -129,6 +131,13 @@ jobs:
               "reenable_checks": 2560, "observations": 13824, "empty_outputs": 8580,
               "one_request_outputs": 304, "two_request_outputs": 4940,
               "lane0_cells": 255, "lane1_cells": 254,
+          }
+          adapter_post_expected = {
+              "comparisons": 13824, "output_bits": 12, "enabled_checks": 8192,
+              "disabled_checks": 5632, "empty_outputs": 8580,
+              "one_request_outputs": 304, "two_request_outputs": 4940,
+              "matrix_cases": 6144, "mask_cases": 2560, "disable_checks": 2560,
+              "reenable_checks": 2560, "lane0_cells": 255, "lane1_cells": 254,
           }
           routing_expected = {
               "matrix_cases": 720, "duplicate_cases": 216, "pending_cases": 32,
@@ -190,6 +199,7 @@ jobs:
               "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
               "expected_metrics": expected, "commands": [], "profiles": [],
               "phase_request_adapter_expected_metrics": adapter_expected,
+              "phase_request_adapter_post_expected_metrics": adapter_post_expected,
               "execution_routing_expected_metrics": routing_expected,
               "execution_routing_post_expected_metrics": routing_post_expected,
               "frequency_expected_metrics": frequency_expected,
@@ -268,6 +278,17 @@ jobs:
               metrics = dict(zip(expected_metrics, map(int, match.groups())))
               require(metrics == expected_metrics, prefix + " incomplete coverage")
               return records[0], metrics
+
+          def adapter_post_records(text):
+              prefix = "FRP_M31_PHASE_REQUEST_ADAPTER_POST_SYNTHESIS_TB:"
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M31_PHASE_REQUEST_ADAPTER_")]
+              require(len(records) == 2 and records[-1].startswith(prefix),
+                      "Incomplete, repeated or out-of-order adapter post-synthesis results")
+              _, rtl_metrics = regression_record(records[0],
+                  "FRP_M31_PHASE_REQUEST_ADAPTER_TB:", adapter_expected)
+              _, metrics = regression_record(records[1], prefix, adapter_post_expected)
+              return records, rtl_metrics, metrics
 
           def routing_post_records(text):
               prefix = "FRP_M31_EXECUTION_ROUTING_POST_SYNTHESIS_TB:"
@@ -532,6 +553,16 @@ jobs:
               identities[adapter_tb] = {
                   "bytes": len(adapter_raw), "sha256": sha(adapter_raw)}
               rows.append(f"{adapter_tb}|{len(adapter_raw)}|{sha(adapter_raw)}")
+              visit(adapter_post_tb)
+              require(sources == set(identities) | {adapter_post_tb},
+                      "Unexpected adapter post-synthesis dependencies")
+              adapter_post_raw = (root / adapter_post_tb).read_bytes()
+              require(len(adapter_post_raw) == 5698 and sha(adapter_post_raw) ==
+                      "2682effc32444ee1be53cafca6da1c8e9577cf71d02cd934a3a18fb049334073",
+                      "Adapter post-synthesis test differs from the validated testbench")
+              identities[adapter_post_tb] = {
+                  "bytes": len(adapter_post_raw), "sha256": sha(adapter_post_raw)}
+              rows.append(f"{adapter_post_tb}|{len(adapter_post_raw)}|{sha(adapter_post_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -660,6 +691,47 @@ jobs:
               simlib = evidence / "yosys-simlib.v"
               shutil.copyfile(share / "simlib.v", simlib)
               report["cell_models_sha256"] = sha(simlib.read_bytes())
+
+              adapter_top = "frp_m31_phase_request_adapter"
+              adapter_netlist = evidence / (adapter_top + "_netlist.v")
+              adapter_script = (
+                  "read_slang -j 1 --std 1800-2017 --ignore-assertions --top " + adapter_top
+                  + " " + " ".join("-I" + d for d in include_dirs)
+                  + " rtl/m31/" + adapter_top + ".sv; "
+                  + "synth -top " + adapter_top + " -noshare -run begin:fine; check -assert; "
+                  + "techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; "
+                  + "select -assert-none t:$shiftx t:$connect; "
+                  + "rename " + adapter_top + " " + adapter_top + "_netlist; "
+                  + "write_verilog -noattr " + json.dumps(str(adapter_netlist))
+              )
+              adapter_script_path = evidence / "adapter-synthesis.ys"
+              adapter_script_path.write_text(adapter_script + "\n")
+              execute(["yowasp-yosys", "-Q", "-T", "-q", "-s", str(adapter_script_path)],
+                      "adapter-synthesis", view, 600)
+              require(adapter_netlist.is_file() and adapter_netlist.stat().st_size > 0,
+                      "Missing phase-request adapter netlist")
+              report["adapter_netlist_sha256"] = sha(adapter_netlist.read_bytes())
+
+              adapter_post_build = work / "adapter-post-build"
+              execute(compiler + ["-DSIMLIB_NOCONNECT", "--top-module", adapter_post_bench,
+                  "--Mdir", str(adapter_post_build), "-v", str(simlib),
+                  str(adapter_netlist), adapter_post_tb], "adapter-post-build", root, 600)
+              adapter_post_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(adapter_post_build / ("V" + adapter_post_bench))],
+                                f"adapter-post-run-{attempt}", root, 180)
+                  records, rtl_metrics, metrics = adapter_post_records(log.read_text())
+                  require(records[0] == adapter_replays[0],
+                          "Adapter post-synthesis reference differs from standalone RTL")
+                  adapter_post_replays.append(records)
+              require(adapter_post_replays[0] == adapter_post_replays[1],
+                      "Adapter post-synthesis replay records differ")
+              report["phase_request_adapter_post_synthesis"] = {
+                  "implementation": "synthesized netlist with RTL reference", "replays": 2,
+                  "rtl_metrics": rtl_metrics, "metrics": metrics,
+                  "records": adapter_post_replays[0],
+                  "records_sha256": sha(("\n".join(adapter_post_replays[0]) + "\n").encode())}
+              print("\n".join(adapter_post_replays[0]), flush=True)
 
               execution_top = "frp_m31_execution_core"
               execution_netlist = evidence / (execution_top + "_netlist.v")
@@ -873,8 +945,9 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=28,
+              report.update(status="PASS", simulation_runs=30,
                             phase_request_adapter_simulation_runs=2,
+                            phase_request_adapter_post_simulation_runs=2,
                             routing_simulation_runs=2, routing_post_simulation_runs=2,
                             stream_simulation_runs=6, frequency_simulation_runs=2,
                             frequency_post_simulation_runs=2,
@@ -885,7 +958,7 @@ jobs:
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
-                  "Simulation runs: 28.", "",
+                  "Simulation runs: 30.", "",
                   "Phase-request adapter RTL regression: two matching replays; "
                   "6144 single-cell cases across both enable values, eight cells, "
                   "all eight scheduler codes, four retained and target encodings, "
@@ -895,6 +968,14 @@ jobs:
                   "13824 exact output checks per replay cover ascending two-lane "
                   "priority, pending-route exclusion, reserved-operand rejection, "
                   "target preservation and zero padding of inactive lanes.", "",
+                  "Phase-request adapter post-synthesis regression: two matching replays; "
+                  "the reference result also matches standalone RTL.",
+                  "13824 comparisons of all 12 adapter output bits per replay on the "
+                  "same single-cell matrix and candidate-mask workload.",
+                  "8192 enabled and 5632 disabled samples; every reference observation "
+                  "has exactly one settled netlist comparison.",
+                  "Request validity, cell indices, targets and inactive-lane zeros match; "
+                  "all eight cells reach lane 0 and cells 1 through 7 reach lane 1.", "",
                   "Execution routing RTL regression: two matching replays; "
                   "720 single-request cases across eight cells, two lanes, five "
                   "scheduler states and all nine canonical -1/0/1 transitions.",
