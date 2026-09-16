@@ -70,7 +70,7 @@ jobs:
             g++ --version
           } 2>&1 | tee "$M32_CDC_STREAM_POST_EVIDENCE/toolchain.log"
 
-      - name: Qualify execution routing, phase, frequency, thermal stability, and netlists
+      - name: Qualify phase requests, execution routing, phase, frequency, thermal stability, and netlists
         run: |
           set -euo pipefail
           ulimit -c 0
@@ -93,6 +93,8 @@ jobs:
           top = "frp_m32_csr_cdc_stream_top"
           bench = "frp_m32_csr_cdc_stream_post_synthesis_tb"
           tb = "fpga/m32_csr/" + bench + ".sv"
+          adapter_bench = "frp_m31_phase_request_adapter_tb"
+          adapter_tb = "rtl/m31/" + adapter_bench + ".sv"
           routing_bench = "frp_m31_execution_routing_tb"
           routing_tb = "rtl/m31/" + routing_bench + ".sv"
           routing_post_bench = "frp_m31_execution_routing_post_synthesis_tb"
@@ -121,6 +123,12 @@ jobs:
               "accepted": 427, "completed": 423, "core_completed": 425,
               "aborted": 4, "aborted_after_core": 2, "simultaneous": 127,
               "pulses": 426, "rejected": 41, "routes": 8, "resets": 10,
+          }
+          adapter_expected = {
+              "matrix_cases": 6144, "mask_cases": 2560, "disable_checks": 2560,
+              "reenable_checks": 2560, "observations": 13824, "empty_outputs": 8580,
+              "one_request_outputs": 304, "two_request_outputs": 4940,
+              "lane0_cells": 255, "lane1_cells": 254,
           }
           routing_expected = {
               "matrix_cases": 720, "duplicate_cases": 216, "pending_cases": 32,
@@ -181,6 +189,7 @@ jobs:
               "run_id": os.environ["GITHUB_RUN_ID"],
               "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
               "expected_metrics": expected, "commands": [], "profiles": [],
+              "phase_request_adapter_expected_metrics": adapter_expected,
               "execution_routing_expected_metrics": routing_expected,
               "execution_routing_post_expected_metrics": routing_post_expected,
               "frequency_expected_metrics": frequency_expected,
@@ -513,6 +522,16 @@ jobs:
               identities[routing_post_tb] = {
                   "bytes": len(routing_post_raw), "sha256": sha(routing_post_raw)}
               rows.append(f"{routing_post_tb}|{len(routing_post_raw)}|{sha(routing_post_raw)}")
+              visit(adapter_tb)
+              require(sources == set(identities) | {adapter_tb},
+                      "Unexpected phase-request adapter dependencies")
+              adapter_raw = (root / adapter_tb).read_bytes()
+              require(len(adapter_raw) == 8924 and sha(adapter_raw) ==
+                      "81ea564ac96b66610bf9a950a303412208d2854e559af2925320e7005802abce",
+                      "Phase-request adapter test differs from the validated testbench")
+              identities[adapter_tb] = {
+                  "bytes": len(adapter_raw), "sha256": sha(adapter_raw)}
+              rows.append(f"{adapter_tb}|{len(adapter_raw)}|{sha(adapter_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -525,6 +544,23 @@ jobs:
                   "--output-split", "20000", "-MAKEFLAGS", "VK_PCH_I_FAST=",
                   "-MAKEFLAGS", "VK_PCH_I_SLOW=", "-j", "2"]
               compiler += ["-I" + d for d in include_dirs]
+              adapter_build = work / "adapter-build"
+              execute(compiler + ["--top-module", adapter_bench,
+                  "--Mdir", str(adapter_build), adapter_tb],
+                  "adapter-build", root, 600)
+              adapter_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(adapter_build / ("V" + adapter_bench))],
+                                f"adapter-run-{attempt}", root, 180)
+                  record, metrics = regression_record(log.read_text(),
+                      "FRP_M31_PHASE_REQUEST_ADAPTER_TB:", adapter_expected)
+                  adapter_replays.append(record)
+              require(adapter_replays[0] == adapter_replays[1],
+                      "Phase-request adapter replay records differ")
+              report["phase_request_adapter"] = {"implementation": "RTL", "replays": 2,
+                  "metrics": metrics, "record": adapter_replays[0]}
+              print(adapter_replays[0], flush=True)
+
               routing_build = work / "routing-build"
               execute(compiler + ["--top-module", routing_bench,
                   "--Mdir", str(routing_build), routing_tb],
@@ -837,7 +873,8 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=26,
+              report.update(status="PASS", simulation_runs=28,
+                            phase_request_adapter_simulation_runs=2,
                             routing_simulation_runs=2, routing_post_simulation_runs=2,
                             stream_simulation_runs=6, frequency_simulation_runs=2,
                             frequency_post_simulation_runs=2,
@@ -848,7 +885,16 @@ jobs:
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
-                  "Simulation runs: 26.", "",
+                  "Simulation runs: 28.", "",
+                  "Phase-request adapter RTL regression: two matching replays; "
+                  "6144 single-cell cases across both enable values, eight cells, "
+                  "all eight scheduler codes, four retained and target encodings, "
+                  "and three canonical pending-route encodings.",
+                  "All 256 candidate masks in five valid scheduler states and both "
+                  "polarity arrangements; 2560 disable and 2560 re-enable checks.",
+                  "13824 exact output checks per replay cover ascending two-lane "
+                  "priority, pending-route exclusion, reserved-operand rejection, "
+                  "target preservation and zero padding of inactive lanes.", "",
                   "Execution routing RTL regression: two matching replays; "
                   "720 single-request cases across eight cells, two lanes, five "
                   "scheduler states and all nine canonical -1/0/1 transitions.",
