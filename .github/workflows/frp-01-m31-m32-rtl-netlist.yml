@@ -1,6 +1,6 @@
 name: 01 - FRP M31-M32 RTL + Netlist
 
-run-name: "01 - FRP M31-M32 RTL + Netlist | 32 runs @ ${{ github.sha }}"
+run-name: "01 - FRP M31-M32 RTL + Netlist | 34 runs @ ${{ github.sha }}"
 
 on:
   workflow_dispatch:
@@ -95,6 +95,8 @@ jobs:
           tb = "fpga/m32_csr/" + bench + ".sv"
           scheduler_bench = "frp_m31_scheduler_control_tb"
           scheduler_tb = "rtl/m31/" + scheduler_bench + ".sv"
+          scheduler_post_bench = "frp_m31_scheduler_control_post_synthesis_tb"
+          scheduler_post_tb = "rtl/m31/" + scheduler_post_bench + ".sv"
           adapter_bench = "frp_m31_phase_request_adapter_tb"
           adapter_tb = "rtl/m31/" + adapter_bench + ".sv"
           adapter_post_bench = "frp_m31_phase_request_adapter_post_synthesis_tb"
@@ -140,6 +142,18 @@ jobs:
               "index_wraps": wraps[0], "recorded_wraps": wraps[1],
               "counter_wraps": wraps[2],
           } for bits, wraps in ((3, (224, 208, 196)), (8, (6, 6, 4)), (32, (0, 0, 0)))]
+          scheduler_post_expected = {
+              "profiles": 3, "comparisons": 40599, "output_bits": 352,
+              "reference_observations": 47691, "matrix_cases": 1536,
+              "steady_ticks": 4608, "recovery_cases": 9,
+          }
+          scheduler_post_profile_expected = [{
+              "counter_bits": bits, "output_bits": 7 * bits + 17,
+              "comparisons": 13533, "enabled_edges": 3604, "hold_edges": 983,
+              "reset_assertions": 534, "reset_clock_edges": 534,
+              "reset_releases": 534, "falling_edges": 5121,
+              "clear_tick_edges": 138, "clear_hold_edges": 138, "input_changes": 2223,
+          } for bits in (3, 8, 32)]
           adapter_expected = {
               "matrix_cases": 6144, "mask_cases": 2560, "disable_checks": 2560,
               "reenable_checks": 2560, "observations": 13824, "empty_outputs": 8580,
@@ -214,6 +228,8 @@ jobs:
               "expected_metrics": expected, "commands": [], "profiles": [],
               "scheduler_control_expected_metrics": scheduler_expected,
               "scheduler_control_expected_profiles": scheduler_profile_expected,
+              "scheduler_control_post_expected_metrics": scheduler_post_expected,
+              "scheduler_control_post_expected_profiles": scheduler_post_profile_expected,
               "phase_request_adapter_expected_metrics": adapter_expected,
               "phase_request_adapter_post_expected_metrics": adapter_post_expected,
               "execution_routing_expected_metrics": routing_expected,
@@ -308,6 +324,21 @@ jobs:
               _, metrics = regression_record(records[-1],
                   "FRP_M31_SCHEDULER_CONTROL_TB:", scheduler_expected)
               return records, observed_profiles, metrics
+
+          def scheduler_post_records(text):
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M31_SCHEDULER_CONTROL_")]
+              require(len(records) == 8,
+                      "Incomplete or repeated scheduler post-synthesis results")
+              _, rtl_profiles, rtl_metrics = scheduler_records("\n".join(records[:4]))
+              observed_profiles = []
+              for index, expected_metrics in enumerate(scheduler_post_profile_expected):
+                  _, metrics = regression_record(records[4 + index],
+                      "FRP_M31_SCHEDULER_CONTROL_POST_SYNTHESIS_PROFILE:", expected_metrics)
+                  observed_profiles.append(metrics)
+              _, metrics = regression_record(records[-1],
+                  "FRP_M31_SCHEDULER_CONTROL_POST_SYNTHESIS_TB:", scheduler_post_expected)
+              return records, rtl_profiles, rtl_metrics, observed_profiles, metrics
 
           def adapter_post_records(text):
               prefix = "FRP_M31_PHASE_REQUEST_ADAPTER_POST_SYNTHESIS_TB:"
@@ -603,6 +634,16 @@ jobs:
               identities[scheduler_tb] = {
                   "bytes": len(scheduler_raw), "sha256": sha(scheduler_raw)}
               rows.append(f"{scheduler_tb}|{len(scheduler_raw)}|{sha(scheduler_raw)}")
+              visit(scheduler_post_tb)
+              require(sources == set(identities) | {scheduler_post_tb},
+                      "Unexpected scheduler post-synthesis dependencies")
+              scheduler_post_raw = (root / scheduler_post_tb).read_bytes()
+              require(len(scheduler_post_raw) == 9220 and sha(scheduler_post_raw) ==
+                      "6212d29303c215217ad12397e8a6e079dd3fdbba4d857d3556322a016e4e84a6",
+                      "Scheduler post-synthesis test differs from the validated testbench")
+              identities[scheduler_post_tb] = {
+                  "bytes": len(scheduler_post_raw), "sha256": sha(scheduler_post_raw)}
+              rows.append(f"{scheduler_post_tb}|{len(scheduler_post_raw)}|{sha(scheduler_post_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -749,6 +790,74 @@ jobs:
               simlib = evidence / "yosys-simlib.v"
               shutil.copyfile(share / "simlib.v", simlib)
               report["cell_models_sha256"] = sha(simlib.read_bytes())
+
+              scheduler_top = "frp_m31_scheduler"
+              scheduler_netlists = []
+              report["scheduler_netlists"] = {}
+              for counter_bits in (3, 8, 32):
+                  renamed = f"{scheduler_top}_{counter_bits}_netlist"
+                  scheduler_netlist = evidence / (renamed + ".v")
+                  scheduler_json = evidence / (renamed + ".json")
+                  scheduler_script = (
+                      "read_slang -j 1 --std 1800-2017 --ignore-assertions --top " + scheduler_top
+                      + " -G COUNTER_BITS=" + str(counter_bits)
+                      + " " + " ".join("-I" + d for d in include_dirs)
+                      + " rtl/m31/" + scheduler_top + ".sv; "
+                      + "synth -top " + scheduler_top + " -noshare -run begin:fine; check -assert; "
+                      + "techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; "
+                      + "select -assert-none t:$shiftx t:$connect; "
+                      + "rename " + scheduler_top + " " + renamed + "; "
+                      + "write_verilog -noattr " + json.dumps(str(scheduler_netlist)) + "; "
+                      + "write_json " + json.dumps(str(scheduler_json))
+                  )
+                  scheduler_script_path = evidence / f"scheduler-{counter_bits}-synthesis.ys"
+                  scheduler_script_path.write_text(scheduler_script + "\n")
+                  execute(["yowasp-yosys", "-Q", "-T", "-q", "-s", str(scheduler_script_path)],
+                          f"scheduler-{counter_bits}-synthesis", view, 600)
+                  require(scheduler_netlist.is_file() and scheduler_netlist.stat().st_size > 0,
+                          "Missing scheduler netlist: " + renamed)
+                  ports = json.loads(scheduler_json.read_text())["modules"][renamed]["ports"]
+                  output_widths = {name: len(port["bits"]) for name, port in ports.items()
+                                   if port["direction"] == "output"}
+                  states = ("free", "balance", "commit", "excite", "neutralize")
+                  expected_outputs = {
+                      "scheduler_mode_q": 2, "scheduler_state_q": 3,
+                      "tick_index_q": counter_bits, "period_index_q": 3,
+                      "ticks_recorded_q": counter_bits,
+                      **{"scheduler_count_" + state + "_q": counter_bits for state in states},
+                      **{state + "_enable": 1 for state in states},
+                      "scheduler_mode_reserved": 1, "scheduler_state_reserved": 1,
+                      "scheduler_valid": 1, "scheduler_counts_valid": 1,
+                  }
+                  require(output_widths == expected_outputs,
+                          "Unexpected scheduler netlist output widths: " + renamed)
+                  report["scheduler_netlists"][str(counter_bits)] = {
+                      "module": renamed, "sha256": sha(scheduler_netlist.read_bytes()),
+                      "output_widths": output_widths}
+                  scheduler_netlists.append(str(scheduler_netlist))
+
+              scheduler_post_build = work / "scheduler-post-build"
+              execute(compiler + ["-DSIMLIB_NOCONNECT", "--top-module", scheduler_post_bench,
+                  "--Mdir", str(scheduler_post_build), "-v", str(simlib),
+                  *scheduler_netlists, scheduler_post_tb], "scheduler-post-build", root, 600)
+              scheduler_post_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(scheduler_post_build / ("V" + scheduler_post_bench))],
+                                f"scheduler-post-run-{attempt}", root, 180)
+                  records, rtl_profiles, rtl_metrics, profile_metrics, metrics = (
+                      scheduler_post_records(log.read_text()))
+                  require(records[:4] == scheduler_replays[0],
+                          "Scheduler post-synthesis reference differs from standalone RTL")
+                  scheduler_post_replays.append(records)
+              require(scheduler_post_replays[0] == scheduler_post_replays[1],
+                      "Scheduler post-synthesis profile or summary replay records differ")
+              report["scheduler_control_post_synthesis"] = {
+                  "implementation": "synthesized netlists with RTL reference", "replays": 2,
+                  "rtl_profiles": rtl_profiles, "rtl_metrics": rtl_metrics,
+                  "profiles": profile_metrics, "metrics": metrics,
+                  "records": scheduler_post_replays[0],
+                  "records_sha256": sha(("\n".join(scheduler_post_replays[0]) + "\n").encode())}
+              print("\n".join(scheduler_post_replays[0]), flush=True)
 
               adapter_top = "frp_m31_phase_request_adapter"
               adapter_netlist = evidence / (adapter_top + "_netlist.v")
@@ -1003,8 +1112,9 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=32,
+              report.update(status="PASS", simulation_runs=34,
                             scheduler_control_simulation_runs=2,
+                            scheduler_control_post_simulation_runs=2,
                             phase_request_adapter_simulation_runs=2,
                             phase_request_adapter_post_simulation_runs=2,
                             routing_simulation_runs=2, routing_post_simulation_runs=2,
@@ -1017,7 +1127,7 @@ jobs:
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
-                  "Simulation runs: 32.", "",
+                  "Simulation runs: 34.", "",
                   "Scheduler control RTL regression: two matching replays of all four "
                   "records; counter widths 3, 8 and 32, with all output bits checked.",
                   "Each width covers 512 old-mode/position/new-mode/tick/clear cases, "
@@ -1031,6 +1141,16 @@ jobs:
                   "The 3-bit profile checks 224 index, 208 recorded-tick and 196 "
                   "state-counter wraps; the 8-bit profile checks 6, 6 and 4 wraps. "
                   "The 32-bit profile exercises the production counter width.", "",
+                  "Scheduler control post-synthesis regression: two matching replays of "
+                  "all eight records; the four reference records also match standalone RTL.",
+                  "Three fresh netlists use counter widths 3, 8 and 32, with all 19 "
+                  "output ports checked at their exact widths: 38, 73 and 241 bits.",
+                  "40599 comparisons per replay, 13533 per width; the same mode-change "
+                  "matrix, steady schedules, natural wraps and reserved-mode recovery.",
+                  "Each width checks 3604 enabled and 983 disabled edges, 534 reset "
+                  "assertions, 534 clock edges under reset and 534 releases.",
+                  "138 clears on enabled and 138 on disabled edges per width; falling "
+                  "edges and control changes are also sampled.", "",
                   "Phase-request adapter RTL regression: two matching replays; "
                   "6144 single-cell cases across both enable values, eight cells, "
                   "all eight scheduler codes, four retained and target encodings, "
