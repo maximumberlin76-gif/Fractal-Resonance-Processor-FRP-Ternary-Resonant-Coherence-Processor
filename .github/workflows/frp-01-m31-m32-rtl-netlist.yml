@@ -1,6 +1,6 @@
 name: 01 - FRP M31-M32 RTL + Netlist
 
-run-name: "01 - FRP M31-M32 RTL + Netlist | 36 runs @ ${{ github.sha }}"
+run-name: "01 - FRP M31-M32 RTL + Netlist | 38 runs @ ${{ github.sha }}"
 
 on:
   workflow_dispatch:
@@ -99,6 +99,8 @@ jobs:
           scheduler_post_tb = "rtl/m31/" + scheduler_post_bench + ".sv"
           target_capture_bench = "frp_m32_target_capture_tb"
           target_capture_tb = "rtl/m32/" + target_capture_bench + ".sv"
+          target_capture_post_bench = "frp_m32_target_capture_post_synthesis_tb"
+          target_capture_post_tb = "rtl/m32/" + target_capture_post_bench + ".sv"
           adapter_bench = "frp_m31_phase_request_adapter_tb"
           adapter_tb = "rtl/m31/" + adapter_bench + ".sv"
           adapter_post_bench = "frp_m31_phase_request_adapter_post_synthesis_tb"
@@ -201,6 +203,45 @@ jobs:
                   "observations": 3147525,
               },
           ]
+          target_capture_post_expected = {
+              "profiles": 4, "comparisons": 9441003, "output_bits": 158,
+              "reference_observations": 9441534, "matrix_cases": 1572896, "reset_cases": 64,
+              "pressure_events": 1070,
+          }
+          target_capture_post_profile_expected = [
+              {
+                  "cells": 1, "counter_bits": 1, "output_bits": 9,
+                  "comparisons": 455, "enabled_edges": 102, "hold_edges": 27,
+                  "accepted_edges": 63, "rejected_edges": 26, "reset_assertions": 18,
+                  "reset_clock_edges": 18, "reset_releases": 18, "falling_edges": 147,
+                  "input_changes": 125, "clear_tick_edges": 14, "clear_hold_edges": 14,
+                  "clear_accepts": 5, "clear_rejects": 3,
+              },
+              {
+                  "cells": 8, "counter_bits": 3, "output_bits": 27,
+                  "comparisons": 3146021, "enabled_edges": 786498, "hold_edges": 262155,
+                  "accepted_edges": 537441, "rejected_edges": 117980, "reset_assertions": 18,
+                  "reset_clock_edges": 18, "reset_releases": 18, "falling_edges": 1048671,
+                  "input_changes": 1048643, "clear_tick_edges": 131078, "clear_hold_edges": 131078,
+                  "clear_accepts": 6563, "clear_rejects": 58977,
+              },
+              {
+                  "cells": 8, "counter_bits": 8, "output_bits": 37,
+                  "comparisons": 3147261, "enabled_edges": 786994, "hold_edges": 262155,
+                  "accepted_edges": 537689, "rejected_edges": 118228, "reset_assertions": 18,
+                  "reset_clock_edges": 18, "reset_releases": 18, "falling_edges": 1049167,
+                  "input_changes": 1048891, "clear_tick_edges": 131078, "clear_hold_edges": 131078,
+                  "clear_accepts": 6563, "clear_rejects": 58977,
+              },
+              {
+                  "cells": 8, "counter_bits": 32, "output_bits": 85,
+                  "comparisons": 3147266, "enabled_edges": 786996, "hold_edges": 262155,
+                  "accepted_edges": 537690, "rejected_edges": 118229, "reset_assertions": 18,
+                  "reset_clock_edges": 18, "reset_releases": 18, "falling_edges": 1049169,
+                  "input_changes": 1048892, "clear_tick_edges": 131078, "clear_hold_edges": 131078,
+                  "clear_accepts": 6563, "clear_rejects": 58977,
+              },
+          ]
           adapter_expected = {
               "matrix_cases": 6144, "mask_cases": 2560, "disable_checks": 2560,
               "reenable_checks": 2560, "observations": 13824, "empty_outputs": 8580,
@@ -279,6 +320,8 @@ jobs:
               "scheduler_control_post_expected_profiles": scheduler_post_profile_expected,
               "target_capture_expected_metrics": target_capture_expected,
               "target_capture_expected_profiles": target_capture_profile_expected,
+              "target_capture_post_expected_metrics": target_capture_post_expected,
+              "target_capture_post_expected_profiles": target_capture_post_profile_expected,
               "phase_request_adapter_expected_metrics": adapter_expected,
               "phase_request_adapter_post_expected_metrics": adapter_post_expected,
               "execution_routing_expected_metrics": routing_expected,
@@ -373,6 +416,21 @@ jobs:
               _, metrics = regression_record(records[-1],
                   "FRP_M32_TARGET_CAPTURE_TB:", target_capture_expected)
               return records, observed_profiles, metrics
+
+          def target_capture_post_records(text):
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M32_TARGET_CAPTURE_")]
+              require(len(records) == 10,
+                      "Incomplete or repeated target capture post-synthesis results")
+              _, rtl_profiles, rtl_metrics = target_capture_records("\n".join(records[:5]))
+              observed_profiles = []
+              for index, expected_metrics in enumerate(target_capture_post_profile_expected):
+                  _, metrics = regression_record(records[5 + index],
+                      "FRP_M32_TARGET_CAPTURE_POST_SYNTHESIS_PROFILE:", expected_metrics)
+                  observed_profiles.append(metrics)
+              _, metrics = regression_record(records[-1],
+                  "FRP_M32_TARGET_CAPTURE_POST_SYNTHESIS_TB:", target_capture_post_expected)
+              return records, rtl_profiles, rtl_metrics, observed_profiles, metrics
 
           def scheduler_records(text):
               records = [line for line in text.splitlines()
@@ -717,6 +775,16 @@ jobs:
               identities[target_capture_tb] = {
                   "bytes": len(target_capture_raw), "sha256": sha(target_capture_raw)}
               rows.append(f"{target_capture_tb}|{len(target_capture_raw)}|{sha(target_capture_raw)}")
+              visit(target_capture_post_tb)
+              require(sources == set(identities) | {target_capture_post_tb},
+                      "Unexpected target capture post-synthesis dependencies")
+              target_capture_post_raw = (root / target_capture_post_tb).read_bytes()
+              require(len(target_capture_post_raw) == 11463 and sha(target_capture_post_raw) ==
+                      "ee9b7b7e44a5afd9c419ec2cadea4afd908c8e4ce0b71c57b49d7d0aca5bbf9c",
+                      "Target capture post-synthesis test differs from the validated testbench")
+              identities[target_capture_post_tb] = {
+                  "bytes": len(target_capture_post_raw), "sha256": sha(target_capture_post_raw)}
+              rows.append(f"{target_capture_post_tb}|{len(target_capture_post_raw)}|{sha(target_capture_post_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -881,6 +949,78 @@ jobs:
               simlib = evidence / "yosys-simlib.v"
               shutil.copyfile(share / "simlib.v", simlib)
               report["cell_models_sha256"] = sha(simlib.read_bytes())
+
+              target_capture_top = "frp_m32_registered_target_boundary"
+              target_capture_netlists = []
+              report["target_capture_netlists"] = {}
+              for cells, counter_bits in ((1, 1), (8, 3), (8, 8), (8, 32)):
+                  key = f"{cells}_{counter_bits}"
+                  renamed = f"frp_m32_target_capture_{key}_netlist"
+                  target_netlist = evidence / (renamed + ".v")
+                  target_json = evidence / (renamed + ".json")
+                  target_script = (
+                      "read_slang -j 1 --std 1800-2017 --ignore-assertions --top " + target_capture_top
+                      + " -G CELLS=" + str(cells) + " -G COUNTER_BITS=" + str(counter_bits)
+                      + " " + " ".join("-I" + d for d in include_dirs)
+                      + " rtl/m32/" + target_capture_top + ".sv; "
+                      + "synth -top " + target_capture_top + " -noshare -run begin:fine; check -assert; "
+                      + "techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; "
+                      + "select -assert-none t:$shiftx t:$connect; "
+                      + "rename " + target_capture_top + " " + renamed + "; "
+                      + "write_verilog -noattr " + json.dumps(str(target_netlist)) + "; "
+                      + "write_json " + json.dumps(str(target_json))
+                  )
+                  target_script_path = evidence / f"target-capture-{key}-synthesis.ys"
+                  target_script_path.write_text(target_script + "\n")
+                  execute(["yowasp-yosys", "-Q", "-T", "-q", "-s", str(target_script_path)],
+                          f"target-capture-{key}-synthesis", view, 600)
+                  require(target_netlist.is_file() and target_netlist.stat().st_size > 0,
+                          "Missing target capture netlist: " + renamed)
+                  ports = json.loads(target_json.read_text())["modules"][renamed]["ports"]
+                  output_widths = {name: len(port["bits"]) for name, port in ports.items()
+                                   if port["direction"] == "output"}
+                  expected_outputs = {
+                      "registered_target_q": 2*cells, "registered_target_valid_q": 1,
+                      "phase_target_domain_valid": 1, "registered_target_domain_valid": 1,
+                      "capture_accepted": 1, "capture_rejected": 1,
+                      "accepted_capture_events_q": counter_bits,
+                      "rejected_capture_events_q": counter_bits,
+                  }
+                  require(output_widths == expected_outputs,
+                          "Unexpected target capture netlist output widths: " + renamed)
+                  input_widths = {name: len(port["bits"]) for name, port in ports.items()
+                                  if port["direction"] == "input"}
+                  require(input_widths == {
+                      "clk": 1, "rst_n": 1, "tick_enable": 1, "clear_counters": 1,
+                      "phase_target_valid": 1, "phase_target": 2*cells},
+                      "Unexpected target capture netlist input widths: " + renamed)
+                  report["target_capture_netlists"][key] = {
+                      "module": renamed, "sha256": sha(target_netlist.read_bytes()),
+                      "output_widths": output_widths, "input_widths": input_widths}
+                  target_capture_netlists.append(str(target_netlist))
+
+              target_capture_post_build = work / "target-capture-post-build"
+              execute(compiler + ["-DSIMLIB_NOCONNECT", "--top-module", target_capture_post_bench,
+                  "--Mdir", str(target_capture_post_build), "-v", str(simlib),
+                  *target_capture_netlists, target_capture_post_tb], "target-capture-post-build", root, 600)
+              target_capture_post_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(target_capture_post_build / ("V" + target_capture_post_bench))],
+                                f"target-capture-post-run-{attempt}", root, 180)
+                  records, rtl_profiles, rtl_metrics, profile_metrics, metrics = (
+                      target_capture_post_records(log.read_text()))
+                  require(records[:5] == target_capture_replays[0],
+                          "Target capture post-synthesis reference differs from standalone RTL")
+                  target_capture_post_replays.append(records)
+              require(target_capture_post_replays[0] == target_capture_post_replays[1],
+                      "Target capture post-synthesis profile or summary replay records differ")
+              report["target_capture_post_synthesis"] = {
+                  "implementation": "synthesized netlists with RTL reference", "replays": 2,
+                  "rtl_profiles": rtl_profiles, "rtl_metrics": rtl_metrics,
+                  "profiles": profile_metrics, "metrics": metrics,
+                  "records": target_capture_post_replays[0],
+                  "records_sha256": sha(("\n".join(target_capture_post_replays[0]) + "\n").encode())}
+              print("\n".join(target_capture_post_replays[0]), flush=True)
 
               scheduler_top = "frp_m31_scheduler"
               scheduler_netlists = []
@@ -1203,8 +1343,9 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=36,
+              report.update(status="PASS", simulation_runs=38,
                             target_capture_simulation_runs=2,
+                            target_capture_post_simulation_runs=2,
                             scheduler_control_simulation_runs=2,
                             scheduler_control_post_simulation_runs=2,
                             phase_request_adapter_simulation_runs=2,
@@ -1219,7 +1360,7 @@ jobs:
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
-                  "Simulation runs: 36.", "",
+                  "Simulation runs: 38.", "",
                   "Target capture boundary RTL regression: two matching replays of "
                   "all five records; one cell with a 1-bit counter and eight cells "
                   "with 3-, 8- and 32-bit counters.",
@@ -1234,6 +1375,15 @@ jobs:
                   "The 1-, 3- and 8-bit counters reach saturation naturally, with four "
                   "further accepted and four further rejected events per profile. The "
                   "32-bit profile checks ordinary counting, holding, clearing and reset.", "",
+                  "Target capture post-synthesis regression: two matching replays of all ten "
+                  "records; the five reference records also match standalone RTL.",
+                  "Four fresh netlists use (cells, counter bits) = (1,1), (8,3), (8,8), "
+                  "(8,32); all eight output ports are checked, totaling 9, 27, 37 and 85 "
+                  "bits across these profiles. All six input ports retain their exact widths.",
+                  "9441003 comparisons per replay, covering the same exhaustive source/control "
+                  "matrix, natural saturation, clear priority and 64 reset-control cases.",
+                  "72 asynchronous reset assertions, 72 clock edges under reset and 72 releases; "
+                  "falling edges and input changes are also compared after zero-delay cells settle.", "",
                   "Scheduler control RTL regression: two matching replays of all four "
                   "records; counter widths 3, 8 and 32, with all output bits checked.",
                   "Each width covers 512 old-mode/position/new-mode/tick/clear cases, "
