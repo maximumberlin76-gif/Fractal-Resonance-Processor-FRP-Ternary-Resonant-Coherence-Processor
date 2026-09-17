@@ -1,6 +1,6 @@
 name: 01 - FRP M31-M32 RTL + Netlist
 
-run-name: "01 - FRP M31-M32 RTL + Netlist | 38 runs @ ${{ github.sha }}"
+run-name: "01 - FRP M31-M32 RTL + Netlist | 40 runs @ ${{ github.sha }}"
 
 on:
   workflow_dispatch:
@@ -97,6 +97,8 @@ jobs:
           scheduler_tb = "rtl/m31/" + scheduler_bench + ".sv"
           scheduler_post_bench = "frp_m31_scheduler_control_post_synthesis_tb"
           scheduler_post_tb = "rtl/m31/" + scheduler_post_bench + ".sv"
+          registered_request_bench = "frp_m32_registered_request_tb"
+          registered_request_tb = "rtl/m32/" + registered_request_bench + ".sv"
           target_capture_bench = "frp_m32_target_capture_tb"
           target_capture_tb = "rtl/m32/" + target_capture_bench + ".sv"
           target_capture_post_bench = "frp_m32_target_capture_post_synthesis_tb"
@@ -158,6 +160,40 @@ jobs:
               "reset_releases": 534, "falling_edges": 5121,
               "clear_tick_edges": 138, "clear_hold_edges": 138, "input_changes": 2223,
           } for bits in (3, 8, 32)]
+          registered_request_expected = {
+              "profiles": 3, "matrix_cases": 313344, "mask_cases": 5140,
+              "reset_cases": 1536, "resets": 1542, "pressure_events": 552,
+              "scheduler_samples": 48, "observations": 1928115,
+          }
+          registered_request_profile_expected = [
+              {
+                  "cells": 1, "lanes": 1, "counter_bits": 1,
+                  "output_bits": 14, "matrix_cases": 18432, "mask_cases": 20,
+                  "reset_cases": 512, "resets": 514, "pressure_events": 10,
+                  "scheduler_samples": 16, "steps": 37937, "observations": 115927,
+                  "empty_outputs": 112984, "one_request_outputs": 2943, "two_request_outputs": 0,
+                  "accepted_saturation_holds": 4, "rejected_saturation_holds": 4, "lane0_cells": 1,
+                  "lane1_cells": 0,
+              },
+              {
+                  "cells": 8, "lanes": 2, "counter_bits": 3,
+                  "output_bits": 40, "matrix_cases": 147456, "mask_cases": 2560,
+                  "reset_cases": 512, "resets": 514, "pressure_events": 22,
+                  "scheduler_samples": 16, "steps": 298537, "observations": 905347,
+                  "empty_outputs": 877567, "one_request_outputs": 14242, "two_request_outputs": 13538,
+                  "accepted_saturation_holds": 4, "rejected_saturation_holds": 4, "lane0_cells": 255,
+                  "lane1_cells": 254,
+              },
+              {
+                  "cells": 8, "lanes": 2, "counter_bits": 32,
+                  "output_bits": 98, "matrix_cases": 147456, "mask_cases": 2560,
+                  "reset_cases": 512, "resets": 514, "pressure_events": 520,
+                  "scheduler_samples": 16, "steps": 299035, "observations": 906841,
+                  "empty_outputs": 877568, "one_request_outputs": 14242, "two_request_outputs": 15031,
+                  "accepted_saturation_holds": 0, "rejected_saturation_holds": 0, "lane0_cells": 255,
+                  "lane1_cells": 254,
+              },
+          ]
           target_capture_expected = {
               "profiles": 4, "matrix_cases": 1572896, "reset_cases": 64,
               "pressure_events": 1070, "observations": 9441534,
@@ -318,6 +354,8 @@ jobs:
               "scheduler_control_expected_profiles": scheduler_profile_expected,
               "scheduler_control_post_expected_metrics": scheduler_post_expected,
               "scheduler_control_post_expected_profiles": scheduler_post_profile_expected,
+              "registered_request_expected_metrics": registered_request_expected,
+              "registered_request_expected_profiles": registered_request_profile_expected,
               "target_capture_expected_metrics": target_capture_expected,
               "target_capture_expected_profiles": target_capture_profile_expected,
               "target_capture_post_expected_metrics": target_capture_post_expected,
@@ -402,6 +440,20 @@ jobs:
               metrics = dict(zip(expected_metrics, map(int, match.groups())))
               require(metrics == expected_metrics, prefix + " incomplete coverage")
               return records[0], metrics
+
+          def registered_request_records(text):
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M32_REGISTERED_REQUEST_")]
+              require(len(records) == 4,
+                      "Incomplete or repeated registered request results")
+              observed_profiles = []
+              for index, expected_metrics in enumerate(registered_request_profile_expected):
+                  _, metrics = regression_record(records[index],
+                      "FRP_M32_REGISTERED_REQUEST_PROFILE:", expected_metrics)
+                  observed_profiles.append(metrics)
+              _, metrics = regression_record(records[-1],
+                  "FRP_M32_REGISTERED_REQUEST_TB:", registered_request_expected)
+              return records, observed_profiles, metrics
 
           def target_capture_records(text):
               records = [line for line in text.splitlines()
@@ -785,6 +837,16 @@ jobs:
               identities[target_capture_post_tb] = {
                   "bytes": len(target_capture_post_raw), "sha256": sha(target_capture_post_raw)}
               rows.append(f"{target_capture_post_tb}|{len(target_capture_post_raw)}|{sha(target_capture_post_raw)}")
+              visit(registered_request_tb)
+              require(sources == set(identities) | {registered_request_tb},
+                      "Unexpected registered request dependencies")
+              registered_request_raw = (root / registered_request_tb).read_bytes()
+              require(len(registered_request_raw) == 17213 and sha(registered_request_raw) ==
+                      "e52733e7c60275e3e66b98feee075ec58a7a7a60bab151c273859d56050e57bd",
+                      "Registered request regression differs from the validated testbench")
+              identities[registered_request_tb] = {
+                  "bytes": len(registered_request_raw), "sha256": sha(registered_request_raw)}
+              rows.append(f"{registered_request_tb}|{len(registered_request_raw)}|{sha(registered_request_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -797,6 +859,24 @@ jobs:
                   "--output-split", "20000", "-MAKEFLAGS", "VK_PCH_I_FAST=",
                   "-MAKEFLAGS", "VK_PCH_I_SLOW=", "-j", "2"]
               compiler += ["-I" + d for d in include_dirs]
+              registered_request_build = work / "registered-request-build"
+              execute(compiler + ["--top-module", registered_request_bench,
+                  "--Mdir", str(registered_request_build), registered_request_tb],
+                  "registered-request-build", root, 600)
+              registered_request_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(registered_request_build / ("V" + registered_request_bench))],
+                                f"registered-request-run-{attempt}", root, 180)
+                  records, profile_metrics, metrics = registered_request_records(log.read_text())
+                  registered_request_replays.append(records)
+              require(registered_request_replays[0] == registered_request_replays[1],
+                      "Registered request profile or summary replay records differ")
+              report["registered_request"] = {"implementation": "RTL", "replays": 2,
+                  "profiles": profile_metrics, "metrics": metrics,
+                  "records": registered_request_replays[0],
+                  "records_sha256": sha(("\n".join(registered_request_replays[0]) + "\n").encode())}
+              print("\n".join(registered_request_replays[0]), flush=True)
+
               target_capture_build = work / "target-capture-build"
               execute(compiler + ["--top-module", target_capture_bench,
                   "--Mdir", str(target_capture_build), target_capture_tb],
@@ -1343,7 +1423,8 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=38,
+              report.update(status="PASS", simulation_runs=40,
+                            registered_request_simulation_runs=2,
                             target_capture_simulation_runs=2,
                             target_capture_post_simulation_runs=2,
                             scheduler_control_simulation_runs=2,
@@ -1360,7 +1441,20 @@ jobs:
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
-                  "Simulation runs: 38.", "",
+                  "Simulation runs: 40.", "",
+                  "Registered target/request RTL integration: two matching replays of all four "
+                  "records; one cell with one lane and a 1-bit counter, eight cells with two "
+                  "lanes and 3- or 32-bit counters. All 12 output ports are checked.",
+                  "313344 capture/control/operand matrix cases and 5140 candidate-mask cases; "
+                  "1928115 complete output comparisons per replay, before and after capture "
+                  "and on falling edges, including live downstream input changes.",
+                  "1536 reset-control cases, 1542 asynchronous resets and 552 counter-pressure "
+                  "events; small counters saturate naturally, and counter clears preserve capture history.",
+                  "Registered requests survive invalid, absent or unticked upstream sources; "
+                  "automatic request disable does not block target capture. Inactive lanes "
+                  "remain zero and eligible cells retain ascending lane priority.",
+                  "48 literal scheduler-state samples replay the 7/1 and 1/7 cadences; "
+                  "request destinations remain distinct from downstream executed states.", "",
                   "Target capture boundary RTL regression: two matching replays of "
                   "all five records; one cell with a 1-bit counter and eight cells "
                   "with 3-, 8- and 32-bit counters.",
