@@ -1,6 +1,6 @@
 name: 01 - FRP M31-M32 RTL + Netlist
 
-run-name: "01 - FRP M31-M32 RTL + Netlist | 46 runs @ ${{ github.sha }}"
+run-name: "01 - FRP M31-M32 RTL + Netlist | 48 runs @ ${{ github.sha }}"
 
 on:
   workflow_dispatch:
@@ -101,6 +101,8 @@ jobs:
           integration_tb = "rtl/m32/" + integration_bench + ".sv"
           integration_post_bench = "frp_m32_execution_integration_post_synthesis_tb"
           integration_post_tb = "rtl/m32/" + integration_post_bench + ".sv"
+          closed_loop_bench = "frp_m32_closed_loop_tb"
+          closed_loop_tb = "rtl/m32/" + closed_loop_bench + ".sv"
           registered_request_bench = "frp_m32_registered_request_tb"
           registered_request_tb = "rtl/m32/" + registered_request_bench + ".sv"
           registered_request_post_bench = "frp_m32_registered_request_post_synthesis_tb"
@@ -200,6 +202,89 @@ jobs:
            'mask_cases': 256,
            'stream_steps': 3072,
            'reference_checks': 106864}
+          closed_loop_expected = {'profiles': 6,
+           'steps': 3262,
+           'checks': 10030,
+           'output_bits': 2075,
+           'dynamic_ticks': 3104,
+           'longest_streak': 256,
+           'held_edges': 158,
+           'loads': 12,
+           'resets': 22,
+           'pending_resets': 8,
+           'clear_ticks': 54,
+           'clear_holds': 86,
+           'automatic_ticks': 2688,
+           'external_ticks': 416,
+           'target_lag_samples': 988,
+           'state_feedback_samples': 14274,
+           'switch_feedback_samples': 1502,
+           'heating_ticks': 1092,
+           'cooling_ticks': 1733,
+           'first_legs': 185,
+           'second_legs': 177,
+           'first_cells': 255,
+           'second_cells': 255,
+           'live_control_checks': 156,
+           'free_ticks': 1056,
+           'balance_ticks': 896,
+           'commit_ticks': 128,
+           'excite_ticks': 128,
+           'neutralize_ticks': 896}
+          closed_loop_profile_expected = [{'workload': 0,
+            'mode': 'free',
+            'ticks': 512,
+            'phase': 'e032bf0a7261be782bc0d58e30820d15a7bce5b1b1ab3174990a8555c7be0ebd',
+            'frequency': '00010f5b00011a6b00010f2500010f4d00010ee600010f3500010cb100010f5b',
+            'state': 'd5ff',
+            'pending': '0000',
+            'temperature': '000000ea',
+            'peak': '000000ea'},
+           {'workload': 0,
+            'mode': '7/1',
+            'ticks': 512,
+            'phase': 'ce84386b67ca0fe419e9e20e223319ada0e5b732b314f3dd9b09688ec51e43c3',
+            'frequency': '0001000100010f5b000100570001002b0001001e00010bc30001097100010f1a',
+            'state': '101f',
+            'pending': '0000',
+            'temperature': '000000a4',
+            'peak': '000000a4'},
+           {'workload': 0,
+            'mode': '1/7',
+            'ticks': 512,
+            'phase': 'c5580c6864c9d2571b27dff91f7a7aaaa11c7709ab4e8f9b93ac37cfbee1251c',
+            'frequency': '0001000100010edb0001004a0001002b0001002b00010ede000100b100010f56',
+            'state': '1033',
+            'pending': '0000',
+            'temperature': '00000000',
+            'peak': '00000000'},
+           {'workload': 1,
+            'mode': 'free',
+            'ticks': 512,
+            'phase': 'f745608211ba45a97397b645ab209e6636fd5fc6ef81150811c01f9400a60d4a',
+            'frequency': '00011e3a0001095500010f5b00010f9b00010f5b00010f63000100b200010422',
+            'state': '1770',
+            'pending': '0000',
+            'temperature': '000001ac',
+            'peak': '000001ac'},
+           {'workload': 1,
+            'mode': '7/1',
+            'ticks': 512,
+            'phase': 'f4120c1b0f7a4a54702cff1ea8266d013699e708ef1a9638130875c6028fc591',
+            'frequency': '00010f5b0001001d00010f5b0001093e00010f0200010f1e000109e900010422',
+            'state': 'c774',
+            'pending': '0000',
+            'temperature': '000000e4',
+            'peak': '000000e4'},
+           {'workload': 1,
+            'mode': '1/7',
+            'ticks': 512,
+            'phase': 'e9d6fe5b04b685b7617d98ff9c18408f2d88266ce60c55f509d388c9f90e2226',
+            'frequency': '00010f5b0001000100010edb0001003500010f5500010f5b0001042200011893',
+            'state': 'c470',
+            'pending': '0000',
+            'temperature': '00000092',
+            'peak': '00000092'}]
           registered_request_expected = {
               "profiles": 3, "matrix_cases": 313344, "mask_cases": 5140,
               "reset_cases": 1536, "resets": 1542, "pressure_events": 552,
@@ -433,6 +518,8 @@ jobs:
               "scheduler_control_post_expected_profiles": scheduler_post_profile_expected,
               "execution_integration_expected_metrics": integration_expected,
               "execution_integration_post_expected_metrics": integration_post_expected,
+              "closed_loop_expected_metrics": closed_loop_expected,
+              "closed_loop_expected_profiles": closed_loop_profile_expected,
               "registered_request_expected_metrics": registered_request_expected,
               "registered_request_expected_profiles": registered_request_profile_expected,
               "registered_request_post_expected_metrics": registered_request_post_expected,
@@ -521,6 +608,32 @@ jobs:
               metrics = dict(zip(expected_metrics, map(int, match.groups())))
               require(metrics == expected_metrics, prefix + " incomplete coverage")
               return records[0], metrics
+
+          def closed_loop_records(text):
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M32_CLOSED_LOOP_")]
+              require(len(records) == len(closed_loop_profile_expected) + 1,
+                      "Incomplete or repeated closed-loop results")
+              profile_metrics = []
+              fields = ("workload", "mode", "ticks", "phase", "frequency", "state",
+                        "pending", "temperature", "peak")
+              pattern = (r"FRP_M32_CLOSED_LOOP_PROFILE: PASS workload=(\d+) "
+                         r"mode=(free|7/1|1/7) ticks=(\d+) phase=([0-9a-f]{64}) "
+                         r"frequency=([0-9a-f]{64}) state=([0-9a-f]{4}) "
+                         r"pending=([0-9a-f]{4}) temperature=([0-9a-f]{8}) "
+                         r"peak=([0-9a-f]{8})")
+              for record, wanted in zip(records[:-1], closed_loop_profile_expected):
+                  match = re.fullmatch(pattern, record)
+                  require(match is not None, "Malformed closed-loop profile")
+                  observed = dict(zip(fields, match.groups()))
+                  observed["workload"] = int(observed["workload"])
+                  observed["ticks"] = int(observed["ticks"])
+                  require(observed == wanted,
+                          "Closed-loop profile order, dynamics or final state differs")
+                  profile_metrics.append(observed)
+              _, metrics = regression_record(records[-1],
+                  "FRP_M32_CLOSED_LOOP_TB:", closed_loop_expected)
+              return records, profile_metrics, metrics
 
           def integration_post_records(text):
               records = [line for line in text.splitlines()
@@ -984,6 +1097,16 @@ jobs:
               identities[integration_post_tb] = {
                   "bytes": len(integration_post_raw), "sha256": sha(integration_post_raw)}
               rows.append(f"{integration_post_tb}|{len(integration_post_raw)}|{sha(integration_post_raw)}")
+              visit(closed_loop_tb)
+              require(sources == set(identities) | {closed_loop_tb},
+                      "Unexpected closed-loop regression dependencies")
+              closed_loop_raw = (root / closed_loop_tb).read_bytes()
+              require(len(closed_loop_raw) == 41867 and sha(closed_loop_raw) ==
+                      "1d0e02b0d95fe02806eee79a21eeb9d341d7a1b4b760842c0f0b2702fb183528",
+                      "Closed-loop regression differs from the validated testbench")
+              identities[closed_loop_tb] = {
+                  "bytes": len(closed_loop_raw), "sha256": sha(closed_loop_raw)}
+              rows.append(f"{closed_loop_tb}|{len(closed_loop_raw)}|{sha(closed_loop_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -996,6 +1119,25 @@ jobs:
                   "--output-split", "20000", "-MAKEFLAGS", "VK_PCH_I_FAST=",
                   "-MAKEFLAGS", "VK_PCH_I_SLOW=", "-j", "2"]
               compiler += ["-I" + d for d in include_dirs]
+              closed_loop_build = work / "closed-loop-build"
+              execute(compiler + ["--top-module", closed_loop_bench,
+                  "--Mdir", str(closed_loop_build), closed_loop_tb],
+                  "closed-loop-build", root, 600)
+              closed_loop_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(closed_loop_build / ("V" + closed_loop_bench))],
+                                f"closed-loop-run-{attempt}", root, 180)
+                  records, profile_metrics, metrics = closed_loop_records(log.read_text())
+                  closed_loop_replays.append(records)
+              require(closed_loop_replays[0] == closed_loop_replays[1],
+                      "Closed-loop profile or summary replay records differ")
+              report["closed_loop"] = {
+                  "implementation": "RTL with independent fixed-point oracle", "replays": 2,
+                  "profiles": profile_metrics, "metrics": metrics,
+                  "records": closed_loop_replays[0],
+                  "records_sha256": sha(("\n".join(closed_loop_replays[0]) + "\n").encode())}
+              print("\n".join(closed_loop_replays[0]), flush=True)
+
               integration_build = work / "execution-integration-build"
               execute(compiler + ["--top-module", integration_bench,
                   "--Mdir", str(integration_build), integration_tb],
@@ -1792,7 +1934,8 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=46,
+              report.update(status="PASS", simulation_runs=48,
+                            closed_loop_simulation_runs=2,
                             execution_integration_simulation_runs=2,
                             execution_integration_post_simulation_runs=2,
                             registered_request_simulation_runs=2,
@@ -1813,7 +1956,21 @@ jobs:
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
-                  "Simulation runs: 46.", "",
+                  "Simulation runs: 48.", "",
+                  "M32 continuous closed-loop RTL regression: two identical seven-record replays "
+                  "against an independent fixed-point oracle; all 59 outputs and 2075 output bits match.",
+                  "Six profiles combine two workloads with free, 7/1 and 1/7 schedules; "
+                  "each profile advances 512 ticks with 256 uninterrupted dynamic ticks between loads.",
+                  "Per replay: 3262 steps, 10030 full-output checks, 3104 dynamic ticks, 158 held edges, "
+                  "12 bank loads and 156 live-control checks; 2688 automatic and 416 external ticks.",
+                  "22 asynchronous resets include eight pending-route aborts; 54 clears on enabled "
+                  "and 86 on held edges. All eight cells perform active-zero first and second legs "
+                  "(185 and 177); the difference is exactly the eight reset-aborted routes.",
+                  "988 registered-target lag observations, 14274 state-feedback and 1502 switch-feedback "
+                  "observations; 1092 heating and 1733 cooling ticks. Six complete final phase, frequency, "
+                  "retained-state, pending-state and temperature records are checked exactly.",
+                  "This qualifies the eight-cell fixed-point RTL feedback path; model v0.9.3 workload "
+                  "equivalence and complete design coverage remain separate qualification steps.", "",
                   "M32 integrated execution RTL regression: two matching replays at eight cells "
                   "and two lanes, using an independent ternary and scheduler oracle.",
                   "2880 transition/control cases cover every cell, all nine canonical transitions, "
