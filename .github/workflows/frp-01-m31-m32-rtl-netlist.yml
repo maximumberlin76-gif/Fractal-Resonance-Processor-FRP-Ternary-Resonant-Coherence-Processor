@@ -1,6 +1,6 @@
 name: 01 - FRP M31-M32 RTL + Netlist
 
-run-name: "01 - FRP M31-M32 RTL + Netlist | 42 runs @ ${{ github.sha }}"
+run-name: "01 - FRP M31-M32 RTL + Netlist | 44 runs @ ${{ github.sha }}"
 
 on:
   workflow_dispatch:
@@ -97,6 +97,8 @@ jobs:
           scheduler_tb = "rtl/m31/" + scheduler_bench + ".sv"
           scheduler_post_bench = "frp_m31_scheduler_control_post_synthesis_tb"
           scheduler_post_tb = "rtl/m31/" + scheduler_post_bench + ".sv"
+          integration_bench = "frp_m32_execution_integration_tb"
+          integration_tb = "rtl/m32/" + integration_bench + ".sv"
           registered_request_bench = "frp_m32_registered_request_tb"
           registered_request_tb = "rtl/m32/" + registered_request_bench + ".sv"
           registered_request_post_bench = "frp_m32_registered_request_post_synthesis_tb"
@@ -162,6 +164,16 @@ jobs:
               "reset_releases": 534, "falling_edges": 5121,
               "clear_tick_edges": 138, "clear_hold_edges": 138, "input_changes": 2223,
           } for bits in (3, 8, 32)]
+          integration_expected = {
+              "cells": 8, "lanes": 2, "matrix_cases": 2880, "mask_cases": 256,
+              "stream_steps": 3072, "steps": 31424, "checks": 106864, "resets": 3148,
+              "enabled_ticks": 22789, "held_ticks": 8635,
+              "clear_enabled": 863, "clear_held": 1208, "mux_changes": 4440,
+              "target_lag_samples": 8830, "capacity_blocks": 748,
+              "first_legs": 1652, "second_legs": 1648,
+              "automatic_cells": 255, "external_cells": 255,
+              "first_cells": 255, "second_cells": 255, "scheduler_states": 31,
+          }
           registered_request_expected = {
               "profiles": 3, "matrix_cases": 313344, "mask_cases": 5140,
               "reset_cases": 1536, "resets": 1542, "pressure_events": 552,
@@ -216,7 +228,7 @@ jobs:
                   "cells": 8, "lanes": 2, "counter_bits": 3,
                   "output_bits": 40, "comparisons": 900227, "input_changes": 301609,
                   "enabled_edges": 224552, "hold_edges": 73985, "falling_edges": 299051,
-                  "accepted_edges": 178285, "rejected_edges": 9259, "auto_disabled_capture_edges": 161328,
+                  "accepted_edges": 178534, "rejected_edges": 9508, "auto_disabled_capture_edges": 161328,
                   "reset_assertions": 514, "reset_clock_edges": 514, "reset_releases": 514,
                   "clear_tick_edges": 187010, "clear_hold_edges": 36993, "request_enabled_checks": 235321,
                   "upstream_independent_checks": 184916, "empty_outputs": 872447, "one_request_outputs": 14242,
@@ -393,6 +405,7 @@ jobs:
               "scheduler_control_expected_profiles": scheduler_profile_expected,
               "scheduler_control_post_expected_metrics": scheduler_post_expected,
               "scheduler_control_post_expected_profiles": scheduler_post_profile_expected,
+              "execution_integration_expected_metrics": integration_expected,
               "registered_request_expected_metrics": registered_request_expected,
               "registered_request_expected_profiles": registered_request_profile_expected,
               "registered_request_post_expected_metrics": registered_request_post_expected,
@@ -913,6 +926,16 @@ jobs:
               identities[registered_request_post_tb] = {
                   "bytes": len(registered_request_post_raw), "sha256": sha(registered_request_post_raw)}
               rows.append(f"{registered_request_post_tb}|{len(registered_request_post_raw)}|{sha(registered_request_post_raw)}")
+              visit(integration_tb)
+              require(sources == set(identities) | {integration_tb},
+                      "Unexpected execution integration dependencies")
+              integration_raw = (root / integration_tb).read_bytes()
+              require(len(integration_raw) == 20546 and sha(integration_raw) ==
+                      "08701fe87e7f1e1d57d323dce4315364476f58ecada0410d45bdc35f16dd926d",
+                      "Execution integration regression differs from the validated testbench")
+              identities[integration_tb] = {
+                  "bytes": len(integration_raw), "sha256": sha(integration_raw)}
+              rows.append(f"{integration_tb}|{len(integration_raw)}|{sha(integration_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -925,6 +948,23 @@ jobs:
                   "--output-split", "20000", "-MAKEFLAGS", "VK_PCH_I_FAST=",
                   "-MAKEFLAGS", "VK_PCH_I_SLOW=", "-j", "2"]
               compiler += ["-I" + d for d in include_dirs]
+              integration_build = work / "execution-integration-build"
+              execute(compiler + ["--top-module", integration_bench,
+                  "--Mdir", str(integration_build), integration_tb],
+                  "execution-integration-build", root, 600)
+              integration_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(integration_build / ("V" + integration_bench))],
+                                f"execution-integration-run-{attempt}", root, 180)
+                  record, metrics = regression_record(log.read_text(),
+                      "FRP_M32_EXECUTION_INTEGRATION_TB:", integration_expected)
+                  integration_replays.append(record)
+              require(integration_replays[0] == integration_replays[1],
+                      "Execution integration replay records differ")
+              report["execution_integration"] = {"implementation": "RTL", "replays": 2,
+                  "metrics": metrics, "record": integration_replays[0]}
+              print(integration_replays[0], flush=True)
+
               registered_request_build = work / "registered-request-build"
               execute(compiler + ["--top-module", registered_request_bench,
                   "--Mdir", str(registered_request_build), registered_request_tb],
@@ -1568,7 +1608,8 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=42,
+              report.update(status="PASS", simulation_runs=44,
+                            execution_integration_simulation_runs=2,
                             registered_request_simulation_runs=2,
                             registered_request_post_simulation_runs=2,
                             target_capture_simulation_runs=2,
@@ -1587,7 +1628,19 @@ jobs:
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
-                  "Simulation runs: 42.", "",
+                  "Simulation runs: 44.", "",
+                  "M32 integrated execution RTL regression: two matching replays at eight cells "
+                  "and two lanes, using an independent ternary and scheduler oracle.",
+                  "2880 transition/control cases cover every cell, all nine canonical transitions, "
+                  "all five scheduler states and both automatic/external request paths. "
+                  "256 target masks drain through active-zero routes; 3072 deterministic "
+                  "stream steps change targets, mux selection, lanes, modes and counter clears.",
+                  "31424 clock steps, 3148 asynchronous resets and 106864 checks per replay; "
+                  "748 capacity rejections, 1652 first route legs and 1648 second route legs "
+                  "are recorded. Pending destinations survive source, mux and counter-clear changes.",
+                  "Phase loads use exact cardinal angles. Continuous phase dynamics and thermal "
+                  "behavior are covered by their separate regressions below; this integration "
+                  "test is not a workload comparison with model v0.9.3.", "",
                   "Registered target/request RTL integration: two matching replays of all four "
                   "records; one cell with one lane and a 1-bit counter, eight cells with two "
                   "lanes and 3- or 32-bit counters. All 12 output ports are checked.",
