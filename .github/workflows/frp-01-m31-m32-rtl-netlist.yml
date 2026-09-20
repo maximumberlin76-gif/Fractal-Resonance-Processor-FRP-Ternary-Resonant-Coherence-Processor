@@ -1,6 +1,6 @@
 name: 01 - FRP M31-M32 RTL + Netlist
 
-run-name: "01 - FRP M31-M32 RTL + Netlist | 44 runs @ ${{ github.sha }}"
+run-name: "01 - FRP M31-M32 RTL + Netlist | 46 runs @ ${{ github.sha }}"
 
 on:
   workflow_dispatch:
@@ -99,6 +99,8 @@ jobs:
           scheduler_post_tb = "rtl/m31/" + scheduler_post_bench + ".sv"
           integration_bench = "frp_m32_execution_integration_tb"
           integration_tb = "rtl/m32/" + integration_bench + ".sv"
+          integration_post_bench = "frp_m32_execution_integration_post_synthesis_tb"
+          integration_post_tb = "rtl/m32/" + integration_post_bench + ".sv"
           registered_request_bench = "frp_m32_registered_request_tb"
           registered_request_tb = "rtl/m32/" + registered_request_bench + ".sv"
           registered_request_post_bench = "frp_m32_registered_request_post_synthesis_tb"
@@ -174,6 +176,30 @@ jobs:
               "automatic_cells": 255, "external_cells": 255,
               "first_cells": 255, "second_cells": 255, "scheduler_states": 31,
           }
+          integration_post_expected = {'comparisons': 98619,
+           'input_bits': 1060,
+           'output_bits': 2075,
+           'input_changes': 23179,
+           'enabled_ticks': 22789,
+           'hold_edges': 8635,
+           'falling_edges': 34572,
+           'reset_assertions': 3148,
+           'reset_clock_edges': 3148,
+           'reset_releases': 3148,
+           'clear_tick_edges': 863,
+           'clear_hold_edges': 1208,
+           'phase_load_edges': 31424,
+           'automatic_ticks': 8031,
+           'external_ticks': 14758,
+           'first_legs': 1652,
+           'second_legs': 1648,
+           'first_cells': 255,
+           'second_cells': 255,
+           'scheduler_states': 31,
+           'matrix_cases': 2880,
+           'mask_cases': 256,
+           'stream_steps': 3072,
+           'reference_checks': 106864}
           registered_request_expected = {
               "profiles": 3, "matrix_cases": 313344, "mask_cases": 5140,
               "reset_cases": 1536, "resets": 1542, "pressure_events": 552,
@@ -406,6 +432,7 @@ jobs:
               "scheduler_control_post_expected_metrics": scheduler_post_expected,
               "scheduler_control_post_expected_profiles": scheduler_post_profile_expected,
               "execution_integration_expected_metrics": integration_expected,
+              "execution_integration_post_expected_metrics": integration_post_expected,
               "registered_request_expected_metrics": registered_request_expected,
               "registered_request_expected_profiles": registered_request_profile_expected,
               "registered_request_post_expected_metrics": registered_request_post_expected,
@@ -494,6 +521,17 @@ jobs:
               metrics = dict(zip(expected_metrics, map(int, match.groups())))
               require(metrics == expected_metrics, prefix + " incomplete coverage")
               return records[0], metrics
+
+          def integration_post_records(text):
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M32_EXECUTION_INTEGRATION_")]
+              require(len(records) == 2,
+                      "Incomplete or repeated execution integration post-synthesis results")
+              _, rtl_metrics = regression_record(records[0],
+                  "FRP_M32_EXECUTION_INTEGRATION_TB:", integration_expected)
+              _, metrics = regression_record(records[1],
+                  "FRP_M32_EXECUTION_INTEGRATION_POST_SYNTHESIS_TB:", integration_post_expected)
+              return records, rtl_metrics, metrics
 
           def registered_request_records(text):
               records = [line for line in text.splitlines()
@@ -936,6 +974,16 @@ jobs:
               identities[integration_tb] = {
                   "bytes": len(integration_raw), "sha256": sha(integration_raw)}
               rows.append(f"{integration_tb}|{len(integration_raw)}|{sha(integration_raw)}")
+              visit(integration_post_tb)
+              require(sources == set(identities) | {integration_post_tb},
+                      "Unexpected execution integration post-synthesis dependencies")
+              integration_post_raw = (root / integration_post_tb).read_bytes()
+              require(len(integration_post_raw) == 21324 and sha(integration_post_raw) ==
+                      "3b5850fb4b6df140f81fc8c5cb52652b3fed350783d43edc3102642ccdafce70",
+                      "Execution integration post-synthesis regression differs from the validated testbench")
+              identities[integration_post_tb] = {
+                  "bytes": len(integration_post_raw), "sha256": sha(integration_post_raw)}
+              rows.append(f"{integration_post_tb}|{len(integration_post_raw)}|{sha(integration_post_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -1135,6 +1183,142 @@ jobs:
               simlib = evidence / "yosys-simlib.v"
               shutil.copyfile(share / "simlib.v", simlib)
               report["cell_models_sha256"] = sha(simlib.read_bytes())
+
+              integration_top = "frp_m32_core"
+              integration_netlist_name = "frp_m32_core_netlist"
+              integration_netlist = evidence / (integration_netlist_name + ".v")
+              integration_json = evidence / (integration_netlist_name + ".json")
+              integration_script = (
+                  "read_slang -j 1 --std 1800-2017 --ignore-assertions --top " + integration_top
+                  + " -G CELLS=8 -G REQUEST_LANES=2 -G CELL_INDEX_BITS=3 -G COUNTER_BITS=32"
+                  + " " + " ".join("-I" + d for d in include_dirs)
+                  + " rtl/m32/" + integration_top + ".sv; "
+                  + "synth -top " + integration_top + " -flatten -noshare -run begin:fine; check -assert; "
+                  + "techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; "
+                  + "select -assert-none t:$shiftx t:$connect; "
+                  + "rename " + integration_top + " " + integration_netlist_name + "; "
+                  + "write_verilog -noattr " + json.dumps(str(integration_netlist)) + "; "
+                  + "write_json " + json.dumps(str(integration_json))
+              )
+              integration_script_path = evidence / "execution-integration-synthesis.ys"
+              integration_script_path.write_text(integration_script + "\n")
+              execute(["yowasp-yosys", "-Q", "-T", "-q", "-s", str(integration_script_path)],
+                      "execution-integration-synthesis", view, 600)
+              require(integration_netlist.is_file() and integration_netlist.stat().st_size > 0,
+                      "Missing complete M32 integration netlist")
+              modules = json.loads(integration_json.read_text())["modules"]
+              require(set(modules) == {integration_netlist_name},
+                      "M32 integration netlist is not fully flattened")
+              ports = modules[integration_netlist_name]["ports"]
+              input_widths = {name: len(port["bits"]) for name, port in ports.items()
+                              if port["direction"] == "input"}
+              output_widths = {name: len(port["bits"]) for name, port in ports.items()
+                               if port["direction"] == "output"}
+              require(set(ports) == set(input_widths) | set(output_widths),
+                      "Unexpected M32 integration netlist port direction")
+              expected_input_widths = {'clk': 1,
+               'rst_n': 1,
+               'tick_enable': 1,
+               'clear_counters': 1,
+               'scheduler_mode': 2,
+               'phase_load_valid': 1,
+               'phase_load': 256,
+               'frequency_load_q16': 256,
+               'gamma_effective_word': 256,
+               'thermal_node_factor_q30': 256,
+               'auto_target_enable': 1,
+               'external_request_valid': 2,
+               'external_request_cell_index': 6,
+               'external_request_target': 4,
+               'external_target_bank': 16}
+              expected_output_widths = {'phase_word_q': 256,
+               'frequency_current_q16': 256,
+               'coupling_field_q16': 256,
+               'phase_projection_q30': 256,
+               'phase_target_source': 16,
+               'registered_target_q': 16,
+               'registered_target_valid_q': 1,
+               'phase_target_domain_valid': 1,
+               'registered_target_domain_valid': 1,
+               'target_capture_accepted': 1,
+               'target_capture_rejected': 1,
+               'accepted_target_capture_events_q': 32,
+               'rejected_target_capture_events_q': 32,
+               'registered_request_enable': 1,
+               'phase_request_valid': 2,
+               'phase_request_cell_index': 6,
+               'phase_request_target': 4,
+               'execution_request_valid': 2,
+               'execution_request_cell_index': 6,
+               'execution_request_target': 4,
+               'execution_target_bank': 16,
+               'state_out': 16,
+               'pending_route_out': 16,
+               'scheduler_mode_q': 2,
+               'scheduler_state_q': 3,
+               'ticks_recorded_q': 32,
+               'scheduler_count_free_q': 32,
+               'scheduler_count_balance_q': 32,
+               'scheduler_count_commit_q': 32,
+               'scheduler_count_excite_q': 32,
+               'scheduler_count_neutralize_q': 32,
+               'request_accept': 2,
+               'request_reject': 2,
+               'accepted_cell_mask': 8,
+               'neutral_routed_cell_mask': 8,
+               'accepted_change_mask': 8,
+               'accepted_changes': 32,
+               'capacity_remaining': 32,
+               'capacity_exhausted': 1,
+               'switch_load_numerator': 32,
+               'requested_direct_events': 32,
+               'prevented_direct_events': 32,
+               'neutral_routed_events': 32,
+               'actual_direct_events': 32,
+               'reserved_state_events': 32,
+               'queue_overflow_events': 32,
+               'invariant_flags': 10,
+               'pair_coherence_q30': 32,
+               'cluster_coherence_q30': 32,
+               'global_coherence_q30': 32,
+               'organization_dispersion_q30': 32,
+               'normalized_cycle_cost_q16': 32,
+               'temperature_proxy_q16': 32,
+               'peak_temperature_proxy_q16': 32,
+               'thermal_sample_count_q': 32,
+               'coherence_capacity_q16': 32,
+               'pressure_q16': 32,
+               'stability_margin_q16': 32,
+               'stable': 1}
+              require(input_widths == expected_input_widths,
+                      "Unexpected complete M32 integration input ports or widths")
+              require(output_widths == expected_output_widths,
+                      "Unexpected complete M32 integration output ports or widths")
+              report["execution_integration_netlist"] = {
+                  "module": integration_netlist_name, "sha256": sha(integration_netlist.read_bytes()),
+                  "input_widths": input_widths, "output_widths": output_widths}
+
+              integration_post_build = work / "execution-integration-post-build"
+              execute(compiler + ["-DSIMLIB_NOCONNECT", "--top-module", integration_post_bench,
+                  "--Mdir", str(integration_post_build), "-v", str(simlib),
+                  str(integration_netlist), integration_post_tb],
+                  "execution-integration-post-build", root, 900)
+              integration_post_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(integration_post_build / ("V" + integration_post_bench))],
+                                f"execution-integration-post-run-{attempt}", root, 180)
+                  records, rtl_metrics, metrics = integration_post_records(log.read_text())
+                  require(records[0] == integration_replays[0],
+                          "Execution integration post-synthesis reference differs from standalone RTL")
+                  integration_post_replays.append(records)
+              require(integration_post_replays[0] == integration_post_replays[1],
+                      "Execution integration post-synthesis replay records differ")
+              report["execution_integration_post_synthesis"] = {
+                  "implementation": "synthesized netlist with RTL reference", "replays": 2,
+                  "rtl_metrics": rtl_metrics, "metrics": metrics,
+                  "records": integration_post_replays[0],
+                  "records_sha256": sha(("\n".join(integration_post_replays[0]) + "\n").encode())}
+              print("\n".join(integration_post_replays[0]), flush=True)
 
               registered_request_top = "frp_m32_registered_target_request_path"
               registered_request_netlists = []
@@ -1608,8 +1792,9 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=44,
+              report.update(status="PASS", simulation_runs=46,
                             execution_integration_simulation_runs=2,
+                            execution_integration_post_simulation_runs=2,
                             registered_request_simulation_runs=2,
                             registered_request_post_simulation_runs=2,
                             target_capture_simulation_runs=2,
@@ -1628,7 +1813,7 @@ jobs:
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
-                  "Simulation runs: 44.", "",
+                  "Simulation runs: 46.", "",
                   "M32 integrated execution RTL regression: two matching replays at eight cells "
                   "and two lanes, using an independent ternary and scheduler oracle.",
                   "2880 transition/control cases cover every cell, all nine canonical transitions, "
@@ -1641,6 +1826,18 @@ jobs:
                   "Phase loads use exact cardinal angles. Continuous phase dynamics and thermal "
                   "behavior are covered by their separate regressions below; this integration "
                   "test is not a workload comparison with model v0.9.3.", "",
+                  "M32 integrated execution post-synthesis regression: two matching replays "
+                  "of both records; the reference record also matches standalone RTL.",
+                  "A freshly synthesized flattened M32 core receives the same 15 input ports "
+                  "and 1060 input bits; all 59 output ports and 2075 output bits match.",
+                  "98619 settled-event comparisons per replay cover 22789 enabled ticks, "
+                  "8635 held clock edges, 34572 falling edges and 23179 control changes.",
+                  "3148 asynchronous reset assertions, 3148 clock edges under reset and "
+                  "3148 reset releases; 863 clears on enabled and 1208 on held edges.",
+                  "8031 automatic and 14758 external ticks preserve the registered target "
+                  "boundary, pending destinations and all five scheduler states. All eight "
+                  "cells exercise active-zero first and second route legs, totaling 1652 and "
+                  "1648 respectively, on the unchanged 2880-case matrix, 256 masks and 3072 stream steps.", "",
                   "Registered target/request RTL integration: two matching replays of all four "
                   "records; one cell with one lane and a 1-bit counter, eight cells with two "
                   "lanes and 3- or 32-bit counters. All 12 output ports are checked.",
