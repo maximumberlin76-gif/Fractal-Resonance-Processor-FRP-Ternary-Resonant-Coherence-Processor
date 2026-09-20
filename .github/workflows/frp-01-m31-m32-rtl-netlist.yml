@@ -228,7 +228,7 @@ jobs:
                   "cells": 8, "lanes": 2, "counter_bits": 3,
                   "output_bits": 40, "comparisons": 900227, "input_changes": 301609,
                   "enabled_edges": 224552, "hold_edges": 73985, "falling_edges": 299051,
-                  "accepted_edges": 178534, "rejected_edges": 9508, "auto_disabled_capture_edges": 161328,
+                  "accepted_edges": 178285, "rejected_edges": 9259, "auto_disabled_capture_edges": 161328,
                   "reset_assertions": 514, "reset_clock_edges": 514, "reset_releases": 514,
                   "clear_tick_edges": 187010, "clear_hold_edges": 36993, "request_enabled_checks": 235321,
                   "upstream_independent_checks": 184916, "empty_outputs": 872447, "one_request_outputs": 14242,
