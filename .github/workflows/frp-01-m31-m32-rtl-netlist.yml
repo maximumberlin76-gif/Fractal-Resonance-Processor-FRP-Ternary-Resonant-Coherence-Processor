@@ -1,6 +1,6 @@
 name: 01 - FRP M31-M32 RTL + Netlist
 
-run-name: "01 - FRP M31-M32 RTL + Netlist | 40 runs @ ${{ github.sha }}"
+run-name: "01 - FRP M31-M32 RTL + Netlist | 42 runs @ ${{ github.sha }}"
 
 on:
   workflow_dispatch:
@@ -99,6 +99,8 @@ jobs:
           scheduler_post_tb = "rtl/m31/" + scheduler_post_bench + ".sv"
           registered_request_bench = "frp_m32_registered_request_tb"
           registered_request_tb = "rtl/m32/" + registered_request_bench + ".sv"
+          registered_request_post_bench = "frp_m32_registered_request_post_synthesis_tb"
+          registered_request_post_tb = "rtl/m32/" + registered_request_post_bench + ".sv"
           target_capture_bench = "frp_m32_target_capture_tb"
           target_capture_tb = "rtl/m32/" + target_capture_bench + ".sv"
           target_capture_post_bench = "frp_m32_target_capture_post_synthesis_tb"
@@ -192,6 +194,43 @@ jobs:
                   "empty_outputs": 877568, "one_request_outputs": 14242, "two_request_outputs": 15031,
                   "accepted_saturation_holds": 0, "rejected_saturation_holds": 0, "lane0_cells": 255,
                   "lane1_cells": 254,
+              },
+          ]
+          registered_request_post_expected = {
+              "profiles": 3, "comparisons": 1916787, "output_bits": 152,
+              "reference_observations": 1928115, "matrix_cases": 313344, "mask_cases": 5140,
+              "reset_cases": 1536, "pressure_events": 552, "scheduler_samples": 48,
+          }
+          registered_request_post_profile_expected = [
+              {
+                  "cells": 1, "lanes": 1, "counter_bits": 1,
+                  "output_bits": 14, "comparisons": 114839, "input_changes": 37421,
+                  "enabled_edges": 28464, "hold_edges": 9473, "falling_edges": 38451,
+                  "accepted_edges": 22523, "rejected_edges": 1189, "auto_disabled_capture_edges": 20208,
+                  "reset_assertions": 514, "reset_clock_edges": 514, "reset_releases": 514,
+                  "clear_tick_edges": 23190, "clear_hold_edges": 4737, "request_enabled_checks": 29049,
+                  "upstream_independent_checks": 22570, "empty_outputs": 111896, "one_request_outputs": 2943,
+                  "two_request_outputs": 0, "lane0_cells": 1, "lane1_cells": 0,
+              },
+              {
+                  "cells": 8, "lanes": 2, "counter_bits": 3,
+                  "output_bits": 40, "comparisons": 900227, "input_changes": 301609,
+                  "enabled_edges": 224552, "hold_edges": 73985, "falling_edges": 299051,
+                  "accepted_edges": 178285, "rejected_edges": 9259, "auto_disabled_capture_edges": 161328,
+                  "reset_assertions": 514, "reset_clock_edges": 514, "reset_releases": 514,
+                  "clear_tick_edges": 187010, "clear_hold_edges": 36993, "request_enabled_checks": 235321,
+                  "upstream_independent_checks": 184916, "empty_outputs": 872447, "one_request_outputs": 14242,
+                  "two_request_outputs": 13538, "lane0_cells": 255, "lane1_cells": 254,
+              },
+              {
+                  "cells": 8, "lanes": 2, "counter_bits": 32,
+                  "output_bits": 98, "comparisons": 901721, "input_changes": 302107,
+                  "enabled_edges": 225050, "hold_edges": 73985, "falling_edges": 299549,
+                  "accepted_edges": 178534, "rejected_edges": 9508, "auto_disabled_capture_edges": 161328,
+                  "reset_assertions": 514, "reset_clock_edges": 514, "reset_releases": 514,
+                  "clear_tick_edges": 187010, "clear_hold_edges": 36993, "request_enabled_checks": 236815,
+                  "upstream_independent_checks": 185663, "empty_outputs": 872448, "one_request_outputs": 14242,
+                  "two_request_outputs": 15031, "lane0_cells": 255, "lane1_cells": 254,
               },
           ]
           target_capture_expected = {
@@ -356,6 +395,8 @@ jobs:
               "scheduler_control_post_expected_profiles": scheduler_post_profile_expected,
               "registered_request_expected_metrics": registered_request_expected,
               "registered_request_expected_profiles": registered_request_profile_expected,
+              "registered_request_post_expected_metrics": registered_request_post_expected,
+              "registered_request_post_expected_profiles": registered_request_post_profile_expected,
               "target_capture_expected_metrics": target_capture_expected,
               "target_capture_expected_profiles": target_capture_profile_expected,
               "target_capture_post_expected_metrics": target_capture_post_expected,
@@ -454,6 +495,21 @@ jobs:
               _, metrics = regression_record(records[-1],
                   "FRP_M32_REGISTERED_REQUEST_TB:", registered_request_expected)
               return records, observed_profiles, metrics
+
+          def registered_request_post_records(text):
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M32_REGISTERED_REQUEST_")]
+              require(len(records) == 8,
+                      "Incomplete or repeated registered request post-synthesis results")
+              _, rtl_profiles, rtl_metrics = registered_request_records("\n".join(records[:4]))
+              observed_profiles = []
+              for index, expected_metrics in enumerate(registered_request_post_profile_expected):
+                  _, metrics = regression_record(records[4 + index],
+                      "FRP_M32_REGISTERED_REQUEST_POST_SYNTHESIS_PROFILE:", expected_metrics)
+                  observed_profiles.append(metrics)
+              _, metrics = regression_record(records[-1],
+                  "FRP_M32_REGISTERED_REQUEST_POST_SYNTHESIS_TB:", registered_request_post_expected)
+              return records, rtl_profiles, rtl_metrics, observed_profiles, metrics
 
           def target_capture_records(text):
               records = [line for line in text.splitlines()
@@ -847,6 +903,16 @@ jobs:
               identities[registered_request_tb] = {
                   "bytes": len(registered_request_raw), "sha256": sha(registered_request_raw)}
               rows.append(f"{registered_request_tb}|{len(registered_request_raw)}|{sha(registered_request_raw)}")
+              visit(registered_request_post_tb)
+              require(sources == set(identities) | {registered_request_post_tb},
+                      "Unexpected registered request post-synthesis dependencies")
+              registered_request_post_raw = (root / registered_request_post_tb).read_bytes()
+              require(len(registered_request_post_raw) == 14540 and sha(registered_request_post_raw) ==
+                      "42e2006626b09aec292005a619fc5b1ac93e89972d19bee716973589d1c6bdcd",
+                      "Registered request post-synthesis regression differs from the validated testbench")
+              identities[registered_request_post_tb] = {
+                  "bytes": len(registered_request_post_raw), "sha256": sha(registered_request_post_raw)}
+              rows.append(f"{registered_request_post_tb}|{len(registered_request_post_raw)}|{sha(registered_request_post_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -1029,6 +1095,85 @@ jobs:
               simlib = evidence / "yosys-simlib.v"
               shutil.copyfile(share / "simlib.v", simlib)
               report["cell_models_sha256"] = sha(simlib.read_bytes())
+
+              registered_request_top = "frp_m32_registered_target_request_path"
+              registered_request_netlists = []
+              report["registered_request_netlists"] = {}
+              for cells, lanes, counter_bits in ((1, 1, 1), (8, 2, 3), (8, 2, 32)):
+                  index_bits = 1 if cells == 1 else 3
+                  key = f"{cells}_{lanes}_{counter_bits}"
+                  renamed = f"frp_m32_registered_request_{key}_netlist"
+                  request_netlist = evidence / (renamed + ".v")
+                  request_json = evidence / (renamed + ".json")
+                  request_script = (
+                      "read_slang -j 1 --std 1800-2017 --ignore-assertions --top " + registered_request_top
+                      + " -G CELLS=" + str(cells) + " -G REQUEST_LANES=" + str(lanes)
+                      + " -G CELL_INDEX_BITS=" + str(index_bits) + " -G COUNTER_BITS=" + str(counter_bits)
+                      + " " + " ".join("-I" + d for d in include_dirs)
+                      + " rtl/m32/" + registered_request_top + ".sv; "
+                      + "synth -top " + registered_request_top + " -flatten -noshare -run begin:fine; check -assert; "
+                      + "techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; "
+                      + "select -assert-none t:$shiftx t:$connect; "
+                      + "rename " + registered_request_top + " " + renamed + "; "
+                      + "write_verilog -noattr " + json.dumps(str(request_netlist)) + "; "
+                      + "write_json " + json.dumps(str(request_json))
+                  )
+                  request_script_path = evidence / f"registered-request-{key}-synthesis.ys"
+                  request_script_path.write_text(request_script + "\n")
+                  execute(["yowasp-yosys", "-Q", "-T", "-q", "-s", str(request_script_path)],
+                          f"registered-request-{key}-synthesis", view, 600)
+                  require(request_netlist.is_file() and request_netlist.stat().st_size > 0,
+                          "Missing registered request netlist: " + renamed)
+                  modules = json.loads(request_json.read_text())["modules"]
+                  require(set(modules) == {renamed},
+                          "Registered request netlist is not fully flattened: " + renamed)
+                  ports = modules[renamed]["ports"]
+                  output_widths = {name: len(port["bits"]) for name, port in ports.items()
+                                   if port["direction"] == "output"}
+                  require(output_widths == {
+                      "registered_target_q": 2*cells, "registered_target_valid_q": 1,
+                      "phase_target_domain_valid": 1, "registered_target_domain_valid": 1,
+                      "capture_accepted": 1, "capture_rejected": 1,
+                      "accepted_capture_events_q": counter_bits, "rejected_capture_events_q": counter_bits,
+                      "registered_request_enable": 1, "phase_request_valid": lanes,
+                      "phase_request_cell_index": lanes*index_bits, "phase_request_target": 2*lanes},
+                      "Unexpected registered request netlist output widths: " + renamed)
+                  input_widths = {name: len(port["bits"]) for name, port in ports.items()
+                                  if port["direction"] == "input"}
+                  require(input_widths == {
+                      "clk": 1, "rst_n": 1, "tick_enable": 1, "clear_counters": 1,
+                      "phase_target_valid": 1, "phase_target_source": 2*cells,
+                      "auto_target_enable": 1, "retained_state": 2*cells,
+                      "pending_route": 2*cells, "scheduler_state": 3},
+                      "Unexpected registered request netlist input widths: " + renamed)
+                  report["registered_request_netlists"][key] = {
+                      "module": renamed, "sha256": sha(request_netlist.read_bytes()),
+                      "output_widths": output_widths, "input_widths": input_widths}
+                  registered_request_netlists.append(str(request_netlist))
+
+              registered_request_post_build = work / "registered-request-post-build"
+              execute(compiler + ["-DSIMLIB_NOCONNECT", "--top-module", registered_request_post_bench,
+                  "--Mdir", str(registered_request_post_build), "-v", str(simlib),
+                  *registered_request_netlists, registered_request_post_tb],
+                  "registered-request-post-build", root, 600)
+              registered_request_post_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(registered_request_post_build / ("V" + registered_request_post_bench))],
+                                f"registered-request-post-run-{attempt}", root, 180)
+                  records, rtl_profiles, rtl_metrics, profile_metrics, metrics = (
+                      registered_request_post_records(log.read_text()))
+                  require(records[:4] == registered_request_replays[0],
+                          "Registered request post-synthesis reference differs from standalone RTL")
+                  registered_request_post_replays.append(records)
+              require(registered_request_post_replays[0] == registered_request_post_replays[1],
+                      "Registered request post-synthesis profile or summary replay records differ")
+              report["registered_request_post_synthesis"] = {
+                  "implementation": "synthesized netlists with RTL reference", "replays": 2,
+                  "rtl_profiles": rtl_profiles, "rtl_metrics": rtl_metrics,
+                  "profiles": profile_metrics, "metrics": metrics,
+                  "records": registered_request_post_replays[0],
+                  "records_sha256": sha(("\n".join(registered_request_post_replays[0]) + "\n").encode())}
+              print("\n".join(registered_request_post_replays[0]), flush=True)
 
               target_capture_top = "frp_m32_registered_target_boundary"
               target_capture_netlists = []
@@ -1423,8 +1568,9 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=40,
+              report.update(status="PASS", simulation_runs=42,
                             registered_request_simulation_runs=2,
+                            registered_request_post_simulation_runs=2,
                             target_capture_simulation_runs=2,
                             target_capture_post_simulation_runs=2,
                             scheduler_control_simulation_runs=2,
@@ -1441,7 +1587,7 @@ jobs:
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
-                  "Simulation runs: 40.", "",
+                  "Simulation runs: 42.", "",
                   "Registered target/request RTL integration: two matching replays of all four "
                   "records; one cell with one lane and a 1-bit counter, eight cells with two "
                   "lanes and 3- or 32-bit counters. All 12 output ports are checked.",
@@ -1455,6 +1601,18 @@ jobs:
                   "remain zero and eligible cells retain ascending lane priority.",
                   "48 literal scheduler-state samples replay the 7/1 and 1/7 cadences; "
                   "request destinations remain distinct from downstream executed states.", "",
+                  "Registered target/request post-synthesis integration: two matching replays "
+                  "of all eight records, with the original four RTL records unchanged.",
+                  "Three freshly synthesized flattened netlists include both target capture "
+                  "and request selection, with one or eight cells, one or two lanes, "
+                  "and 1-, 3- or 32-bit counters. All 12 output ports and 152 total bits match.",
+                  "1916787 settled-event comparisons per replay; initialization, asynchronous "
+                  "resets, both clock edges, clears, capture holds, natural counter saturation "
+                  "and live downstream input changes are checked on the unchanged RTL workload.",
+                  "Saved-target requests remain independent of invalid, absent or unticked "
+                  "upstream sources; automatic request disable preserves target capture. "
+                  "Zero inactive lanes, ascending cell priority and both 7/1 and 1/7 "
+                  "scheduler-state sequences are preserved.", "",
                   "Target capture boundary RTL regression: two matching replays of "
                   "all five records; one cell with a 1-bit counter and eight cells "
                   "with 3-, 8- and 32-bit counters.",
