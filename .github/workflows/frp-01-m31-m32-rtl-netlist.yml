@@ -1,6 +1,6 @@
 name: 01 - FRP M31-M32 RTL + Netlist
 
-run-name: "01 - FRP M31-M32 RTL + Netlist | 50 runs @ ${{ github.sha }}"
+run-name: "01 - FRP M31-M32 RTL + Netlist | 52 runs @ ${{ github.sha }}"
 
 on:
   workflow_dispatch:
@@ -105,6 +105,8 @@ jobs:
           closed_loop_tb = "rtl/m32/" + closed_loop_bench + ".sv"
           closed_loop_post_bench = "frp_m32_closed_loop_post_synthesis_tb"
           closed_loop_post_tb = "rtl/m32/" + closed_loop_post_bench + ".sv"
+          counter_boundary_bench = "frp_m32_counter_boundary_tb"
+          counter_boundary_tb = "rtl/m32/" + counter_boundary_bench + ".sv"
           registered_request_bench = "frp_m32_registered_request_tb"
           registered_request_tb = "rtl/m32/" + registered_request_bench + ".sv"
           registered_request_post_bench = "frp_m32_registered_request_post_synthesis_tb"
@@ -323,6 +325,68 @@ jobs:
            'commit_ticks': 128,
            'excite_ticks': 128,
            'neutralize_ticks': 896,
+           'reference_profiles': 6,
+           'reference_steps': 3262,
+           'reference_checks': 10030,
+           'reference_live_control_checks': 156}
+          counter_boundary_profile_expected = [{'counter_bits': 4,
+            'comparisons': 9969,
+            'input_bits': 1060,
+            'output_ports': 59,
+            'output_bits': 1599,
+            'enabled_ticks': 3104,
+            'held_edges': 158,
+            'resets': 22,
+            'clear_ticks': 54,
+            'clear_holds': 86,
+            'tick_wraps': 120,
+            'free_wraps': 40,
+            'balance_wraps': 34,
+            'commit_wraps': 0,
+            'excite_wraps': 0,
+            'neutralize_wraps': 32,
+            'wrap_modes': 7,
+            'capture_limit_entries': 90,
+            'saturated_capture_ticks': 1398,
+            'saturation_modes': 7,
+            'saturation_clear_ticks': 36,
+            'saturation_clear_holds': 54,
+            'ticks_after_wrap': 2982,
+            'phase_updates_after_wrap': 2982,
+            'frequency_updates_after_wrap': 2982,
+            'phase_updates_at_saturation': 1398,
+            'first_legs_at_saturation': 65,
+            'second_legs_at_saturation': 56},
+           {'counter_bits': 5,
+            'comparisons': 9969,
+            'input_bits': 1060,
+            'output_ports': 59,
+            'output_bits': 1616,
+            'enabled_ticks': 3104,
+            'held_edges': 158,
+            'resets': 22,
+            'clear_ticks': 54,
+            'clear_holds': 86,
+            'tick_wraps': 36,
+            'free_wraps': 12,
+            'balance_wraps': 10,
+            'commit_wraps': 0,
+            'excite_wraps': 0,
+            'neutralize_wraps': 10,
+            'wrap_modes': 7,
+            'capture_limit_entries': 36,
+            'saturated_capture_ticks': 432,
+            'saturation_modes': 7,
+            'saturation_clear_ticks': 12,
+            'saturation_clear_holds': 24,
+            'ticks_after_wrap': 2886,
+            'phase_updates_after_wrap': 2886,
+            'frequency_updates_after_wrap': 2886,
+            'phase_updates_at_saturation': 432,
+            'first_legs_at_saturation': 17,
+            'second_legs_at_saturation': 13}]
+          counter_boundary_expected = {'profiles': 2,
+           'reference_counter_bits': 32,
            'reference_profiles': 6,
            'reference_steps': 3262,
            'reference_checks': 10030,
@@ -563,6 +627,8 @@ jobs:
               "closed_loop_expected_metrics": closed_loop_expected,
               "closed_loop_expected_profiles": closed_loop_profile_expected,
               "closed_loop_post_expected_metrics": closed_loop_post_expected,
+              "counter_boundary_expected_profiles": counter_boundary_profile_expected,
+              "counter_boundary_expected_metrics": counter_boundary_expected,
               "registered_request_expected_metrics": registered_request_expected,
               "registered_request_expected_profiles": registered_request_profile_expected,
               "registered_request_post_expected_metrics": registered_request_post_expected,
@@ -687,6 +753,22 @@ jobs:
               _, metrics = regression_record(records[-1],
                   "FRP_M32_CLOSED_LOOP_POST_SYNTHESIS_TB:", closed_loop_post_expected)
               return records, profile_metrics, rtl_metrics, metrics
+
+          def counter_boundary_records(text):
+              records = [line for line in text.splitlines()
+                         if line.startswith(("FRP_M32_CLOSED_LOOP_", "FRP_M32_COUNTER_BOUNDARY_"))]
+              reference_count = len(closed_loop_profile_expected) + 1
+              require(len(records) == reference_count + len(counter_boundary_profile_expected) + 1,
+                      "Incomplete or repeated counter-boundary results")
+              _, reference_profiles, reference_metrics = closed_loop_records(
+                  "\n".join(records[:reference_count]))
+              profile_metrics = []
+              for record, wanted in zip(records[reference_count:-1], counter_boundary_profile_expected):
+                  _, metrics = regression_record(record, "FRP_M32_COUNTER_BOUNDARY_PROFILE:", wanted)
+                  profile_metrics.append(metrics)
+              _, metrics = regression_record(records[-1],
+                  "FRP_M32_COUNTER_BOUNDARY_TB:", counter_boundary_expected)
+              return records, reference_profiles, reference_metrics, profile_metrics, metrics
 
           def integration_post_records(text):
               records = [line for line in text.splitlines()
@@ -1170,6 +1252,16 @@ jobs:
               identities[closed_loop_post_tb] = {
                   "bytes": len(closed_loop_post_raw), "sha256": sha(closed_loop_post_raw)}
               rows.append(f"{closed_loop_post_tb}|{len(closed_loop_post_raw)}|{sha(closed_loop_post_raw)}")
+              visit(counter_boundary_tb)
+              require(sources == set(identities) | {counter_boundary_tb},
+                      "Unexpected counter-boundary dependencies")
+              counter_boundary_raw = (root / counter_boundary_tb).read_bytes()
+              require(len(counter_boundary_raw) == 46146 and sha(counter_boundary_raw) ==
+                      "874ff7517c1702ba3fe6b22ac03a59dc0be741dda8dbe6f5c6d345f0dcf50546",
+                      "Counter-boundary regression differs from the validated testbench")
+              identities[counter_boundary_tb] = {
+                  "bytes": len(counter_boundary_raw), "sha256": sha(counter_boundary_raw)}
+              rows.append(f"{counter_boundary_tb}|{len(counter_boundary_raw)}|{sha(counter_boundary_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -1200,6 +1292,29 @@ jobs:
                   "records": closed_loop_replays[0],
                   "records_sha256": sha(("\n".join(closed_loop_replays[0]) + "\n").encode())}
               print("\n".join(closed_loop_replays[0]), flush=True)
+
+              counter_boundary_build = work / "counter-boundary-build"
+              execute(compiler + ["--top-module", counter_boundary_bench,
+                  "--Mdir", str(counter_boundary_build), counter_boundary_tb],
+                  "counter-boundary-build", root, 600)
+              counter_boundary_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(counter_boundary_build / ("V" + counter_boundary_bench))],
+                                f"counter-boundary-run-{attempt}", root, 180)
+                  records, reference_profiles, reference_metrics, profile_metrics, metrics = (
+                      counter_boundary_records(log.read_text()))
+                  require(records[:len(closed_loop_replays[0])] == closed_loop_replays[0],
+                          "Counter-boundary reference differs from standalone closed-loop RTL")
+                  counter_boundary_replays.append(records)
+              require(counter_boundary_replays[0] == counter_boundary_replays[1],
+                      "Counter-boundary replay records differ")
+              report["counter_boundary"] = {
+                  "implementation": "RTL with independently checked 32-bit reference", "replays": 2,
+                  "reference_profiles": reference_profiles, "reference_metrics": reference_metrics,
+                  "profiles": profile_metrics, "metrics": metrics,
+                  "records": counter_boundary_replays[0],
+                  "records_sha256": sha(("\n".join(counter_boundary_replays[0]) + "\n").encode())}
+              print("\n".join(counter_boundary_replays[0]), flush=True)
 
               integration_build = work / "execution-integration-build"
               execute(compiler + ["--top-module", integration_bench,
@@ -2021,9 +2136,10 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=50,
+              report.update(status="PASS", simulation_runs=52,
                             closed_loop_simulation_runs=2,
                             closed_loop_post_simulation_runs=2,
+                            counter_boundary_simulation_runs=2,
                             execution_integration_simulation_runs=2,
                             execution_integration_post_simulation_runs=2,
                             registered_request_simulation_runs=2,
@@ -2044,7 +2160,7 @@ jobs:
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
-                  "Simulation runs: 50.", "",
+                  "Simulation runs: 52.", "",
                   "M32 continuous closed-loop RTL regression: two identical seven-record replays "
                   "against an independent fixed-point oracle; all 59 outputs and 2075 output bits match.",
                   "Six profiles combine two workloads with free, 7/1 and 1/7 schedules; "
@@ -2059,6 +2175,17 @@ jobs:
                   "retained-state, pending-state and temperature records are checked exactly.",
                   "This qualifies the eight-cell fixed-point RTL feedback path; model v0.9.3 workload "
                   "equivalence and complete design coverage remain separate qualification steps.", "",
+                  "M32 full-core counter boundaries: two identical ten-record RTL replays; the seven "
+                  "32-bit reference records match the standalone closed-loop run exactly.",
+                  "The same workload drives complete 4-bit and 5-bit counter cores: all 59 public "
+                  "outputs (1599 and 1616 bits) match in 9969 settled-event comparisons per profile. "
+                  "Only six wrapping scheduler counters and two saturating capture counters are "
+                  "transformed; the other 51 output fields match exactly.",
+                  "The profiles record 120/36 tick-counter wraps and 1398/432 saturated-capture "
+                  "ticks across free, 7/1 and 1/7; phase and frequency continue after rollover. "
+                  "Clear priority and active-zero route legs remain checked at saturation.",
+                  "The workload clears before COMMIT/EXCITE counters wrap at these widths; "
+                  "rejected capture stays zero because the integrated core generates valid targets.", "",
                   "M32 continuous closed-loop post-synthesis regression: two identical eight-record "
                   "replays; all seven reference records also match the standalone RTL run.",
                   "The freshly synthesized complete M32 core receives the same 15 input ports "
