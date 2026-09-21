@@ -1,6 +1,6 @@
 name: 01 - FRP M31-M32 RTL + Netlist
 
-run-name: "01 - FRP M31-M32 RTL + Netlist | 52 runs @ ${{ github.sha }}"
+run-name: "01 - FRP M31-M32 RTL + Netlist | 54 runs @ ${{ github.sha }}"
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ concurrency:
 jobs:
   qualify-01:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 45
     defaults:
       run:
         shell: bash
@@ -107,6 +107,8 @@ jobs:
           closed_loop_post_tb = "rtl/m32/" + closed_loop_post_bench + ".sv"
           counter_boundary_bench = "frp_m32_counter_boundary_tb"
           counter_boundary_tb = "rtl/m32/" + counter_boundary_bench + ".sv"
+          counter_boundary_post_bench = "frp_m32_counter_boundary_post_synthesis_tb"
+          counter_boundary_post_tb = "rtl/m32/" + counter_boundary_post_bench + ".sv"
           registered_request_bench = "frp_m32_registered_request_tb"
           registered_request_tb = "rtl/m32/" + registered_request_bench + ".sv"
           registered_request_post_bench = "frp_m32_registered_request_post_synthesis_tb"
@@ -629,6 +631,8 @@ jobs:
               "closed_loop_post_expected_metrics": closed_loop_post_expected,
               "counter_boundary_expected_profiles": counter_boundary_profile_expected,
               "counter_boundary_expected_metrics": counter_boundary_expected,
+              "counter_boundary_post_expected_profiles": counter_boundary_profile_expected,
+              "counter_boundary_post_expected_metrics": counter_boundary_expected,
               "registered_request_expected_metrics": registered_request_expected,
               "registered_request_expected_profiles": registered_request_profile_expected,
               "registered_request_post_expected_metrics": registered_request_post_expected,
@@ -769,6 +773,30 @@ jobs:
               _, metrics = regression_record(records[-1],
                   "FRP_M32_COUNTER_BOUNDARY_TB:", counter_boundary_expected)
               return records, reference_profiles, reference_metrics, profile_metrics, metrics
+
+          def counter_boundary_post_records(text):
+              records = [line for line in text.splitlines()
+                         if line.startswith(("FRP_M32_CLOSED_LOOP_", "FRP_M32_COUNTER_BOUNDARY_"))]
+              post_prefix = "FRP_M32_COUNTER_BOUNDARY_POST_SYNTHESIS_"
+              reference_records = [line for line in records if not line.startswith(post_prefix)]
+              post_records = [line for line in records if line.startswith(post_prefix)]
+              require(len(post_records) == len(counter_boundary_profile_expected) + 1,
+                      "Incomplete or repeated counter-boundary post-synthesis results")
+              _, _, _, rtl_profiles, rtl_metrics = counter_boundary_records("\n".join(reference_records))
+              reference_count = len(closed_loop_profile_expected) + 1
+              require(records == reference_records[:reference_count] + post_records +
+                      reference_records[reference_count:],
+                      "Unexpected counter-boundary post-synthesis record order")
+              profile_metrics = []
+              for record, wanted in zip(post_records[:-1], counter_boundary_profile_expected):
+                  _, metrics = regression_record(record,
+                      "FRP_M32_COUNTER_BOUNDARY_POST_SYNTHESIS_PROFILE:", wanted)
+                  profile_metrics.append(metrics)
+              _, metrics = regression_record(post_records[-1],
+                  "FRP_M32_COUNTER_BOUNDARY_POST_SYNTHESIS_TB:", counter_boundary_expected)
+              require(profile_metrics == rtl_profiles and metrics == rtl_metrics,
+                      "Counter-boundary post-synthesis coverage differs from RTL")
+              return records, reference_records, rtl_profiles, rtl_metrics, profile_metrics, metrics
 
           def integration_post_records(text):
               records = [line for line in text.splitlines()
@@ -1262,6 +1290,16 @@ jobs:
               identities[counter_boundary_tb] = {
                   "bytes": len(counter_boundary_raw), "sha256": sha(counter_boundary_raw)}
               rows.append(f"{counter_boundary_tb}|{len(counter_boundary_raw)}|{sha(counter_boundary_raw)}")
+              visit(counter_boundary_post_tb)
+              require(sources == set(identities) | {counter_boundary_post_tb},
+                      "Unexpected counter-boundary post-synthesis dependencies")
+              counter_boundary_post_raw = (root / counter_boundary_post_tb).read_bytes()
+              require(len(counter_boundary_post_raw) == 35208 and sha(counter_boundary_post_raw) ==
+                      "6486ef532068d4c3dded07244ce4b9450efb7bb935852b1dc1457fba2730c748",
+                      "Counter-boundary post-synthesis regression differs from the validated testbench")
+              identities[counter_boundary_post_tb] = {
+                  "bytes": len(counter_boundary_post_raw), "sha256": sha(counter_boundary_post_raw)}
+              rows.append(f"{counter_boundary_post_tb}|{len(counter_boundary_post_raw)}|{sha(counter_boundary_post_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -1663,6 +1701,91 @@ jobs:
                   "records": closed_loop_post_replays[0],
                   "records_sha256": sha(("\n".join(closed_loop_post_replays[0]) + "\n").encode())}
               print("\n".join(closed_loop_post_replays[0]), flush=True)
+
+              # Preserve the complete M32 interface while changing only counter widths.
+              counter_boundary_ports = (
+                  "accepted_target_capture_events_q", "rejected_target_capture_events_q",
+                  "ticks_recorded_q", "scheduler_count_free_q", "scheduler_count_balance_q",
+                  "scheduler_count_commit_q", "scheduler_count_excite_q", "scheduler_count_neutralize_q",
+                  "accepted_changes", "capacity_remaining", "switch_load_numerator",
+                  "requested_direct_events", "prevented_direct_events", "neutral_routed_events",
+                  "actual_direct_events", "reserved_state_events", "queue_overflow_events")
+              require(len(counter_boundary_ports) == 17 and
+                      all(expected_output_widths[name] == 32 for name in counter_boundary_ports),
+                      "Unexpected counter-boundary width-dependent ports")
+              counter_boundary_netlists = []
+              report["counter_boundary_netlists"] = {}
+              for counter_bits in (4, 5):
+                  renamed = f"frp_m32_core_counter_boundary_{counter_bits}_netlist"
+                  boundary_netlist = evidence / (renamed + ".v")
+                  boundary_json = evidence / (renamed + ".json")
+                  boundary_script = (
+                      "read_slang -j 1 --std 1800-2017 --ignore-assertions --top " + integration_top
+                      + " -G CELLS=8 -G REQUEST_LANES=2 -G CELL_INDEX_BITS=3 -G COUNTER_BITS=" + str(counter_bits)
+                      + " " + " ".join("-I" + d for d in include_dirs)
+                      + " rtl/m32/" + integration_top + ".sv; "
+                      + "synth -top " + integration_top + " -flatten -noshare -run begin:fine; check -assert; "
+                      + "techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; "
+                      + "select -assert-none t:$shiftx t:$connect; "
+                      + "rename " + integration_top + " " + renamed + "; "
+                      + "write_verilog -noattr " + json.dumps(str(boundary_netlist)) + "; "
+                      + "write_json " + json.dumps(str(boundary_json))
+                  )
+                  boundary_script_path = evidence / f"counter-boundary-{counter_bits}-synthesis.ys"
+                  boundary_script_path.write_text(boundary_script + "\n")
+                  execute(["yowasp-yosys", "-Q", "-T", "-q", "-s", str(boundary_script_path)],
+                          f"counter-boundary-{counter_bits}-synthesis", view, 600)
+                  require(boundary_netlist.is_file() and boundary_netlist.stat().st_size > 0,
+                          "Missing complete M32 counter-boundary netlist: " + renamed)
+                  modules = json.loads(boundary_json.read_text())["modules"]
+                  require(set(modules) == {renamed},
+                          "M32 counter-boundary netlist is not fully flattened: " + renamed)
+                  ports = modules[renamed]["ports"]
+                  input_widths = {name: len(port["bits"]) for name, port in ports.items()
+                                  if port["direction"] == "input"}
+                  output_widths = {name: len(port["bits"]) for name, port in ports.items()
+                                   if port["direction"] == "output"}
+                  require(set(ports) == set(input_widths) | set(output_widths),
+                          "Unexpected counter-boundary netlist port direction")
+                  boundary_output_widths = dict(expected_output_widths)
+                  for name in counter_boundary_ports:
+                      boundary_output_widths[name] = counter_bits
+                  require(input_widths == expected_input_widths,
+                          "Unexpected complete M32 counter-boundary input ports or widths")
+                  require(output_widths == boundary_output_widths,
+                          "Unexpected complete M32 counter-boundary output ports or widths")
+                  require(len(input_widths) == 15 and sum(input_widths.values()) == 1060 and
+                          len(output_widths) == 59 and sum(output_widths.values()) == 2075 - 17*(32-counter_bits),
+                          "Incomplete complete-core counter-boundary interface")
+                  report["counter_boundary_netlists"][str(counter_bits)] = {
+                      "module": renamed, "sha256": sha(boundary_netlist.read_bytes()),
+                      "counter_bits": counter_bits, "input_widths": input_widths, "output_widths": output_widths}
+                  counter_boundary_netlists.append(str(boundary_netlist))
+
+              counter_boundary_post_build = work / "counter-boundary-post-build"
+              execute(compiler + ["-DSIMLIB_NOCONNECT", "--top-module", counter_boundary_post_bench,
+                  "--Mdir", str(counter_boundary_post_build), "-v", str(simlib),
+                  *counter_boundary_netlists, counter_boundary_post_tb],
+                  "counter-boundary-post-build", root, 900)
+              counter_boundary_post_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(counter_boundary_post_build / ("V" + counter_boundary_post_bench))],
+                                f"counter-boundary-post-run-{attempt}", root, 180)
+                  records, reference_records, rtl_profiles, rtl_metrics, profile_metrics, metrics = (
+                      counter_boundary_post_records(log.read_text()))
+                  require(reference_records == counter_boundary_replays[0],
+                          "Counter-boundary post-synthesis reference differs from standalone RTL")
+                  counter_boundary_post_replays.append(records)
+              require(counter_boundary_post_replays[0] == counter_boundary_post_replays[1],
+                      "Counter-boundary post-synthesis replay records differ")
+              report["counter_boundary_post_synthesis"] = {
+                  "implementation": "synthesized netlists with RTL reference", "replays": 2,
+                  "rtl_profiles": rtl_profiles, "rtl_metrics": rtl_metrics,
+                  "profiles": profile_metrics, "metrics": metrics,
+                  "reference_records": reference_records,
+                  "records": counter_boundary_post_replays[0],
+                  "records_sha256": sha(("\n".join(counter_boundary_post_replays[0]) + "\n").encode())}
+              print("\n".join(counter_boundary_post_replays[0]), flush=True)
 
               registered_request_top = "frp_m32_registered_target_request_path"
               registered_request_netlists = []
@@ -2136,10 +2259,11 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=52,
+              report.update(status="PASS", simulation_runs=54,
                             closed_loop_simulation_runs=2,
                             closed_loop_post_simulation_runs=2,
                             counter_boundary_simulation_runs=2,
+                            counter_boundary_post_simulation_runs=2,
                             execution_integration_simulation_runs=2,
                             execution_integration_post_simulation_runs=2,
                             registered_request_simulation_runs=2,
@@ -2160,7 +2284,7 @@ jobs:
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
-                  "Simulation runs: 52.", "",
+                  "Simulation runs: 54.", "",
                   "M32 continuous closed-loop RTL regression: two identical seven-record replays "
                   "against an independent fixed-point oracle; all 59 outputs and 2075 output bits match.",
                   "Six profiles combine two workloads with free, 7/1 and 1/7 schedules; "
@@ -2186,6 +2310,14 @@ jobs:
                   "Clear priority and active-zero route legs remain checked at saturation.",
                   "The workload clears before COMMIT/EXCITE counters wrap at these widths; "
                   "rejected capture stays zero because the integrated core generates valid targets.", "",
+                  "M32 full-core counter-boundary post-synthesis regression: two identical 13-record "
+                  "replays; all ten reference records also match the standalone RTL boundary run.",
+                  "Two freshly synthesized complete cores retain all 15 inputs (1060 bits) and all "
+                  "59 outputs: 1599 bits for 4-bit counters and 1616 bits for 5-bit counters. "
+                  "Each netlist matches its RTL profile in 9969 settled-event comparisons per replay.",
+                  "Both netlists reproduce the exact RTL counter-wrap, capture-saturation, clear-priority "
+                  "and active-zero route coverage. Phase and frequency continue for 2982/2886 ticks "
+                  "after rollover, and phase updates continue for 1398/432 saturated-capture ticks.", "",
                   "M32 continuous closed-loop post-synthesis regression: two identical eight-record "
                   "replays; all seven reference records also match the standalone RTL run.",
                   "The freshly synthesized complete M32 core receives the same 15 input ports "
