@@ -1,6 +1,6 @@
 name: 01 - FRP M31-M32 RTL + Netlist
 
-run-name: "01 - FRP M31-M32 RTL + Netlist | 48 runs @ ${{ github.sha }}"
+run-name: "01 - FRP M31-M32 RTL + Netlist | 50 runs @ ${{ github.sha }}"
 
 on:
   workflow_dispatch:
@@ -103,6 +103,8 @@ jobs:
           integration_post_tb = "rtl/m32/" + integration_post_bench + ".sv"
           closed_loop_bench = "frp_m32_closed_loop_tb"
           closed_loop_tb = "rtl/m32/" + closed_loop_bench + ".sv"
+          closed_loop_post_bench = "frp_m32_closed_loop_post_synthesis_tb"
+          closed_loop_post_tb = "rtl/m32/" + closed_loop_post_bench + ".sv"
           registered_request_bench = "frp_m32_registered_request_tb"
           registered_request_tb = "rtl/m32/" + registered_request_bench + ".sv"
           registered_request_post_bench = "frp_m32_registered_request_post_synthesis_tb"
@@ -285,6 +287,46 @@ jobs:
             'pending': '0000',
             'temperature': '00000092',
             'peak': '00000092'}]
+          closed_loop_post_expected = {'comparisons': 9969,
+           'input_bits': 1060,
+           'output_bits': 2075,
+           'input_changes': 3357,
+           'stopped_clock_changes': 3357,
+           'enabled_ticks': 3104,
+           'dynamic_ticks': 3104,
+           'longest_streak': 256,
+           'phase_updates': 3104,
+           'frequency_updates': 3104,
+           'hold_edges': 158,
+           'falling_edges': 3284,
+           'reset_assertions': 22,
+           'reset_clock_edges': 22,
+           'reset_releases': 22,
+           'pending_resets': 8,
+           'clear_tick_edges': 54,
+           'clear_hold_edges': 86,
+           'phase_load_edges': 12,
+           'automatic_ticks': 2688,
+           'external_ticks': 416,
+           'target_lag_samples': 988,
+           'state_feedback_samples': 14274,
+           'switch_feedback_samples': 1502,
+           'heating_ticks': 1092,
+           'cooling_ticks': 1733,
+           'first_legs': 185,
+           'second_legs': 177,
+           'first_cells': 255,
+           'second_cells': 255,
+           'scheduler_states': 31,
+           'free_ticks': 1056,
+           'balance_ticks': 896,
+           'commit_ticks': 128,
+           'excite_ticks': 128,
+           'neutralize_ticks': 896,
+           'reference_profiles': 6,
+           'reference_steps': 3262,
+           'reference_checks': 10030,
+           'reference_live_control_checks': 156}
           registered_request_expected = {
               "profiles": 3, "matrix_cases": 313344, "mask_cases": 5140,
               "reset_cases": 1536, "resets": 1542, "pressure_events": 552,
@@ -520,6 +562,7 @@ jobs:
               "execution_integration_post_expected_metrics": integration_post_expected,
               "closed_loop_expected_metrics": closed_loop_expected,
               "closed_loop_expected_profiles": closed_loop_profile_expected,
+              "closed_loop_post_expected_metrics": closed_loop_post_expected,
               "registered_request_expected_metrics": registered_request_expected,
               "registered_request_expected_profiles": registered_request_profile_expected,
               "registered_request_post_expected_metrics": registered_request_post_expected,
@@ -634,6 +677,16 @@ jobs:
               _, metrics = regression_record(records[-1],
                   "FRP_M32_CLOSED_LOOP_TB:", closed_loop_expected)
               return records, profile_metrics, metrics
+
+          def closed_loop_post_records(text):
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M32_CLOSED_LOOP_")]
+              require(len(records) == len(closed_loop_profile_expected) + 2,
+                      "Incomplete or repeated closed-loop post-synthesis results")
+              _, profile_metrics, rtl_metrics = closed_loop_records("\n".join(records[:-1]))
+              _, metrics = regression_record(records[-1],
+                  "FRP_M32_CLOSED_LOOP_POST_SYNTHESIS_TB:", closed_loop_post_expected)
+              return records, profile_metrics, rtl_metrics, metrics
 
           def integration_post_records(text):
               records = [line for line in text.splitlines()
@@ -1107,6 +1160,16 @@ jobs:
               identities[closed_loop_tb] = {
                   "bytes": len(closed_loop_raw), "sha256": sha(closed_loop_raw)}
               rows.append(f"{closed_loop_tb}|{len(closed_loop_raw)}|{sha(closed_loop_raw)}")
+              visit(closed_loop_post_tb)
+              require(sources == set(identities) | {closed_loop_post_tb},
+                      "Unexpected closed-loop post-synthesis dependencies")
+              closed_loop_post_raw = (root / closed_loop_post_tb).read_bytes()
+              require(len(closed_loop_post_raw) == 25459 and sha(closed_loop_post_raw) ==
+                      "24f58d398224f00db9c8e170ab2fb39641a11c7deb25cb4e54e686c2a12897db",
+                      "Closed-loop post-synthesis regression differs from the validated testbench")
+              identities[closed_loop_post_tb] = {
+                  "bytes": len(closed_loop_post_raw), "sha256": sha(closed_loop_post_raw)}
+              rows.append(f"{closed_loop_post_tb}|{len(closed_loop_post_raw)}|{sha(closed_loop_post_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -1461,6 +1524,30 @@ jobs:
                   "records": integration_post_replays[0],
                   "records_sha256": sha(("\n".join(integration_post_replays[0]) + "\n").encode())}
               print("\n".join(integration_post_replays[0]), flush=True)
+
+              # Reuse the freshly synthesized complete M32 core and its checked public ports.
+              closed_loop_post_build = work / "closed-loop-post-build"
+              execute(compiler + ["-DSIMLIB_NOCONNECT", "--top-module", closed_loop_post_bench,
+                  "--Mdir", str(closed_loop_post_build), "-v", str(simlib),
+                  str(integration_netlist), closed_loop_post_tb],
+                  "closed-loop-post-build", root, 900)
+              closed_loop_post_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(closed_loop_post_build / ("V" + closed_loop_post_bench))],
+                                f"closed-loop-post-run-{attempt}", root, 180)
+                  records, profile_metrics, rtl_metrics, metrics = closed_loop_post_records(log.read_text())
+                  require(records[:-1] == closed_loop_replays[0],
+                          "Closed-loop post-synthesis reference differs from standalone RTL")
+                  closed_loop_post_replays.append(records)
+              require(closed_loop_post_replays[0] == closed_loop_post_replays[1],
+                      "Closed-loop post-synthesis replay records differ")
+              report["closed_loop_post_synthesis"] = {
+                  "implementation": "synthesized netlist with RTL reference", "replays": 2,
+                  "netlist_sha256": report["execution_integration_netlist"]["sha256"],
+                  "profiles": profile_metrics, "rtl_metrics": rtl_metrics, "metrics": metrics,
+                  "records": closed_loop_post_replays[0],
+                  "records_sha256": sha(("\n".join(closed_loop_post_replays[0]) + "\n").encode())}
+              print("\n".join(closed_loop_post_replays[0]), flush=True)
 
               registered_request_top = "frp_m32_registered_target_request_path"
               registered_request_netlists = []
@@ -1934,8 +2021,9 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=48,
+              report.update(status="PASS", simulation_runs=50,
                             closed_loop_simulation_runs=2,
+                            closed_loop_post_simulation_runs=2,
                             execution_integration_simulation_runs=2,
                             execution_integration_post_simulation_runs=2,
                             registered_request_simulation_runs=2,
@@ -1956,7 +2044,7 @@ jobs:
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
-                  "Simulation runs: 48.", "",
+                  "Simulation runs: 50.", "",
                   "M32 continuous closed-loop RTL regression: two identical seven-record replays "
                   "against an independent fixed-point oracle; all 59 outputs and 2075 output bits match.",
                   "Six profiles combine two workloads with free, 7/1 and 1/7 schedules; "
@@ -1971,6 +2059,20 @@ jobs:
                   "retained-state, pending-state and temperature records are checked exactly.",
                   "This qualifies the eight-cell fixed-point RTL feedback path; model v0.9.3 workload "
                   "equivalence and complete design coverage remain separate qualification steps.", "",
+                  "M32 continuous closed-loop post-synthesis regression: two identical eight-record "
+                  "replays; all seven reference records also match the standalone RTL run.",
+                  "The freshly synthesized complete M32 core receives the same 15 input ports "
+                  "and 1060 input bits; all 59 output ports and 2075 output bits match in 9969 "
+                  "settled-event comparisons per replay, including reset diagnostics.",
+                  "3357 stopped-clock control changes, 3104 dynamic ticks with phase and frequency "
+                  "updates, 158 held edges, 3284 falling edges, 22 asynchronous resets and releases, "
+                  "22 clock edges under reset, 12 loads and eight pending-route aborts are checked.",
+                  "The netlist independently records 988 target-lag, 14274 retained-state feedback "
+                  "and 1502 switch-feedback observations; 1092 heating and 1733 cooling ticks; "
+                  "185 first and 177 second active-zero route legs across all eight cells.",
+                  "All five scheduler states preserve the free, 7/1 and 1/7 counts on the same "
+                  "six profiles. This extends RTL/netlist feedback qualification; the model v0.9.3 "
+                  "workload comparison remains a separate step.", "",
                   "M32 integrated execution RTL regression: two matching replays at eight cells "
                   "and two lanes, using an independent ternary and scheduler oracle.",
                   "2880 transition/control cases cover every cell, all nine canonical transitions, "
