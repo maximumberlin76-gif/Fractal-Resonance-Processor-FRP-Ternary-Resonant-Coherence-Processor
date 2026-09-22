@@ -1,6 +1,6 @@
 name: 01 - FRP M31-M32 RTL + Netlist
 
-run-name: "01 - FRP M31-M32 RTL + Netlist | 54 runs @ ${{ github.sha }}"
+run-name: "01 - FRP M31-M32 RTL + Netlist | 56 runs @ ${{ github.sha }}"
 
 on:
   workflow_dispatch:
@@ -109,6 +109,8 @@ jobs:
           counter_boundary_tb = "rtl/m32/" + counter_boundary_bench + ".sv"
           counter_boundary_post_bench = "frp_m32_counter_boundary_post_synthesis_tb"
           counter_boundary_post_tb = "rtl/m32/" + counter_boundary_post_bench + ".sv"
+          mode_handoff_bench = "frp_m32_mode_handoff_tb"
+          mode_handoff_tb = "rtl/m32/" + mode_handoff_bench + ".sv"
           registered_request_bench = "frp_m32_registered_request_tb"
           registered_request_tb = "rtl/m32/" + registered_request_bench + ".sv"
           registered_request_post_bench = "frp_m32_registered_request_post_synthesis_tb"
@@ -614,6 +616,66 @@ jobs:
               "output_bits": 193, "updates": 324, "clears": 4,
               "resets": 3, "boundary_cases": 108,
           }
+          mode_handoff_matrix_expected = {'cases': 1152,
+           'changed_modes': 768,
+           'unchanged_modes': 384,
+           'tick_handoffs': 576,
+           'held_handoffs': 576,
+           'clear_handoffs': 576,
+           'load_handoffs': 576,
+           'auto_handoffs': 576,
+           'continuous_handoffs': 192,
+           'phase_updates': 192,
+           'held_route_checks': 576,
+           'drained_route_checks': 1152,
+           'load_tick_lags': 288}
+          mode_handoff_stream_expected = [{'workload': 0,
+            'ticks': 1024,
+            'phase': '485de89dd37194ff8fc83bfeb1589e2d4fce482c1d268af3dedbdcf9d7c5b16f',
+            'frequency': '00010f5700010f5b000100fe00010f2100010f5b0001002b00010fbf00010f5b',
+            'state': '734f',
+            'pending': '0000',
+            'temperature': '000000dd',
+            'peak': '0000011e'},
+           {'workload': 1,
+            'ticks': 1024,
+            'phase': '2ba5fc5f422a2d2a2d233375722341eeb69af361508c1f19470c88f935ab13d8',
+            'frequency': '00010f1e00010f5b0001093c00010f5700010f5b00010f5b00010f5b00010f5d',
+            'state': '55d5',
+            'pending': '0000',
+            'temperature': '00000086',
+            'peak': '00000086'}]
+          mode_handoff_expected = {'profiles': 3,
+           'steps': 32766,
+           'checks': 103014,
+           'output_bits': 2075,
+           'matrix_cases': 1152,
+           'stream_ticks': 2048,
+           'stream_mode_changes': 1346,
+           'dynamic_ticks': 30560,
+           'longest_streak': 1024,
+           'held_edges': 1918,
+           'loads': 1730,
+           'resets': 1154,
+           'clear_ticks': 322,
+           'clear_holds': 382,
+           'automatic_ticks': 2042,
+           'external_ticks': 28806,
+           'target_lag_samples': 8491,
+           'state_feedback_samples': 205942,
+           'switch_feedback_samples': 14934,
+           'heating_ticks': 7789,
+           'cooling_ticks': 19590,
+           'first_legs': 2586,
+           'second_legs': 2586,
+           'first_cells': 255,
+           'second_cells': 255,
+           'live_control_checks': 100,
+           'free_ticks': 16792,
+           'balance_ticks': 6187,
+           'commit_ticks': 886,
+           'excite_ticks': 876,
+           'neutralize_ticks': 6107}
           report = {
               "status": "FAIL", "source_commit": os.environ["GITHUB_SHA"],
               "repository": os.environ["GITHUB_REPOSITORY"],
@@ -633,6 +695,9 @@ jobs:
               "counter_boundary_expected_metrics": counter_boundary_expected,
               "counter_boundary_post_expected_profiles": counter_boundary_profile_expected,
               "counter_boundary_post_expected_metrics": counter_boundary_expected,
+              "mode_handoff_expected_matrix": mode_handoff_matrix_expected,
+              "mode_handoff_expected_streams": mode_handoff_stream_expected,
+              "mode_handoff_expected_metrics": mode_handoff_expected,
               "registered_request_expected_metrics": registered_request_expected,
               "registered_request_expected_profiles": registered_request_profile_expected,
               "registered_request_post_expected_metrics": registered_request_post_expected,
@@ -721,6 +786,33 @@ jobs:
               metrics = dict(zip(expected_metrics, map(int, match.groups())))
               require(metrics == expected_metrics, prefix + " incomplete coverage")
               return records[0], metrics
+
+          def mode_handoff_records(text):
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M32_MODE_HANDOFF_")]
+              require(len(records) == len(mode_handoff_stream_expected) + 2,
+                      "Incomplete or repeated mode-handoff results")
+              _, matrix_metrics = regression_record(records[0],
+                  "FRP_M32_MODE_HANDOFF_MATRIX:", mode_handoff_matrix_expected)
+              fields = ("workload", "ticks", "phase", "frequency", "state",
+                        "pending", "temperature", "peak")
+              pattern = (r"FRP_M32_MODE_HANDOFF_STREAM: PASS workload=(\d+) "
+                         r"ticks=(\d+) phase=([0-9a-f]{64}) frequency=([0-9a-f]{64}) "
+                         r"state=([0-9a-f]{4}) pending=([0-9a-f]{4}) "
+                         r"temperature=([0-9a-f]{8}) peak=([0-9a-f]{8})")
+              stream_metrics = []
+              for record, wanted in zip(records[1:-1], mode_handoff_stream_expected):
+                  match = re.fullmatch(pattern, record)
+                  require(match is not None, "Malformed mode-handoff stream")
+                  observed = dict(zip(fields, match.groups()))
+                  observed["workload"] = int(observed["workload"])
+                  observed["ticks"] = int(observed["ticks"])
+                  require(observed == wanted,
+                          "Mode-handoff stream order, dynamics or final state differs")
+                  stream_metrics.append(observed)
+              _, metrics = regression_record(records[-1],
+                  "FRP_M32_MODE_HANDOFF_TB:", mode_handoff_expected)
+              return records, matrix_metrics, stream_metrics, metrics
 
           def closed_loop_records(text):
               records = [line for line in text.splitlines()
@@ -1300,6 +1392,16 @@ jobs:
               identities[counter_boundary_post_tb] = {
                   "bytes": len(counter_boundary_post_raw), "sha256": sha(counter_boundary_post_raw)}
               rows.append(f"{counter_boundary_post_tb}|{len(counter_boundary_post_raw)}|{sha(counter_boundary_post_raw)}")
+              visit(mode_handoff_tb)
+              require(sources == set(identities) | {mode_handoff_tb},
+                      "Unexpected mode-handoff regression dependencies")
+              mode_handoff_raw = (root / mode_handoff_tb).read_bytes()
+              require(len(mode_handoff_raw) == 34487 and sha(mode_handoff_raw) ==
+                      "ea3da7bb3659c4bf34371528a93069894927e50c040a3d9cced3889c618fd68f",
+                      "Mode-handoff regression differs from the validated testbench")
+              identities[mode_handoff_tb] = {
+                  "bytes": len(mode_handoff_raw), "sha256": sha(mode_handoff_raw)}
+              rows.append(f"{mode_handoff_tb}|{len(mode_handoff_raw)}|{sha(mode_handoff_raw)}")
               report.update(base_source_set_sha256=digest,
                             source_set_sha256=sha(("\n".join(sorted(rows)) + "\n").encode()))
               for name in sources:
@@ -1312,6 +1414,25 @@ jobs:
                   "--output-split", "20000", "-MAKEFLAGS", "VK_PCH_I_FAST=",
                   "-MAKEFLAGS", "VK_PCH_I_SLOW=", "-j", "2"]
               compiler += ["-I" + d for d in include_dirs]
+              mode_handoff_build = work / "mode-handoff-build"
+              execute(compiler + ["--top-module", mode_handoff_bench,
+                  "--Mdir", str(mode_handoff_build), mode_handoff_tb],
+                  "mode-handoff-build", root, 600)
+              mode_handoff_replays = []
+              for attempt in (1, 2):
+                  log = execute([str(mode_handoff_build / ("V" + mode_handoff_bench))],
+                                f"mode-handoff-run-{attempt}", root, 180)
+                  records, matrix_metrics, stream_metrics, metrics = mode_handoff_records(log.read_text())
+                  mode_handoff_replays.append(records)
+              require(mode_handoff_replays[0] == mode_handoff_replays[1],
+                      "Mode-handoff matrix, stream or summary replay records differ")
+              report["mode_handoff"] = {
+                  "implementation": "RTL with independent fixed-point oracle", "replays": 2,
+                  "matrix": matrix_metrics, "streams": stream_metrics, "metrics": metrics,
+                  "records": mode_handoff_replays[0],
+                  "records_sha256": sha(("\n".join(mode_handoff_replays[0]) + "\n").encode())}
+              print("\n".join(mode_handoff_replays[0]), flush=True)
+
               closed_loop_build = work / "closed-loop-build"
               execute(compiler + ["--top-module", closed_loop_bench,
                   "--Mdir", str(closed_loop_build), closed_loop_tb],
@@ -2259,7 +2380,8 @@ jobs:
               require(sha((root / workflow).read_bytes()) == report["workflow_sha256"],
                       "Workflow changed during qualification")
               subprocess.run(["git", "diff", "--exit-code", "--"], cwd=root, check=True)
-              report.update(status="PASS", simulation_runs=54,
+              report.update(status="PASS", simulation_runs=56,
+                            mode_handoff_simulation_runs=2,
                             closed_loop_simulation_runs=2,
                             closed_loop_post_simulation_runs=2,
                             counter_boundary_simulation_runs=2,
@@ -2284,7 +2406,20 @@ jobs:
                             result_records_identical=True, sources_unchanged=True)
               summary = ["# FRP M32 CSR CDC Stream Post-Synthesis: PASS", "",
                   "Source commit: " + os.environ["GITHUB_SHA"], "",
-                  "Simulation runs: 54.", "",
+                  "Simulation runs: 56.", "",
+                  "M32 mode-handoff RTL regression: two identical four-record replays against "
+                  "an independent fixed-point oracle; all 59 public outputs and 2075 bits match.",
+                  "1152 cases cross every legal old/new mode, all eight cycle positions and "
+                  "tick, clear, load and automatic-request controls; 768 mode changes and "
+                  "384 unchanged-mode controls. Every case starts with two pending active-zero routes.",
+                  "All 1152 saved-route pairs drain through the selected cadence; 576 held edges "
+                  "preserve retained execution and target history. 192 enabled mode changes without "
+                  "reload advance phase; 288 simultaneous load/tick cases preserve target-capture lag.",
+                  "Two continuous 1024-tick streams add 1346 mode changes without reset or reload; "
+                  "100 input-mode changes are checked with no clock edge. Each replay contains "
+                  "32766 steps and 103014 full-output checks; complete stream endpoints match exactly.",
+                  "This adds RTL mode-handoff coverage; post-synthesis mode-handoff and model v0.9.3 "
+                  "workload equivalence are separate qualification steps.", "",
                   "M32 continuous closed-loop RTL regression: two identical seven-record replays "
                   "against an independent fixed-point oracle; all 59 outputs and 2075 output bits match.",
                   "Six profiles combine two workloads with free, 7/1 and 1/7 schedules; "
