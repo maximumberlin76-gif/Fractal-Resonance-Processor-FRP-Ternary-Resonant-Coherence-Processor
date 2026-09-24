@@ -1,0 +1,544 @@
+name: 04 - FRP M32 Reserved-Mode Recovery RTL + Netlist
+
+run-name: "04 - FRP M32 Reserved-Mode Recovery RTL + Netlist | 2 runs @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-04-m32-reserved-mode-recovery-netlist-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-reserved-mode:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      CXXFLAGS: "--std=c++20 -DVL_TIME_CONTEXT"
+
+    steps:
+      - name: Initialize build and evidence paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "M32_RESERVED_POST_WORK=$RUNNER_TEMP/frp-m32-reserved-mode-post-work" \
+            "M32_RESERVED_POST_EVIDENCE=$RUNNER_TEMP/frp-m32-reserved-mode-post-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m32-reserved-mode-post-evidence"
+
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned simulation and synthesis tools
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            sudo apt-get update
+            sudo apt-get install --yes g++ make
+            python -m pip install --disable-pip-version-check --only-binary=:all: \
+              verilator==5.48.0 yowasp-yosys==0.68.0.0.post1208
+            frp_verilator_root="$(python -c 'import importlib.util; from pathlib import Path; print(Path(importlib.util.find_spec("verilator").origin).parent)')"
+            test -x "$frp_verilator_root/bin/verilator_bin"
+            printf '%s\n' "VERILATOR_ROOT=$frp_verilator_root" >> "$GITHUB_ENV"
+            printf '%s\n' "$frp_verilator_root/bin" >> "$GITHUB_PATH"
+            python --version
+            VERILATOR_ROOT="$frp_verilator_root" "$frp_verilator_root/bin/verilator" --version
+            g++ --version
+          } 2>&1 | tee "$M32_RESERVED_POST_EVIDENCE/toolchain.log"
+
+      - name: Qualify two deterministic reserved-mode recovery RTL/netlist replays
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          import yowasp_yosys
+          from pathlib import Path
+
+          root = Path.cwd().resolve()
+          work = Path(os.environ['M32_RESERVED_POST_WORK'])
+          evidence = Path(os.environ['M32_RESERVED_POST_EVIDENCE'])
+          evidence.mkdir(parents=True, exist_ok=True)
+          view = work / 'source'
+          synthesis_view = work / 'synthesis-source'
+          build = work / 'build'
+          bench = 'frp_m32_reserved_mode_recovery_post_synthesis_tb'
+          tb = 'rtl/m32/' + bench + '.sv'
+          workflow = '.github/workflows/frp-04-m32-reserved-mode-recovery-netlist.yml'
+          include_dirs = ['rtl/m22', 'rtl/m23', 'rtl/m31', 'rtl/m32', 'fpga/m32', 'fpga/m32_csr']
+          report = {
+              'status': 'FAIL',
+              'repository': os.environ['GITHUB_REPOSITORY'],
+              'source_commit': os.environ['GITHUB_SHA'],
+              'run_id': os.environ['GITHUB_RUN_ID'],
+              'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'scope': 'Eight-cell M32 reserved-mode recovery RTL/netlist workload comparison',
+              'implementation': 'Fresh complete M32 netlist versus RTL with independent fixed-point oracle',
+              'configured_simulation_runs': 2,
+              'simulation_attempts': 0,
+              'simulation_runs': 0,
+              'commands': [],
+              'replays': [],
+              'post_synthesis_qualified': False,
+              'model_v0_9_3_equivalence_qualified': False,
+          }
+          reserved_mode_matrix_expected = {'entry_cases': 384,
+           'recovery_cases': 384,
+           'recovery_retention_checks': 384,
+           'drained_route_checks': 768}
+
+          reserved_mode_stream_expected = [{'workload': 0,
+            'recovery_mode': 0,
+            'ticks': 256,
+            'phase': '2531586bb7745f5870d7acd88f580fd62dcff43bfeebbd2897f364af912697ff',
+            'frequency': '00010f5b00010f5d00010f5b00010f5b00010f5b00010f5d0000ffff00010000',
+            'state': 'ddd0',
+            'pending': '0007',
+            'temperature': '00000000',
+            'peak': '00000000'},
+           {'workload': 0,
+            'recovery_mode': 1,
+            'ticks': 256,
+            'phase': '2531586bb7745f5870d7acd88f580fd60897fc37d9b533d6bd2a3f82b65e15c9',
+            'frequency': '00010f5b00010f5d00010f5b00010f5b0000ffff0001000100010f5b00010f5b',
+            'state': 'dd0d',
+            'pending': '0070',
+            'temperature': '00000000',
+            'peak': '00000000'},
+           {'workload': 0,
+            'recovery_mode': 2,
+            'ticks': 256,
+            'phase': '2531586bb7745f584ba02f106a2069502dcff43bfeebbd28bd2a3f82b65e15c9',
+            'frequency': '00010f5b00010f5d0000ffff0000ffff00010f5b00010f5d00010f5b00010f5b',
+            'state': 'd0dd',
+            'pending': '0700',
+            'temperature': '00000000',
+            'peak': '00000000'},
+           {'workload': 1,
+            'recovery_mode': 0,
+            'ticks': 256,
+            'phase': '1c046107340c1cac18b914ee27c76c418cb8344c14c88e7b2b09ad041721bb21',
+            'frequency': '00010f5b00010f5d00010f5b00010f5b0000ffff0001000100010f5b00010f5b',
+            'state': 'dd0d',
+            'pending': '0070',
+            'temperature': '00000000',
+            'peak': '00000000'},
+           {'workload': 1,
+            'recovery_mode': 1,
+            'ticks': 256,
+            'phase': '17477587333e53201b8a87fa52ac51852f16dc0ff6ba6578268bc80912e6d748',
+            'frequency': '00010f5b00010f5d0000ffff0000ffff00010f5b00010f5d00010f5b00010f5b',
+            'state': 'd0dd',
+            'pending': '0700',
+            'temperature': '00000000',
+            'peak': '00000000'},
+           {'workload': 1,
+            'recovery_mode': 2,
+            'ticks': 256,
+            'phase': 'e1cfd0e50400efbd08ea687a7587fa0a41c40880d313a803f4c43ec3e01e1c2b',
+            'frequency': '0000ffff0001000100010f5b00010f5b00010f5b00010f5d00010f5b00010f5b',
+            'state': '0ddd',
+            'pending': '7000',
+            'temperature': '00000000',
+            'peak': '00000000'}]
+
+          reserved_mode_expected = {'profiles': 6,
+           'steps': 26181,
+           'checks': 86133,
+           'output_bits': 2075,
+           'entry_cases': 384,
+           'recovery_cases': 384,
+           'reset_cases': 48,
+           'stream_ticks': 1536,
+           'invalid_ticks': 2928,
+           'invalid_holds': 630,
+           'invalid_dynamic_ticks': 2832,
+           'invalid_phase_updates': 2832,
+           'invalid_frequency_updates': 1494,
+           'invalid_capture_ticks': 2928,
+           'invalid_auto_ticks': 1308,
+           'invalid_external_ticks': 1620,
+           'invalid_loads': 192,
+           'invalid_retention_checks': 3558,
+           'diagnostic_checks': 4380,
+           'retained_diagnostic_checks': 3462,
+           'restored_diagnostic_checks': 918,
+           'recovery_retention_checks': 384,
+           'drained_route_checks': 774,
+           'dynamic_ticks': 22317,
+           'held_edges': 3660,
+           'loads': 1236,
+           'resets': 870,
+           'pending_resets': 48,
+           'clear_ticks': 228,
+           'clear_holds': 978,
+           'target_lag_samples': 6310,
+           'state_feedback_samples': 149768,
+           'switch_feedback_samples': 9812,
+           'heating_ticks': 4926,
+           'cooling_ticks': 12659,
+           'first_legs': 1700,
+           'second_legs': 1604,
+           'first_cells': 255,
+           'second_cells': 255,
+           'live_control_checks': 4110,
+           'free_ticks': 11209,
+           'balance_ticks': 3668,
+           'commit_ticks': 524,
+           'excite_ticks': 524,
+           'neutralize_ticks': 3668}
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          def sha(raw):
+              return hashlib.sha256(raw).hexdigest()
+
+          def execute(command, label, directory, limit):
+              report["commands"].append({"label": label, "argv": command})
+              print(label, flush=True)
+              log_path = evidence / (label + ".log")
+              try:
+                  with log_path.open("w") as log:
+                      subprocess.run(command, cwd=directory, stdout=log,
+                          stderr=subprocess.STDOUT, timeout=limit, check=True)
+              except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                  print("\n".join(log_path.read_text(errors="replace").splitlines()[-40:]))
+                  raise
+              return log_path
+
+          def regression_record(text, prefix, expected_metrics):
+              records = [line for line in text.splitlines() if line.startswith(prefix)]
+              require(len(records) == 1, prefix + " incomplete or repeated result")
+              match = re.fullmatch(prefix + " PASS " +
+                  " ".join(k + r"=(\d+)" for k in expected_metrics), records[0])
+              require(match is not None, prefix + " malformed result")
+              metrics = dict(zip(expected_metrics, map(int, match.groups())))
+              require(metrics == expected_metrics, prefix + " incomplete coverage")
+              return records[0], metrics
+
+          def reserved_mode_records(text):
+              records = [line for line in text.splitlines()
+                         if line.startswith("FRP_M32_RESERVED_MODE_")]
+              require(len(records) == len(reserved_mode_stream_expected) + 2,
+                      "Incomplete or repeated reserved-mode recovery results")
+              _, matrix_metrics = regression_record(records[0],
+                  "FRP_M32_RESERVED_MODE_MATRIX:", reserved_mode_matrix_expected)
+              fields = ("workload", "recovery_mode", "ticks", "phase", "frequency",
+                        "state", "pending", "temperature", "peak")
+              pattern = (r"FRP_M32_RESERVED_MODE_STREAM: PASS workload=(\d+) "
+                         r"recovery_mode=(\d+) ticks=(\d+) phase=([0-9a-f]{64}) "
+                         r"frequency=([0-9a-f]{64}) state=([0-9a-f]{4}) "
+                         r"pending=([0-9a-f]{4}) temperature=([0-9a-f]{8}) peak=([0-9a-f]{8})")
+              stream_metrics = []
+              for record, wanted in zip(records[1:-1], reserved_mode_stream_expected):
+                  match = re.fullmatch(pattern, record)
+                  require(match is not None, "Malformed reserved-mode recovery stream")
+                  observed = dict(zip(fields, match.groups()))
+                  for name in ("workload", "recovery_mode", "ticks"):
+                      observed[name] = int(observed[name])
+                  require(observed == wanted,
+                          "Reserved-mode stream order, dynamics or retained state differs")
+                  stream_metrics.append(observed)
+              _, metrics = regression_record(records[-1],
+                  "FRP_M32_RESERVED_MODE_RECOVERY_TB:", reserved_mode_expected)
+              return records, matrix_metrics, stream_metrics, metrics
+
+
+          post_expected = {'comparisons': 70667,
+           'input_bits': 1060,
+           'output_bits': 2075,
+           'input_changes': 14825,
+           'stopped_clock_changes': 14825,
+           'enabled_ticks': 22521,
+           'dynamic_ticks': 22317,
+           'longest_streak': 272,
+           'phase_updates': 22317,
+           'frequency_updates': 20951,
+           'hold_edges': 3660,
+           'falling_edges': 27051,
+           'reset_assertions': 870,
+           'reset_clock_edges': 870,
+           'reset_releases': 870,
+           'pending_resets': 48,
+           'clear_tick_edges': 228,
+           'clear_hold_edges': 978,
+           'phase_load_edges': 1236,
+           'automatic_ticks': 1416,
+           'external_ticks': 21105,
+           'target_lag_samples': 6310,
+           'state_feedback_samples': 149768,
+           'switch_feedback_samples': 9812,
+           'heating_ticks': 4926,
+           'cooling_ticks': 12659,
+           'first_legs': 1700,
+           'second_legs': 1604,
+           'first_cells': 255,
+           'second_cells': 255,
+           'scheduler_states': 159,
+           'free_ticks': 11209,
+           'balance_ticks': 3668,
+           'commit_ticks': 524,
+           'excite_ticks': 524,
+           'neutralize_ticks': 3668,
+           'invalid_ticks': 2928,
+           'invalid_holds': 630,
+           'invalid_loads': 192,
+           'invalid_dynamic_ticks': 2832,
+           'invalid_phase_updates': 2832,
+           'invalid_frequency_updates': 1494,
+           'invalid_capture_ticks': 2928,
+           'invalid_auto_ticks': 1308,
+           'invalid_external_ticks': 1620,
+           'invalid_retention_checks': 3558,
+           'longest_invalid_streak': 256,
+           'reserved_entries': 870,
+           'valid_recoveries': 822,
+           'reference_profiles': 6,
+           'reference_steps': 26181,
+           'reference_checks': 86133,
+           'reference_live_control_checks': 4110,
+           'entry_cases': 384,
+           'recovery_cases': 384,
+           'reset_cases': 48,
+           'stream_ticks': 1536,
+           'diagnostic_checks': 4380,
+           'retained_diagnostic_checks': 3462,
+           'restored_diagnostic_checks': 918,
+           'recovery_retention_checks': 384,
+           'drained_route_checks': 774}
+
+          def post_records(text):
+              records = [line for line in text.splitlines() if line.startswith('FRP_M32_RESERVED_MODE_')]
+              require(len(records) == 9, 'Exactly nine post-synthesis result records are required')
+              reference, matrix, streams, metrics = reserved_mode_records('\n'.join(records[:8]))
+              _, post_metrics = regression_record(records[-1],
+                  'FRP_M32_RESERVED_MODE_RECOVERY_POST_SYNTHESIS_TB:', post_expected)
+              require(sha(('\n'.join(reference) + '\n').encode()) ==
+                      '73691cb11e9c74cf86f591c2791176687da4df448c2dbc0a245bf100e6a573f2',
+                      'Embedded RTL records differ from the qualified standalone workload')
+              return records, matrix, streams, metrics, post_metrics
+
+
+          try:
+              require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch', 'Manual dispatch required')
+              require(os.environ['GITHUB_REF'] == 'refs/heads/main', 'Dispatch from main only')
+              require(os.environ['GITHUB_REPOSITORY'] ==
+                      'maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor',
+                      'Unexpected repository')
+              require(importlib.metadata.version('verilator') == '5.48.0', 'Unexpected simulation package')
+              require(importlib.metadata.version('yowasp-yosys') == '0.68.0.0.post1208',
+                      'Unexpected synthesis package')
+              report['synthesis_package'] = 'yowasp-yosys==0.68.0.0.post1208'
+              simulator_root = Path(os.environ['VERILATOR_ROOT']).resolve()
+              require(Path(shutil.which('verilator') or '').resolve() == simulator_root / 'bin' / 'verilator',
+                      'Simulator path differs from the pinned package')
+              simulator_sha = sha((simulator_root / 'bin' / 'verilator_bin').read_bytes())
+              require(simulator_sha == '7a308fe7b00607f3140fe0599efc107a3f591e631a44a1c3614e00e6c90c0dcc',
+                      'Simulator binary differs from the validated Linux x86-64 build')
+              report.update(simulation_package='verilator==5.48.0', simulation_binary_sha256=simulator_sha)
+              workflow_raw = (root / workflow).read_bytes()
+              report['workflow_sha256'] = sha(workflow_raw)
+              (evidence / Path(workflow).name).write_bytes(workflow_raw)
+              sources = {}
+
+              def visit(name):
+                  if name in sources:
+                      return
+                  path = root / name
+                  require(path.is_file() and not path.is_symlink(), 'Missing source: ' + name)
+                  raw = path.read_bytes()
+                  sources[name] = raw
+                  for inc in re.findall(r'`include\s+"([^"]+)"', raw.decode()):
+                      matches = {(directory / inc).resolve()
+                                 for directory in [path.parent, *[root / d for d in include_dirs]]
+                                 if (directory / inc).is_file()}
+                      require(len(matches) == 1, 'Missing or ambiguous include: ' + inc)
+                      resolved = matches.pop()
+                      require(resolved.is_relative_to(root), 'Include leaves the repository')
+                      visit(resolved.relative_to(root).as_posix())
+
+              visit(tb)
+              visit('rtl/m31/frp_m31_sin_q30.mem')
+              identities = {name: {'bytes': len(raw), 'sha256': sha(raw)}
+                            for name, raw in sorted(sources.items())}
+              rows = [f"{name}|{item['bytes']}|{item['sha256']}" for name, item in identities.items()]
+              digest = sha(('\n'.join(rows) + '\n').encode())
+              report.update(sources=identities, source_set_sha256=digest)
+              require(len(sources) == 19 and digest ==
+                      '17bca33afce1792ec7d22ece86f0e7657c1785f7e335712c6441f0c87ae44398',
+                      'Sources differ from the validated reserved-mode regression inputs')
+
+              require(len(sources[tb]) == 33691 and sha(sources[tb]) ==
+                      'c0e8ba4fc6ee3c4441baefc1505c7447cfda6d29d89d5af828e0b38796ababde',
+                      'Reserved-mode testbench differs from the validated source')
+              for directory in include_dirs:
+                  (view / directory).mkdir(parents=True, exist_ok=True)
+              for name, raw in sources.items():
+                  for destination in (view / name, evidence / 'inputs' / name):
+                      destination.parent.mkdir(parents=True, exist_ok=True)
+                      destination.write_bytes(raw)
+              for directory in include_dirs:
+                  (synthesis_view / directory).mkdir(parents=True, exist_ok=True)
+              for name, raw in sources.items():
+                  destination = synthesis_view / name
+                  destination.parent.mkdir(parents=True, exist_ok=True)
+                  destination.write_bytes(raw)
+              phase_name = 'rtl/m31/frp_m31_phase_interference.sv'
+              phase = synthesis_view / phase_name
+              original = phase.read_text()
+              first = original.index("    if (sin_lut[0] !== 32'sd0)")
+              last = original.index('      $fatal(1, "FRP M31 sine LUT three-quarter-cycle mismatch");', first)
+              normalized = original[:first] + original[original.index('\n', last) + 1:]
+              require(sha(normalized.encode()) ==
+                      '09302236b4a7734be9ac0890df4a7a577541a73c441ae7db3e70da8465f1c3ef',
+                      'Unexpected synthesis-only sine-LUT assertion normalization')
+              phase.write_text(normalized)
+              (evidence / 'synthesis-phase-input.sv').write_text(normalized)
+              top, renamed = 'frp_m32_core', 'frp_m32_core_netlist'
+              netlist, data = evidence / (renamed + '.v'), evidence / (renamed + '.json')
+              script = (
+                  f'read_slang -j 1 --std 1800-2017 --ignore-assertions --top {top} '
+                  '-G CELLS=8 -G REQUEST_LANES=2 -G CELL_INDEX_BITS=3 -G COUNTER_BITS=32 '
+                  + ' '.join('-I' + directory for directory in include_dirs) + f' rtl/m32/{top}.sv; '
+                  f'synth -top {top} -flatten -noshare -run begin:fine; check -assert; '
+                  'techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; '
+                  'select -assert-none t:$shiftx t:$connect; '
+                  f'rename {top} {renamed}; '
+                  f'write_verilog -noattr {json.dumps(str(netlist))}; '
+                  f'write_json {json.dumps(str(data))}\n')
+              script_path = evidence / 'synthesis.ys'
+              script_path.write_text(script)
+              execute(['yowasp-yosys', '-Q', '-T', '-q', '-s', str(script_path)],
+                      'reserved-mode-synthesis', synthesis_view, 600)
+              modules = json.loads(data.read_text())['modules']
+              require(set(modules) == {renamed}, 'Complete M32 netlist must be flattened')
+              ports = modules[renamed]['ports']
+              widths = {direction: {name: len(port['bits']) for name, port in ports.items()
+                                   if port['direction'] == direction} for direction in ('input', 'output')}
+              require(set(ports) == set(widths['input']) | set(widths['output']), 'Unexpected port direction')
+              require(len(widths['input']) == 15 and sum(widths['input'].values()) == 1060 and
+                      len(widths['output']) == 59 and sum(widths['output'].values()) == 2075,
+                      'Incomplete M32 netlist interface')
+              require(sha(json.dumps(widths, sort_keys=True, separators=(',', ':')).encode()) ==
+                      'c7ddda410d71ccd16087ba6acd082025e723da1ae49231b74664f0c432aa3a56', 'M32 port names or widths differ from the validated interface')
+              netlist_sha = sha(netlist.read_bytes())
+              require(netlist_sha == '94e4007f4b437e70e237ac3b1a480b8edef5d039082284554b6d4bd0a2fd9c68',
+                      'Fresh M32 netlist differs from the validated complete core')
+              report['netlist'] = {'module': renamed, 'sha256': netlist_sha, 'port_widths': widths,
+                                   'parameters': {'CELLS': 8, 'REQUEST_LANES': 2,
+                                                  'CELL_INDEX_BITS': 3, 'COUNTER_BITS': 32}}
+              simlib = evidence / 'yosys-simlib.v'
+              shutil.copyfile(Path(yowasp_yosys.__file__).resolve().parent / 'share' / 'simlib.v', simlib)
+              simlib_sha = sha(simlib.read_bytes())
+              require(simlib_sha == 'e79c08085225bdc6f52ce99f128328158009a33b8ea0c8c273011dfde370561d',
+                      'Yosys simulation cell models differ from the validated library')
+              report['cell_models_sha256'] = simlib_sha
+              compiler = ['verilator', '--binary', '--sv', '--timing', '--assert',
+                  '-Wall', '-Wno-fatal', '-CFLAGS', '-std=c++20 -O0',
+                  '--output-split', '20000', '-MAKEFLAGS', 'VK_PCH_I_FAST=',
+                  '-MAKEFLAGS', 'VK_PCH_I_SLOW=', '-j', '2']
+              compiler += ['-I' + directory for directory in include_dirs]
+              execute(compiler + ['-DSIMLIB_NOCONNECT', '--top-module', bench, '--Mdir', str(build),
+                                  '-v', str(simlib), str(netlist), tb],
+                      'reserved-mode-post-build', view, 900)
+              executable = build / ('V' + bench)
+              report['executable_sha256'] = sha(executable.read_bytes())
+              for attempt in (1, 2):
+                  report['simulation_attempts'] += 1
+                  log = execute([str(executable)], f'reserved-mode-post-run-{attempt}', view, 300)
+                  report['simulation_runs'] += 1
+                  records, matrix, streams, metrics, post_metrics = post_records(log.read_text())
+                  record_bytes = ('\n'.join(records) + '\n').encode()
+                  (evidence / f'reserved-mode-records-{attempt}.txt').write_bytes(record_bytes)
+                  report['replays'].append({
+                      'attempt': attempt, 'matrix': matrix, 'streams': streams, 'rtl_metrics': metrics,
+                      'post_metrics': post_metrics,
+                      'records': records, 'records_sha256': sha(record_bytes),
+                  })
+                  print('\n'.join(records), flush=True)
+              require(report['simulation_runs'] == 2 and len(report['replays']) == 2,
+                      'Both reserved-mode replays are required')
+              require(report['replays'][0]['records'] == report['replays'][1]['records'],
+                      'Reserved-mode matrix, stream or summary replay records differ')
+              for name, raw in sources.items():
+                  require((root / name).read_bytes() == raw and (view / name).read_bytes() == raw,
+                          'Source changed during qualification: ' + name)
+              for name, raw in sources.items():
+                  wanted = normalized.encode() if name == phase_name else raw
+                  require((synthesis_view / name).read_bytes() == wanted, 'Synthesis input changed: ' + name)
+              require(sha(netlist.read_bytes()) == netlist_sha and sha(simlib.read_bytes()) == simlib_sha,
+                      'Netlist or simulation cell models changed during replay')
+              require((root / workflow).read_bytes() == workflow_raw, 'Workflow changed during qualification')
+              summary = [
+                  '# FRP M32 reserved-mode recovery RTL + Netlist: PASS', '',
+                  'Source commit: `' + report['source_commit'] + '`', '',
+                  'Simulation runs: 2. All nine result records match exactly in both replays.', '',
+                  '| Metric | Per replay |', '| --- | ---: |',
+                  '| Settled output comparisons | 70667 |', '| Input bits | 1060 |',
+                  '| Clock steps | 26181 |', '| Oracle checks | 86133 |',
+                  '| Public outputs | 59 |', '| Output bits | 2075 |',
+                  '| Entry cases | 384 |', '| Recovery cases | 384 |', '| Reset cases | 48 |',
+                  '| Stream profiles | 6 |', '| INVALID ticks | 2928 |',
+                  '| Retention checks | 3558 |', '| Diagnostic checks | 4380 |',
+                  '| Drained route checks | 774 |', '',
+                  'Both workloads recover through free, 7/1 and 1/7.',
+                  'All six stream endpoints, matrix results, 45 RTL metrics and 62 post-synthesis metrics match fixed expectations.',
+                  'INVALID retains execution and pending routes while enabled phase dynamics and target capture continue.',
+                  'Returning to a valid mode preserves the counter discrepancy until clear or reset.', '',
+                  'This workflow performs two RTL/netlist replays with a freshly synthesized complete M32 core.',
+                  'The embedded reference repeats the unchanged RTL workload and independent fixed-point oracle.',
+                  'Workflows 01 and 03 are separate qualifications and are not rerun here.',
+                  'Equality is qualified for this workload and parameter set; model v0.9.3 equivalence and global coverage closure remain outside this result.',
+              ]
+              (evidence / 'summary.md').write_text('\n'.join(summary) + '\n')
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write('\n'.join(summary) + '\n')
+              report.update(status='PASS', deterministic=True, sources_unchanged=True,
+                            post_synthesis_qualified=True)
+              print('FRP M32 reserved-mode recovery RTL/netlist qualification: PASS (2 runs)', flush=True)
+          except Exception as error:
+              report['status'] = 'FAIL'
+              report['error'] = str(error)
+              raise
+          finally:
+              (evidence / 'result.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
+          PY
+
+      - name: Retain source identities, input snapshots, logs, and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-04-m32-reserved-mode-recovery-netlist-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M32_RESERVED_POST_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
