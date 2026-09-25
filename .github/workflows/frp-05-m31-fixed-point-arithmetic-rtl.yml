@@ -1,0 +1,302 @@
+name: 05 - FRP M31 Fixed-Point Arithmetic RTL
+
+run-name: "05 - FRP M31 Fixed-Point Arithmetic RTL | 2 runs @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-05-m31-fixed-point-arithmetic-rtl-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-arithmetic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      CXXFLAGS: "--std=c++20 -DVL_TIME_CONTEXT"
+
+    steps:
+      - name: Initialize build and evidence paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "M31_ARITHMETIC_WORK=$RUNNER_TEMP/frp-m31-fixed-point-arithmetic-work" \
+            "M31_ARITHMETIC_EVIDENCE=$RUNNER_TEMP/frp-m31-fixed-point-arithmetic-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m31-fixed-point-arithmetic-evidence"
+
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned RTL simulator
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            sudo apt-get update
+            sudo apt-get install --yes g++ make
+            python -m pip install --disable-pip-version-check --only-binary=:all: \
+              verilator==5.48.0
+            frp_verilator_root="$(python -c 'import importlib.util; from pathlib import Path; print(Path(importlib.util.find_spec("verilator").origin).parent)')"
+            test -x "$frp_verilator_root/bin/verilator_bin"
+            printf '%s\n' "VERILATOR_ROOT=$frp_verilator_root" >> "$GITHUB_ENV"
+            printf '%s\n' "$frp_verilator_root/bin" >> "$GITHUB_PATH"
+            python --version
+            VERILATOR_ROOT="$frp_verilator_root" "$frp_verilator_root/bin/verilator" --version
+            g++ --version
+          } 2>&1 | tee "$M31_ARITHMETIC_EVIDENCE/toolchain.log"
+
+      - name: Qualify two deterministic fixed-point arithmetic RTL replays
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          from pathlib import Path
+
+          root = Path.cwd().resolve()
+          work = Path(os.environ['M31_ARITHMETIC_WORK'])
+          evidence = Path(os.environ['M31_ARITHMETIC_EVIDENCE'])
+          evidence.mkdir(parents=True, exist_ok=True)
+          view = work / 'source'
+          build = work / 'build'
+          bench = 'frp_m31_fixed_point_arithmetic_tb'
+          tb = 'rtl/m31/' + bench + '.sv'
+          workflow = '.github/workflows/frp-05-m31-fixed-point-arithmetic-rtl.yml'
+          include_dirs = ['rtl/m31']
+          report = {
+              'status': 'FAIL',
+              'repository': os.environ['GITHUB_REPOSITORY'],
+              'source_commit': os.environ['GITHUB_SHA'],
+              'run_id': os.environ['GITHUB_RUN_ID'],
+              'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'scope': 'Eight M31 fixed-point functions within the declared arithmetic input profile',
+              'implementation': 'Unchanged RTL package versus independent signed 128-bit integer oracle',
+              'configured_simulation_runs': 2,
+              'simulation_attempts': 0,
+              'simulation_runs': 0,
+              'commands': [],
+              'replays': [],
+              'rtl_arithmetic_qualified': False,
+              'post_synthesis_qualified': False,
+              'model_v0_9_3_equivalence_qualified': False,
+          }
+          expected_sources = {
+              'rtl/m31/frp_m31_fixed_point_arithmetic_tb.sv': {
+                  'bytes': 14426,
+                  'sha256': '7f9d0cb547cd7c03c691a83690b96ff63a059786520ff6846f8bf5f54fc61fdd',
+              },
+              'rtl/m31/frp_m31_fixed_point_pkg.sv': {
+                  'bytes': 7278,
+                  'sha256': '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24',
+              },
+          }
+          expected_stages = [
+              {'stage': 0, 'vectors': 2304, 'signature': '3e6bc088cdd3e601'},
+              {'stage': 1, 'vectors': 19, 'signature': 'd81673c6c6e82db1'},
+              {'stage': 2, 'vectors': 98304, 'signature': '1f75182cfc635ec9'},
+              {'stage': 3, 'vectors': 144, 'signature': '36b23192e43db8c1'},
+              {'stage': 4, 'vectors': 66, 'signature': '483d4db9cec63b54'},
+              {'stage': 5, 'vectors': 8192, 'signature': 'eb5e16fa27069f34'},
+          ]
+          expected_metrics = {
+              'stages': 6,
+              'vectors': 109029,
+              'checks': 872232,
+              'input_bits': 134,
+              'output_bits': 288,
+              'signed_remainders': 32768,
+              'positive_saturation': 31,
+              'negative_saturation': 31,
+              'ties': 191,
+              'phase_wrap_signs': 3,
+              'signature': 'eb5e16fa27069f34',
+          }
+          expected_records = [
+              'FRP_M31_FIXED_POINT_ARITHMETIC_STAGE: PASS ' +
+              ' '.join(f'{key}={value}' for key, value in stage.items())
+              for stage in expected_stages
+          ]
+          expected_records.append('FRP_M31_FIXED_POINT_ARITHMETIC_TB: PASS ' +
+                                  ' '.join(f'{key}={value}' for key, value in expected_metrics.items()))
+
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+
+          def sha(raw):
+              return hashlib.sha256(raw).hexdigest()
+
+
+          def execute(command, label, directory, limit):
+              report['commands'].append({'label': label, 'argv': command})
+              print(label, flush=True)
+              log_path = evidence / (label + '.log')
+              try:
+                  with log_path.open('w') as log:
+                      subprocess.run(command, cwd=directory, stdout=log,
+                                     stderr=subprocess.STDOUT, timeout=limit, check=True)
+              except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                  print('\n'.join(log_path.read_text(errors='replace').splitlines()[-40:]))
+                  raise
+              return log_path
+
+
+          def arithmetic_records(text):
+              records = [line for line in text.splitlines()
+                         if line.lstrip().startswith('FRP_M31_FIXED_POINT_')]
+              require(len(records) == 7, 'Exactly seven arithmetic result records are required')
+              for index, (actual, expected) in enumerate(zip(records, expected_records)):
+                  require(actual == expected,
+                          f'Arithmetic result {index} differs: {actual!r}; expected {expected!r}')
+              return records
+
+
+          try:
+              require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch', 'Manual dispatch required')
+              require(os.environ['GITHUB_REF'] == 'refs/heads/main', 'Dispatch from main only')
+              require(os.environ['GITHUB_REPOSITORY'] ==
+                      'maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor',
+                      'Unexpected repository')
+              require(importlib.metadata.version('verilator') == '5.48.0', 'Unexpected simulation package')
+              simulator_root = Path(os.environ['VERILATOR_ROOT']).resolve()
+              require(Path(shutil.which('verilator') or '').resolve() == simulator_root / 'bin' / 'verilator',
+                      'Simulator path differs from the pinned package')
+              simulator_sha = sha((simulator_root / 'bin' / 'verilator_bin').read_bytes())
+              require(simulator_sha == '7a308fe7b00607f3140fe0599efc107a3f591e631a44a1c3614e00e6c90c0dcc',
+                      'Simulator binary differs from the validated Linux x86-64 build')
+              report.update(simulation_package='verilator==5.48.0', simulation_binary_sha256=simulator_sha)
+              workflow_raw = (root / workflow).read_bytes()
+              report['workflow_sha256'] = sha(workflow_raw)
+              (evidence / Path(workflow).name).write_bytes(workflow_raw)
+              sources = {}
+
+              def visit(name):
+                  if name in sources:
+                      return
+                  path = root / name
+                  require(path.is_file() and not path.is_symlink(), 'Missing source: ' + name)
+                  raw = path.read_bytes()
+                  sources[name] = raw
+                  for inc in re.findall(r'`include\s+"([^"]+)"', raw.decode()):
+                      matches = {(directory / inc).resolve()
+                                 for directory in [path.parent, *[root / d for d in include_dirs]]
+                                 if (directory / inc).is_file()}
+                      require(len(matches) == 1, 'Missing or ambiguous include: ' + inc)
+                      resolved = matches.pop()
+                      require(resolved.is_relative_to(root), 'Include leaves the repository')
+                      visit(resolved.relative_to(root).as_posix())
+
+              visit(tb)
+              identities = {name: {'bytes': len(raw), 'sha256': sha(raw)}
+                            for name, raw in sorted(sources.items())}
+              report['sources'] = identities
+              require(identities == expected_sources, 'Arithmetic sources differ from the validated inputs')
+              for name, raw in sources.items():
+                  for destination in (view / name, evidence / 'inputs' / name):
+                      destination.parent.mkdir(parents=True, exist_ok=True)
+                      destination.write_bytes(raw)
+              compiler = ['verilator', '--binary', '--sv', '--timing', '--assert',
+                          '-Wall', '-Wno-fatal', '-CFLAGS', '-std=c++20 -O0',
+                          '--output-split', '20000', '-MAKEFLAGS', 'VK_PCH_I_FAST=',
+                          '-MAKEFLAGS', 'VK_PCH_I_SLOW=', '-j', '2']
+              compiler += ['-I' + directory for directory in include_dirs]
+              execute(compiler + ['--top-module', bench, '--Mdir', str(build), tb],
+                      'arithmetic-build', view, 600)
+              executable = build / ('V' + bench)
+              executable_sha = sha(executable.read_bytes())
+              report['executable_sha256'] = executable_sha
+              for attempt in (1, 2):
+                  report['simulation_attempts'] += 1
+                  log = execute([str(executable)], f'arithmetic-run-{attempt}', view, 120)
+                  report['simulation_runs'] += 1
+                  records = arithmetic_records(log.read_text())
+                  record_bytes = ('\n'.join(records) + '\n').encode()
+                  (evidence / f'arithmetic-records-{attempt}.txt').write_bytes(record_bytes)
+                  report['replays'].append({
+                      'attempt': attempt, 'stages': expected_stages, 'metrics': expected_metrics,
+                      'records': records, 'records_sha256': sha(record_bytes),
+                  })
+                  print('\n'.join(records), flush=True)
+              require(report['simulation_runs'] == 2 and len(report['replays']) == 2,
+                      'Both arithmetic replays are required')
+              require(report['replays'][0]['records'] == report['replays'][1]['records'],
+                      'Arithmetic replay records differ')
+              for name, raw in sources.items():
+                  require((root / name).read_bytes() == raw and (view / name).read_bytes() == raw and
+                          (evidence / 'inputs' / name).read_bytes() == raw,
+                          'Source changed during qualification: ' + name)
+              require(sha(executable.read_bytes()) == executable_sha, 'Executable changed during qualification')
+              require((root / workflow).read_bytes() == workflow_raw, 'Workflow changed during qualification')
+              summary = [
+                  '# FRP M31 fixed-point arithmetic RTL: PASS', '',
+                  'Source commit: `' + report['source_commit'] + '`', '',
+                  'Simulation runs: 2. All seven result records match exactly in both replays.', '',
+                  '| Metric | Per replay |', '| --- | ---: |',
+                  '| Stages | 6 |', '| Input vectors | 109029 |', '| Oracle comparisons | 872232 |',
+                  '| Functions | 8 |', '| Probe input bits | 134 |', '| Probe output bits | 288 |',
+                  '| Signed Q30-to-Q16 remainder bins | 32768 |', '',
+                  'The unchanged package is checked against an independent signed 128-bit integer oracle.',
+                  'All six cumulative signatures also match the independently calculated Python expectations.',
+                  'Directed stages cover multiplication, saturation, every Q30-to-Q16 remainder for both signs,',
+                  'half-way rounding boundaries and velocity-to-phase wrap crossings; the seeded stream is fixed.',
+                  'The shift profile is 0/14/16/30; nonzero shifts use magnitudes at most 2^62.',
+                  'Signed 64-bit extrema are tested with shift zero and saturation.',
+                  'Phase conversion retains the implemented modulo-2^32 result.', '',
+                  'This is a numerical-primitive RTL qualification within the declared input profile.',
+                  'Workflows 01, 03 and 04 are separate qualifications and are not rerun here.',
+                  'Post-synthesis arithmetic, full phase-interference behavior, model v0.9.3 equivalence',
+                  'and global coverage closure are outside this result.',
+              ]
+              (evidence / 'summary.md').write_text('\n'.join(summary) + '\n')
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write('\n'.join(summary) + '\n')
+              report.update(status='PASS', deterministic=True, sources_unchanged=True,
+                            rtl_arithmetic_qualified=True)
+              print('FRP M31 fixed-point arithmetic RTL qualification: PASS (2 runs)', flush=True)
+          except Exception as error:
+              report['status'] = 'FAIL'
+              report['error'] = str(error)
+              raise
+          finally:
+              (evidence / 'result.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
+          PY
+
+      - name: Retain source identities, input snapshots, logs, and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-05-m31-fixed-point-arithmetic-rtl-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M31_ARITHMETIC_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
