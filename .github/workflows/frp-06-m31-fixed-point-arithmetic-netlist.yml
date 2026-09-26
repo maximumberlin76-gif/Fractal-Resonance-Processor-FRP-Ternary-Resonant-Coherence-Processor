@@ -1,186 +1,377 @@
-// SPDX-License-Identifier: Apache-2.0
-// FRP M31 arithmetic netlist versus the unchanged RTL workload. Author: Alchimist.
-`ifndef FRP_M31_FIXED_POINT_ARITHMETIC_POST_SYNTHESIS_TB_SV
-`define FRP_M31_FIXED_POINT_ARITHMETIC_POST_SYNTHESIS_TB_SV
-`include "frp_m31_fixed_point_arithmetic_tb.sv"
+name: 06 - FRP M31 Fixed-Point Arithmetic RTL + Netlist
 
-module frp_m31_fixed_point_arithmetic_post_synthesis_tb;
-  timeunit 1ns;
-  timeprecision 1fs;
-  import frp_m31_fixed_point_arithmetic_tb_pkg::*;
+run-name: "06 - FRP M31 Fixed-Point Arithmetic RTL + Netlist | 2 runs @ ${{ github.sha }}"
 
-  // Synthesize frp_m31_fixed_point_arithmetic_probe from the unchanged
-  // frp_m31_fixed_point_arithmetic_tb.sv and fixed-point package. Flatten it
-  // and rename it to frp_m31_fixed_point_arithmetic_netlist. Keep both packed
-  // ports: inputs[133:0] and outputs[287:0]. Compile that generated netlist
-  // and its simulation-cell library with this top, --timing and -Irtl/m31.
-  // The oracle, stimulus, stage signatures and watchdog remain in the
-  // reference testbench; neither the oracle nor stimulus is synthesized.
-  // This checks numerical primitives for the declared workload. It does not
-  // establish physical timing, complete input coverage or model equivalence.
-  frp_m31_fixed_point_arithmetic_tb reference_test();
+on:
+  workflow_dispatch:
 
-  localparam int INPUT_BITS = $bits(inputs_t);
-  localparam int OUTPUT_BITS = $bits(outputs_t);
-  localparam int unsigned EXPECTED_COUNTS [0:5] = '{2304, 19, 98304, 144, 66, 8192};
-  localparam logic [63:0] EXPECTED_SIGNATURES [0:5] = '{
-    64'h3e6bc088cdd3e601, 64'hd81673c6c6e82db1, 64'h1f75182cfc635ec9,
-    64'h36b23192e43db8c1, 64'h483d4db9cec63b54, 64'heb5e16fa27069f34
-  };
-  localparam int unsigned EXPECTED_SHIFT_COUNTS [0:3] = '{2067, 2096, 102770, 2096};
-  // Only shifts 0, 14, 16 and 30 belong to the reference qualification.
-  // Shift bits 0 and 5 stay zero; all other input bits take both values.
-  localparam logic [133:0] EXPECTED_INPUT_EXERCISE = {{128{1'b1}}, 6'b011110};
+permissions:
+  contents: read
 
-  wire inputs_t inputs;
-  wire outputs_t reference_outputs;
-  wire outputs_t netlist_outputs;
-  assign inputs = reference_test.dut.inputs;
-  assign reference_outputs = reference_test.dut.outputs;
+concurrency:
+  group: frp-06-m31-fixed-point-arithmetic-netlist-${{ github.ref }}
+  cancel-in-progress: false
 
-  frp_m31_fixed_point_arithmetic_netlist u_netlist (
-    .inputs(inputs),
-    .outputs(netlist_outputs)
-  );
+jobs:
+  qualify-arithmetic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      CXXFLAGS: "--std=c++20 -DVL_TIME_CONTEXT"
 
-  int unsigned comparisons = 0, field_checks = 0, completed_stages = 0;
-  int unsigned input_transitions = 0, repeated_inputs = 0;
-  int unsigned stage_counts[6], shift_counts[4];
-  logic [63:0] stage_signatures[6];
-  logic [63:0] signature = 64'hcbf29ce484222325;
-  logic [INPUT_BITS-1:0] input_ones = '0, input_zeros = '0;
-  logic [OUTPUT_BITS-1:0] output_ones = '0, output_zeros = '0;
-  inputs_t previous_inputs = '0;
-  bit mismatch_seen = 0;
+    steps:
+      - name: Initialize build and evidence paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "M31_ARITHMETIC_POST_WORK=$RUNNER_TEMP/frp-m31-fixed-point-arithmetic-post-work" \
+            "M31_ARITHMETIC_POST_EVIDENCE=$RUNNER_TEMP/frp-m31-fixed-point-arithmetic-post-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m31-fixed-point-arithmetic-post-evidence"
 
-  task automatic compare_word(input string field_name,
-      input logic [63:0] actual, expected);
-    field_checks++;
-    if ($isunknown({actual, expected}) || actual !== expected) begin
-      mismatch_seen = 1;
-      $fatal(1, "Arithmetic netlist mismatch vector=%0d field=%s actual=%h expected=%h inputs=%h",
-             comparisons, field_name, actual, expected, inputs);
-    end
-  endtask
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
 
-  task automatic hash_word(input logic [31:0] value);
-    signature = (signature ^ {32'b0, value}) * 64'h00000100000001b3;
-  endtask
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
 
-  task automatic compare_sample;
-    // The reference checks this vector at the end of its 1 ps interval.
-    // Sampling 1 fs after the drive gives combinational logic time to settle.
-    // Counting every interval also detects skipped or duplicated samples.
-    if (reference_test.done || reference_test.vectors != comparisons
-        || reference_test.checks != 8 * comparisons || completed_stages >= 6)
-      $fatal(1, "Arithmetic netlist sample alignment failed sample=%0d reference=%0d checks=%0d stage=%0d",
-             comparisons, reference_test.vectors, reference_test.checks, completed_stages);
-    if ($isunknown(inputs)) $fatal(1, "Unknown arithmetic netlist input");
+      - name: Install the pinned simulation and synthesis tools
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            sudo apt-get update
+            sudo apt-get install --yes g++ make
+            python -m pip install --disable-pip-version-check --only-binary=:all: \
+              verilator==5.48.0 yowasp-yosys==0.68.0.0.post1208
+            frp_verilator_root="$(python -c 'import importlib.util; from pathlib import Path; print(Path(importlib.util.find_spec("verilator").origin).parent)')"
+            test -x "$frp_verilator_root/bin/verilator_bin"
+            printf '%s\n' "VERILATOR_ROOT=$frp_verilator_root" >> "$GITHUB_ENV"
+            printf '%s\n' "$frp_verilator_root/bin" >> "$GITHUB_PATH"
+            python --version
+            VERILATOR_ROOT="$frp_verilator_root" "$frp_verilator_root/bin/verilator" --version
+            g++ --version
+          } 2>&1 | tee "$M31_ARITHMETIC_POST_EVIDENCE/toolchain.log"
 
-    compare_word("saturated", 64'(netlist_outputs.saturated), 64'(reference_outputs.saturated));
-    compare_word("rounded", netlist_outputs.rounded, reference_outputs.rounded);
-    compare_word("product_q16", 64'(netlist_outputs.product_q16), 64'(reference_outputs.product_q16));
-    compare_word("product_q30", 64'(netlist_outputs.product_q30), 64'(reference_outputs.product_q30));
-    compare_word("mixed_q16", 64'(netlist_outputs.mixed_q16), 64'(reference_outputs.mixed_q16));
-    compare_word("down_q16", 64'(netlist_outputs.down_q16), 64'(reference_outputs.down_q16));
-    compare_word("up_q30", 64'(netlist_outputs.up_q30), 64'(reference_outputs.up_q30));
-    compare_word("phase_step", 64'(netlist_outputs.phase_step), 64'(reference_outputs.phase_step));
+      - name: Qualify two deterministic fixed-point arithmetic RTL/netlist replays
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          import yowasp_yosys
+          from pathlib import Path
 
-    if (comparisons != 0) begin
-      if (inputs !== previous_inputs) input_transitions++;
-      else repeated_inputs++;
-    end
-    previous_inputs = inputs;
-    input_ones |= inputs;
-    input_zeros |= ~inputs;
-    output_ones |= netlist_outputs;
-    output_zeros |= ~netlist_outputs;
-    case (inputs.shift)
-      6'd0: shift_counts[0]++;
-      6'd14: shift_counts[1]++;
-      6'd16: shift_counts[2]++;
-      6'd30: shift_counts[3]++;
-      default: $fatal(1, "Arithmetic netlist shift outside the declared profile");
-    endcase
+          root = Path.cwd().resolve()
+          work = Path(os.environ['M31_ARITHMETIC_POST_WORK'])
+          evidence = Path(os.environ['M31_ARITHMETIC_POST_EVIDENCE'])
+          evidence.mkdir(parents=True, exist_ok=True)
+          view = work / 'source'
+          build = work / 'build'
+          bench = 'frp_m31_fixed_point_arithmetic_post_synthesis_tb'
+          tb = 'rtl/m31/' + bench + '.sv'
+          workflow = '.github/workflows/frp-06-m31-fixed-point-arithmetic-netlist.yml'
+          include_dirs = ['rtl/m31']
+          report = {
+              'status': 'FAIL',
+              'repository': os.environ['GITHUB_REPOSITORY'],
+              'source_commit': os.environ['GITHUB_SHA'],
+              'run_id': os.environ['GITHUB_RUN_ID'],
+              'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'scope': 'Eight M31 fixed-point functions within the declared arithmetic input profile',
+              'implementation': 'Fresh arithmetic probe netlist versus unchanged RTL with independent 128-bit oracle',
+              'configured_simulation_runs': 2,
+              'simulation_attempts': 0,
+              'simulation_runs': 0,
+              'commands': [],
+              'replays': [],
+              'rtl_arithmetic_qualified': False,
+              'post_synthesis_qualified': False,
+              'model_v0_9_3_equivalence_qualified': False,
+          }
+          expected_sources = {
+              'rtl/m31/frp_m31_fixed_point_arithmetic_post_synthesis_tb.sv': {
+                  'bytes': 9884,
+                  'sha256': 'b7749360aefa85e8f7d4482e995642386cbd596fc0e5fb578b21d00a6c38386b',
+              },
+              'rtl/m31/frp_m31_fixed_point_arithmetic_tb.sv': {
+                  'bytes': 14426,
+                  'sha256': '7f9d0cb547cd7c03c691a83690b96ff63a059786520ff6846f8bf5f54fc61fdd',
+              },
+              'rtl/m31/frp_m31_fixed_point_pkg.sv': {
+                  'bytes': 7278,
+                  'sha256': '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24',
+              },
+          }
+          expected_stages = [
+              {'stage': 0, 'vectors': 2304, 'signature': '3e6bc088cdd3e601'},
+              {'stage': 1, 'vectors': 19, 'signature': 'd81673c6c6e82db1'},
+              {'stage': 2, 'vectors': 98304, 'signature': '1f75182cfc635ec9'},
+              {'stage': 3, 'vectors': 144, 'signature': '36b23192e43db8c1'},
+              {'stage': 4, 'vectors': 66, 'signature': '483d4db9cec63b54'},
+              {'stage': 5, 'vectors': 8192, 'signature': 'eb5e16fa27069f34'},
+          ]
+          expected_metrics = {
+              'stages': 6,
+              'vectors': 109029,
+              'checks': 872232,
+              'input_bits': 134,
+              'output_bits': 288,
+              'signed_remainders': 32768,
+              'positive_saturation': 31,
+              'negative_saturation': 31,
+              'ties': 191,
+              'phase_wrap_signs': 3,
+              'signature': 'eb5e16fa27069f34',
+          }
+          expected_post_metrics = {
+              'stages': 6,
+              'comparisons': 109029,
+              'field_checks': 872232,
+              'input_bits': 134,
+              'output_bits': 288,
+              'input_transitions': 109028,
+              'repeated_inputs': 0,
+              'input_exercised': 132,
+              'output_exercised': 288,
+              'shift_0': 2067,
+              'shift_14': 2096,
+              'shift_16': 102770,
+              'shift_30': 2096,
+              'reference_vectors': 109029,
+              'reference_checks': 872232,
+              'signature': 'eb5e16fa27069f34',
+          }
+          expected_records = [
+              'FRP_M31_FIXED_POINT_ARITHMETIC_STAGE: PASS ' +
+              ' '.join(f'{key}={value}' for key, value in stage.items())
+              for stage in expected_stages
+          ]
+          expected_records.append('FRP_M31_FIXED_POINT_ARITHMETIC_TB: PASS ' +
+                                  ' '.join(f'{key}={value}' for key, value in expected_metrics.items()))
+          expected_records.append('FRP_M31_FIXED_POINT_ARITHMETIC_POST_SYNTHESIS_TB: PASS ' +
+                                  ' '.join(f'{key}={value}' for key, value in expected_post_metrics.items()))
 
-    // Hash netlist results independently, preserving the reference word order.
-    hash_word(inputs.left_word); hash_word(inputs.right_word);
-    hash_word(inputs.wide_word[63:32]); hash_word(inputs.wide_word[31:0]);
-    hash_word({26'b0, inputs.shift}); hash_word(netlist_outputs.saturated);
-    hash_word(netlist_outputs.rounded[63:32]); hash_word(netlist_outputs.rounded[31:0]);
-    hash_word(netlist_outputs.product_q16); hash_word(netlist_outputs.product_q30);
-    hash_word(netlist_outputs.mixed_q16); hash_word(netlist_outputs.down_q16);
-    hash_word(netlist_outputs.up_q30); hash_word(netlist_outputs.phase_step);
 
-    comparisons++;
-    stage_counts[completed_stages]++;
-    if (stage_counts[completed_stages] == EXPECTED_COUNTS[completed_stages]) begin
-      stage_signatures[completed_stages] = signature;
-      if (signature !== EXPECTED_SIGNATURES[completed_stages])
-        $fatal(1, "Arithmetic netlist stage signature failed stage=%0d signature=%h expected=%h",
-               completed_stages, signature, EXPECTED_SIGNATURES[completed_stages]);
-      completed_stages++;
-    end
-  endtask
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
 
-  initial begin
-    foreach (stage_counts[k]) begin
-      stage_counts[k] = 0;
-      stage_signatures[k] = 0;
-    end
-    foreach (shift_counts[k]) shift_counts[k] = 0;
-    if (INPUT_BITS != 134 || OUTPUT_BITS != 288
-        || $bits(u_netlist.inputs) != INPUT_BITS || $bits(u_netlist.outputs) != OUTPUT_BITS)
-      $fatal(1, "Arithmetic netlist interface width mismatch");
-    #1fs;
-    forever begin
-      compare_sample();
-      #1ps;
-    end
-  end
 
-  final begin
-    if (mismatch_seen || !reference_test.done || comparisons != 109029
-        || field_checks != 872232 || completed_stages != 6
-        || reference_test.vectors != comparisons || reference_test.checks != field_checks
-        || input_transitions != 109028 || repeated_inputs != 0
-        || input_transitions + repeated_inputs + 1 != comparisons)
-      $fatal(1, "Incomplete arithmetic netlist replay comparisons=%0d checks=%0d stages=%0d changes=%0d repeats=%0d reference_done=%0d",
-             comparisons, field_checks, completed_stages, input_transitions,
-             repeated_inputs, reference_test.done);
-    foreach (stage_counts[k]) begin
-      if (stage_counts[k] != EXPECTED_COUNTS[k]
-          || stage_counts[k] != reference_test.stage_counts[k]
-          || stage_signatures[k] !== EXPECTED_SIGNATURES[k])
-        $fatal(1, "Incomplete arithmetic netlist stage=%0d count=%0d signature=%h",
-               k, stage_counts[k], stage_signatures[k]);
-    end
-    foreach (shift_counts[k])
-      if (shift_counts[k] != EXPECTED_SHIFT_COUNTS[k])
-        $fatal(1, "Arithmetic netlist shift coverage failed index=%0d count=%0d expected=%0d",
-               k, shift_counts[k], EXPECTED_SHIFT_COUNTS[k]);
-    if ((input_ones & input_zeros) !== EXPECTED_INPUT_EXERCISE
-        || (output_ones & output_zeros) !== {OUTPUT_BITS{1'b1}})
-      $fatal(1, "Arithmetic netlist bit exercise failed inputs=%h outputs=%h",
-             input_ones & input_zeros, output_ones & output_zeros);
-    if (reference_test.shifts_seen != 4'hf
-        || reference_test.residue_counts[0] != 16384 || reference_test.residue_counts[1] != 16384
-        || reference_test.positive_saturation != 5'h1f || reference_test.negative_saturation != 5'h1f
-        || reference_test.tie_mask != 8'hbf || reference_test.phase_wrap_signs != 2'b11)
-      $fatal(1, "Incomplete arithmetic reference coverage during netlist replay");
-    foreach (reference_test.residues_seen[s, r])
-      if (!reference_test.residues_seen[s][r])
-        $fatal(1, "Missing arithmetic reference remainder sign=%0d residue=%0d", s, r);
-    if (signature !== 64'heb5e16fa27069f34 || signature !== reference_test.signature
-        || inputs !== previous_inputs || $isunknown({reference_outputs, netlist_outputs})
-        || reference_outputs !== netlist_outputs)
-      $fatal(1, "Final arithmetic netlist signature or output mismatch");
-    $display("FRP_M31_FIXED_POINT_ARITHMETIC_POST_SYNTHESIS_TB: PASS stages=%0d comparisons=%0d field_checks=%0d input_bits=%0d output_bits=%0d input_transitions=%0d repeated_inputs=%0d input_exercised=%0d output_exercised=%0d shift_0=%0d shift_14=%0d shift_16=%0d shift_30=%0d reference_vectors=%0d reference_checks=%0d signature=%h",
-             completed_stages, comparisons, field_checks, INPUT_BITS, OUTPUT_BITS,
-             input_transitions, repeated_inputs, $countones(input_ones & input_zeros),
-             $countones(output_ones & output_zeros), shift_counts[0], shift_counts[1],
-             shift_counts[2], shift_counts[3], reference_test.vectors,
-             reference_test.checks, signature);
-  end
-endmodule : frp_m31_fixed_point_arithmetic_post_synthesis_tb
-`endif
+          def sha(raw):
+              return hashlib.sha256(raw).hexdigest()
+
+
+          def execute(command, label, directory, limit):
+              report['commands'].append({'label': label, 'argv': command})
+              print(label, flush=True)
+              log_path = evidence / (label + '.log')
+              try:
+                  with log_path.open('w') as log:
+                      subprocess.run(command, cwd=directory, stdout=log,
+                                     stderr=subprocess.STDOUT, timeout=limit, check=True)
+              except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                  print('\n'.join(log_path.read_text(errors='replace').splitlines()[-40:]))
+                  raise
+              return log_path
+
+
+          def arithmetic_records(text):
+              records = [line for line in text.splitlines()
+                         if line.lstrip().startswith('FRP_M31_FIXED_POINT_')]
+              require(len(records) == 8, 'Exactly eight arithmetic result records are required')
+              for index, (actual, expected) in enumerate(zip(records, expected_records)):
+                  require(actual == expected,
+                          f'Arithmetic result {index} differs: {actual!r}; expected {expected!r}')
+              return records
+
+
+          try:
+              require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch', 'Manual dispatch required')
+              require(os.environ['GITHUB_REF'] == 'refs/heads/main', 'Dispatch from main only')
+              require(os.environ['GITHUB_REPOSITORY'] ==
+                      'maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor',
+                      'Unexpected repository')
+              require(importlib.metadata.version('verilator') == '5.48.0', 'Unexpected simulation package')
+              require(importlib.metadata.version('yowasp-yosys') == '0.68.0.0.post1208',
+                      'Unexpected synthesis package')
+              report['synthesis_package'] = 'yowasp-yosys==0.68.0.0.post1208'
+              simulator_root = Path(os.environ['VERILATOR_ROOT']).resolve()
+              require(Path(shutil.which('verilator') or '').resolve() == simulator_root / 'bin' / 'verilator',
+                      'Simulator path differs from the pinned package')
+              simulator_sha = sha((simulator_root / 'bin' / 'verilator_bin').read_bytes())
+              require(simulator_sha == '7a308fe7b00607f3140fe0599efc107a3f591e631a44a1c3614e00e6c90c0dcc',
+                      'Simulator binary differs from the validated Linux x86-64 build')
+              report.update(simulation_package='verilator==5.48.0', simulation_binary_sha256=simulator_sha)
+              workflow_raw = (root / workflow).read_bytes()
+              report['workflow_sha256'] = sha(workflow_raw)
+              (evidence / Path(workflow).name).write_bytes(workflow_raw)
+              sources = {}
+
+              def visit(name):
+                  if name in sources:
+                      return
+                  path = root / name
+                  require(path.is_file() and not path.is_symlink(), 'Missing source: ' + name)
+                  raw = path.read_bytes()
+                  sources[name] = raw
+                  for inc in re.findall(r'`include\s+"([^"]+)"', raw.decode()):
+                      matches = {(directory / inc).resolve()
+                                 for directory in [path.parent, *[root / d for d in include_dirs]]
+                                 if (directory / inc).is_file()}
+                      require(len(matches) == 1, 'Missing or ambiguous include: ' + inc)
+                      resolved = matches.pop()
+                      require(resolved.is_relative_to(root), 'Include leaves the repository')
+                      visit(resolved.relative_to(root).as_posix())
+
+              visit(tb)
+              identities = {name: {'bytes': len(raw), 'sha256': sha(raw)}
+                            for name, raw in sorted(sources.items())}
+              report['sources'] = identities
+              require(identities == expected_sources, 'Arithmetic sources differ from the validated inputs')
+              for name, raw in sources.items():
+                  for destination in (view / name, evidence / 'inputs' / name):
+                      destination.parent.mkdir(parents=True, exist_ok=True)
+                      destination.write_bytes(raw)
+              top = 'frp_m31_fixed_point_arithmetic_probe'
+              renamed = 'frp_m31_fixed_point_arithmetic_netlist'
+              netlist = evidence / (renamed + '.v')
+              data = evidence / (renamed + '.json')
+              script = (
+                  f'read_slang -j 1 --std 1800-2017 --ignore-assertions --top {top} '
+                  '-Irtl/m31 rtl/m31/frp_m31_fixed_point_arithmetic_tb.sv; '
+                  f'synth -top {top} -flatten -noshare -run begin:fine; check -assert; '
+                  'techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; '
+                  'select -assert-none t:$shiftx t:$connect; '
+                  f'rename {top} {renamed}; '
+                  f'write_verilog -noattr {json.dumps(str(netlist))}; '
+                  f'write_json {json.dumps(str(data))}\n')
+              script_path = evidence / 'synthesis.ys'
+              script_path.write_text(script)
+              execute(['yowasp-yosys', '-Q', '-T', '-s', str(script_path)],
+                      'arithmetic-synthesis', view, 600)
+              modules = json.loads(data.read_text())['modules']
+              require(set(modules) == {renamed}, 'Arithmetic probe netlist must be flattened')
+              ports = modules[renamed]['ports']
+              interface = {name: {'direction': port['direction'], 'bits': len(port['bits'])}
+                           for name, port in ports.items()}
+              require(interface == {'inputs': {'direction': 'input', 'bits': 134},
+                                    'outputs': {'direction': 'output', 'bits': 288}},
+                      'Arithmetic netlist port names, directions or widths differ')
+              netlist_sha = sha(netlist.read_bytes())
+              require(netlist_sha == '5034fa43674a8ac25a6dffd6aecfbc093097205a9fb7fe4f4ce3fb982ed195e7',
+                      'Fresh arithmetic netlist differs from the validated probe')
+              data_sha = sha(data.read_bytes())
+              report['netlist'] = {'module': renamed, 'sha256': netlist_sha,
+                                   'json_sha256': data_sha, 'interface': interface,
+                                   'synthesis_script_sha256': sha(script_path.read_bytes())}
+              simlib = evidence / 'yosys-simlib.v'
+              shutil.copyfile(Path(yowasp_yosys.__file__).resolve().parent / 'share' / 'simlib.v', simlib)
+              simlib_sha = sha(simlib.read_bytes())
+              require(simlib_sha == 'e79c08085225bdc6f52ce99f128328158009a33b8ea0c8c273011dfde370561d',
+                      'Yosys simulation cell models differ from the validated library')
+              report['cell_models_sha256'] = simlib_sha
+              compiler = ['verilator', '--binary', '--sv', '--timing', '--assert',
+                          '-Wall', '-Wno-fatal', '-CFLAGS', '-std=c++20 -O0',
+                          '--output-split', '20000', '-MAKEFLAGS', 'VK_PCH_I_FAST=',
+                          '-MAKEFLAGS', 'VK_PCH_I_SLOW=', '-j', '2']
+              compiler += ['-I' + directory for directory in include_dirs]
+              execute(compiler + ['-DSIMLIB_NOCONNECT', '--top-module', bench, '--Mdir', str(build),
+                                  '-v', str(simlib), str(netlist), tb],
+                      'arithmetic-post-build', view, 900)
+              executable = build / ('V' + bench)
+              executable_sha = sha(executable.read_bytes())
+              report['executable_sha256'] = executable_sha
+              for attempt in (1, 2):
+                  report['simulation_attempts'] += 1
+                  log = execute([str(executable)], f'arithmetic-post-run-{attempt}', view, 120)
+                  report['simulation_runs'] += 1
+                  records = arithmetic_records(log.read_text())
+                  record_bytes = ('\n'.join(records) + '\n').encode()
+                  (evidence / f'arithmetic-records-{attempt}.txt').write_bytes(record_bytes)
+                  report['replays'].append({
+                      'attempt': attempt, 'stages': expected_stages, 'rtl_metrics': expected_metrics,
+                      'post_metrics': expected_post_metrics,
+                      'records': records, 'records_sha256': sha(record_bytes),
+                  })
+                  print('\n'.join(records), flush=True)
+              require(report['simulation_runs'] == 2 and len(report['replays']) == 2,
+                      'Both arithmetic replays are required')
+              require(report['replays'][0]['records'] == report['replays'][1]['records'],
+                      'Arithmetic replay records differ')
+              for name, raw in sources.items():
+                  require((root / name).read_bytes() == raw and (view / name).read_bytes() == raw and
+                          (evidence / 'inputs' / name).read_bytes() == raw,
+                          'Source changed during qualification: ' + name)
+              require(sha(executable.read_bytes()) == executable_sha, 'Executable changed during qualification')
+              require(sha(netlist.read_bytes()) == netlist_sha and sha(data.read_bytes()) == data_sha
+                      and sha(simlib.read_bytes()) == simlib_sha,
+                      'Netlist or simulation cell models changed during qualification')
+              require(script_path.read_text() == script, 'Synthesis script changed during qualification')
+              require((root / workflow).read_bytes() == workflow_raw, 'Workflow changed during qualification')
+              summary = [
+                  '# FRP M31 fixed-point arithmetic RTL + Netlist: PASS', '',
+                  'Source commit: `' + report['source_commit'] + '`', '',
+                  'Simulation runs: 2. All eight result records match exactly in both replays.', '',
+                  '| Metric | Per replay |', '| --- | ---: |',
+                  '| Stages | 6 |', '| Input vectors | 109029 |', '| RTL oracle comparisons | 872232 |',
+                  '| RTL/netlist field comparisons | 872232 |', '| Functions | 8 |',
+                  '| Probe input bits | 134 |', '| Probe output bits | 288 |',
+                  '| Input bits observed at both values | 132 |', '| Output bits observed at both values | 288 |',
+                  '| Signed Q30-to-Q16 remainder bins | 32768 |', '',
+                  'The freshly synthesized arithmetic probe receives the unchanged RTL workload.',
+                  'All eight output fields are compared at every vector after combinational settling.',
+                  'The reference retains its independent signed 128-bit oracle and all original checks.',
+                  'All six cumulative netlist signatures match the fixed Python-derived expectations.',
+                  'Exact stage counts, shift counts, input transitions and bit exercise are required.',
+                  'The shift profile is 0/14/16/30; nonzero shifts use magnitudes at most 2^62.',
+                  'Signed 64-bit extrema are tested with shift zero and saturation.',
+                  'Phase conversion retains the implemented modulo-2^32 result.', '',
+                  'This qualifies functional RTL/netlist equality for the declared arithmetic workload.',
+                  'Workflows 01, 03, 04 and 05 are separate qualifications and are not rerun here.',
+                  'Physical timing, complete input-space coverage, full phase-interference behavior',
+                  'and model v0.9.3 equivalence are outside this result.',
+              ]
+              (evidence / 'summary.md').write_text('\n'.join(summary) + '\n')
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write('\n'.join(summary) + '\n')
+              report.update(status='PASS', deterministic=True, sources_unchanged=True,
+                            rtl_arithmetic_qualified=True, post_synthesis_qualified=True)
+              print('FRP M31 fixed-point arithmetic RTL/netlist qualification: PASS (2 runs)', flush=True)
+          except Exception as error:
+              report['status'] = 'FAIL'
+              report['error'] = str(error)
+              raise
+          finally:
+              (evidence / 'result.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
+          PY
+
+      - name: Retain source identities, input snapshots, logs, and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-06-m31-fixed-point-arithmetic-netlist-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M31_ARITHMETIC_POST_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
