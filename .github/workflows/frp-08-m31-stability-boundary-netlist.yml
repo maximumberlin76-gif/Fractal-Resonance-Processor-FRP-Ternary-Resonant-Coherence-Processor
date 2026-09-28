@@ -1,0 +1,430 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# This workflow is proprietary and is not licensed under Apache-2.0.
+# Except as required by applicable law, using, reproducing, modifying, or
+# distributing this file requires prior written permission from Maksym Marnov.
+# Referenced dependencies retain their existing licenses.
+
+name: 08 - FRP M31 Stability Boundary RTL + Netlist
+
+run-name: "08 - FRP M31 Stability Boundary RTL + Netlist | 2 runs @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-08-m31-stability-boundary-netlist-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-stability:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      CXXFLAGS: "--std=c++20 -DVL_TIME_CONTEXT"
+
+    steps:
+      - name: Initialize build and evidence paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "M31_STABILITY_POST_WORK=$RUNNER_TEMP/frp-m31-stability-boundary-post-work" \
+            "M31_STABILITY_POST_EVIDENCE=$RUNNER_TEMP/frp-m31-stability-boundary-post-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m31-stability-boundary-post-evidence"
+
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned simulation and synthesis tools
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            sudo apt-get update
+            sudo apt-get install --yes g++ make
+            python -m pip install --disable-pip-version-check --only-binary=:all: \
+              verilator==5.48.0 yowasp-yosys==0.68.0.0.post1208
+            frp_verilator_root="$(python -c 'import importlib.util; from pathlib import Path; print(Path(importlib.util.find_spec("verilator").origin).parent)')"
+            test -x "$frp_verilator_root/bin/verilator_bin"
+            printf '%s\n' "VERILATOR_ROOT=$frp_verilator_root" >> "$GITHUB_ENV"
+            printf '%s\n' "$frp_verilator_root/bin" >> "$GITHUB_PATH"
+            python --version
+            VERILATOR_ROOT="$frp_verilator_root" "$frp_verilator_root/bin/verilator" --version
+            g++ --version
+          } 2>&1 | tee "$M31_STABILITY_POST_EVIDENCE/toolchain.log"
+
+      - name: Qualify two deterministic stability boundary RTL/netlist replays
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          import yowasp_yosys
+          from pathlib import Path
+
+          root = Path.cwd().resolve()
+          work = Path(os.environ['M31_STABILITY_POST_WORK'])
+          evidence = Path(os.environ['M31_STABILITY_POST_EVIDENCE'])
+          evidence.mkdir(parents=True, exist_ok=True)
+          view = work / 'source'
+          build = work / 'build'
+          bench = 'frp_m31_stability_boundary_post_synthesis_tb'
+          tb = 'rtl/m31/' + bench + '.sv'
+          workflow = '.github/workflows/frp-08-m31-stability-boundary-netlist.yml'
+          include_dirs = ['rtl/m31']
+          report = {
+              'status': 'FAIL',
+              'repository': os.environ['GITHUB_REPOSITORY'],
+              'source_commit': os.environ['GITHUB_SHA'],
+              'run_id': os.environ['GITHUB_RUN_ID'],
+              'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'scope': 'M31 stability observable with CELLS=8 on the declared 100027-vector boundary workload',
+              'implementation': 'Fresh stability netlist versus unchanged RTL with independent 128-bit oracle',
+              'configured_simulation_runs': 2,
+              'simulation_attempts': 0,
+              'simulation_runs': 0,
+              'commands': [],
+              'replays': [],
+              'rtl_stability_qualified': False,
+              'post_synthesis_qualified': False,
+              'global_coverage_closure_qualified': False,
+              'hardware_implementation_qualified': False,
+              'model_v0_9_3_equivalence_qualified': False,
+          }
+          expected_sources = {
+              'rtl/m31/frp_m31_stability_boundary_post_synthesis_tb.sv': {
+                  'bytes': 11408,
+                  'sha256': 'd89939e0fd6de1c4acfb8ab35c5c3dcc42c2248f8ca05c731e2dc083626f1b55',
+              },
+              'rtl/m31/frp_m31_stability_boundary_tb.sv': {
+                  'bytes': 16222,
+                  'sha256': 'bc74cdb4a2e948ea182695009c4793c352c28ec3529c663489f394cb076632d0',
+              },
+              'rtl/m31/frp_m31_stability.sv': {
+                  'bytes': 2203,
+                  'sha256': '69c06833e6dfbb28e25b74a5787dcd03756dddf0f66726de3ea47c1ad2931931',
+              },
+              'rtl/m31/frp_m31_fixed_point_pkg.sv': {
+                  'bytes': 7278,
+                  'sha256': '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24',
+              },
+          }
+          expected_stages = [
+              {'stage': 0, 'vectors': 65536, 'signature': '229d24de44365d37'},
+              {'stage': 1, 'vectors': 4563, 'signature': 'b1a535a763bde271'},
+              {'stage': 2, 'vectors': 1764, 'signature': '518ab8db267550d7'},
+              {'stage': 3, 'vectors': 15876, 'signature': 'ecf46a8aea3d0b15'},
+              {'stage': 4, 'vectors': 4096, 'signature': 'c598b2e8564266fd'},
+              {'stage': 5, 'vectors': 8192, 'signature': '0de3e2d82f831ac7'},
+          ]
+          expected_metrics = {
+              'stages': 6,
+              'vectors': 100027,
+              'checks': 400108,
+              'input_bits': 144,
+              'output_bits': 97,
+              'state_words': 65536,
+              'valid_state_words': 6561,
+              'reserved_state_words': 58975,
+              'neutral_bins': 9,
+              'boundary_cases': 4563,
+              'pressure_high': 6471,
+              'pressure_low': 1316,
+              'margin_high_wraps': 3167,
+              'margin_low_wraps': 25,
+              'negative_margins': 19258,
+              'zero_margins': 3287,
+              'positive_margins': 77482,
+              'global_ties': 3,
+              'cluster_ties': 3,
+              'neutral_ties': 9543,
+              'diagnostic_vectors': 82276,
+              'input_exercised': 144,
+              'output_exercised': 97,
+              'signature': '0de3e2d82f831ac7',
+          }
+          expected_post_metrics = {
+              'stages': 6,
+              'comparisons': 100027,
+              'field_checks': 400108,
+              'input_bits': 144,
+              'output_bits': 97,
+              'input_transitions': 100026,
+              'repeated_inputs': 0,
+              'input_exercised': 144,
+              'output_exercised': 97,
+              'negative_margins': 19258,
+              'zero_margins': 3287,
+              'positive_margins': 77482,
+              'stable_true': 77482,
+              'stable_false': 22545,
+              'reference_vectors': 100027,
+              'reference_checks': 400108,
+              'signature': '0de3e2d82f831ac7',
+          }
+          expected_records = [
+              'FRP_M31_STABILITY_BOUNDARY_STAGE: PASS ' +
+              ' '.join(f'{key}={value}' for key, value in stage.items())
+              for stage in expected_stages
+          ]
+          expected_records.append('FRP_M31_STABILITY_BOUNDARY_TB: PASS ' +
+                                  ' '.join(f'{key}={value}' for key, value in expected_metrics.items()))
+          expected_records.append('FRP_M31_STABILITY_BOUNDARY_POST_SYNTHESIS_TB: PASS ' +
+                                  ' '.join(f'{key}={value}' for key, value in expected_post_metrics.items()))
+
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+
+          def sha(raw):
+              return hashlib.sha256(raw).hexdigest()
+
+
+          def execute(command, label, directory, limit):
+              report['commands'].append({'label': label, 'argv': command})
+              print(label, flush=True)
+              log_path = evidence / (label + '.log')
+              try:
+                  with log_path.open('w') as log:
+                      subprocess.run(command, cwd=directory, stdout=log,
+                                     stderr=subprocess.STDOUT, timeout=limit, check=True)
+              except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                  print('\n'.join(log_path.read_text(errors='replace').splitlines()[-40:]))
+                  raise
+              return log_path
+
+
+          def stability_records(text):
+              records = [line for line in text.splitlines()
+                         if line.lstrip().startswith('FRP_M31_STABILITY_')]
+              require(len(records) == 8, 'Exactly eight stability result records are required')
+              for index, (actual, expected) in enumerate(zip(records, expected_records)):
+                  require(actual == expected,
+                          f'Stability result {index} differs: {actual!r}; expected {expected!r}')
+              return records
+
+
+          try:
+              require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch', 'Manual dispatch required')
+              require(os.environ['GITHUB_REF'] == 'refs/heads/main', 'Dispatch from main only')
+              require(os.environ['GITHUB_REPOSITORY'] ==
+                      'maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor',
+                      'Unexpected repository')
+              require(importlib.metadata.version('verilator') == '5.48.0', 'Unexpected simulation package')
+              require(importlib.metadata.version('yowasp-yosys') == '0.68.0.0.post1208',
+                      'Unexpected synthesis package')
+              report['synthesis_package'] = 'yowasp-yosys==0.68.0.0.post1208'
+              simulator_root = Path(os.environ['VERILATOR_ROOT']).resolve()
+              require(Path(shutil.which('verilator') or '').resolve() == simulator_root / 'bin' / 'verilator',
+                      'Simulator path differs from the pinned package')
+              simulator_sha = sha((simulator_root / 'bin' / 'verilator_bin').read_bytes())
+              require(simulator_sha == '7a308fe7b00607f3140fe0599efc107a3f591e631a44a1c3614e00e6c90c0dcc',
+                      'Simulator binary differs from the validated Linux x86-64 build')
+              report.update(simulation_package='verilator==5.48.0', simulation_binary_sha256=simulator_sha)
+              workflow_raw = (root / workflow).read_bytes()
+              report['workflow_sha256'] = sha(workflow_raw)
+              (evidence / Path(workflow).name).write_bytes(workflow_raw)
+              sources = {}
+
+              def visit(name):
+                  if name in sources:
+                      return
+                  path = root / name
+                  require(path.is_file() and not path.is_symlink(), 'Missing source: ' + name)
+                  raw = path.read_bytes()
+                  sources[name] = raw
+                  for inc in re.findall(r'`include\s+"([^"]+)"', raw.decode()):
+                      matches = {(directory / inc).resolve()
+                                 for directory in [path.parent, *[root / d for d in include_dirs]]
+                                 if (directory / inc).is_file()}
+                      require(len(matches) == 1, 'Missing or ambiguous include: ' + inc)
+                      resolved = matches.pop()
+                      require(resolved.is_relative_to(root), 'Include leaves the repository')
+                      visit(resolved.relative_to(root).as_posix())
+
+              visit(tb)
+              identities = {name: {'bytes': len(raw), 'sha256': sha(raw)}
+                            for name, raw in sorted(sources.items())}
+              report['sources'] = identities
+              require(identities == expected_sources, 'Stability sources differ from the validated inputs')
+              for name, raw in sources.items():
+                  for destination in (view / name, evidence / 'inputs' / name):
+                      destination.parent.mkdir(parents=True, exist_ok=True)
+                      destination.write_bytes(raw)
+              top = 'frp_m31_stability'
+              renamed = 'frp_m31_stability_netlist'
+              netlist = evidence / (renamed + '.v')
+              data = evidence / (renamed + '.json')
+              script = (
+                  f'read_slang -j 1 --std 1800-2017 --ignore-assertions --top {top} '
+                  '-Irtl/m31 rtl/m31/frp_m31_stability.sv; '
+                  f'synth -top {top} -flatten -noshare -run begin:fine; check -assert; '
+                  'techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; '
+                  'select -assert-none t:$shiftx t:$connect; '
+                  f'rename {top} {renamed}; '
+                  f'write_verilog -noattr {json.dumps(str(netlist))}; '
+                  f'write_json {json.dumps(str(data))}\n')
+              script_path = evidence / 'synthesis.ys'
+              script_path.write_text(script)
+              execute(['yowasp-yosys', '-Q', '-T', '-s', str(script_path)],
+                      'stability-synthesis', view, 600)
+              modules = json.loads(data.read_text())['modules']
+              require(set(modules) == {renamed}, 'Stability netlist must be flattened')
+              ports = modules[renamed]['ports']
+              interface = {name: {'direction': port['direction'], 'bits': len(port['bits'])}
+                           for name, port in ports.items()}
+              expected_interface = {
+                  'retained_state': {'direction': 'input', 'bits': 16},
+                  'global_coherence_q30': {'direction': 'input', 'bits': 32},
+                  'cluster_coherence_q30': {'direction': 'input', 'bits': 32},
+                  'temperature_proxy_q16': {'direction': 'input', 'bits': 32},
+                  'switch_load_q16': {'direction': 'input', 'bits': 32},
+                  'coherence_capacity_q16': {'direction': 'output', 'bits': 32},
+                  'pressure_q16': {'direction': 'output', 'bits': 32},
+                  'stability_margin_q16': {'direction': 'output', 'bits': 32},
+                  'stable': {'direction': 'output', 'bits': 1},
+              }
+              require(interface == expected_interface,
+                      'Stability netlist port names, directions or widths differ')
+              netlist_sha = sha(netlist.read_bytes())
+              require(netlist_sha == 'b253186a725bc18fd089cc9e5c099b1d6048d0c496d747885aa18dad0705df7e',
+                      'Fresh stability netlist differs from the validated synthesis')
+              data_sha = sha(data.read_bytes())
+              report['netlist'] = {'module': renamed, 'sha256': netlist_sha,
+                                   'json_sha256': data_sha, 'interface': interface,
+                                   'synthesis_script_sha256': sha(script_path.read_bytes())}
+              simlib = evidence / 'yosys-simlib.v'
+              shutil.copyfile(Path(yowasp_yosys.__file__).resolve().parent / 'share' / 'simlib.v', simlib)
+              simlib_sha = sha(simlib.read_bytes())
+              require(simlib_sha == 'e79c08085225bdc6f52ce99f128328158009a33b8ea0c8c273011dfde370561d',
+                      'Yosys simulation cell models differ from the validated library')
+              report['cell_models_sha256'] = simlib_sha
+              compiler = ['verilator', '--binary', '--sv', '--timing', '--assert',
+                          '-Wall', '-Wno-fatal', '-CFLAGS', '-std=c++20 -O0',
+                          '--output-split', '20000', '-MAKEFLAGS', 'VK_PCH_I_FAST=',
+                          '-MAKEFLAGS', 'VK_PCH_I_SLOW=', '-j', '2']
+              compiler += ['-I' + directory for directory in include_dirs]
+              execute(compiler + ['-DSIMLIB_NOCONNECT', '--top-module', bench, '--Mdir', str(build),
+                                  '-v', str(simlib), str(netlist), tb],
+                      'stability-post-build', view, 900)
+              executable = build / ('V' + bench)
+              executable_sha = sha(executable.read_bytes())
+              report['executable_sha256'] = executable_sha
+              for attempt in (1, 2):
+                  report['simulation_attempts'] += 1
+                  log = execute([str(executable)], f'stability-post-run-{attempt}', view, 120)
+                  report['simulation_runs'] += 1
+                  records = stability_records(log.read_text())
+                  record_bytes = ('\n'.join(records) + '\n').encode()
+                  (evidence / f'stability-records-{attempt}.txt').write_bytes(record_bytes)
+                  report['replays'].append({
+                      'attempt': attempt, 'stages': expected_stages, 'rtl_metrics': expected_metrics,
+                      'post_metrics': expected_post_metrics,
+                      'records': records, 'records_sha256': sha(record_bytes),
+                  })
+                  print('\n'.join(records), flush=True)
+              require(report['simulation_runs'] == 2 and len(report['replays']) == 2,
+                      'Both stability replays are required')
+              require(report['replays'][0]['records'] == report['replays'][1]['records'],
+                      'Stability replay records differ')
+              for name, raw in sources.items():
+                  require((root / name).read_bytes() == raw and (view / name).read_bytes() == raw and
+                          (evidence / 'inputs' / name).read_bytes() == raw,
+                          'Source changed during qualification: ' + name)
+              require(sha(executable.read_bytes()) == executable_sha, 'Executable changed during qualification')
+              require(sha(netlist.read_bytes()) == netlist_sha and sha(data.read_bytes()) == data_sha
+                      and sha(simlib.read_bytes()) == simlib_sha,
+                      'Netlist or simulation cell models changed during qualification')
+              require(script_path.read_text() == script, 'Synthesis script changed during qualification')
+              require((root / workflow).read_bytes() == workflow_raw, 'Workflow changed during qualification')
+              summary = [
+                  '# FRP M31 stability boundary RTL + Netlist: PASS',
+                  '',
+                  'Source commit: `' + report['source_commit'] + '`',
+                  '',
+                  'Simulation runs: 2. All eight result records match exactly in both replays.',
+                  '',
+                  '| Metric | Per replay |',
+                  '| --- | ---: |',
+                  '| Stages | 6 |',
+                  '| Input vectors | 100027 |',
+                  '| RTL oracle comparisons | 400108 |',
+                  '| RTL/netlist field comparisons | 400108 |',
+                  '| Output fields | 4 |',
+                  '| Input bits | 144 |',
+                  '| Output bits | 97 |',
+                  '| Input bits observed at both values | 144 |',
+                  '| Output bits observed at both values | 97 |',
+                  '| Packed state-bank encodings | 65536 |',
+                  '| Valid ternary encodings | 6561 |',
+                  '| Reserved encodings checked diagnostically | 58975 |',
+                  '| Boundary cases | 4563 |',
+                  '| Input transitions | 100026 |',
+                  '| Repeated inputs | 0 |',
+                  '',
+                  'The freshly synthesized frp_m31_stability module uses CELLS=8 and all nine public ports.',
+                  'All four outputs are compared at every settled vector of the unchanged RTL workload.',
+                  'The reference retains its independent signed 128-bit oracle and all original checks.',
+                  'All six cumulative netlist signatures match the fixed Python-derived expectations.',
+                  'Exact saturation, wrapping, rounding, margin-sign and active-zero coverage is required.',
+                  'Pressure retains signed saturation; margin retains the implemented 32-bit wrapping.',
+                  'Stable means strictly positive margin, so zero margin is unstable.',
+                  'Reserved state encodings and out-of-range values are diagnostic inputs;',
+                  'their presence here does not establish reachability in the complete FRP core.',
+                  '',
+                  'This qualifies functional RTL/netlist equality for the declared stability workload.',
+                  'Previous qualification workflows remain separate and are not rerun here.',
+                  'Physical timing, complete 144-bit input-space coverage, full-core behavior',
+                  'and model v0.9.3 equivalence are outside this result.',
+              ]
+              (evidence / 'summary.md').write_text('\n'.join(summary) + '\n')
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write('\n'.join(summary) + '\n')
+              report.update(status='PASS', deterministic=True, sources_unchanged=True,
+                            rtl_stability_qualified=True, post_synthesis_qualified=True)
+              print('FRP M31 stability boundary RTL/netlist qualification: PASS (2 runs)', flush=True)
+          except Exception as error:
+              report['status'] = 'FAIL'
+              report['error'] = str(error)
+              raise
+          finally:
+              (evidence / 'result.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
+          PY
+
+      - name: Retain source identities, input snapshots, logs, and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-08-m31-stability-boundary-netlist-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M31_STABILITY_POST_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
