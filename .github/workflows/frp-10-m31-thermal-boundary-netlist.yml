@@ -1,0 +1,497 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# This workflow is proprietary and is not licensed under Apache-2.0.
+# Except as required by applicable law, using, reproducing, modifying, or
+# distributing this file requires prior written permission from Maksym Marnov.
+# Referenced dependencies retain their existing licenses.
+
+name: 10 - FRP M31 Thermal Boundary RTL + Netlist
+
+run-name: "10 - FRP M31 Thermal Boundary RTL + Netlist | 2 runs @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-10-m31-thermal-boundary-netlist-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-thermal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      CXXFLAGS: "--std=c++20 -DVL_TIME_CONTEXT"
+
+    steps:
+      - name: Initialize build and evidence paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "M31_THERMAL_POST_WORK=$RUNNER_TEMP/frp-m31-thermal-boundary-post-work" \
+            "M31_THERMAL_POST_EVIDENCE=$RUNNER_TEMP/frp-m31-thermal-boundary-post-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m31-thermal-boundary-post-evidence"
+
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned simulation and synthesis tools
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            sudo apt-get update
+            sudo apt-get install --yes g++ make
+            python -m pip install --disable-pip-version-check --only-binary=:all: \
+              verilator==5.48.0 yowasp-yosys==0.68.0.0.post1208
+            frp_verilator_root="$(python -c 'import importlib.util; from pathlib import Path; print(Path(importlib.util.find_spec("verilator").origin).parent)')"
+            test -x "$frp_verilator_root/bin/verilator_bin"
+            printf '%s\n' "VERILATOR_ROOT=$frp_verilator_root" >> "$GITHUB_ENV"
+            printf '%s\n' "$frp_verilator_root/bin" >> "$GITHUB_PATH"
+            python --version
+            VERILATOR_ROOT="$frp_verilator_root" "$frp_verilator_root/bin/verilator" --version
+            g++ --version
+          } 2>&1 | tee "$M31_THERMAL_POST_EVIDENCE/toolchain.log"
+
+      - name: Qualify two deterministic thermal boundary RTL/netlist replays
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          import yowasp_yosys
+          from pathlib import Path
+
+          root = Path.cwd().resolve()
+          work = Path(os.environ['M31_THERMAL_POST_WORK'])
+          evidence = Path(os.environ['M31_THERMAL_POST_EVIDENCE'])
+          evidence.mkdir(parents=True, exist_ok=True)
+          view = work / 'source'
+          build = work / 'build'
+          bench = 'frp_m31_thermal_boundary_post_synthesis_tb'
+          tb = 'rtl/m31/' + bench + '.sv'
+          workflow = '.github/workflows/frp-10-m31-thermal-boundary-netlist.yml'
+          include_dirs = ['rtl/m31']
+          report = {
+              'status': 'FAIL',
+              'repository': os.environ['GITHUB_REPOSITORY'],
+              'source_commit': os.environ['GITHUB_SHA'],
+              'run_id': os.environ['GITHUB_RUN_ID'],
+              'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'scope': 'M31 thermal proxy on the declared 516478-cycle boundary workload, including signed-input diagnostics',
+              'implementation': 'Fresh thermal netlist versus unchanged RTL with independent signed 128-bit division/remainder oracle',
+              'configured_simulation_runs': 2,
+              'simulation_attempts': 0,
+              'simulation_runs': 0,
+              'commands': [],
+              'replays': [],
+              'rtl_thermal_qualified': False,
+              'post_synthesis_qualified': False,
+              'global_coverage_closure_qualified': False,
+              'hardware_implementation_qualified': False,
+              'model_v0_9_3_equivalence_qualified': False,
+          }
+          expected_sources = {
+              'rtl/m31/frp_m31_thermal_boundary_post_synthesis_tb.sv': {
+                  'bytes': 12869,
+                  'sha256': 'be45158bc83418b781bbc343778f1ac02af5cfaf0240732dba646338c4e2811a',
+              },
+              'rtl/m31/frp_m31_thermal_boundary_tb.sv': {
+                  'bytes': 16596,
+                  'sha256': 'af17f2cc72691d48edb9138d3381085805db010cefbc5a0846c11e21eaa7917c',
+              },
+              'rtl/m31/frp_m31_thermal_proxy.sv': {
+                  'bytes': 1883,
+                  'sha256': '34df4ebfc5dfad8e3e5e454e560404585de5c881e6f75abaae367d3bd9fb11bd',
+              },
+              'rtl/m31/frp_m31_fixed_point_pkg.sv': {
+                  'bytes': 7278,
+                  'sha256': '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24',
+              },
+          }
+          expected_stages = [
+              {'stage': 0, 'cycles': 144, 'signature': '7de57c7b58f4c12c'},
+              {'stage': 1, 'cycles': 196611, 'signature': '491f697fe39a148c'},
+              {'stage': 2, 'cycles': 196608, 'signature': 'b2c6118f0c4e8a25'},
+              {'stage': 3, 'cycles': 216, 'signature': '83ad4b39ec0e196b'},
+              {'stage': 4, 'cycles': 24588, 'signature': '3ff3ff6737faa5d9'},
+              {'stage': 5, 'cycles': 65541, 'signature': 'd2e7f48157cb7a04'},
+              {'stage': 6, 'cycles': 32770, 'signature': '0247f52a740b51d9'},
+          ]
+          expected_metrics = {
+              'stages': 7,
+              'cycles': 516478,
+              'observations': 1549550,
+              'checks': 4648650,
+              'updates': 245697,
+              'holds': 139292,
+              'clear_edges': 131343,
+              'reset_edges': 146,
+              'async_pulses': 58,
+              'normal_cases': 65537,
+              'negative_cases': 65536,
+              'rounding_cases': 108,
+              'profiles': 12,
+              'long_ticks': 65538,
+              'stream_ticks': 32768,
+              'peak_changes': 71610,
+              'diagnostic_updates': 80894,
+              'separate_rounding': 74466,
+              'gain_positive_ties': 5,
+              'gain_negative_ties': 4,
+              'negative_fixed': 1569,
+              'positive_fixed': 7886,
+              'saturations': 0,
+              'input_bits': 35,
+              'output_bits': 96,
+              'input_exercised': 35,
+              'output_exercised': 78,
+              'signature': '0247f52a740b51d9',
+          }
+          expected_profiles = [
+              {'profile': 0, 'cost': 0, 'hot': 0, 'cool': 0, 'peak': 0, 'samples': 2048},
+              {'profile': 1, 'cost': 8192, 'hot': 1631, 'cool': 10, 'peak': 1631, 'samples': 2048},
+              {'profile': 2, 'cost': 16384, 'hot': 3271, 'cool': 10, 'peak': 3271, 'samples': 2048},
+              {'profile': 3, 'cost': 24576, 'hot': 4911, 'cool': 10, 'peak': 4911, 'samples': 2048},
+              {'profile': 4, 'cost': 32768, 'hot': 6551, 'cool': 10, 'peak': 6551, 'samples': 2048},
+              {'profile': 5, 'cost': 40960, 'hot': 8191, 'cool': 10, 'peak': 8191, 'samples': 2048},
+              {'profile': 6, 'cost': 49152, 'hot': 9831, 'cool': 10, 'peak': 9831, 'samples': 2048},
+              {'profile': 7, 'cost': 57344, 'hot': 11451, 'cool': 10, 'peak': 11451, 'samples': 2048},
+              {'profile': 8, 'cost': 65536, 'hot': 13091, 'cool': 10, 'peak': 13091, 'samples': 2048},
+              {'profile': 9, 'cost': 2147483647, 'hot': 429496712, 'cool': 10, 'peak': 429496712, 'samples': 2048},
+              {'profile': 10, 'cost': -2147483648, 'hot': -429496712, 'cool': -10, 'peak': 0, 'samples': 2048},
+              {'profile': 11, 'cost': -65536, 'hot': -13091, 'cool': -10, 'peak': 0, 'samples': 2048},
+          ]
+          stage_records = [
+              'FRP_M31_THERMAL_BOUNDARY_STAGE: PASS ' +
+              ' '.join(f'{key}={value}' for key, value in stage.items())
+              for stage in expected_stages
+          ]
+          profile_records = [
+              'FRP_M31_THERMAL_BOUNDARY_PROFILE: PASS ' +
+              ' '.join(f'{key}={value}' for key, value in profile.items())
+              for profile in expected_profiles
+          ]
+          expected_records = stage_records[:4] + profile_records + stage_records[4:] + [
+              'FRP_M31_THERMAL_BOUNDARY_TB: PASS ' +
+              ' '.join(f'{key}={value}' for key, value in expected_metrics.items())
+          ]
+          expected_post_metrics = {
+              "stages": 7,
+              "cycles": 516478,
+              "comparisons": 1549550,
+              "field_checks": 4648650,
+              "pre_edges": 516478,
+              "rising_edges": 516478,
+              "falling_edges": 516478,
+              "reset_assertions": 58,
+              "reset_releases": 58,
+              "updates": 245697,
+              "holds": 139292,
+              "clear_edges": 131343,
+              "reset_edges": 146,
+              "low_reset_pulses": 30,
+              "high_reset_pulses": 28,
+              "input_bits": 35,
+              "output_bits": 96,
+              "input_exercised": 35,
+              "output_exercised": 78,
+              "reference_observations": 1549550,
+              "reference_checks": 4648650,
+              "signature": "0247f52a740b51d9"
+          }
+          expected_records.append('FRP_M31_THERMAL_BOUNDARY_POST_SYNTHESIS_TB: PASS ' +
+                                  ' '.join(f'{key}={value}' for key, value in expected_post_metrics.items()))
+
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+
+          def sha(raw):
+              return hashlib.sha256(raw).hexdigest()
+
+
+          def execute(command, label, directory, limit):
+              report['commands'].append({'label': label, 'argv': command})
+              print(label, flush=True)
+              log_path = evidence / (label + '.log')
+              try:
+                  with log_path.open('w') as log:
+                      subprocess.run(command, cwd=directory, stdout=log,
+                                     stderr=subprocess.STDOUT, timeout=limit, check=True)
+              except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                  print('\n'.join(log_path.read_text(errors='replace').splitlines()[-40:]))
+                  raise
+              return log_path
+
+
+          def thermal_records(text):
+              records = [line for line in text.splitlines()
+                         if line.lstrip().startswith('FRP_M31_THERMAL_')]
+              require(len(records) == 21, 'Exactly twenty-one thermal result records are required')
+              for index, (actual, expected) in enumerate(zip(records, expected_records)):
+                  require(actual == expected,
+                          f'Thermal result {index} differs: {actual!r}; expected {expected!r}')
+              return records
+
+
+          try:
+              require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch', 'Manual dispatch required')
+              require(os.environ['GITHUB_REF'] == 'refs/heads/main', 'Dispatch from main only')
+              require(os.environ['GITHUB_REPOSITORY'] ==
+                      'maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor',
+                      'Unexpected repository')
+              require(importlib.metadata.version('verilator') == '5.48.0', 'Unexpected simulation package')
+              require(importlib.metadata.version('yowasp-yosys') == '0.68.0.0.post1208',
+                      'Unexpected synthesis package')
+              report['synthesis_package'] = 'yowasp-yosys==0.68.0.0.post1208'
+              simulator_root = Path(os.environ['VERILATOR_ROOT']).resolve()
+              require(Path(shutil.which('verilator') or '').resolve() == simulator_root / 'bin' / 'verilator',
+                      'Simulator path differs from the pinned package')
+              simulator_sha = sha((simulator_root / 'bin' / 'verilator_bin').read_bytes())
+              require(simulator_sha == '7a308fe7b00607f3140fe0599efc107a3f591e631a44a1c3614e00e6c90c0dcc',
+                      'Simulator binary differs from the validated Linux x86-64 build')
+              report.update(simulation_package='verilator==5.48.0', simulation_binary_sha256=simulator_sha)
+              workflow_raw = (root / workflow).read_bytes()
+              report['workflow_sha256'] = sha(workflow_raw)
+              (evidence / Path(workflow).name).write_bytes(workflow_raw)
+              sources = {}
+
+              def visit(name):
+                  if name in sources:
+                      return
+                  path = root / name
+                  require(path.is_file() and not path.is_symlink(), 'Missing source: ' + name)
+                  raw = path.read_bytes()
+                  sources[name] = raw
+                  for inc in re.findall(r'`include\s+"([^"]+)"', raw.decode()):
+                      matches = {(directory / inc).resolve()
+                                 for directory in [path.parent, *[root / d for d in include_dirs]]
+                                 if (directory / inc).is_file()}
+                      require(len(matches) == 1, 'Missing or ambiguous include: ' + inc)
+                      resolved = matches.pop()
+                      require(resolved.is_relative_to(root), 'Include leaves the repository')
+                      visit(resolved.relative_to(root).as_posix())
+
+              visit(tb)
+              identities = {name: {'bytes': len(raw), 'sha256': sha(raw)}
+                            for name, raw in sorted(sources.items())}
+              report['sources'] = identities
+              require(identities == expected_sources, 'Thermal sources differ from the validated inputs')
+              for name, raw in sources.items():
+                  for destination in (view / name, evidence / 'inputs' / name):
+                      destination.parent.mkdir(parents=True, exist_ok=True)
+                      destination.write_bytes(raw)
+              version_log = execute(['verilator', '--version'], 'simulator-version', view, 30)
+              report['simulation_version'] = version_log.read_text().strip()
+              top = 'frp_m31_thermal_proxy'
+              renamed = 'frp_m31_thermal_proxy_netlist'
+              netlist = evidence / (renamed + '.v')
+              data = evidence / (renamed + '.json')
+              script = (
+                  f'read_slang -j 1 --std 1800-2017 --ignore-assertions --top {top} '
+                  '-Irtl/m31 rtl/m31/frp_m31_thermal_proxy.sv; '
+                  f'synth -top {top} -flatten -noshare -run begin:fine; check -assert; '
+                  'techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; '
+                  'select -assert-none t:$shiftx t:$connect; '
+                  f'rename {top} {renamed}; '
+                  f'write_verilog -noattr {json.dumps(str(netlist))}; '
+                  f'write_json {json.dumps(str(data))}\n')
+              script_path = evidence / 'synthesis.ys'
+              script_path.write_text(script)
+              execute(['yowasp-yosys', '-Q', '-T', '-s', str(script_path)],
+                      'thermal-synthesis', view, 600)
+              modules = json.loads(data.read_text())['modules']
+              require(set(modules) == {renamed}, 'Thermal netlist must be flattened')
+              ports = modules[renamed]['ports']
+              interface = {name: {'direction': port['direction'], 'bits': len(port['bits'])}
+                           for name, port in ports.items()}
+              expected_interface = {
+                  "clk": {
+                      "direction": "input",
+                      "bits": 1
+                  },
+                  "rst_n": {
+                      "direction": "input",
+                      "bits": 1
+                  },
+                  "tick_enable": {
+                      "direction": "input",
+                      "bits": 1
+                  },
+                  "clear": {
+                      "direction": "input",
+                      "bits": 1
+                  },
+                  "normalized_cycle_cost_q16": {
+                      "direction": "input",
+                      "bits": 32
+                  },
+                  "temperature_proxy_q16": {
+                      "direction": "output",
+                      "bits": 32
+                  },
+                  "peak_temperature_proxy_q16": {
+                      "direction": "output",
+                      "bits": 32
+                  },
+                  "sample_count_q": {
+                      "direction": "output",
+                      "bits": 32
+                  }
+              }
+              require(interface == expected_interface,
+                      'Thermal netlist port names, directions or widths differ')
+              netlist_sha = sha(netlist.read_bytes())
+              require(netlist_sha == '873a17c2f28610d2e4bb5ddb93ea94874cc6b78b5386723fc07200e526b812c1',
+                      'Fresh thermal netlist differs from the validated synthesis')
+              data_sha = sha(data.read_bytes())
+              report['netlist'] = {'module': renamed, 'sha256': netlist_sha,
+                                   'json_sha256': data_sha, 'interface': interface,
+                                   'synthesis_script_sha256': sha(script_path.read_bytes())}
+              simlib = evidence / 'yosys-simlib.v'
+              shutil.copyfile(Path(yowasp_yosys.__file__).resolve().parent / 'share' / 'simlib.v', simlib)
+              simlib_sha = sha(simlib.read_bytes())
+              require(simlib_sha == 'e79c08085225bdc6f52ce99f128328158009a33b8ea0c8c273011dfde370561d',
+                      'Yosys simulation cell models differ from the validated library')
+              report['cell_models_sha256'] = simlib_sha
+              compiler = ['verilator', '--binary', '--sv', '--timing', '--assert',
+                          '-Wall', '-Wno-fatal', '-CFLAGS', '-std=c++20 -O0',
+                          '--output-split', '20000', '-MAKEFLAGS', 'VK_PCH_I_FAST=',
+                          '-MAKEFLAGS', 'VK_PCH_I_SLOW=', '-j', '2']
+              compiler += ['-I' + directory for directory in include_dirs]
+              execute(compiler + ['-DSIMLIB_NOCONNECT', '--top-module', bench, '--Mdir', str(build),
+                                  '-v', str(simlib), str(netlist), tb],
+                      'thermal-post-build', view, 900)
+              executable = build / ('V' + bench)
+              executable_sha = sha(executable.read_bytes())
+              report['executable_sha256'] = executable_sha
+              for attempt in (1, 2):
+                  report['simulation_attempts'] += 1
+                  log = execute([str(executable)], f'thermal-post-run-{attempt}', view, 120)
+                  report['simulation_runs'] += 1
+                  records = thermal_records(log.read_text())
+                  record_bytes = ('\n'.join(records) + '\n').encode()
+                  (evidence / f'thermal-records-{attempt}.txt').write_bytes(record_bytes)
+                  report['replays'].append({
+                      'attempt': attempt, 'stages': expected_stages, 'profiles': expected_profiles,
+                      'rtl_metrics': expected_metrics,
+                      'post_metrics': expected_post_metrics,
+                      'records': records, 'records_sha256': sha(record_bytes),
+                  })
+                  print('\n'.join(records), flush=True)
+              require(report['simulation_runs'] == 2 and len(report['replays']) == 2,
+                      'Both thermal replays are required')
+              require(report['replays'][0]['records'] == report['replays'][1]['records'],
+                      'Thermal replay records differ')
+              for name, raw in sources.items():
+                  require((root / name).read_bytes() == raw and (view / name).read_bytes() == raw and
+                          (evidence / 'inputs' / name).read_bytes() == raw,
+                          'Source changed during qualification: ' + name)
+              require(sha(executable.read_bytes()) == executable_sha, 'Executable changed during qualification')
+              require(sha(netlist.read_bytes()) == netlist_sha and sha(data.read_bytes()) == data_sha
+                      and sha(simlib.read_bytes()) == simlib_sha,
+                      'Netlist or simulation cell models changed during qualification')
+              require(script_path.read_text() == script, 'Synthesis script changed during qualification')
+              require((root / workflow).read_bytes() == workflow_raw, 'Workflow changed during qualification')
+              summary = [
+                  '# FRP M31 thermal boundary RTL + Netlist: PASS',
+                  '',
+                  'Source commit: `' + report['source_commit'] + '`',
+                  '',
+                  'Simulation runs: 2. All twenty-one result records match exactly in both replays.',
+                  '',
+                  '| Metric | Per replay |',
+                  '| --- | ---: |',
+                  '| Stages | 7 |',
+                  '| Clock cycles | 516478 |',
+                  '| Output observations | 1549550 |',
+                  '| RTL oracle field comparisons | 4648650 |',
+                  '| RTL/netlist field comparisons | 4648650 |',
+                  '| Public outputs / bits | 3 / 96 |',
+                  '| Enabled updates | 245697 |',
+                  '| Held clock edges | 139292 |',
+                  '| Clear edges / reset edges | 131343 / 146 |',
+                  '| Asynchronous reset pulses | 58 |',
+                  '| Reset pulses with clock low / high | 30 / 28 |',
+                  '| Nonnegative cold-start cases | 65537 |',
+                  '| Negative cold-start cases | 65536 |',
+                  '| Directed rounding and word-boundary cases | 108 |',
+                  '| Heating/cooling profiles | 12 |',
+                  '| Uninterrupted long-run ticks | 65538 |',
+                  '| Stream cycles | 32768 |',
+                  '| Updates distinguishing separate product rounding | 74466 |',
+                  '| Positive / negative gain half ties | 5 / 4 |',
+                  '| Input bits observed at both values | 35 / 35 |',
+                  '| Output bits observed at both values | 78 / 96 |',
+                  '',
+                  'The freshly synthesized thermal proxy retains all eight public ports.',
+                  'All three outputs are compared at every observation of the unchanged RTL workload.',
+                  'The reference retains its independent signed 128-bit oracle and all original checks.',
+                  'All seven cumulative RTL/netlist signatures and twelve RTL profiles match fixed Python-derived expectations.',
+                  'The test checks reset, clear and tick priority, retention, peak tracking and counter carries.',
+                  'Reset pulses occur entirely within low or high clock phases; assertion and release are checked.',
+                  'Each thermal product retains its separate half-away-from-zero rounding.',
+                  'Cooling fixed points at +10 and -10 are preserved; the peak starts at zero and stays nonnegative.',
+                  'The dense cold-start sweep covers every signed raw Q16 cost from -65536 through 65536.',
+                  'Costs outside [0,65536] are interface diagnostics, not asserted full-core activity.',
+                  'No saturation event occurs in this workload; the reported count must remain zero.',
+                  'All 96 output bits are compared; 78 are observed at both values in this workload.',
+                  'Counter carries reach bit 16; 32-bit counter rollover is outside this result.',
+                  '',
+                  'This qualifies functional RTL/netlist equality for the declared standalone thermal workload.',
+                  'Previous qualification workflows remain separate and are not rerun here.',
+                  'Full input/state coverage, full-core behavior, physical temperature',
+                  'or timing, hardware readiness and model v0.9.3 equivalence are outside this result.',
+              ]
+              (evidence / 'summary.md').write_text('\n'.join(summary) + '\n')
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write('\n'.join(summary) + '\n')
+              report.update(status='PASS', deterministic=True, sources_unchanged=True,
+                            rtl_thermal_qualified=True, post_synthesis_qualified=True)
+              print('FRP M31 thermal boundary RTL/netlist qualification: PASS (2 runs)', flush=True)
+          except Exception as error:
+              report['status'] = 'FAIL'
+              report['error'] = str(error)
+              raise
+          finally:
+              (evidence / 'result.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
+          PY
+
+      - name: Retain source identities, input snapshots, logs, and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-10-m31-thermal-boundary-netlist-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M31_THERMAL_POST_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
