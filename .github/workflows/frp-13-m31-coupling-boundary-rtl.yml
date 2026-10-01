@@ -1,0 +1,372 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# This workflow is proprietary and is not licensed under Apache-2.0.
+# Except as required by applicable law, using, reproducing, modifying, or
+# distributing this file requires prior written permission from Maksym Marnov.
+# Referenced dependencies retain their existing licenses.
+name: 13 - FRP M31 Coupling Boundary RTL
+
+run-name: "13 - FRP M31 Coupling Boundary RTL | 2 runs @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-13-m31-coupling-boundary-rtl-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-coupling:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      CXXFLAGS: "--std=c++20 -DVL_TIME_CONTEXT"
+
+    steps:
+      - name: Initialize build and evidence paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "M31_COUPLING_WORK=$RUNNER_TEMP/frp-m31-coupling-boundary-work" \
+            "M31_COUPLING_EVIDENCE=$RUNNER_TEMP/frp-m31-coupling-boundary-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m31-coupling-boundary-evidence"
+
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned RTL simulator
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            sudo apt-get update
+            sudo apt-get install --yes g++ make
+            python -m pip install --disable-pip-version-check --only-binary=:all: \
+              verilator==5.48.0
+            frp_verilator_root="$(python -c 'import importlib.util; from pathlib import Path; print(Path(importlib.util.find_spec("verilator").origin).parent)')"
+            test -x "$frp_verilator_root/bin/verilator_bin"
+            printf '%s\n' "VERILATOR_ROOT=$frp_verilator_root" >> "$GITHUB_ENV"
+            printf '%s\n' "$frp_verilator_root/bin" >> "$GITHUB_PATH"
+            python --version
+            VERILATOR_ROOT="$frp_verilator_root" "$frp_verilator_root/bin/verilator" --version
+            g++ --version
+          } 2>&1 | tee "$M31_COUPLING_EVIDENCE/toolchain.log"
+
+      - name: Qualify two deterministic coupling boundary RTL replays
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          from pathlib import Path
+
+          root = Path.cwd().resolve()
+          work = Path(os.environ['M31_COUPLING_WORK'])
+          evidence = Path(os.environ['M31_COUPLING_EVIDENCE'])
+          evidence.mkdir(parents=True, exist_ok=True)
+          view = work / 'source'
+          build = work / 'build'
+          bench = 'frp_m31_coupling_boundary_tb'
+          tb = 'rtl/m31/' + bench + '.sv'
+          workflow = '.github/workflows/frp-13-m31-coupling-boundary-rtl.yml'
+          include_dirs = ['rtl/m31']
+          report = {
+              'status': 'FAIL',
+              'repository': os.environ['GITHUB_REPOSITORY'],
+              'source_commit': os.environ['GITHUB_SHA'],
+              'run_id': os.environ['GITHUB_RUN_ID'],
+              'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'scope': 'Eight-cell M31 coupling arithmetic, receiver-local gamma and loaded/held phase banks',
+              'implementation': 'Unchanged RTL phase engine versus independent signed 128-bit coupling arithmetic, analytic sine and binary-search integer roots',
+              'configured_simulation_runs': 2,
+              'simulation_attempts': 0,
+              'simulation_runs': 0,
+              'commands': [],
+              'replays': [],
+              'rtl_coupling_qualified': False,
+              'post_synthesis_qualified': False,
+              'global_coverage_closure_qualified': False,
+              'hardware_implementation_qualified': False,
+              'model_v0_9_3_equivalence_qualified': False,
+          }
+          expected_sources = {
+              'rtl/m31/frp_m31_coupling_boundary_tb.sv': {
+                  'bytes': 22199,
+                  'sha256': 'ba03b014a1037abd1b60f9851ab8866f6cd9b1f57149d2b5f7affcdf727b1253',
+              },
+              'rtl/m31/frp_m31_phase_interference.sv': {
+                  'bytes': 11627,
+                  'sha256': 'd3ccabcd304c4ca66dcd31c75d233a16fe61c3181f797162e91674e1992d475d',
+              },
+              'rtl/m31/frp_m31_fixed_point_pkg.sv': {
+                  'bytes': 7278,
+                  'sha256': '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24',
+              },
+              'rtl/m31/frp_m31_pkg.sv': {
+                  'bytes': 18531,
+                  'sha256': '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94',
+              },
+              'rtl/m31/frp_m31_sin_q30.mem': {
+                  'bytes': 36864,
+                  'sha256': 'adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d',
+              },
+          }
+          expected_stages = [
+              {'stage': 0, 'vectors': 2241, 'signature': 'a934bff9a4040fe7'},
+              {'stage': 1, 'vectors': 32769, 'signature': '63c9decb64f3f7a4'},
+              {'stage': 2, 'vectors': 8960, 'signature': 'c06ee89cab3825fe'},
+              {'stage': 3, 'vectors': 14336, 'signature': 'a9acc27ddfc9ba0e'},
+              {'stage': 4, 'vectors': 4096, 'signature': '1d06b40a7bb098e4'},
+              {'stage': 5, 'vectors': 5640, 'signature': 'd76b2702931c48af'},
+          ]
+          expected_rounding = [
+              {'operation': 0, 'exact': 2942576, 'positive_below': 403206, 'positive_half': 2464, 'positive_above': 403408, 'negative_below': 29434, 'negative_half': 0, 'negative_above': 29264, 'saturated_positive': 10022, 'saturated_negative': 9468},
+              {'operation': 1, 'exact': 1111188, 'positive_below': 1583032, 'positive_half': 1648, 'positive_above': 1064134, 'negative_below': 25450, 'negative_half': 0, 'negative_above': 24900, 'saturated_positive': 0, 'saturated_negative': 0},
+              {'operation': 2, 'exact': 1129559, 'positive_below': 658490, 'positive_half': 0, 'positive_above': 625403, 'negative_below': 584250, 'negative_half': 0, 'negative_above': 812650, 'saturated_positive': 0, 'saturated_negative': 0},
+              {'operation': 3, 'exact': 141081, 'positive_below': 132763, 'positive_half': 0, 'positive_above': 105607, 'negative_below': 124339, 'negative_half': 5, 'negative_above': 40541, 'saturated_positive': 0, 'saturated_negative': 0},
+              {'operation': 4, 'exact': 151017, 'positive_below': 122102, 'positive_half': 1, 'positive_above': 111346, 'negative_below': 72404, 'negative_half': 1, 'negative_above': 87465, 'saturated_positive': 0, 'saturated_negative': 0},
+          ]
+          expected_metrics = {
+              'stages': 6,
+              'vectors': 68042,
+              'checks': 612378,
+              'loads': 33225,
+              'holds': 34816,
+              'resets': 1,
+              'ordered_pairs': 56,
+              'swept_addresses': 229376,
+              'locality_checks': 32768,
+              'phase_gamma_wraps': 250536,
+              'pair_terms': 3810352,
+              'diagnostic_vectors': 5640,
+              'total_saturated_positive': 16,
+              'total_saturated_negative': 0,
+              'coupling_negative': 159692,
+              'coupling_zero': 151377,
+              'coupling_positive': 233267,
+              'output_bits': 1168,
+              'output_exercised': 1162,
+              'signature': 'd76b2702931c48af',
+          }
+          expected_records = [
+              'FRP_M31_COUPLING_BOUNDARY_STAGE: PASS ' +
+              ' '.join(f'{key}={value}' for key, value in stage.items())
+              for stage in expected_stages
+          ] + [
+              'FRP_M31_COUPLING_BOUNDARY_ROUND: PASS ' +
+              ' '.join(f'{key}={value}' for key, value in row.items())
+              for row in expected_rounding
+          ] + [
+              'FRP_M31_COUPLING_BOUNDARY_TB: PASS ' +
+              ' '.join(f'{key}={value}' for key, value in expected_metrics.items())
+          ]
+
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+
+          def sha(raw):
+              return hashlib.sha256(raw).hexdigest()
+
+
+          def execute(command, label, directory, limit):
+              report['commands'].append({'label': label, 'argv': command})
+              print(label, flush=True)
+              log_path = evidence / (label + '.log')
+              try:
+                  with log_path.open('w') as log:
+                      subprocess.run(command, cwd=directory, stdout=log,
+                                     stderr=subprocess.STDOUT, timeout=limit, check=True)
+              except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                  print('\n'.join(log_path.read_text(errors='replace').splitlines()[-40:]))
+                  raise
+              return log_path
+
+
+          def coupling_records(text):
+              records = [line for line in text.splitlines()
+                         if line.lstrip().startswith('FRP_')]
+              require(len(records) == 12, 'Exactly twelve coupling result records are required')
+              for index, (actual, expected) in enumerate(zip(records, expected_records)):
+                  require(actual == expected,
+                          f'Coupling result {index} differs: {actual!r}; expected {expected!r}')
+              return records
+
+
+          try:
+              require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch', 'Manual dispatch required')
+              require(os.environ['GITHUB_REF'] == 'refs/heads/main', 'Dispatch from main only')
+              require(os.environ['GITHUB_REPOSITORY'] ==
+                      'maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor',
+                      'Unexpected repository')
+              require(importlib.metadata.version('verilator') == '5.48.0', 'Unexpected simulation package')
+              simulator_root = Path(os.environ['VERILATOR_ROOT']).resolve()
+              require(Path(shutil.which('verilator') or '').resolve() == simulator_root / 'bin' / 'verilator',
+                      'Simulator path differs from the pinned package')
+              simulator_sha = sha((simulator_root / 'bin' / 'verilator_bin').read_bytes())
+              require(simulator_sha == '7a308fe7b00607f3140fe0599efc107a3f591e631a44a1c3614e00e6c90c0dcc',
+                      'Simulator binary differs from the validated Linux x86-64 build')
+              report.update(simulation_package='verilator==5.48.0', simulation_binary_sha256=simulator_sha)
+              workflow_raw = (root / workflow).read_bytes()
+              report['workflow_sha256'] = sha(workflow_raw)
+              (evidence / Path(workflow).name).write_bytes(workflow_raw)
+              sources = {}
+
+              def visit(name):
+                  if name in sources:
+                      return
+                  path = root / name
+                  require(path.is_file() and not path.is_symlink(), 'Missing source: ' + name)
+                  raw = path.read_bytes()
+                  sources[name] = raw
+                  for inc in re.findall(r'`include\s+"([^"]+)"', raw.decode()):
+                      matches = {(directory / inc).resolve()
+                                 for directory in [path.parent, *[root / d for d in include_dirs]]
+                                 if (directory / inc).is_file()}
+                      require(len(matches) == 1, 'Missing or ambiguous include: ' + inc)
+                      resolved = matches.pop()
+                      require(resolved.is_relative_to(root), 'Include leaves the repository')
+                      visit(resolved.relative_to(root).as_posix())
+
+              visit(tb)
+              visit('rtl/m31/frp_m31_sin_q30.mem')
+              identities = {name: {'bytes': len(raw), 'sha256': sha(raw)}
+                            for name, raw in sorted(sources.items())}
+              report['sources'] = identities
+              require(identities == expected_sources, 'Coupling sources differ from the validated inputs')
+              for name, raw in sources.items():
+                  for destination in (view / name, evidence / 'inputs' / name):
+                      destination.parent.mkdir(parents=True, exist_ok=True)
+                      destination.write_bytes(raw)
+              version_log = execute(['verilator', '--version'], 'simulator-version', view, 30)
+              report['simulation_version'] = version_log.read_text().strip()
+              compiler = ['verilator', '--binary', '--sv', '--timing', '--assert',
+                          '-Wall', '-Wno-fatal', '-CFLAGS', '-std=c++20 -O0',
+                          '--output-split', '20000', '-MAKEFLAGS', 'VK_PCH_I_FAST=',
+                          '-MAKEFLAGS', 'VK_PCH_I_SLOW=', '-j', '2']
+              compiler += ['-I' + directory for directory in include_dirs]
+              execute(compiler + ['--top-module', bench, '--Mdir', str(build), tb],
+                      'coupling-build', view, 600)
+              executable = build / ('V' + bench)
+              executable_sha = sha(executable.read_bytes())
+              report['executable_sha256'] = executable_sha
+              for attempt in (1, 2):
+                  report['simulation_attempts'] += 1
+                  log = execute([str(executable)], f'coupling-run-{attempt}', view, 180)
+                  report['simulation_runs'] += 1
+                  records = coupling_records(log.read_text())
+                  record_bytes = ('\n'.join(records) + '\n').encode()
+                  (evidence / f'coupling-records-{attempt}.txt').write_bytes(record_bytes)
+                  report['replays'].append({
+                      'attempt': attempt, 'stages': expected_stages,
+                      'rounding': expected_rounding, 'metrics': expected_metrics,
+                      'records': records, 'records_sha256': sha(record_bytes),
+                  })
+                  print('\n'.join(records), flush=True)
+              require(report['simulation_runs'] == 2 and len(report['replays']) == 2,
+                      'Both coupling replays are required')
+              require(report['replays'][0]['records'] == report['replays'][1]['records'],
+                      'Coupling replay records differ')
+              for name, raw in sources.items():
+                  require((root / name).read_bytes() == raw and (view / name).read_bytes() == raw and
+                          (evidence / 'inputs' / name).read_bytes() == raw,
+                          'Source changed during qualification: ' + name)
+              require(sha(executable.read_bytes()) == executable_sha, 'Executable changed during qualification')
+              require((root / workflow).read_bytes() == workflow_raw, 'Workflow changed during qualification')
+              summary = [
+                  '# FRP M31 coupling boundary RTL: PASS',
+                  '',
+                  'Source commit: `' + report['source_commit'] + '`',
+                  '',
+                  'Simulation runs: 2. All twelve result records match exactly in both replays.',
+                  '',
+                  '| Metric | Per replay |',
+                  '| --- | ---: |',
+                  '| Stages | 6 |',
+                  '| Output observations | 68042 |',
+                  '| Oracle field comparisons | 612378 |',
+                  '| Public outputs / compared bits | 9 / 1168 |',
+                  '| Loaded banks / held banks / reset | 33225 / 34816 / 1 |',
+                  '| Directed pairs | 56 |',
+                  '| Relative LUT addresses per directed pair | 4096 |',
+                  '| Directed pair/address combinations | 229376 |',
+                  '| Receiver-local gamma comparisons | 32768 |',
+                  '| Phase plus gamma wrap events | 250536 |',
+                  '| Evaluated pair terms | 3810352 |',
+                  '| Signed-port diagnostic observations | 5640 |',
+                  '| Positive / negative pair-factor saturation | 10022 / 9468 |',
+                  '| Positive / negative total saturation | 16 / 0 |',
+                  '| Negative / zero / positive coupling words | 159692 / 151377 / 233267 |',
+                  '| Output bits observed at both values | 1162 / 1168 |',
+                  '',
+                  'All nine public fields are checked against an independent fixed-point oracle.',
+                  'The oracle uses analytic sine, signed 128-bit arithmetic and binary-search integer roots.',
+                  'Six cumulative signatures, five rounding/saturation rows and all totals match fixed expectations.',
+                  'Rounding rows 0-4 cover thermal multiplication, topology multiplication, sine multiplication,',
+                  'Q30-to-Q16 conversion and the final coupling gain, respectively.',
+                  'Every directed pair visits all 4096 relative LUT addresses during the local-gamma sweeps.',
+                  'The testbench requires positive and negative swept coupling values for all eight receivers.',
+                  'This finite sweep does not exhaust combinations of phases, gamma words and thermal factors.',
+                  'All 1168 output bits are compared; 1162 are observed at both values in this workload.',
+                  'Stages 0-4 use thermal factors in [0, Q30 one]; stage 5 is a separate signed-port diagnostic.',
+                  'Tick is disabled: phase and frequency banks are reset, loaded or held.',
+                  'Raw scheduler/state codes and loaded frequency words are interface diagnostics.',
+                  'Phase targets are observations, not executed ternary state transitions.',
+                  '',
+                  'This qualification covers the declared standalone loaded/held coupling workload.',
+                  'Previous qualification workflows remain separate and are not rerun here.',
+                  'Phase recurrence, scheduler cadence, post-synthesis equality for this workload,',
+                  'full input/state coverage, physical timing, hardware readiness and model v0.9.3 equivalence',
+                  'are outside this result.',
+              ]
+              (evidence / 'summary.md').write_text('\n'.join(summary) + '\n')
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write('\n'.join(summary) + '\n')
+              report.update(status='PASS', deterministic=True, sources_unchanged=True,
+                            rtl_coupling_qualified=True)
+              print('FRP M31 coupling boundary RTL qualification: PASS (2 runs)', flush=True)
+          except Exception as error:
+              report['status'] = 'FAIL'
+              report['error'] = str(error)
+              raise
+          finally:
+              (evidence / 'result.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
+          PY
+
+      - name: Retain source identities, input snapshots, logs, and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-13-m31-coupling-boundary-rtl-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M31_COUPLING_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
