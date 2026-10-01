@@ -1,0 +1,507 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# This workflow is proprietary and is not licensed under Apache-2.0.
+# Except as required by applicable law, using, reproducing, modifying, or
+# distributing this file requires prior written permission from Maksym Marnov.
+# Referenced dependencies retain their existing licenses.
+
+name: 12 - FRP M31 Phase Order Boundary RTL + Netlist
+
+run-name: "12 - FRP M31 Phase Order Boundary RTL + Netlist | 2 runs @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-12-m31-phase-order-boundary-netlist-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-phase-order:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      CXXFLAGS: "--std=c++20 -DVL_TIME_CONTEXT"
+
+    steps:
+      - name: Initialize build and evidence paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "M31_PHASE_ORDER_POST_WORK=$RUNNER_TEMP/frp-m31-phase-order-boundary-post-work" \
+            "M31_PHASE_ORDER_POST_EVIDENCE=$RUNNER_TEMP/frp-m31-phase-order-boundary-post-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m31-phase-order-boundary-post-evidence"
+
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned simulation and synthesis tools
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            sudo apt-get update
+            sudo apt-get install --yes g++ make
+            python -m pip install --disable-pip-version-check --only-binary=:all: \
+              verilator==5.48.0 yowasp-yosys==0.68.0.0.post1208
+            frp_verilator_root="$(python -c 'import importlib.util; from pathlib import Path; print(Path(importlib.util.find_spec("verilator").origin).parent)')"
+            test -x "$frp_verilator_root/bin/verilator_bin"
+            printf '%s\n' "VERILATOR_ROOT=$frp_verilator_root" >> "$GITHUB_ENV"
+            printf '%s\n' "$frp_verilator_root/bin" >> "$GITHUB_PATH"
+            python --version
+            VERILATOR_ROOT="$frp_verilator_root" "$frp_verilator_root/bin/verilator" --version
+            g++ --version
+          } 2>&1 | tee "$M31_PHASE_ORDER_POST_EVIDENCE/toolchain.log"
+
+      - name: Qualify two deterministic phase-order boundary RTL/netlist replays
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          import yowasp_yosys
+          from pathlib import Path
+
+          root = Path.cwd().resolve()
+          work = Path(os.environ['M31_PHASE_ORDER_POST_WORK'])
+          evidence = Path(os.environ['M31_PHASE_ORDER_POST_EVIDENCE'])
+          evidence.mkdir(parents=True, exist_ok=True)
+          view = work / 'source'
+          build = work / 'build'
+          bench = 'frp_m31_phase_order_boundary_post_synthesis_tb'
+          tb = 'rtl/m31/' + bench + '.sv'
+          workflow = '.github/workflows/frp-12-m31-phase-order-boundary-netlist.yml'
+          include_dirs = ['rtl/m31']
+          report = {
+              'status': 'FAIL',
+              'repository': os.environ['GITHUB_REPOSITORY'],
+              'source_commit': os.environ['GITHUB_SHA'],
+              'run_id': os.environ['GITHUB_RUN_ID'],
+              'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'scope': 'Eight-cell M31 phase engine on the declared 89089-vector loaded/retained phase-order workload',
+              'implementation': 'Fresh phase-engine netlist versus unchanged RTL with analytic sine, signed 128-bit means and integer-root oracle',
+              'configured_simulation_runs': 2,
+              'simulation_attempts': 0,
+              'simulation_runs': 0,
+              'commands': [],
+              'replays': [],
+              'rtl_phase_order_qualified': False,
+              'post_synthesis_qualified': False,
+              'global_coverage_closure_qualified': False,
+              'hardware_implementation_qualified': False,
+              'model_v0_9_3_equivalence_qualified': False,
+          }
+          expected_sources = {
+              'rtl/m31/frp_m31_phase_order_boundary_post_synthesis_tb.sv': {
+                  'bytes': 14667,
+                  'sha256': '0ddb9bcff7cf16303721eb48138cd0b4544b28407acaa08bbc1acec765424af8',
+              },
+              'rtl/m31/frp_m31_phase_order_boundary_tb.sv': {
+                  'bytes': 18709,
+                  'sha256': 'ff4658d220da6893e9a9735097496b06e11d4a1b77093ca434e205b64bda5984',
+              },
+              'rtl/m31/frp_m31_phase_interference.sv': {
+                  'bytes': 11627,
+                  'sha256': 'd3ccabcd304c4ca66dcd31c75d233a16fe61c3181f797162e91674e1992d475d',
+              },
+              'rtl/m31/frp_m31_fixed_point_pkg.sv': {
+                  'bytes': 7278,
+                  'sha256': '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24',
+              },
+              'rtl/m31/frp_m31_pkg.sv': {
+                  'bytes': 18531,
+                  'sha256': '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94',
+              },
+              'rtl/m31/frp_m31_sin_q30.mem': {
+                  'bytes': 36864,
+                  'sha256': 'adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d',
+              },
+          }
+          expected_stages = [
+              {'stage': 0, 'vectors': 65537, 'signature': 'd1adf5d6dee56313'},
+              {'stage': 1, 'vectors': 16384, 'signature': '428702501bbf0a71'},
+              {'stage': 2, 'vectors': 2048, 'signature': '3140e569d9b5bd57'},
+              {'stage': 3, 'vectors': 1024, 'signature': 'f50c21b2096e794b'},
+              {'stage': 4, 'vectors': 2048, 'signature': 'aa0f1506a19a2f97'},
+              {'stage': 5, 'vectors': 2048, 'signature': '540a693ef2011a97'},
+          ]
+          expected_means = [
+              {'population': 2, 'exact': 628258, 'positive_below': 0, 'positive_half': 48002, 'positive_above': 0, 'negative_below': 0, 'negative_half': 36452, 'negative_above': 0},
+              {'population': 4, 'exact': 298358, 'positive_below': 7629, 'positive_half': 16841, 'positive_above': 7605, 'negative_below': 7547, 'negative_half': 10811, 'negative_above': 7565},
+              {'population': 8, 'exact': 148680, 'positive_below': 5585, 'positive_half': 5861, 'positive_above': 5763, 'negative_below': 4507, 'negative_half': 2983, 'negative_above': 4799},
+          ]
+          expected_metrics = {
+              'stages': 6,
+              'vectors': 89089,
+              'checks': 801801,
+              'loads': 88064,
+              'holds': 1024,
+              'resets': 1,
+              'cardinal_banks': 65536,
+              'separation_cases': 16384,
+              'rotation_relations': 1536,
+              'low_bits_relations': 768,
+              'permutation_relations': 1792,
+              'hold_relations': 1024,
+              'wide_sums': 168788,
+              'sqrt_exact': 221593,
+              'sqrt_floor': 402030,
+              'clamps': 0,
+              'pair_zero': 258,
+              'pair_one': 259,
+              'cluster_zero': 1298,
+              'cluster_one': 18,
+              'global_zero': 8998,
+              'global_one': 6,
+              'dispersion_zero': 27066,
+              'target_negative': 186534,
+              'target_zero': 339568,
+              'target_positive': 186610,
+              'output_bits': 1168,
+              'output_exercised': 907,
+              'signature': '540a693ef2011a97',
+          }
+          expected_records = [
+              'FRP_M31_PHASE_ORDER_BOUNDARY_STAGE: PASS ' +
+              ' '.join(f'{key}={value}' for key, value in stage.items())
+              for stage in expected_stages
+          ] + [
+              'FRP_M31_PHASE_ORDER_BOUNDARY_MEAN: PASS ' +
+              ' '.join(f'{key}={value}' for key, value in mean.items())
+              for mean in expected_means
+          ] + [
+              'FRP_M31_PHASE_ORDER_BOUNDARY_TB: PASS ' +
+              ' '.join(f'{key}={value}' for key, value in expected_metrics.items())
+          ]
+          expected_post_metrics = {
+              'stages': 6,
+              'vectors': 89089,
+              'comparisons': 178178,
+              'field_checks': 1603602,
+              'rising_edges': 89089,
+              'falling_edges': 89089,
+              'loads': 88064,
+              'holds': 1024,
+              'resets': 1,
+              'input_bits': 1054,
+              'output_bits': 1168,
+              'input_exercised': 773,
+              'output_exercised': 907,
+              'reference_vectors': 89089,
+              'reference_checks': 801801,
+              'signature': '540a693ef2011a97',
+          }
+          expected_records.append('FRP_M31_PHASE_ORDER_BOUNDARY_POST_SYNTHESIS_TB: PASS ' +
+                                  ' '.join(f'{key}={value}' for key, value in expected_post_metrics.items()))
+
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+
+          def sha(raw):
+              return hashlib.sha256(raw).hexdigest()
+
+
+          def execute(command, label, directory, limit):
+              report['commands'].append({'label': label, 'argv': command})
+              print(label, flush=True)
+              log_path = evidence / (label + '.log')
+              try:
+                  with log_path.open('w') as log:
+                      subprocess.run(command, cwd=directory, stdout=log,
+                                     stderr=subprocess.STDOUT, timeout=limit, check=True)
+              except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                  print('\n'.join(log_path.read_text(errors='replace').splitlines()[-40:]))
+                  raise
+              return log_path
+
+
+          def phase_order_records(text):
+              records = [line for line in text.splitlines()
+                         if line.lstrip().startswith('FRP_')]
+              require(len(records) == 11, 'Exactly eleven phase-order result records are required')
+              for index, (actual, expected) in enumerate(zip(records, expected_records)):
+                  require(actual == expected,
+                          f'Phase-order result {index} differs: {actual!r}; expected {expected!r}')
+              return records
+
+
+          try:
+              require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch', 'Manual dispatch required')
+              require(os.environ['GITHUB_REF'] == 'refs/heads/main', 'Dispatch from main only')
+              require(os.environ['GITHUB_REPOSITORY'] ==
+                      'maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor',
+                      'Unexpected repository')
+              require(importlib.metadata.version('verilator') == '5.48.0', 'Unexpected simulation package')
+              require(importlib.metadata.version('yowasp-yosys') == '0.68.0.0.post1208',
+                      'Unexpected synthesis package')
+              report['synthesis_package'] = 'yowasp-yosys==0.68.0.0.post1208'
+              simulator_root = Path(os.environ['VERILATOR_ROOT']).resolve()
+              require(Path(shutil.which('verilator') or '').resolve() == simulator_root / 'bin' / 'verilator',
+                      'Simulator path differs from the pinned package')
+              simulator_sha = sha((simulator_root / 'bin' / 'verilator_bin').read_bytes())
+              require(simulator_sha == '7a308fe7b00607f3140fe0599efc107a3f591e631a44a1c3614e00e6c90c0dcc',
+                      'Simulator binary differs from the validated Linux x86-64 build')
+              report.update(simulation_package='verilator==5.48.0', simulation_binary_sha256=simulator_sha)
+              workflow_raw = (root / workflow).read_bytes()
+              report['workflow_sha256'] = sha(workflow_raw)
+              (evidence / Path(workflow).name).write_bytes(workflow_raw)
+              sources = {}
+
+              def visit(name):
+                  if name in sources:
+                      return
+                  path = root / name
+                  require(path.is_file() and not path.is_symlink(), 'Missing source: ' + name)
+                  raw = path.read_bytes()
+                  sources[name] = raw
+                  for inc in re.findall(r'`include\s+"([^"]+)"', raw.decode()):
+                      matches = {(directory / inc).resolve()
+                                 for directory in [path.parent, *[root / d for d in include_dirs]]
+                                 if (directory / inc).is_file()}
+                      require(len(matches) == 1, 'Missing or ambiguous include: ' + inc)
+                      resolved = matches.pop()
+                      require(resolved.is_relative_to(root), 'Include leaves the repository')
+                      visit(resolved.relative_to(root).as_posix())
+
+              visit(tb)
+              visit('rtl/m31/frp_m31_sin_q30.mem')
+              identities = {name: {'bytes': len(raw), 'sha256': sha(raw)}
+                            for name, raw in sorted(sources.items())}
+              report['sources'] = identities
+              require(identities == expected_sources, 'Phase-order sources differ from the validated inputs')
+              for name, raw in sources.items():
+                  for destination in (view / name, evidence / 'inputs' / name):
+                      destination.parent.mkdir(parents=True, exist_ok=True)
+                      destination.write_bytes(raw)
+              synthesis_view = work / 'synthesis-source'
+              phase_name = 'rtl/m31/frp_m31_phase_interference.sv'
+              phase_text = sources[phase_name].decode()
+              first = phase_text.index("    if (sin_lut[0] !== 32'sd0)")
+              last = phase_text.index('      $fatal(1, "FRP M31 sine LUT three-quarter-cycle mismatch");', first)
+              end = phase_text.index('\n', last) + 1
+              removed = phase_text[first:end]
+              normalized = (phase_text[:first] + phase_text[end:]).encode()
+              require(removed.count('$fatal(') == 4 and b'$readmemh(SIN_LUT_FILE, sin_lut);' in normalized,
+                      'Unexpected phase-engine ROM guard normalization')
+              require(sha(normalized) == '09302236b4a7734be9ac0890df4a7a577541a73c441ae7db3e70da8465f1c3ef',
+                      'Synthesis copy differs from the established phase-engine normalization')
+              synthesis_sources = {name: sources[name] for name in (
+                  phase_name, 'rtl/m31/frp_m31_fixed_point_pkg.sv',
+                  'rtl/m31/frp_m31_pkg.sv', 'rtl/m31/frp_m31_sin_q30.mem')}
+              synthesis_sources[phase_name] = normalized
+              report['synthesis_normalization'] = {
+                  'path': phase_name, 'original_sha256': sha(sources[phase_name]),
+                  'normalized_sha256': sha(normalized), 'removed_simulation_guards': 4,
+                  'readmemh_preserved': True, 'rtl_reference_unchanged': True,
+              }
+              report['synthesis_sources'] = {
+                  name: {'bytes': len(raw), 'sha256': sha(raw)}
+                  for name, raw in sorted(synthesis_sources.items())}
+              (evidence / 'removed-simulation-guards.txt').write_text(removed)
+              for name, raw in synthesis_sources.items():
+                  for destination in (synthesis_view / name, evidence / 'synthesis-inputs' / name):
+                      destination.parent.mkdir(parents=True, exist_ok=True)
+                      destination.write_bytes(raw)
+              version_log = execute(['verilator', '--version'], 'simulator-version', view, 30)
+              report['simulation_version'] = version_log.read_text().strip()
+              top = 'frp_m31_phase_interference'
+              renamed = 'frp_m31_phase_interference_netlist'
+              netlist = evidence / (renamed + '.v')
+              data = evidence / (renamed + '.json')
+              script = (
+                  f'read_slang -j 1 --std 1800-2017 --ignore-assertions --top {top} '
+                  '-Irtl/m31 rtl/m31/frp_m31_phase_interference.sv; '
+                  f'synth -top {top} -flatten -noshare -run begin:fine; check -assert; '
+                  'techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; '
+                  'select -assert-none t:$shiftx t:$connect; '
+                  f'rename {top} {renamed}; '
+                  f'write_verilog -noattr {json.dumps(str(netlist))}; '
+                  f'write_json {json.dumps(str(data))}\n')
+              script_path = evidence / 'synthesis.ys'
+              script_path.write_text(script)
+              execute(['yowasp-yosys', '-Q', '-T', '-s', str(script_path)],
+                      'phase-order-synthesis', synthesis_view, 600)
+              modules = json.loads(data.read_text())['modules']
+              require(set(modules) == {renamed}, 'Phase-order netlist must be flattened')
+              ports = modules[renamed]['ports']
+              interface = {name: {'direction': port['direction'], 'bits': len(port['bits'])}
+                           for name, port in ports.items()}
+              expected_interface = {
+                  'clk': {'direction': 'input', 'bits': 1},
+                  'rst_n': {'direction': 'input', 'bits': 1},
+                  'tick_enable': {'direction': 'input', 'bits': 1},
+                  'load_valid': {'direction': 'input', 'bits': 1},
+                  'phase_load': {'direction': 'input', 'bits': 256},
+                  'frequency_load_q16': {'direction': 'input', 'bits': 256},
+                  'gamma_effective_word': {'direction': 'input', 'bits': 256},
+                  'thermal_node_factor_q30': {'direction': 'input', 'bits': 256},
+                  'retained_state': {'direction': 'input', 'bits': 16},
+                  'switch_activity': {'direction': 'input', 'bits': 8},
+                  'scheduler_state': {'direction': 'input', 'bits': 3},
+                  'phase_word_q': {'direction': 'output', 'bits': 256},
+                  'frequency_current_q16': {'direction': 'output', 'bits': 256},
+                  'coupling_field_q16': {'direction': 'output', 'bits': 256},
+                  'phase_projection_q30': {'direction': 'output', 'bits': 256},
+                  'phase_target': {'direction': 'output', 'bits': 16},
+                  'pair_coherence_q30': {'direction': 'output', 'bits': 32},
+                  'cluster_coherence_q30': {'direction': 'output', 'bits': 32},
+                  'global_coherence_q30': {'direction': 'output', 'bits': 32},
+                  'organization_dispersion_q30': {'direction': 'output', 'bits': 32},
+              }
+              require(interface == expected_interface,
+                      'Phase-order netlist port names, directions or widths differ')
+              netlist_sha = sha(netlist.read_bytes())
+              require(netlist_sha == '9524da7ec00564ab136f7687788fb69c5d3e94bd675155c9d85370ec31767003',
+                      'Fresh phase-order netlist differs from the validated synthesis')
+              data_sha = sha(data.read_bytes())
+              report['netlist'] = {'module': renamed, 'sha256': netlist_sha,
+                                   'json_sha256': data_sha, 'interface': interface,
+                                   'synthesis_script_sha256': sha(script_path.read_bytes())}
+              simlib = evidence / 'yosys-simlib.v'
+              shutil.copyfile(Path(yowasp_yosys.__file__).resolve().parent / 'share' / 'simlib.v', simlib)
+              simlib_sha = sha(simlib.read_bytes())
+              require(simlib_sha == 'e79c08085225bdc6f52ce99f128328158009a33b8ea0c8c273011dfde370561d',
+                      'Yosys simulation cell models differ from the validated library')
+              report['cell_models_sha256'] = simlib_sha
+              compiler = ['verilator', '--binary', '--sv', '--timing', '--assert',
+                          '-Wall', '-Wno-fatal', '-CFLAGS', '-std=c++20 -O0',
+                          '--output-split', '20000', '-MAKEFLAGS', 'VK_PCH_I_FAST=',
+                          '-MAKEFLAGS', 'VK_PCH_I_SLOW=', '-j', '2']
+              compiler += ['-I' + directory for directory in include_dirs]
+              execute(compiler + ['-DSIMLIB_NOCONNECT', '--top-module', bench, '--Mdir', str(build),
+                                  '-v', str(simlib), str(netlist), tb],
+                      'phase-order-post-build', view, 900)
+              executable = build / ('V' + bench)
+              executable_sha = sha(executable.read_bytes())
+              report['executable_sha256'] = executable_sha
+              for attempt in (1, 2):
+                  report['simulation_attempts'] += 1
+                  log = execute([str(executable)], f'phase-order-post-run-{attempt}', view, 180)
+                  report['simulation_runs'] += 1
+                  records = phase_order_records(log.read_text())
+                  record_bytes = ('\n'.join(records) + '\n').encode()
+                  (evidence / f'phase-order-records-{attempt}.txt').write_bytes(record_bytes)
+                  report['replays'].append({
+                      'attempt': attempt, 'stages': expected_stages, 'means': expected_means,
+                      'rtl_metrics': expected_metrics,
+                      'post_metrics': expected_post_metrics,
+                      'records': records, 'records_sha256': sha(record_bytes),
+                  })
+                  print('\n'.join(records), flush=True)
+              require(report['simulation_runs'] == 2 and len(report['replays']) == 2,
+                      'Both phase-order replays are required')
+              require(report['replays'][0]['records'] == report['replays'][1]['records'],
+                      'Phase-order replay records differ')
+              for name, raw in sources.items():
+                  require((root / name).read_bytes() == raw and (view / name).read_bytes() == raw and
+                          (evidence / 'inputs' / name).read_bytes() == raw,
+                          'Source changed during qualification: ' + name)
+              for name, raw in synthesis_sources.items():
+                  require((synthesis_view / name).read_bytes() == raw and
+                          (evidence / 'synthesis-inputs' / name).read_bytes() == raw,
+                          'Synthesis source changed during qualification: ' + name)
+              require(sha(executable.read_bytes()) == executable_sha, 'Executable changed during qualification')
+              require(sha(netlist.read_bytes()) == netlist_sha and sha(data.read_bytes()) == data_sha
+                      and sha(simlib.read_bytes()) == simlib_sha,
+                      'Netlist or simulation cell models changed during qualification')
+              require(script_path.read_text() == script, 'Synthesis script changed during qualification')
+              require((root / workflow).read_bytes() == workflow_raw, 'Workflow changed during qualification')
+              summary = [
+                  '# FRP M31 phase-order boundary RTL + Netlist: PASS',
+                  '',
+                  'Source commit: `' + report['source_commit'] + '`',
+                  '',
+                  'Simulation runs: 2. All eleven result records match exactly in both replays.',
+                  '',
+                  '| Metric | Per replay |',
+                  '| --- | ---: |',
+                  '| Stages | 6 |',
+                  '| Workload vectors | 89089 |',
+                  '| RTL oracle field comparisons | 801801 |',
+                  '| RTL/netlist output observations | 178178 |',
+                  '| RTL/netlist field comparisons | 1603602 |',
+                  '| Public outputs / compared bits | 9 / 1168 |',
+                  '| Rising / falling edges checked | 89089 / 89089 |',
+                  '| Loaded banks / held banks / reset | 88064 / 1024 / 1 |',
+                  '| Cardinal-phase banks | 65536 |',
+                  '| Separation cases | 16384 |',
+                  '| Quarter-turn invariance comparisons | 1536 |',
+                  '| Low phase-bit invariance comparisons | 768 |',
+                  '| Dyadic relabelling invariance comparisons | 1792 |',
+                  '| Held-output comparisons in the reference | 1024 |',
+                  '| Coordinate sums outside signed 32-bit range | 168788 |',
+                  '| Exact / floor integer roots | 221593 / 402030 |',
+                  '| Clamp events | 0 |',
+                  '| Non-clock input bits observed at both values | 773 / 1054 |',
+                  '| Output bits observed at both values | 907 / 1168 |',
+                  '',
+                  'The freshly synthesized eight-cell phase engine retains all twenty public ports.',
+                  'All nine outputs are compared after both edges of every unchanged workload vector.',
+                  'The RTL reference retains its independent analytic sine and 128-bit integer oracle.',
+                  'All six cumulative signatures, three signed-mean bin rows and totals match fixed expectations.',
+                  'The exhaustive domain is the 4^8 labelled cardinal-phase banks, not the full phase space.',
+                  'All 1168 output bits are compared; 907 are observed at both values in this workload.',
+                  'The synthesis copy omits only four unsupported ROM simulation fatal guards.',
+                  'ROM loading and functional logic are preserved; all four guards remain active in the RTL reference.',
+                  'The original sources, normalized synthesis inputs, netlist, cell models and logs are retained.',
+                  'Tick is disabled and all thermal factors are zero; coupling is checked as zero.',
+                  'Raw scheduler/state codes and loaded frequency words are interface diagnostics.',
+                  'Phase targets are observations, not executed ternary state transitions.',
+                  '',
+                  'This qualifies functional RTL/netlist equality for the declared loaded/retained phase-geometry workload.',
+                  'Previous qualification workflows remain separate and are not rerun here.',
+                  'Nonzero coupling, phase recurrence, scheduler cadence, full input/state coverage, physical timing,',
+                  'hardware readiness and model v0.9.3 equivalence are outside this result.',
+              ]
+              (evidence / 'summary.md').write_text('\n'.join(summary) + '\n')
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write('\n'.join(summary) + '\n')
+              report.update(status='PASS', deterministic=True, sources_unchanged=True,
+                            rtl_phase_order_qualified=True, post_synthesis_qualified=True)
+              print('FRP M31 phase-order boundary RTL/netlist qualification: PASS (2 runs)', flush=True)
+          except Exception as error:
+              report['status'] = 'FAIL'
+              report['error'] = str(error)
+              raise
+          finally:
+              (evidence / 'result.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
+          PY
+
+      - name: Retain source identities, input snapshots, logs, and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-12-m31-phase-order-boundary-netlist-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M31_PHASE_ORDER_POST_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
