@@ -55,15 +55,19 @@ jobs:
           python-version: "3.12"
 
       - name: Install the pinned simulation and synthesis tools
+        timeout-minutes: 10
         run: |
           set -euo pipefail
           test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
           test "$GITHUB_REF" = "refs/heads/main"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           {
-            sudo apt-get update
-            sudo apt-get install --yes g++ make
+            command -v g++
+            command -v make
+            g++ --version
+            make --version
             python -m pip install --disable-pip-version-check --only-binary=:all: \
+              --timeout 30 --retries 3 \
               verilator==5.48.0 yowasp-yosys==0.68.0.0.post1208
             frp_verilator_root="$(python -c 'import importlib.util; from pathlib import Path; print(Path(importlib.util.find_spec("verilator").origin).parent)')"
             test -x "$frp_verilator_root/bin/verilator_bin"
@@ -71,7 +75,6 @@ jobs:
             printf '%s\n' "$frp_verilator_root/bin" >> "$GITHUB_PATH"
             python --version
             VERILATOR_ROOT="$frp_verilator_root" "$frp_verilator_root/bin/verilator" --version
-            g++ --version
           } 2>&1 | tee "$M31_COUPLING_POST_EVIDENCE/toolchain.log"
 
       - name: Qualify two deterministic coupling boundary RTL/netlist replays
