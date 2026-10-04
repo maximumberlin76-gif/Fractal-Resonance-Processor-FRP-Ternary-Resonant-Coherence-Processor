@@ -1,0 +1,464 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# This workflow is proprietary and is not licensed under Apache-2.0.
+# Except as required by applicable law, using, reproducing, modifying, or
+# distributing this file requires prior written permission from Maksym Marnov.
+# Referenced dependencies retain their existing licenses.
+
+name: 19 - FRP M32 Pending Backlog Boundary RTL + Netlist
+
+run-name: "19 - FRP M32 Pending Backlog Boundary RTL + Netlist | 4 runs @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-19-m32-pending-backlog-boundary-netlist-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-backlog:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      CXXFLAGS: "--std=c++20 -DVL_TIME_CONTEXT"
+
+    steps:
+      - name: Initialize build and evidence paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "M32_PENDING_BACKLOG_WORK=$RUNNER_TEMP/frp-m32-pending-backlog-boundary-work" \
+            "M32_PENDING_BACKLOG_EVIDENCE=$RUNNER_TEMP/frp-m32-pending-backlog-boundary-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m32-pending-backlog-boundary-evidence"
+
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned simulation and synthesis tools
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            command -v g++
+            command -v make
+            g++ --version
+            make --version
+            python -m pip install --disable-pip-version-check --only-binary=:all: \
+              --timeout 30 --retries 3 \
+              verilator==5.48.0 yowasp-yosys==0.68.0.0.post1208
+            frp_verilator_root="$(python -c 'import importlib.util; from pathlib import Path; print(Path(importlib.util.find_spec("verilator").origin).parent)')"
+            test -x "$frp_verilator_root/bin/verilator_bin"
+            printf '%s\n' "VERILATOR_ROOT=$frp_verilator_root" >> "$GITHUB_ENV"
+            printf '%s\n' "$frp_verilator_root/bin" >> "$GITHUB_PATH"
+            python --version
+            VERILATOR_ROOT="$frp_verilator_root" "$frp_verilator_root/bin/verilator" --version
+          } 2>&1 | tee "$M32_PENDING_BACKLOG_EVIDENCE/toolchain.log"
+
+      - name: Qualify two RTL and two netlist pending-backlog-boundary replays
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          import yowasp_yosys
+          from pathlib import Path
+
+          root = Path.cwd().resolve()
+          work = Path(os.environ['M32_PENDING_BACKLOG_WORK'])
+          evidence = Path(os.environ['M32_PENDING_BACKLOG_EVIDENCE'])
+          evidence.mkdir(parents=True, exist_ok=True)
+          view = work / 'source'
+          bench = 'frp_m32_pending_backlog_boundary_tb'
+          tb = 'rtl/m32/' + bench + '.sv'
+          workflow = '.github/workflows/frp-19-m32-pending-backlog-boundary-netlist.yml'
+          include_dirs = ['rtl/m31', 'rtl/m32']
+          report = {
+              'status': 'FAIL', 'repository': os.environ['GITHUB_REPOSITORY'],
+              'source_commit': os.environ['GITHUB_SHA'],
+              'run_id': os.environ['GITHUB_RUN_ID'], 'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'scope': 'Eight-cell M32 core, two request lanes, finite end-to-end pending-backlog-boundary workload',
+              'implementation': 'The same independent integer oracle and stimulus compiled for RTL and a freshly synthesized netlist',
+              'configured_simulation_runs': 4, 'simulation_attempts': 0, 'simulation_runs': 0,
+              'commands': [], 'replays': [], 'executables': {},
+              'rtl_pending_backlog_boundary_qualified': False, 'post_synthesis_qualified': False,
+              'global_coverage_closure_qualified': False, 'hardware_implementation_qualified': False,
+              'model_v0_9_3_equivalence_qualified': False,
+          }
+          expected_sources = {
+              'rtl/m31/frp_m31_active_neutral.sv': {'bytes': 25909, 'sha256': '765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0'},
+              'rtl/m31/frp_m31_capacity_guard.sv': {'bytes': 20787, 'sha256': 'd0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123'},
+              'rtl/m31/frp_m31_execution_core.sv': {'bytes': 33724, 'sha256': 'e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92'},
+              'rtl/m31/frp_m31_fixed_point_pkg.sv': {'bytes': 7278, 'sha256': '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24'},
+              'rtl/m31/frp_m31_pending_routes.sv': {'bytes': 17005, 'sha256': '18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411'},
+              'rtl/m31/frp_m31_phase_interference.sv': {'bytes': 11627, 'sha256': 'd3ccabcd304c4ca66dcd31c75d233a16fe61c3181f797162e91674e1992d475d'},
+              'rtl/m31/frp_m31_phase_request_adapter.sv': {'bytes': 2251, 'sha256': 'fa78bcfe965270cc74855908aa392989d857575a2097a126539aabb1aab8990d'},
+              'rtl/m31/frp_m31_pkg.sv': {'bytes': 18531, 'sha256': '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94'},
+              'rtl/m31/frp_m31_request_lanes.sv': {'bytes': 18290, 'sha256': '32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109'},
+              'rtl/m31/frp_m31_scheduler.sv': {'bytes': 10560, 'sha256': 'fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f'},
+              'rtl/m31/frp_m31_sin_q30.mem': {'bytes': 36864, 'sha256': 'adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d'},
+              'rtl/m31/frp_m31_stability.sv': {'bytes': 2203, 'sha256': '69c06833e6dfbb28e25b74a5787dcd03756dddf0f66726de3ea47c1ad2931931'},
+              'rtl/m31/frp_m31_state_update.sv': {'bytes': 18147, 'sha256': 'ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90'},
+              'rtl/m31/frp_m31_thermal_proxy.sv': {'bytes': 1883, 'sha256': '34df4ebfc5dfad8e3e5e454e560404585de5c881e6f75abaae367d3bd9fb11bd'},
+              'rtl/m32/frp_m32_core.sv': {'bytes': 10564, 'sha256': '925342326b7ad555a1382e8ee3bc5754ed3012ba60e0eabf512113731e0ee6c9'},
+              'rtl/m32/frp_m32_pending_backlog_boundary_tb.sv': {'bytes': 38873, 'sha256': '29cd92c90b01daeee678af7fe86a2473a6e350460f0194dd7991053d862bc825'},
+              'rtl/m32/frp_m32_registered_target_boundary.sv': {'bytes': 3947, 'sha256': '9626474b49d32b411e107d7ccc8ee5aa7f42728e9a6f70d634d16d3f2a414c5e'},
+              'rtl/m32/frp_m32_registered_target_request_path.sv': {'bytes': 3244, 'sha256': '02250069a68737f055a419cd67bf2d439b3f63b3f6a7a245f40e9bf29d1958eb'},
+          }
+          expected_records = [
+              'FRP_M32_PENDING_BACKLOG_STAGE: PASS stage=0 checks=298496 signature=8c4b6b58e5106389',
+              'FRP_M32_PENDING_BACKLOG_STAGE: PASS stage=1 checks=302368 signature=3bc90888bb21ea8f',
+              'FRP_M32_PENDING_BACKLOG_PROFILE: PASS mode=0 ticks=1024 free=1024 balance=0 commit=0 excite=0 neutralize=0 signature=255026997fe4cb98',
+              'FRP_M32_PENDING_BACKLOG_PROFILE: PASS mode=1 ticks=1024 free=0 balance=896 commit=128 excite=0 neutralize=0 signature=3292276517538de1',
+              'FRP_M32_PENDING_BACKLOG_PROFILE: PASS mode=2 ticks=1024 free=0 balance=0 commit=0 excite=128 neutralize=896 signature=f0d765642634d006',
+              'FRP_M32_PENDING_BACKLOG_STAGE: PASS stage=2 checks=312043 signature=f0d765642634d006',
+              'FRP_M32_PENDING_BACKLOG_TB: PASS matrix_cases=2048 reset_cases=64 profiles=3 checks=312043 fields=59 output_bits=2075 full_backlogs=75 full_backlog_resets=64 drained_destinations=8192 eligible_drain_edges=4608 blocked_drain_edges=27648 pending_holds=34296 busy_rejections=32256 saturated_noops=1776 capacity_blocks=1943 drain_clear_ticks=7392 drain_clear_holds=13368 drain_target_changes=66552 enabled=58245 held=40783 first_legs=9027 second_legs=8515 first_cells=255 second_cells=255 signature=f0d765642634d006',
+          ]
+          expected_ports = {
+              'clk': ('input', 1),
+              'rst_n': ('input', 1),
+              'tick_enable': ('input', 1),
+              'clear_counters': ('input', 1),
+              'scheduler_mode': ('input', 2),
+              'phase_load_valid': ('input', 1),
+              'phase_load': ('input', 256),
+              'frequency_load_q16': ('input', 256),
+              'gamma_effective_word': ('input', 256),
+              'thermal_node_factor_q30': ('input', 256),
+              'auto_target_enable': ('input', 1),
+              'external_request_valid': ('input', 2),
+              'external_request_cell_index': ('input', 6),
+              'external_request_target': ('input', 4),
+              'external_target_bank': ('input', 16),
+              'phase_word_q': ('output', 256),
+              'frequency_current_q16': ('output', 256),
+              'coupling_field_q16': ('output', 256),
+              'phase_projection_q30': ('output', 256),
+              'phase_target_source': ('output', 16),
+              'registered_target_q': ('output', 16),
+              'registered_target_valid_q': ('output', 1),
+              'phase_target_domain_valid': ('output', 1),
+              'registered_target_domain_valid': ('output', 1),
+              'target_capture_accepted': ('output', 1),
+              'target_capture_rejected': ('output', 1),
+              'accepted_target_capture_events_q': ('output', 32),
+              'rejected_target_capture_events_q': ('output', 32),
+              'registered_request_enable': ('output', 1),
+              'phase_request_valid': ('output', 2),
+              'phase_request_cell_index': ('output', 6),
+              'phase_request_target': ('output', 4),
+              'execution_request_valid': ('output', 2),
+              'execution_request_cell_index': ('output', 6),
+              'execution_request_target': ('output', 4),
+              'execution_target_bank': ('output', 16),
+              'state_out': ('output', 16),
+              'pending_route_out': ('output', 16),
+              'scheduler_mode_q': ('output', 2),
+              'scheduler_state_q': ('output', 3),
+              'ticks_recorded_q': ('output', 32),
+              'scheduler_count_free_q': ('output', 32),
+              'scheduler_count_balance_q': ('output', 32),
+              'scheduler_count_commit_q': ('output', 32),
+              'scheduler_count_excite_q': ('output', 32),
+              'scheduler_count_neutralize_q': ('output', 32),
+              'request_accept': ('output', 2),
+              'request_reject': ('output', 2),
+              'accepted_cell_mask': ('output', 8),
+              'neutral_routed_cell_mask': ('output', 8),
+              'accepted_change_mask': ('output', 8),
+              'accepted_changes': ('output', 32),
+              'capacity_remaining': ('output', 32),
+              'capacity_exhausted': ('output', 1),
+              'switch_load_numerator': ('output', 32),
+              'requested_direct_events': ('output', 32),
+              'prevented_direct_events': ('output', 32),
+              'neutral_routed_events': ('output', 32),
+              'actual_direct_events': ('output', 32),
+              'reserved_state_events': ('output', 32),
+              'queue_overflow_events': ('output', 32),
+              'invariant_flags': ('output', 10),
+              'pair_coherence_q30': ('output', 32),
+              'cluster_coherence_q30': ('output', 32),
+              'global_coherence_q30': ('output', 32),
+              'organization_dispersion_q30': ('output', 32),
+              'normalized_cycle_cost_q16': ('output', 32),
+              'temperature_proxy_q16': ('output', 32),
+              'peak_temperature_proxy_q16': ('output', 32),
+              'thermal_sample_count_q': ('output', 32),
+              'coherence_capacity_q16': ('output', 32),
+              'pressure_q16': ('output', 32),
+              'stability_margin_q16': ('output', 32),
+              'stable': ('output', 1),
+          }
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          def sha(raw):
+              return hashlib.sha256(raw).hexdigest()
+
+          def execute(command, label, directory, limit):
+              report['commands'].append({'label': label, 'argv': command})
+              print(label, flush=True)
+              log_path = evidence / (label + '.log')
+              try:
+                  with log_path.open('w') as log:
+                      subprocess.run(command, cwd=directory, stdout=log,
+                                     stderr=subprocess.STDOUT, timeout=limit, check=True)
+              except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                  print('\n'.join(log_path.read_text(errors='replace').splitlines()[-40:]))
+                  raise
+              return log_path
+
+          def pending_backlog_records(text):
+              records = [line for line in text.splitlines() if line.lstrip().startswith('FRP_')]
+              require(len(records) == 7, 'Exactly seven pending-backlog-boundary result records are required')
+              for index, (actual, expected) in enumerate(zip(records, expected_records)):
+                  require(actual == expected, f'Pending-backlog-boundary result {index} differs: {actual!r}')
+              return records
+
+          try:
+              require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch', 'Manual dispatch required')
+              require(os.environ['GITHUB_REF'] == 'refs/heads/main', 'Dispatch from main only')
+              require(os.environ['GITHUB_REPOSITORY'] ==
+                      'maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor',
+                      'Unexpected repository')
+              require(importlib.metadata.version('verilator') == '5.48.0', 'Unexpected simulation package')
+              require(importlib.metadata.version('yowasp-yosys') == '0.68.0.0.post1208', 'Unexpected synthesis package')
+              simulator_root = Path(os.environ['VERILATOR_ROOT']).resolve()
+              require(Path(shutil.which('verilator') or '').resolve() == simulator_root / 'bin' / 'verilator',
+                      'Simulator path differs from the pinned package')
+              simulator_sha = sha((simulator_root / 'bin' / 'verilator_bin').read_bytes())
+              require(simulator_sha == '7a308fe7b00607f3140fe0599efc107a3f591e631a44a1c3614e00e6c90c0dcc',
+                      'Simulator binary differs from the validated Linux x86-64 build')
+              report.update(simulation_package='verilator==5.48.0', simulation_binary_sha256=simulator_sha,
+                            synthesis_package='yowasp-yosys==0.68.0.0.post1208')
+              workflow_raw = (root / workflow).read_bytes()
+              report['workflow_sha256'] = sha(workflow_raw)
+              (evidence / Path(workflow).name).write_bytes(workflow_raw)
+              sources = {}
+
+              def visit(name):
+                  if name in sources:
+                      return
+                  path = root / name
+                  require(path.is_file() and not path.is_symlink(), 'Missing source: ' + name)
+                  raw = path.read_bytes()
+                  sources[name] = raw
+                  for inc in re.findall(r'`include\s+"([^"]+)"', raw.decode()):
+                      matches = {(directory / inc).resolve()
+                                 for directory in [path.parent, *[root / d for d in include_dirs]]
+                                 if (directory / inc).is_file()}
+                      require(len(matches) == 1, 'Missing or ambiguous include: ' + inc)
+                      resolved = matches.pop()
+                      require(resolved.is_relative_to(root), 'Include leaves the repository')
+                      visit(resolved.relative_to(root).as_posix())
+
+              visit(tb)
+              visit('rtl/m31/frp_m31_sin_q30.mem')
+              identities = {name: {'bytes': len(raw), 'sha256': sha(raw)} for name, raw in sorted(sources.items())}
+              report['sources'] = identities
+              require(identities == expected_sources, 'Pending-backlog-boundary sources differ from the validated inputs')
+              for name, raw in sources.items():
+                  for destination in (view / name, evidence / 'inputs' / name):
+                      destination.parent.mkdir(parents=True, exist_ok=True)
+                      destination.write_bytes(raw)
+
+              synthesis_view = work / 'synthesis-source'
+              phase_name = 'rtl/m31/frp_m31_phase_interference.sv'
+              phase_text = sources[phase_name].decode()
+              first = phase_text.index("    if (sin_lut[0] !== 32'sd0)")
+              last = phase_text.index('      $fatal(1, "FRP M31 sine LUT three-quarter-cycle mismatch");', first)
+              end = phase_text.index('\n', last) + 1
+              removed = phase_text[first:end]
+              normalized = (phase_text[:first] + phase_text[end:]).encode()
+              require(removed.count('$fatal(') == 4 and b'$readmemh(SIN_LUT_FILE, sin_lut);' in normalized,
+                      'Unexpected phase-engine ROM guard normalization')
+              require(sha(normalized) == '09302236b4a7734be9ac0890df4a7a577541a73c441ae7db3e70da8465f1c3ef',
+                      'Synthesis copy differs from the established normalization')
+              synthesis_sources = {name: raw for name, raw in sources.items() if name != tb}
+              synthesis_sources[phase_name] = normalized
+              report['synthesis_normalization'] = {
+                  'path': phase_name, 'original_sha256': sha(sources[phase_name]),
+                  'normalized_sha256': sha(normalized), 'removed_simulation_guards': 4,
+                  'readmemh_preserved': True, 'rtl_reference_unchanged': True,
+              }
+              report['synthesis_sources'] = {name: {'bytes': len(raw), 'sha256': sha(raw)}
+                                             for name, raw in sorted(synthesis_sources.items())}
+              (evidence / 'removed-simulation-guards.txt').write_text(removed)
+              for name, raw in synthesis_sources.items():
+                  for destination in (synthesis_view / name, evidence / 'synthesis-inputs' / name):
+                      destination.parent.mkdir(parents=True, exist_ok=True)
+                      destination.write_bytes(raw)
+              version_log = execute(['verilator', '--version'], 'simulator-version', view, 30)
+              report['simulation_version'] = version_log.read_text().strip()
+              top = 'frp_m32_core'
+              renamed = 'frp_m32_core_netlist'
+              netlist = evidence / (renamed + '.v')
+              data = evidence / (renamed + '.json')
+              script = (
+                  f'read_slang -j 1 --std 1800-2017 --ignore-assertions --top {top} '
+                  '-Irtl/m31 -Irtl/m32 rtl/m32/frp_m32_core.sv; '
+                  f'synth -top {top} -flatten -noshare -run begin:fine; check -assert; '
+                  'techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; '
+                  'select -assert-none t:$shiftx t:$connect; '
+                  f'rename {top} {renamed}; '
+                  f'write_verilog -noattr {json.dumps(str(netlist))}; '
+                  f'write_json {json.dumps(str(data))}\n')
+              script_path = evidence / 'synthesis.ys'
+              script_path.write_text(script)
+              execute(['yowasp-yosys', '-Q', '-T', '-s', str(script_path)], 'pending-backlog-synthesis', synthesis_view, 900)
+              modules = json.loads(data.read_text())['modules']
+              require(set(modules) == {renamed}, 'Pending-backlog-boundary netlist must be flattened')
+              module = modules[renamed]
+              ports = {name: (port['direction'], len(port['bits'])) for name, port in module['ports'].items()}
+              require(ports == expected_ports, 'Netlist port names, directions or widths differ')
+              require(not module.get('processes'), 'Netlist contains remaining processes')
+              require(not any('latch' in cell['type'].lower() for cell in module['cells'].values()),
+                      'Netlist contains latch cells')
+              netlist_sha = sha(netlist.read_bytes())
+              require(netlist_sha == '94e4007f4b437e70e237ac3b1a480b8edef5d039082284554b6d4bd0a2fd9c68',
+                      'Fresh pending-backlog-boundary netlist differs from the validated synthesis')
+              data_sha = sha(data.read_bytes())
+              report['netlist'] = {'module': renamed, 'sha256': netlist_sha, 'json_sha256': data_sha,
+                                   'ports': ports, 'synthesis_script_sha256': sha(script_path.read_bytes())}
+              simlib = evidence / 'yosys-simlib.v'
+              shutil.copyfile(Path(yowasp_yosys.__file__).resolve().parent / 'share' / 'simlib.v', simlib)
+              simlib_sha = sha(simlib.read_bytes())
+              require(simlib_sha == 'e79c08085225bdc6f52ce99f128328158009a33b8ea0c8c273011dfde370561d',
+                      'Yosys simulation cell models differ from the validated library')
+              report['cell_models_sha256'] = simlib_sha
+
+              compiler = ['verilator', '--binary', '--sv', '--timing', '--assert', '-Wall', '-Wno-fatal',
+                          '-CFLAGS', '-std=c++20 -O0', '--output-split', '20000',
+                          '-MAKEFLAGS', 'VK_PCH_I_FAST=', '-MAKEFLAGS', 'VK_PCH_I_SLOW=', '-j', '2']
+              compiler += ['-I' + directory for directory in include_dirs]
+              for implementation in ('rtl', 'netlist'):
+                  build = work / (implementation + '-build')
+                  command = compiler + ['--top-module', bench, '--Mdir', str(build)]
+                  if implementation == 'netlist':
+                      command += ['-DFRP_M32_PENDING_BACKLOG_NETLIST', '-DSIMLIB_NOCONNECT',
+                                  '-v', str(simlib), str(netlist)]
+                  execute(command + [tb], 'pending-backlog-' + implementation + '-build', view, 900)
+                  executable = build / ('V' + bench)
+                  executable_sha = sha(executable.read_bytes())
+                  report['executables'][implementation] = {'path': str(executable), 'sha256': executable_sha}
+                  for attempt in (1, 2):
+                      report['simulation_attempts'] += 1
+                      label = f'pending-backlog-{implementation}-run-{attempt}'
+                      log = execute([str(executable)], label, view, 600)
+                      report['simulation_runs'] += 1
+                      records = pending_backlog_records(log.read_text())
+                      record_bytes = ('\n'.join(records) + '\n').encode()
+                      (evidence / (label + '-records.txt')).write_bytes(record_bytes)
+                      report['replays'].append({
+                          'implementation': implementation, 'attempt': attempt,
+                          'observations': 312043, 'output_fields': 59, 'output_bits': 2075,
+                          'records': records, 'records_sha256': sha(record_bytes), 'log_sha256': sha(log.read_bytes()),
+                      })
+                      print('\n'.join(records), flush=True)
+              require(report['simulation_runs'] == 4 and report['simulation_attempts'] == 4,
+                      'Two RTL and two netlist replays are required')
+              require([(r['implementation'], r['attempt']) for r in report['replays']] ==
+                      [('rtl', 1), ('rtl', 2), ('netlist', 1), ('netlist', 2)], 'Incomplete replay sequence')
+              require(all(r['records'] == expected_records for r in report['replays']), 'Replay records differ')
+              for name, raw in sources.items():
+                  require((root / name).read_bytes() == raw and (view / name).read_bytes() == raw and
+                          (evidence / 'inputs' / name).read_bytes() == raw, 'Source changed: ' + name)
+              for name, raw in synthesis_sources.items():
+                  require((synthesis_view / name).read_bytes() == raw and
+                          (evidence / 'synthesis-inputs' / name).read_bytes() == raw, 'Synthesis source changed: ' + name)
+              for identity in report['executables'].values():
+                  require(sha(Path(identity['path']).read_bytes()) == identity['sha256'], 'Executable changed')
+              require(sha(netlist.read_bytes()) == netlist_sha and sha(data.read_bytes()) == data_sha and
+                      sha(simlib.read_bytes()) == simlib_sha, 'Netlist or cell models changed')
+              require(script_path.read_text() == script, 'Synthesis script changed')
+              require((root / workflow).read_bytes() == workflow_raw, 'Workflow changed')
+              summary = [
+                  '# FRP M32 pending backlog boundary RTL + Netlist: PASS', '',
+                  'Source commit: `' + report['source_commit'] + '`', '',
+                  'Two RTL and two fresh-netlist replays match all seven fixed result records.', '',
+                  '| Metric | Per replay |', '| --- | ---: |',
+                  '| Backlog matrix scenarios | 2048 |', '| Full-backlog reset scenarios | 64 |',
+                  '| Whole-core output observations | 312043 |', '| Public outputs / compared bits | 59 / 2075 |',
+                  '| Full eight-cell backlogs constructed | 75 |', '| Retained destinations drained in the matrix | 8192 |',
+                  '| Eligible / blocked matrix drain edges | 4608 / 27648 |', '| Held edges with pending routes | 34296 |',
+                  '| Busy-cell request rejections | 32256 |', '| Same-state acceptances with exhausted change capacity | 1776 |',
+                  '| Capacity-blocked lanes | 1943 |', '| Matrix clears with pending routes: enabled / held | 7392 / 13368 |',
+                  '| Matrix edges with a selected bank different from pending destinations | 66552 |',
+                  '| Enabled / held edges | 58245 / 40783 |', '| First / second route legs | 9027 / 8515 |',
+                  '| Cells reached by both route legs | 8 / 8 |', '| Continuous enabled ticks per mode | 1024 |', '',
+                  '| Mode | FREE | BALANCE | COMMIT | EXCITE | NEUTRALIZE |',
+                  '| --- | ---: | ---: | ---: | ---: | ---: |',
+                  '| free | 1024 | 0 | 0 | 0 | 0 |', '| 7/1 | 0 | 896 | 128 | 0 | 0 |',
+                  '| 1/7 | 0 | 0 | 0 | 128 | 896 |', '',
+                  'The same standalone testbench drives each implementation and checks an independent integer oracle.',
+                  'No DUT internal signals, arithmetic helpers or stored ROM entries supply expected values.',
+                  'All 256 pending masks cross two mixed-polarity patterns, both insertion orders and both scheduled modes.',
+                  'Every backlog is constructed through legal public requests, including all eight retained destinations.',
+                  'Pending routes complete in ascending cell order before competing new state changes.',
+                  'In each matrix scenario, the backlog drains in ceil(population/2) eligible enabled ticks, at most four.',
+                  'Holds, counter clears, target replacement and busy-cell requests preserve retained destinations.',
+                  'Same-state acceptance consumes no change capacity, including when two pending routes complete.',
+                  'Full-backlog reset crosses both clock levels and all tick/load/clear/automatic combinations.',
+                  'Continuous profiles start with a full backlog and retain phase, frequency, execution and thermal feedback.',
+                  'Request destinations, registered targets and executed states remain separate.',
+                  'Executed polarity changes pass through active zero on separate enabled ticks.',
+                  'Synthesis omits only four unsupported ROM simulation guards; functional RTL and ROM loading are preserved.',
+                  'All original inputs, normalized synthesis inputs, netlist, cell models and complete logs are retained.', '',
+                  'This is finite functional qualification of the eight-cell, two-lane configuration.',
+                  'It does not certify exhaustive coverage, physical timing, hardware readiness or model v0.9.3 equivalence.',
+                  'Previous qualification workflows are not rerun here.',
+              ]
+              summary_text = '\n'.join(summary) + '\n'
+              (evidence / 'summary.md').write_text(summary_text)
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write(summary_text)
+              report.update(status='PASS', deterministic=True, sources_unchanged=True,
+                            rtl_pending_backlog_boundary_qualified=True, post_synthesis_qualified=True)
+              print('FRP M32 pending backlog boundary RTL/netlist qualification: PASS (4 runs)', flush=True)
+          except Exception as error:
+              report['status'] = 'FAIL'
+              report['error'] = str(error)
+              raise
+          finally:
+              (evidence / 'result.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
+          PY
+
+      - name: Retain source identities, input snapshots, logs, and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-19-m32-pending-backlog-boundary-netlist-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M32_PENDING_BACKLOG_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
