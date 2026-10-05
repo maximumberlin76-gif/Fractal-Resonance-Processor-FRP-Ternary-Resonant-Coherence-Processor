@@ -177,7 +177,6 @@ module frp_m32_target_convergence_boundary_tb;
     .target_capture_accepted(actual.target_capture_accepted),
     .target_capture_rejected(actual.target_capture_rejected),
     .temperature_proxy_q16(actual.temperature_proxy_q16),
-    .peak_temperature_proxy_q16(actual.peak_temperature_proxy_q16),
     .thermal_sample_count_q(actual.thermal_sample_count_q),
     .ticks_recorded_q(actual.ticks_recorded_q)
   );
