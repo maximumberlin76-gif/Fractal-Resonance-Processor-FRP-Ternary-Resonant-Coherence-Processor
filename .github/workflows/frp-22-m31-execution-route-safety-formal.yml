@@ -1,0 +1,402 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# This workflow is proprietary and is not licensed under Apache-2.0.
+# Except as required by applicable law, using, reproducing, modifying, or
+# distributing this file requires prior written permission from Maksym Marnov.
+# Referenced dependencies retain their existing licenses.
+
+name: 22 - FRP M31 Execution Route Safety RTL + Netlist Formal
+
+run-name: "22 - FRP M31 Execution Route Safety Formal | 4 proofs @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-22-m31-execution-route-safety-formal-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-route-safety:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Initialize evidence paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' "M31_ROUTE_EVIDENCE=$RUNNER_TEMP/frp-m31-route-safety-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m31-route-safety-evidence"
+
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned formal tool
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            python --version
+            python -m pip install --disable-pip-version-check --only-binary=:all: \
+              --timeout 30 --retries 3 yowasp-yosys==0.68.0.0.post1208
+            python -m pip freeze
+          } 2>&1 | tee "$M31_ROUTE_EVIDENCE/toolchain.log"
+
+      - name: Prove safety and check reachability and negative controls
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          import sys
+          import time
+          import yowasp_yosys
+          from pathlib import Path
+          
+          root = Path.cwd().resolve()
+          evidence = Path(os.environ['M31_ROUTE_EVIDENCE']).resolve()
+          evidence.mkdir(parents=True, exist_ok=True)
+          view = evidence / 'inputs'
+          workflow = '.github/workflows/frp-22-m31-execution-route-safety-formal.yml'
+          harness = 'formal/m31/frp_m31_execution_route_safety_formal.sv'
+          top = 'frp_m31_execution_route_safety_formal'
+          core = 'frp_m31_execution_core'
+          report = {
+              'status': 'FAIL', 'repository': os.environ['GITHUB_REPOSITORY'],
+              'source_commit': os.environ['GITHUB_SHA'],
+              'run_id': os.environ['GITHUB_RUN_ID'], 'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'scope': 'Eight-cell, two-lane M31 execution-route safety used by M32; sampled-clock, two-state model',
+              'assumptions': 'Initial sampled reset only; all subsequent inputs unrestricted',
+              'proof_method': 'Temporal induction; maximum induction search length 6',
+              'assertions_per_model': 103, 'assumptions_per_model': 1,
+              'commands': [], 'proofs': [], 'reachability': [], 'negative_controls': [],
+              'rtl_safety_proven': False, 'netlist_safety_proven': False,
+              'full_core_equivalence': False, 'global_coverage_closure': False,
+              'liveness_qualified': False, 'physical_reset_timing_qualified': False,
+          }
+          expected_sources = {
+              'formal/m31/frp_m31_execution_route_safety_formal.sv': {'bytes': 8489, 'sha256': '85d18628cc5269fde31eecbe703ef0c28fdd9626bc5a0df50c496cede7b5dd35'},
+              'rtl/m31/frp_m31_active_neutral.sv': {'bytes': 25909, 'sha256': '765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0'},
+              'rtl/m31/frp_m31_capacity_guard.sv': {'bytes': 20787, 'sha256': 'd0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123'},
+              'rtl/m31/frp_m31_execution_core.sv': {'bytes': 33724, 'sha256': 'e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92'},
+              'rtl/m31/frp_m31_pending_routes.sv': {'bytes': 17005, 'sha256': '18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411'},
+              'rtl/m31/frp_m31_pkg.sv': {'bytes': 18531, 'sha256': '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94'},
+              'rtl/m31/frp_m31_request_lanes.sv': {'bytes': 18290, 'sha256': '32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109'},
+              'rtl/m31/frp_m31_scheduler.sv': {'bytes': 10560, 'sha256': 'fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f'},
+              'rtl/m31/frp_m31_state_update.sv': {'bytes': 18147, 'sha256': 'ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90'},
+          }
+          expected_ports = {
+              'clk': ('input', 1),
+              'rst_n': ('input', 1),
+              'tick_enable': ('input', 1),
+              'clear_counters': ('input', 1),
+              'scheduler_mode': ('input', 2),
+              'request_valid': ('input', 2),
+              'request_cell_index': ('input', 6),
+              'request_target': ('input', 4),
+              'target_q': ('input', 16),
+              'state_out': ('output', 16),
+              'pending_route_out': ('output', 16),
+              'scheduler_mode_q': ('output', 2),
+              'scheduler_state_q': ('output', 3),
+              'ticks_recorded_q': ('output', 32),
+              'scheduler_count_free_q': ('output', 32),
+              'scheduler_count_balance_q': ('output', 32),
+              'scheduler_count_commit_q': ('output', 32),
+              'scheduler_count_excite_q': ('output', 32),
+              'scheduler_count_neutralize_q': ('output', 32),
+              'request_accept': ('output', 2),
+              'request_reject': ('output', 2),
+              'accepted_cell_mask': ('output', 8),
+              'neutral_routed_cell_mask': ('output', 8),
+              'accepted_change_mask': ('output', 8),
+              'accepted_changes': ('output', 32),
+              'capacity_remaining': ('output', 32),
+              'capacity_exhausted': ('output', 1),
+              'switch_load_numerator': ('output', 32),
+              'requested_direct_events': ('output', 32),
+              'prevented_direct_events': ('output', 32),
+              'neutral_routed_events': ('output', 32),
+              'actual_direct_events': ('output', 32),
+              'reserved_state_events': ('output', 32),
+              'queue_overflow_events': ('output', 32),
+              'invariant_flags': ('output', 10),
+          }
+          reach_names = [
+              'free-pending', 'seven-one-pending', 'one-seven-pending', 'held-route',
+              'cleared-counters-pending', 'changed-target-pending',
+              'cell-zero-negative-completion', 'cell-zero-positive-completion',
+              'cell-seven-negative-completion', 'cell-seven-positive-completion',
+              'positive-to-zero-first-leg', 'negative-to-zero-first-leg',
+              'reset-pending', 'reserved-mode-pending', 'two-cell-write', 'mode-change-pending',
+          ]
+          
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+          
+          def identity(path):
+              raw = path.read_bytes()
+              return {'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest()}
+          
+          def write_json(name, value):
+              (evidence / name).write_text(json.dumps(value, indent=2, sort_keys=True) + '\n')
+          
+          def quoted(path):
+              return json.dumps(str(path))
+          
+          def execute(label, script, cwd=view, negative=False, timeout=420):
+              script_path = evidence / (label + '.ys')
+              log_path = evidence / (label + '.log')
+              script_path.write_text(script + '\n')
+              command = ['yowasp-yosys', '-Q', '-T', '-q', '-l', str(log_path), '-s', str(script_path)]
+              entry = {'label': label, 'argv': command, 'script': identity(script_path)}
+              report['commands'].append(entry)
+              started = time.monotonic()
+              print('START ' + label, flush=True)
+              try:
+                  with (evidence / (label + '-console.log')).open('w') as stream:
+                      result = subprocess.run(command, cwd=cwd, stdout=stream,
+                                              stderr=subprocess.STDOUT, timeout=timeout)
+                  entry['returncode'] = result.returncode
+              finally:
+                  entry['seconds'] = round(time.monotonic() - started, 2)
+                  write_json('commands.json', report['commands'])
+              require(log_path.is_file(), label + ': native Yosys log missing')
+              text = log_path.read_text()
+              require('TIMEOUT' not in text.upper(), label + ': solver timeout')
+              if negative:
+                  require(result.returncode != 0 and 'SAT proof finished - model found: FAIL!' in text,
+                          label + ': expected a property counterexample, not a tool failure')
+              else:
+                  require(result.returncode == 0, label + ': Yosys failed; inspect retained logs')
+              print('DONE ' + label, flush=True)
+              return text
+          
+          def check_model(path):
+              text = path.read_text()
+              counts = {kind: len(re.findall(r'^  cell \$' + kind + ' ', text, re.M))
+                        for kind in ['assert', 'assume']}
+              require(counts == {'assert': 103, 'assume': 1}, 'Formal property inventory changed')
+              return counts
+          
+          def check_witness(path, bit=None):
+              data = json.loads(path.read_text())
+              signals = {s['name']: s for s in data['signal']}
+              require({'state_out', 'pending_route_out', 'reach', 'rst_n', 'tick_enable'} <= set(signals),
+                      'Witness is missing public ports: ' + path.name)
+              if bit is not None:
+                  signal = signals['reach']
+                  values = iter(signal['data'])
+                  samples, current = [], None
+                  for symbol in signal['wave']:
+                      require(symbol in '4=.', 'Unsupported reach witness encoding')
+                      if symbol != '.':
+                          current = next(values)
+                      samples.append(current)
+                  require(len(samples) == 7 and re.fullmatch('[01]{16}', samples[6] or ''),
+                          'Invalid six-step reach witness: ' + path.name)
+                  require((int(samples[6], 2) >> bit) & 1, 'Requested reach bit is absent')
+              return identity(path)
+          
+          try:
+              require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch', 'Manual dispatch required')
+              require(os.environ['GITHUB_REF'] == 'refs/heads/main', 'Dispatch main only')
+              expected_repository = 'maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor'
+              require(report['repository'] == expected_repository, 'Unexpected repository')
+              head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+              require(head == report['source_commit'], 'Checkout differs from dispatched commit')
+              require(sys.version_info[:2] == (3, 12), 'Python 3.12 required')
+              tool_version = importlib.metadata.version('yowasp-yosys')
+              require(tool_version == '0.68.0.0.post1208', 'Unexpected Yosys package version')
+              wasm = Path(yowasp_yosys.__file__).parent / 'yosys.wasm'
+              report['toolchain'] = {'python': sys.version, 'yowasp-yosys': tool_version, 'wasm': identity(wasm)}
+              require(report['toolchain']['wasm']['sha256'] == 'e37a7e65e3fa4efbbd64a9c1b0e906be16cdc6c4d5273109d17537f78449f38c',
+                      'Yosys WASM differs from the validated tool')
+              require(not view.exists(), 'Evidence inputs already exist; a fresh run is required')
+              workflow_identity = identity(root / workflow)
+              shutil.copyfile(root / workflow, evidence / Path(workflow).name)
+              report['workflow'] = workflow_identity
+              sources = {}
+          
+              def visit(name):
+                  if name in sources:
+                      return
+                  path = root / name
+                  require(path.resolve().is_relative_to(root), 'Source escapes repository: ' + name)
+                  require(path.resolve() == path and path.is_file(), 'Missing or linked source: ' + name)
+                  raw = path.read_bytes()
+                  sources[name] = raw
+                  destination = view / name
+                  destination.parent.mkdir(parents=True, exist_ok=True)
+                  destination.write_bytes(raw)
+                  for include in re.findall(r'`include\s+"([^"]+)"', raw.decode()):
+                      candidates = {p.absolute() for p in [path.parent / include, root / 'rtl/m31' / include]
+                                    if p.is_file()}
+                      require(len(candidates) == 1, 'Missing or ambiguous include: ' + include)
+                      visit(candidates.pop().relative_to(root).as_posix())
+          
+              visit(harness)
+              actual = {name: identity(view / name) for name in sorted(sources)}
+              write_json('source-identities.json', actual)
+              require(actual == expected_sources, 'Execution-route sources differ from validated inputs')
+              report['source_identities'] = actual
+              front = f'read_slang -j 1 --std 1800-2017 --top {top} -Irtl/m31 {harness}; '
+              prepare = f'prep -top {top} -flatten; async2sync; opt_clean; chformal -lower; '
+              proof = 'sat -seq 2 -tempinduct -maxsteps 6 -set-assumes -prove-asserts -verify -timeout 90'
+              rtl_il = evidence / 'rtl-prepared.il'
+              net_il = evidence / 'netlist-prepared.il'
+              netlist = evidence / (core + '_netlist.v')
+              net_json = evidence / (core + '_netlist.json')
+              frontend = evidence / 'execution-frontend.json'
+              synth = (
+                  f'read_slang -j 1 --std 1800-2017 --top {core} -Irtl/m31 rtl/m31/{core}.sv; '
+                  f'write_json {quoted(frontend)}; '
+                  f'synth -top {core} -flatten -noshare -run begin:fine; check -assert; '
+                  'techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; '
+                  'select -assert-none t:$shiftx t:$connect; '
+                  f'rename {core} {core}_netlist; '
+                  f'write_verilog -noattr {quoted(netlist)}; write_json {quoted(net_json)}'
+              )
+              execute('fresh-synthesis', synth)
+              require(identity(netlist)['sha256'] == 'a9317eb0a430376cd4f09da147ae1ddcd586b5ac3dc3253a5437987922cb8cdf',
+                      'Fresh netlist differs from validated synthesis')
+              modules = json.loads(net_json.read_text())['modules']
+              require(set(modules) == {core + '_netlist'}, 'Netlist is not a single flattened module')
+              module = modules[core + '_netlist']
+              original = json.loads(frontend.read_text())['modules'][core]
+              port_map = lambda m: {n: (p['direction'], len(p['bits'])) for n, p in m['ports'].items()}
+              require(port_map(module) == port_map(original) == expected_ports, 'Execution port contract changed')
+              require(not module.get('processes'), 'Netlist contains unlowered processes')
+              require(not any('latch' in c['type'].lower() for c in module['cells'].values()),
+                      'Netlist contains a latch')
+              report['netlist'] = identity(netlist)
+              net_front = (
+                  f'read_verilog -icells {quoted(netlist)}; '
+                  f'read_slang -j 1 --std 1800-2017 -DFRP_M31_ROUTE_SAFETY_NETLIST '
+                  f'--top {top} -Irtl/m31 {harness}; '
+              )
+              immutable = {p: identity(p) for p in [netlist, net_json, frontend]}
+              for implementation, prepared, prefix in [
+                  ('rtl', rtl_il, front + prepare),
+                  ('netlist', net_il, net_front + prepare.replace('async2sync;', 'memory_map; async2sync;')),
+              ]:
+                  for run in [1, 2]:
+                      setup = (prefix + f'write_rtlil {quoted(prepared)}; stat; ' if run == 1
+                               else f'read_rtlil {quoted(prepared)}; ')
+                      text = execute(f'{implementation}-proof-{run}', setup + proof)
+                      require('Induction step proven: SUCCESS!' in text and
+                              re.search(r'Base case for induction length \d+ proven\.', text),
+                              'Both induction base and induction step must be proven')
+                      counts = check_model(prepared)
+                      report['proofs'].append({'implementation': implementation, 'run': run,
+                                               'status': 'PASS', 'properties': counts})
+                  immutable[prepared] = identity(prepared)
+          
+              for implementation, prepared in [('rtl', rtl_il), ('netlist', net_il)]:
+                  script = f'read_rtlil {quoted(prepared)}; '
+                  for bit in range(len(reach_names)):
+                      witness = evidence / f'{implementation}-reach-{bit:02d}.json'
+                      script += (f'sat -seq 6 -set-assumes -set-at 6 reach[{bit}] 1 -show-ports '
+                                 f'-timeout 60 -dump_json {quoted(witness)}; ')
+                  text = execute(implementation + '-reachability', script, timeout=1100)
+                  require(text.count('SAT solving finished - model found:') == 16,
+                          'All sixteen independent reach targets must have witnesses')
+                  for bit, name in enumerate(reach_names):
+                      witness = evidence / f'{implementation}-reach-{bit:02d}.json'
+                      report['reachability'].append({'implementation': implementation, 'bit': bit,
+                                                    'name': name, 'depth': 6, 'witness': check_witness(witness, bit)})
+          
+              mutations = {
+                  'direct-polarity-write': ('rtl/m31/frp_m31_state_update.sv',
+                      '      state_q <= state_d;',
+                      "      if (state_q[1:0] == 2'b01 && state_d[1:0] == 2'b00)\n"
+                      "        state_q <= {state_d[15:2], 2'b11};\n      else state_q <= state_d;"),
+                  'held-destination-overwrite': ('rtl/m31/frp_m31_pending_routes.sv',
+                      '            pending_route_q <= pending_route_d;\n        end',
+                      '            pending_route_q <= pending_route_d;\n'
+                      '        end else if (pending_route_q[1:0] != 0) begin\n'
+                      "            pending_route_q <= pending_route_q ^ 16'h0002;\n        end"),
+              }
+              for name, (relative, old, new) in mutations.items():
+                  mutant = evidence / 'mutants' / name
+                  shutil.copytree(view, mutant)
+                  path = mutant / relative
+                  text = path.read_text()
+                  require(text.count(old) == 1, 'Mutation site changed: ' + name)
+                  path.write_text(text.replace(old, new))
+                  witness = evidence / (name + '-counterexample.json')
+                  execute(name, front + prepare +
+                          'sat -seq 6 -set-assumes -prove-asserts -verify -timeout 90 -show-ports '
+                          f'-dump_json {quoted(witness)}', cwd=mutant, negative=True)
+                  report['negative_controls'].append({'fault': name, 'status': 'REJECTED',
+                                                     'mutated_source': identity(path),
+                                                     'counterexample': check_witness(witness)})
+          
+              require(len(report['proofs']) == 4 and len(report['reachability']) == 32 and
+                      len(report['negative_controls']) == 2, 'Qualification results are incomplete')
+              for name, expected in expected_sources.items():
+                  require(identity(root / name) == identity(view / name) == expected, 'Source changed: ' + name)
+              for path, expected in immutable.items():
+                  require(identity(path) == expected, 'Prepared model changed: ' + path.name)
+              require(identity(root / workflow) == identity(evidence / Path(workflow).name) == workflow_identity,
+                      'Workflow changed during qualification')
+              report.update(status='PASS', sources_unchanged=True, rtl_safety_proven=True, netlist_safety_proven=True)
+              print('FRP M31 execution-route formal qualification: PASS', flush=True)
+          except Exception as error:
+              report.update(status='FAIL', error=str(error))
+              raise
+          finally:
+              write_json('result.json', report)
+              summary = '\n'.join([
+                  '# M31 execution-route formal qualification: ' + report['status'], '',
+                  'Commit: `' + report['source_commit'] + '`', '',
+                  f"Completed induction proofs: {len(report['proofs'])}/4; reach witnesses: {len(report['reachability'])}/32; detected faults: {len(report['negative_controls'])}/2.", '',
+                  '103 safety assertions and one initial-reset assumption per model; eight cells and two request lanes.',
+                  'Safety uses temporal induction, not a six-cycle bounded proof.',
+                  'Reachability and negative controls use six-step traces.',
+                  'Scope excludes full-core equivalence, liveness, global coverage and physical reset timing.',
+                  'See result.json, native Yosys logs and WaveJSON traces in the artifact.', '',
+              ])
+              (evidence / 'summary.md').write_text(summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write(summary)
+          PY
+
+      - name: Retain sources, proofs, witnesses, and counterexamples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-22-m31-execution-route-safety-formal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M31_ROUTE_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
