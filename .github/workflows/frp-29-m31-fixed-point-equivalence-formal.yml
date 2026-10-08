@@ -1,0 +1,445 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# This workflow is proprietary and is not licensed under Apache-2.0.
+# Except as required by applicable law, using, reproducing, modifying, or
+# distributing this file requires prior written permission from Maksym Marnov.
+# Referenced dependencies retain their existing licenses.
+
+name: 29 - FRP M31 Fixed-Point RTL + Netlist Equivalence
+
+run-name: "29 - FRP M31 Fixed-Point Equivalence | 8 proofs @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-29-m31-fixed-point-equivalence-formal-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-fixed-point-equivalence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Initialize evidence paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' "M31_FIXED_POINT_EQUIVALENCE_EVIDENCE=$RUNNER_TEMP/frp-m31-fixed-point-equivalence-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m31-fixed-point-equivalence-evidence"
+
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned formal tool
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            python --version
+            python -m pip install --disable-pip-version-check --only-binary=:all: \
+              --timeout 30 --retries 3 yowasp-yosys==0.68.0.0.post1208
+            python -m pip freeze
+          } 2>&1 | tee "$M31_FIXED_POINT_EQUIVALENCE_EVIDENCE/toolchain.log"
+
+      - name: Prove fixed-point equivalence and check witnesses and negative controls
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          import sys
+          import time
+          import yowasp_yosys
+          from pathlib import Path
+
+          root = Path.cwd().resolve()
+          evidence = Path(os.environ['M31_FIXED_POINT_EQUIVALENCE_EVIDENCE']).resolve()
+          evidence.mkdir(parents=True, exist_ok=True)
+          view = evidence / 'inputs'
+          workflow = '.github/workflows/frp-29-m31-fixed-point-equivalence-formal.yml'
+          harness = 'formal/m31/frp_m31_fixed_point_equivalence_formal.sv'
+          top = 'frp_m31_fixed_point_equivalence_formal'
+          core = 'frp_m31_fixed_point_arithmetic_probe'
+          net_top = 'frp_m31_fixed_point_arithmetic_netlist'
+          report = {
+              'status': 'FAIL', 'repository': os.environ['GITHUB_REPOSITORY'],
+              'source_commit': os.environ['GITHUB_SHA'],
+              'run_id': os.environ['GITHUB_RUN_ID'], 'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'scope': 'Direct RTL-to-netlist equality of all eight M31 arithmetic fields (288 bits); four shift profiles; two-state combinational model',
+              'assumptions': 'Signed 32-bit operands unrestricted; wide_word unrestricted at shift 0, inclusive [-2^62,+2^62] at shifts 14/16/30',
+              'source_assertions_per_model': 8, 'assumptions_by_shift': {0: 0, 14: 1, 16: 1, 30: 1},
+              'proof_method': 'Combinational SAT; two fresh solver runs per shift',
+              'round_shifts': [0, 14, 16, 30], 'phase_semantics': 'Modulo 2^32, without saturation',
+              'commands': [], 'proofs': [], 'reachability': [], 'negative_controls': [],
+              'rtl_netlist_equivalence_proven': False,
+              'full_phase_engine_qualified': False, 'full_core_equivalence': False,
+              'global_coverage_closure': False, 'physical_timing_qualified': False,
+              'python_model_equivalence': False,
+          }
+          expected_sources = {
+              'formal/m31/frp_m31_fixed_point_equivalence_formal.sv': {'bytes': 5413, 'sha256': '5a7f36d575c56c47c6df8554a077fd63ce48a6cbb307538db736d70c3354bf3a'},
+              'rtl/m31/frp_m31_fixed_point_arithmetic_tb.sv': {'bytes': 14426, 'sha256': '7f9d0cb547cd7c03c691a83690b96ff63a059786520ff6846f8bf5f54fc61fdd'},
+              'rtl/m31/frp_m31_fixed_point_pkg.sv': {'bytes': 7278, 'sha256': '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24'},
+          }
+          expected_netlist = {'bytes': 14590, 'sha256': '97bf5750db86d0ef0371163eedb4c4a25477471cd8e37bb5e6ceac69b5a39b47'}
+          field_names = ['saturated', 'rounded', 'product_q16', 'product_q30',
+                         'mixed_q16', 'down_q16', 'up_q30', 'phase_step']
+          reach_names = [
+              'positive-saturation-boundary', 'negative-saturation-boundary', 'exact-positive-rail', 'exact-negative-rail',
+              'signed64-minimum', 'signed64-maximum', 'positive-rounding-tie', 'negative-rounding-tie',
+              'positive-below-tie', 'negative-beyond-tie', 'q16-positive-rail', 'q16-negative-rail',
+              'q30-positive-rail', 'q30-negative-rail', 'down-positive-tie', 'down-negative-tie',
+              'up-positive-saturation', 'up-negative-saturation', 'up-exact-negative-rail', 'up-last-unsaturated-positive',
+              'positive-phase-wrap', 'negative-phase-wrap', 'negative-phase-tie', 'zero-operands',
+              'mixed-sign-product', 'negative-operands-product', 'maximum-positive-product', 'minimum-negative-product',
+          ]
+
+          widths = [32, 64, 32, 32, 32, 32, 32, 32]
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          def identity(path):
+              raw = path.read_bytes()
+              return {'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest()}
+
+          def write_json(name, value):
+              (evidence / name).write_text(json.dumps(value, indent=2, sort_keys=True) + '\n')
+
+          def quoted(path):
+              return json.dumps(str(path))
+
+          def execute(label, script, cwd=view, negative=False, timeout=240):
+              script_path, log_path = evidence / (label + '.ys'), evidence / (label + '.log')
+              script_path.write_text(script + '\n')
+              command = ['yowasp-yosys', '-Q', '-T', '-s', str(script_path)]
+              entry = {'label': label, 'argv': command, 'script': identity(script_path)}
+              report['commands'].append(entry)
+              started = time.monotonic()
+              print('START ' + label, flush=True)
+              try:
+                  result = subprocess.run(command, cwd=cwd, stdout=subprocess.PIPE,
+                                          stderr=subprocess.STDOUT, timeout=timeout)
+                  # Save the completed native stream in one host write, without WASI file logging.
+                  log_path.write_bytes(result.stdout)
+                  entry['returncode'] = result.returncode
+              except subprocess.TimeoutExpired as error:
+                  log_path.write_bytes(error.stdout or b'')
+                  entry['process_timeout'] = timeout
+                  raise
+              finally:
+                  entry['seconds'] = round(time.monotonic() - started, 2)
+                  write_json('commands.json', report['commands'])
+              text = log_path.read_text()
+              require('TIMEOUT' not in text.upper(), label + ': solver timeout')
+              if negative:
+                  require(result.returncode != 0 and 'SAT proof finished - model found: FAIL!' in text,
+                          label + ': expected a property counterexample, not a tool failure')
+              else:
+                  require(result.returncode == 0, label + ': Yosys failed; inspect retained log')
+              print('DONE ' + label, flush=True)
+              return text
+
+          def synthesize(label, directory, canonical=False):
+              netlist, net_json, frontend = (evidence / (label + suffix) for suffix in ['.v', '.json', '-frontend.json'])
+              execute(label + '-synthesis',
+                      f'read_slang -j 1 --std 1800-2017 --top {core} -Irtl/m31 rtl/m31/frp_m31_fixed_point_arithmetic_tb.sv; '
+                      f'write_json {quoted(frontend)}; synth -top {core} -flatten -noshare -run begin:fine; check -assert; '
+                      'techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; select -assert-none t:$shiftx t:$connect; '
+                      f'rename {core} {net_top}; write_verilog -noattr {quoted(netlist)}; write_json {quoted(net_json)}',
+                      cwd=directory)
+              modules = json.loads(net_json.read_text())['modules']
+              require(set(modules) == {net_top}, 'Netlist is not a single flattened module')
+              module = modules[net_top]
+              original = json.loads(frontend.read_text())['modules'][core]
+              port_map = lambda m: {n: (p['direction'], len(p['bits'])) for n, p in m['ports'].items()}
+              require(port_map(module) == port_map(original) == {'inputs': ('input', 134), 'outputs': ('output', 288)},
+                      'Arithmetic port contract changed')
+              require(not module.get('processes') and not any(
+                  'dff' in c['type'].lower() or 'latch' in c['type'].lower() for c in module['cells'].values()),
+                  'Combinational netlist contains a process or state')
+              if canonical:
+                  require(identity(netlist) == expected_netlist, 'Fresh netlist differs from validated synthesis')
+              for path in [netlist, net_json, frontend]:
+                  immutable[path] = identity(path)
+              return netlist
+
+          def front(shift, netlist):
+              return (f'read_verilog -icells {quoted(netlist)}; read_slang -j 1 --std 1800-2017 '
+                      f'-G ROUND_SHIFT={shift} --top {top} -Irtl/m31 {harness}; ')
+
+          # Normalize both arithmetic cones without cutpoints or internal assumptions.
+          prepare = (f'prep -top {top} -flatten; memory_map; opt -full; wreduce; opt_clean; '
+                     'chformal -lower; alumacc; opt -full; opt_clean; ')
+
+          def values(path):
+              widths = {'left_word': 32, 'right_word': 32, 'wide_word': 64, 'rtl_outputs': 288,
+                        'netlist_outputs': 288, 'mismatch': 8, 'reach': 28}
+              result = {}
+              for signal in json.loads(path.read_text())['signal']:
+                  name, data = signal['name'], signal.get('data', [])
+                  require(name in widths and name not in result, 'Unexpected or duplicate witness signal: ' + name)
+                  require(signal['wave'] == '=4' and len(data) == 2 and data[1] == '', 'Invalid combinational witness encoding')
+                  require(len(data[0]) == widths[name] and re.fullmatch('[01]+', data[0]), 'Undefined or truncated witness: ' + name)
+                  result[name] = int(data[0], 2)
+              require(set(result) == set(widths), 'Witness port inventory changed')
+              return result
+
+          def signed(value, bits):
+              return value - (1 << bits) if value & (1 << (bits - 1)) else value
+
+          def round_div(value, shift):
+              quotient, remainder = divmod(abs(value), 1 << shift)
+              if shift and 2 * remainder >= 1 << shift:
+                  quotient += 1
+              return -quotient if value < 0 else quotient
+
+          def clip(value):
+              return min(2147483647, max(-2147483648, value))
+
+          def unpack(value):
+              remaining, result = 288, []
+              for width in widths:
+                  remaining -= width
+                  result.append((value >> remaining) & ((1 << width) - 1))
+              return result
+
+          def inspect(path, shift, negative=False):
+              wave = values(path)
+              left, right = signed(wave['left_word'], 32), signed(wave['right_word'], 32)
+              wide = signed(wave['wide_word'], 64)
+              require(shift == 0 or -(1 << 62) <= wide <= 1 << 62, 'Magnitude assumption violated')
+              expected = [clip(wide), round_div(wide, shift), clip(round_div(left * right, 16)),
+                          clip(round_div(left * right, 30)), clip(round_div(left * right, 30)),
+                          clip(round_div(left, 14)), clip(left * 16384), round_div(left * 44798133900177, 32)]
+              encoded = [value & ((1 << width) - 1) for value, width in zip(expected, widths)]
+              rtl, net = unpack(wave['rtl_outputs']), unpack(wave['netlist_outputs'])
+              require(rtl == encoded, 'Canonical RTL fails independent oracle')
+              mismatches = sum(int(a != b) << bit for bit, (a, b) in enumerate(zip(rtl, net)))
+              require(wave['mismatch'] == mismatches, 'Mismatch field mapping is incorrect')
+              require(bool(mismatches) == negative, 'Unexpected equivalence result')
+              if not negative:
+                  require(net == encoded, 'Netlist fails independent oracle')
+              half = (1 << shift) >> 1
+              targets = [
+                  wide == 2147483648, wide == -2147483649, wide == 2147483647, wide == -2147483648,
+                  shift == 0 and wide == -(1 << 63), shift == 0 and wide == (1 << 63) - 1,
+                  shift != 0 and wide == half, shift != 0 and wide == -half,
+                  shift != 0 and wide == half - 1, shift != 0 and wide == -half - 1,
+                  rtl[2] == 0x7fffffff, rtl[2] == 0x80000000, rtl[3] == 0x7fffffff, rtl[3] == 0x80000000,
+                  left == 8192, left == -8192, left == 131072, left == -131073, left == -131072, left == 131071,
+                  left == 655360, left == -655360, left == -(1 << 31), left == 0 and right == 0 and wide == 0,
+                  left < 0 and right > 0, left < 0 and right < 0,
+                  left == -(1 << 31) and right == -(1 << 31), left == -(1 << 31) and right == (1 << 31) - 1,
+              ]
+              require(wave['reach'] == sum(int(value) << bit for bit, value in enumerate(targets)), 'Reach predicate mismatch')
+              return wave, rtl, net
+
+          try:
+              require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch', 'Manual dispatch required')
+              require(os.environ['GITHUB_REF'] == 'refs/heads/main', 'Dispatch main only')
+              require(report['repository'] == 'maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor',
+                      'Unexpected repository')
+              head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+              require(head == report['source_commit'], 'Checkout differs from dispatched commit')
+              require(sys.version_info[:2] == (3, 12), 'Python 3.12 required')
+              version = importlib.metadata.version('yowasp-yosys')
+              require(version == '0.68.0.0.post1208', 'Unexpected Yosys package version')
+              wasm = Path(yowasp_yosys.__file__).parent / 'yosys.wasm'
+              report['toolchain'] = {'python': sys.version, 'yowasp-yosys': version, 'wasm': identity(wasm)}
+              require(report['toolchain']['wasm']['sha256'] == 'e37a7e65e3fa4efbbd64a9c1b0e906be16cdc6c4d5273109d17537f78449f38c',
+                      'Yosys WASM differs from the validated tool')
+              require(not view.exists(), 'Evidence inputs already exist; a fresh run is required')
+              workflow_identity = identity(root / workflow)
+              shutil.copyfile(root / workflow, evidence / Path(workflow).name)
+              report['workflow'] = workflow_identity
+              sources = {}
+
+              def visit(name):
+                  if name in sources:
+                      return
+                  path = root / name
+                  require(path.resolve().is_relative_to(root), 'Source escapes repository: ' + name)
+                  require(path.resolve() == path and path.is_file(), 'Missing or linked source: ' + name)
+                  raw = path.read_bytes()
+                  sources[name] = raw
+                  destination = view / name
+                  destination.parent.mkdir(parents=True, exist_ok=True)
+                  destination.write_bytes(raw)
+                  for include in re.findall(r'`include\s+"([^"]+)"', raw.decode()):
+                      candidates = {p.absolute() for p in [path.parent / include, root / 'rtl/m31' / include] if p.is_file()}
+                      require(len(candidates) == 1, 'Missing or ambiguous include: ' + include)
+                      visit(candidates.pop().relative_to(root).as_posix())
+
+              visit(harness)
+              actual = {name: identity(view / name) for name in sorted(sources)}
+              write_json('source-identities.json', actual)
+              require(actual == expected_sources, 'Fixed-point equivalence sources differ from validated inputs')
+              report['source_identities'] = actual
+              immutable, models = {}, {}
+              netlist = synthesize('arithmetic-netlist', view, canonical=True)
+              report['netlist'] = identity(netlist)
+              for shift in [0, 14, 16, 30]:
+                  label = f'equivalence-{shift}'
+                  model, frontend = evidence / (label + '.il'), evidence / (label + '-frontend.json')
+                  execute(label + '-prepare', front(shift, netlist) + f'proc; write_json {quoted(frontend)}; ' +
+                          prepare + f'write_rtlil {quoted(model)}')
+                  module = json.loads(frontend.read_text())['modules'][top]
+                  require({name: (port['direction'], len(port['bits'])) for name, port in module['ports'].items()} == {
+                      'left_word': ('input', 32), 'right_word': ('input', 32), 'wide_word': ('input', 64),
+                      'rtl_outputs': ('output', 288), 'netlist_outputs': ('output', 288),
+                      'mismatch': ('output', 8), 'reach': ('output', 28)}, 'Harness port contract changed')
+                  checks = module['cells']
+                  assertions = {name for name, cell in checks.items()
+                                if cell['type'] == '$check' and cell['parameters']['FLAVOR'] == 'assert'}
+                  assumptions = {name for name, cell in checks.items()
+                                 if cell['type'] == '$check' and cell['parameters']['FLAVOR'] == 'assume'}
+                  require(assertions == {'a_' + name for name in field_names}, 'Missing or unexpected source assertions')
+                  require(assumptions == ({'rounding_domain.a_declared_magnitude'} if shift else set()), 'Unexpected assumptions')
+                  counts = {kind: len(re.findall(r'^  cell [$]' + kind + ' ', model.read_text(), re.M))
+                            for kind in ['assert', 'assume']}
+                  require(counts == {'assert': 5 if shift == 0 else 6, 'assume': int(shift != 0)}, 'Prepared inventory changed')
+                  for path in [model, frontend]:
+                      immutable[path] = identity(path)
+                  for run in [1, 2]:
+                      text = execute(label + f'-proof-{run}', f'read_rtlil {quoted(model)}; '
+                                     'sat -set-assumes -prove-asserts -verify -timeout 120')
+                      require('SAT proof finished - no model found: SUCCESS!' in text, 'Proof incomplete')
+                      report['proofs'].append({'round_shift': shift, 'run': run, 'status': 'PASS',
+                                               'prepared_properties': counts, 'compared_output_bits': 288})
+                  models[shift] = model
+                  write_json('proofs.json', report['proofs'])
+
+              reach_profile = {0: [4, 5], 14: [0, 1, 2, 3, *range(6, 28)], 16: [6, 7, 8, 9], 30: [6, 7, 8, 9]}
+              for shift, model in models.items():
+                  for bit in reach_profile[shift]:
+                      label = f'equivalence-{shift}-reach-{bit:02d}'
+                      witness = evidence / (label + '.json')
+                      text = execute(label, f'read_rtlil {quoted(model)}; sat -set-assumes -set reach[{bit}] 1 '
+                                     f'-show-ports -timeout 60 -dump_json {quoted(witness)}')
+                      require(text.count('SAT solving finished - model found:') == 1, 'Reachability result missing')
+                      wave, _, _ = inspect(witness, shift)
+                      require(wave['reach'] & (1 << bit), 'Requested reach bit absent')
+                      immutable[witness] = identity(witness)
+                      report['reachability'].append({'round_shift': shift, 'bit': bit, 'name': reach_names[bit],
+                                                     'rtl_integer_oracle': 'PASS', 'netlist_integer_oracle': 'PASS',
+                                                     'witness': identity(witness)})
+                      write_json('witnesses.json', report['reachability'])
+
+              mutations = {
+                  'positive-saturation-rail':("frp_m31_sat_s32 = 32'sh7fffffff;","frp_m31_sat_s32 = 32'sh7ffffffe;",0),
+                  'rounding-high-bit':('frp_m31_round_shift_s64 = (value + half_value) >>> shift;',
+                                       "frp_m31_round_shift_s64 = ((value + half_value) >>> shift) ^ 64'sh8000000000000000;",1),
+                  'q16-product-high-bit':('frp_m31_mul_q16 = frp_m31_sat_s32(\n        frp_m31_round_shift_s64(product, FRP_M31_Q16_FRACTION_BITS)\n      );',
+                                          "frp_m31_mul_q16 = frp_m31_sat_s32(\n        frp_m31_round_shift_s64(product, FRP_M31_Q16_FRACTION_BITS)\n      ) ^ 32'sh80000000;",2),
+                  'q30-product-scale':('frp_m31_mul_q30 = frp_m31_sat_s32(\n        frp_m31_round_shift_s64(product, FRP_M31_Q30_FRACTION_BITS)',
+                                       'frp_m31_mul_q30 = frp_m31_sat_s32(\n        frp_m31_round_shift_s64(product, FRP_M31_Q16_FRACTION_BITS)',3),
+                  'mixed-product-scale':('frp_m31_mul_q16_q30 = frp_m31_sat_s32(\n        frp_m31_round_shift_s64(product, FRP_M31_Q30_FRACTION_BITS)',
+                                         'frp_m31_mul_q16_q30 = frp_m31_sat_s32(\n        frp_m31_round_shift_s64(product, FRP_M31_Q16_FRACTION_BITS)',4),
+                  'down-conversion-scale':('{{32{value_q30[31]}}, value_q30},\n          FRP_M31_Q30_FRACTION_BITS - FRP_M31_Q16_FRACTION_BITS',
+                                           '{{32{value_q30[31]}}, value_q30},\n          FRP_M31_Q30_FRACTION_BITS - FRP_M31_Q16_FRACTION_BITS + 1',5),
+                  'up-conversion-wrap':('frp_m31_q16_to_q30 = frp_m31_sat_s32(extended);','frp_m31_q16_to_q30 = extended[31:0];',6),
+                  'phase-negative-sign':('frp_m31_velocity_to_phase_word = -rounded[31:0];','frp_m31_velocity_to_phase_word = rounded[31:0];',7),
+              }
+              for name, (old, new, bit) in mutations.items():
+                  mutant = evidence / 'mutants' / name
+                  shutil.copytree(view, mutant)
+                  path = mutant / 'rtl/m31/frp_m31_fixed_point_pkg.sv'
+                  text = path.read_text()
+                  require(text.count(old) == 1, 'Mutation site changed: ' + name)
+                  path.write_text(text.replace(old, new))
+                  immutable[path] = identity(path)
+                  mutant_net = synthesize(name, mutant)
+                  model, witness = evidence / (name + '.il'), evidence / (name + '-counterexample.json')
+                  # Canonical RTL is elaborated from view; only the synthesized DUT differs.
+                  execute(name + '-prepare', front(14, mutant_net) + prepare + f'write_rtlil {quoted(model)}')
+                  immutable[model] = identity(model)
+                  execute(name + '-negative', f'read_rtlil {quoted(model)}; sat -set-assumes -prove mismatch[{bit}] 0 '
+                          f'-verify -show-ports -timeout 60 -dump_json {quoted(witness)}', negative=True)
+                  wave, rtl, net = inspect(witness, 14, negative=True)
+                  require(wave['mismatch'] & (1 << bit), 'Intended output field fault missed')
+                  if name == 'rounding-high-bit':
+                      require((rtl[1] ^ net[1]) == (1 << 63), '64-bit MSB fault not detected exactly')
+                  if name == 'q16-product-high-bit':
+                      require((rtl[2] ^ net[2]) == (1 << 31), '32-bit MSB fault not detected exactly')
+                  immutable[witness] = identity(witness)
+                  report['negative_controls'].append({'fault': name, 'status': 'REJECTED', 'mismatch_bit': bit,
+                                                     'canonical_rtl_oracle': 'PASS', 'mutated_source': identity(path),
+                                                     'mutated_netlist': identity(mutant_net), 'counterexample': identity(witness)})
+                  write_json('negative-controls.json', report['negative_controls'])
+
+              require(len(report['proofs']) == 8 and len(report['reachability']) == 36 and
+                      len(report['negative_controls']) == 8, 'Incomplete results')
+              require({n['mismatch_bit'] for n in report['negative_controls']} == set(range(8)), 'Not all fields fault-tested')
+              for name, expected in expected_sources.items():
+                  require(identity(root / name) == identity(view / name) == expected, 'Source changed: ' + name)
+              for path, expected in immutable.items():
+                  require(identity(path) == expected, 'Prepared input or witness changed: ' + path.name)
+              require(identity(root / workflow) == identity(evidence / Path(workflow).name) == workflow_identity,
+                      'Workflow changed during qualification')
+              report.update(status='PASS', sources_unchanged=True, rtl_netlist_equivalence_proven=True)
+              print('FRP M31 fixed-point RTL and netlist equivalence: PASS', flush=True)
+          except Exception as error:
+              report.update(status='FAIL', error=str(error))
+              raise
+          finally:
+              write_json('result.json', report)
+              summary = '\n'.join([
+                  '# M31 fixed-point equivalence: ' + report['status'], '',
+                  'Commit: `' + report['source_commit'] + '`', '',
+                  f"Completed SAT proofs: {len(report['proofs'])}/8; reach witnesses: {len(report['reachability'])}/36; detected faults: {len(report['negative_controls'])}/8.", '',
+                  'Direct equality of all eight arithmetic fields (288 bits), shifts 0/14/16/30, RTL and fresh netlist.',
+                  'Two fresh solver runs per profile; eight source assertions, five or six after optimization.',
+                  'Signed 32-bit operands are unrestricted. At shift 0 all signed 64-bit wide_word values are allowed.',
+                  'At shifts 14/16/30 one assumption bounds wide_word to inclusive [-2^62,+2^62].',
+                  'Rounding uses nearest with ties away from zero; phase conversion wraps modulo 2^32.',
+                  'Both implementations in each reach witness are checked against an independent Python integer oracle.',
+                  'Every output field has a fault control; explicit 64-bit and 32-bit MSB faults must be detected.',
+                  'During fault controls canonical RTL must still pass the integer oracle.',
+                  'Scope excludes the full phase engine, full core, physical timing and Python-model equivalence.',
+                  'See result.json, source identities, native Yosys logs and WaveJSON traces in the artifact.', '',
+              ])
+              (evidence / 'summary.md').write_text(summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write(summary)
+          PY
+
+      - name: Retain sources, proofs, witnesses, and counterexamples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-29-m31-fixed-point-equivalence-formal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M31_FIXED_POINT_EQUIVALENCE_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
