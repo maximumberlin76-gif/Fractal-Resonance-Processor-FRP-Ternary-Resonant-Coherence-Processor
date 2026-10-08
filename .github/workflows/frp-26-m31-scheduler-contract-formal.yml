@@ -1,0 +1,446 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# This workflow is proprietary and is not licensed under Apache-2.0.
+# Except as required by applicable law, using, reproducing, modifying, or
+# distributing this file requires prior written permission from Maksym Marnov.
+# Referenced dependencies retain their existing licenses.
+
+name: 26 - FRP M31 Scheduler Contract RTL + Netlist Formal
+
+run-name: "26 - FRP M31 Scheduler Contract | 8 proofs @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-26-m31-scheduler-contract-formal-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-scheduler-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Initialize evidence paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' "M31_SCHEDULER_EVIDENCE=$RUNNER_TEMP/frp-m31-scheduler-contract-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m31-scheduler-contract-evidence"
+
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned formal tool
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            python --version
+            python -m pip install --disable-pip-version-check --only-binary=:all: \
+              --timeout 30 --retries 3 yowasp-yosys==0.68.0.0.post1208
+            python -m pip freeze
+          } 2>&1 | tee "$M31_SCHEDULER_EVIDENCE/toolchain.log"
+
+      - name: Prove scheduler contract and check witnesses and negative controls
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          import sys
+          import time
+          import yowasp_yosys
+          from pathlib import Path
+
+          root = Path.cwd().resolve()
+          evidence = Path(os.environ['M31_SCHEDULER_EVIDENCE']).resolve()
+          evidence.mkdir(parents=True, exist_ok=True)
+          view = evidence / 'inputs'
+          workflow = '.github/workflows/frp-26-m31-scheduler-contract-formal.yml'
+          harness = 'formal/m31/frp_m31_scheduler_contract_formal.sv'
+          top = 'frp_m31_scheduler_contract_formal'
+          core = 'frp_m31_scheduler'
+          report = {
+              'status': 'FAIL', 'repository': os.environ['GITHUB_REPOSITORY'],
+              'source_commit': os.environ['GITHUB_SHA'],
+              'run_id': os.environ['GITHUB_RUN_ID'], 'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'scope': 'Independent M31 scheduler contract on RTL and netlist; 32-bit production and 3-bit wrap profiles; sampled-clock, two-state model',
+              'assumptions': 'Initial sampled reset only; all subsequent inputs unrestricted',
+              'source_assertions_per_model': 21, 'assumptions_per_model': 1,
+              'proof_method': 'Temporal induction; maximum induction search length 6',
+              'commands': [], 'proofs': [], 'reachability': [], 'negative_controls': [], 'netlists': {},
+              'rtl_contract_proven': False, 'netlist_contract_proven': False,
+              'full_core_equivalence': False, 'global_coverage_closure': False,
+              'liveness_qualified': False, 'physical_reset_timing_qualified': False,
+              'routing_qualified': False, 'phase_arithmetic_qualified': False,
+          }
+          expected_sources = {
+              'formal/m31/frp_m31_scheduler_contract_formal.sv': {'bytes': 10328, 'sha256': '9b743e53d90ad95ac1ecb17da72aa362ea25766538f80448b6b970fdd9fddc6a'},
+              'rtl/m31/frp_m31_pkg.sv': {'bytes': 18531, 'sha256': '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94'},
+              'rtl/m31/frp_m31_scheduler.sv': {'bytes': 10560, 'sha256': 'fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f'},
+          }
+          expected_netlists = {
+              32: {'bytes': 11244, 'sha256': 'd5b393befa73e097bfa4b45dfe4291ed9aad546c696d0d1befe779746a60b8c9'},
+              3: {'bytes': 10976, 'sha256': '6de91f0af8ab64d5fd1b88aec5b1350b5fb14ed530b29cd339170e8d09733565'},
+          }
+          reach_names = [
+              'complete-7-1-period', 'complete-1-7-period', 'paused-7-1-to-1-7',
+              'enabled-1-7-to-7-1-wrap', 'enabled-reserved-entry', 'invalid-tick-recovery-diagnostic',
+              'clear-without-tick', 'clear-and-commit-during-handoff', 'clear-and-invalid-tick',
+              'paused-commit-position', 'clear-retains-position', 'reset-after-progress',
+              'free-enable', 'balance-enable', 'excite-enable', 'neutralize-enable',
+              'incoming-reserved-mode-does-not-bypass-register',
+              'tick-index-wrap', 'recorded-ticks-wrap', 'free-counter-wrap',
+          ]
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          def identity(path):
+              raw = path.read_bytes()
+              return {'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest()}
+
+          def write_json(name, value):
+              (evidence / name).write_text(json.dumps(value, indent=2, sort_keys=True) + '\n')
+
+          def quoted(path):
+              return json.dumps(str(path))
+
+          def execute(label, script, cwd=view, negative=False, timeout=240):
+              script_path, log_path = evidence / (label + '.ys'), evidence / (label + '.log')
+              script_path.write_text(script + '\n')
+              command = ['yowasp-yosys', '-Q', '-T', '-s', str(script_path)]
+              entry = {'label': label, 'argv': command, 'script': identity(script_path)}
+              report['commands'].append(entry)
+              started = time.monotonic()
+              print('START ' + label, flush=True)
+              try:
+                  result = subprocess.run(command, cwd=cwd, stdout=subprocess.PIPE,
+                                          stderr=subprocess.STDOUT, timeout=timeout)
+                  # Save the completed native stream in one host write, without WASI file logging.
+                  log_path.write_bytes(result.stdout)
+                  entry['returncode'] = result.returncode
+              except subprocess.TimeoutExpired as error:
+                  log_path.write_bytes(error.stdout or b'')
+                  entry['process_timeout'] = timeout
+                  raise
+              finally:
+                  entry['seconds'] = round(time.monotonic() - started, 2)
+                  write_json('commands.json', report['commands'])
+              text = log_path.read_text()
+              require('TIMEOUT' not in text.upper(), label + ': solver timeout')
+              if negative:
+                  require(result.returncode != 0 and 'SAT proof finished - model found: FAIL!' in text,
+                          label + ': expected a property counterexample, not a tool failure')
+              else:
+                  require(result.returncode == 0, label + ': Yosys failed; inspect retained log')
+              print('DONE ' + label, flush=True)
+              return text
+
+          def ports(width):
+              result = {name: ('input', 1) for name in ['clk', 'rst_n', 'tick_enable', 'clear_counters']}
+              result.update(scheduler_mode=('input', 2), scheduler_mode_q=('output', 2),
+                            scheduler_state_q=('output', 3), period_index_q=('output', 3))
+              for name in ['tick_index_q', 'ticks_recorded_q'] + [
+                      'scheduler_count_' + state + '_q' for state in ['free', 'balance', 'commit', 'excite', 'neutralize']]:
+                  result[name] = ('output', width)
+              for name in ['free_enable', 'balance_enable', 'commit_enable', 'excite_enable', 'neutralize_enable',
+                           'scheduler_mode_reserved', 'scheduler_state_reserved', 'scheduler_valid', 'scheduler_counts_valid']:
+                  result[name] = ('output', 1)
+              return result
+
+          def front(width, netlist=None):
+              return ((f'read_verilog -icells {quoted(netlist)}; ' if netlist else '') +
+                      'read_slang -j 1 --std 1800-2017 ' +
+                      ('-DFRP_M31_SCHEDULER_CONTRACT_NETLIST ' if netlist else '') +
+                      f'-G COUNTER_BITS={width} --top {top} -Irtl/m31 {harness}; ')
+
+          prepare = (f'prep -top {top} -flatten; memory_map; async2sync; opt -full; wreduce; '
+                     'techmap; opt -full; opt_clean; chformal -lower; abc -g AND; opt_clean; ')
+          proof = 'sat -seq 2 -tempinduct -maxsteps 6 -set-assumes -prove-asserts -verify -timeout 60'
+
+          def samples(path, name, width):
+              selected = [s for s in json.loads(path.read_text())['signal'] if s['name'] == name]
+              require(len(selected) == 1, 'Missing or duplicate witness signal: ' + name)
+              signal = selected[0]
+              data, result, value = iter(signal.get('data', [])), [], None
+              for index, symbol in enumerate(signal['wave']):
+                  if symbol in '4=':
+                      if 'data' in signal:
+                          value = next(data)
+                      else:
+                          require(width == 1 and index == 0 and symbol == '4', 'Invalid scalar witness encoding')
+                          value = None
+                  elif symbol in '01':
+                      require(width == 1, 'Invalid vector witness encoding')
+                      value = symbol
+                  else:
+                      require(symbol == '.', 'Unsupported witness encoding')
+                  result.append(value)
+              require(len(result) == 13, 'A twelve-step witness is required: ' + path.name)
+              require(all(re.fullmatch('[01]{' + str(width) + '}', v or '') for v in result[2:]),
+                      'Undefined or truncated post-reset witness: ' + name)
+              return result
+
+          # Literal cadence and integer modular arithmetic are independent of DUT helpers.
+          cadence = [[0] * 8, [1] * 7 + [2], [3] + [4] * 7, [7] * 8]
+
+          def decode(value, width):
+              fields = [('mode', 2), ('state', 3), ('index', width), ('period', 3),
+                        ('ticks', width), ('counts', 5 * width), ('enables', 5),
+                        ('mode_reserved', 1), ('state_reserved', 1), ('valid', 1), ('counts_valid', 1)]
+              offset, result = 7 * width + 17, {}
+              for name, bits in fields:
+                  offset -= bits
+                  result[name] = (int(value, 2) >> offset) & ((1 << bits) - 1)
+              require(offset == 0, 'Invalid observation layout')
+              result['counts'] = [(result['counts'] >> (i * width)) & ((1 << width) - 1) for i in range(5)]
+              return result
+
+          def inspect_trace(path, width):
+              names = {'rst_n': 1, 'tick_enable': 1, 'clear_counters': 1,
+                       'scheduler_mode': 2, 'observed_outputs': 7 * width + 17}
+              waves = {name: samples(path, name, bits) for name, bits in names.items()}
+              observed = {i: decode(v, width) for i, v in enumerate(waves['observed_outputs'])
+                          if v and re.fullmatch('[01]+', v)}
+              failures, mask = [], (1 << width) - 1
+
+              def check(step, name, actual, expected):
+                  if actual != expected:
+                      failures.append({'step': step, 'property': name, 'actual': actual, 'expected': expected})
+
+              for step in range(2, 13):
+                  a = observed[step]
+                  state = cadence[a['mode']][a['index'] % 8]
+                  check(step, 'state', a['state'], state)
+                  check(step, 'period', a['period'], a['index'] % 8)
+                  check(step, 'enables', a['enables'], (1 << state) if waves['tick_enable'][step] == '1' and state < 5 else 0)
+                  check(step, 'mode_reserved', a['mode_reserved'], int(a['mode'] == 3))
+                  check(step, 'state_reserved', a['state_reserved'], int(state == 7))
+                  check(step, 'valid', a['valid'], int(a['mode'] != 3))
+                  check(step, 'counts_valid', a['counts_valid'], int((sum(a['counts']) & mask) == a['ticks']))
+                  if waves['rst_n'][step] == '0' or waves['rst_n'][step - 1] == '0':
+                      for name in ['mode', 'state', 'index', 'period', 'ticks']:
+                          check(step, 'reset-' + name, a[name], 0)
+                      check(step, 'reset-counts', a['counts'], [0] * 5)
+                  else:
+                      b = observed[step - 1]
+                      tick, clear = int(waves['tick_enable'][step - 1], 2), int(waves['clear_counters'][step - 1], 2)
+                      check(step, 'mode-update', a['mode'], int(waves['scheduler_mode'][step - 1], 2))
+                      check(step, 'index-update', a['index'], (b['index'] + tick) & mask)
+                      check(step, 'ticks-update', a['ticks'], ((0 if clear else b['ticks']) + tick) & mask)
+                      counted = cadence[b['mode']][b['index'] % 8]
+                      counts = [((0 if clear else b['counts'][i]) + int(tick and counted == i)) & mask for i in range(5)]
+                      check(step, 'counter-update', a['counts'], counts)
+              return failures, waves, observed
+
+          try:
+              require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch', 'Manual dispatch required')
+              require(os.environ['GITHUB_REF'] == 'refs/heads/main', 'Dispatch main only')
+              require(report['repository'] == 'maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor',
+                      'Unexpected repository')
+              head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+              require(head == report['source_commit'], 'Checkout differs from dispatched commit')
+              require(sys.version_info[:2] == (3, 12), 'Python 3.12 required')
+              version = importlib.metadata.version('yowasp-yosys')
+              require(version == '0.68.0.0.post1208', 'Unexpected Yosys package version')
+              wasm = Path(yowasp_yosys.__file__).parent / 'yosys.wasm'
+              report['toolchain'] = {'python': sys.version, 'yowasp-yosys': version, 'wasm': identity(wasm)}
+              require(report['toolchain']['wasm']['sha256'] == 'e37a7e65e3fa4efbbd64a9c1b0e906be16cdc6c4d5273109d17537f78449f38c',
+                      'Yosys WASM differs from the validated tool')
+              require(not view.exists(), 'Evidence inputs already exist; a fresh run is required')
+              workflow_identity = identity(root / workflow)
+              shutil.copyfile(root / workflow, evidence / Path(workflow).name)
+              report['workflow'] = workflow_identity
+              sources = {}
+
+              def visit(name):
+                  if name in sources:
+                      return
+                  path = root / name
+                  require(path.resolve().is_relative_to(root), 'Source escapes repository: ' + name)
+                  require(path.resolve() == path and path.is_file(), 'Missing or linked source: ' + name)
+                  raw = path.read_bytes()
+                  sources[name] = raw
+                  destination = view / name
+                  destination.parent.mkdir(parents=True, exist_ok=True)
+                  destination.write_bytes(raw)
+                  for include in re.findall(r'`include\s+"([^"]+)"', raw.decode()):
+                      candidates = {p.absolute() for p in [path.parent / include, root / 'rtl/m31' / include] if p.is_file()}
+                      require(len(candidates) == 1, 'Missing or ambiguous include: ' + include)
+                      visit(candidates.pop().relative_to(root).as_posix())
+
+              visit(harness)
+              actual = {name: identity(view / name) for name in sorted(sources)}
+              write_json('source-identities.json', actual)
+              require(actual == expected_sources, 'Scheduler sources differ from validated inputs')
+              report['source_identities'] = actual
+              immutable, models = {}, {}
+              for width in [32, 3]:
+                  netlist = evidence / f'scheduler-{width}-netlist.v'
+                  net_json = evidence / f'scheduler-{width}-netlist.json'
+                  frontend = evidence / f'scheduler-{width}-frontend.json'
+                  execute(f'synthesis-{width}',
+                          f'read_slang -j 1 --std 1800-2017 -G COUNTER_BITS={width} --top {core} -Irtl/m31 rtl/m31/{core}.sv; '
+                          f'write_json {quoted(frontend)}; synth -top {core} -flatten -noshare -run begin:fine; check -assert; '
+                          'techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; select -assert-none t:$shiftx t:$connect; '
+                          f'rename {core} {core}_netlist; write_verilog -noattr {quoted(netlist)}; write_json {quoted(net_json)}')
+                  modules = json.loads(net_json.read_text())['modules']
+                  require(set(modules) == {core + '_netlist'}, 'Netlist is not a single flattened module')
+                  module = modules[core + '_netlist']
+                  original = json.loads(frontend.read_text())['modules'][core]
+                  port_map = lambda m: {n: (p['direction'], len(p['bits'])) for n, p in m['ports'].items()}
+                  require(port_map(module) == port_map(original) == ports(width), 'Port contract changed')
+                  require(len(ports(width)) == 24 and sum(w for d, w in ports(width).values() if d == 'output') == 7 * width + 17,
+                          'Expected 24 ports and 7*COUNTER_BITS+17 output bits')
+                  require(not module.get('processes') and not any('latch' in c['type'].lower() for c in module['cells'].values()),
+                          'Netlist contains a process or latch')
+                  require(identity(netlist) == expected_netlists[width], 'Fresh netlist differs from validated synthesis')
+                  report['netlists'][width] = identity(netlist)
+                  write_json(f'port-contract-{width}.json', ports(width))
+                  for path in [netlist, net_json, frontend]:
+                      immutable[path] = identity(path)
+                  for implementation, net in [('rtl', None), ('netlist', netlist)]:
+                      label = f'{implementation}-{width}'
+                      model, formal_json = evidence / (label + '.il'), evidence / (label + '-frontend.json')
+                      execute(label + '-prepare', front(width, net) + f'proc; write_json {quoted(formal_json)}; ' +
+                              prepare + f'write_rtlil {quoted(model)}')
+                      checks = json.loads(formal_json.read_text())['modules'][top]['cells']
+                      flavors = [c['parameters']['FLAVOR'] for c in checks.values() if c['type'] == '$check']
+                      require(flavors.count('assert') == 21 and flavors.count('assume') == 1, 'Source property inventory changed')
+                      counts = {kind: len(re.findall(r'^  cell \$' + kind + ' ', model.read_text(), re.M))
+                                for kind in ['assert', 'assume']}
+                      expected_asserts = {('rtl', 32): 20, ('netlist', 32): 21, ('rtl', 3): 19, ('netlist', 3): 20}
+                      require(counts == {'assert': expected_asserts[implementation, width], 'assume': 1},
+                              'Prepared property inventory changed')
+                      for run in [1, 2]:
+                          text = execute(label + f'-proof-{run}', f'read_rtlil {quoted(model)}; ' + proof)
+                          require('Induction step proven: SUCCESS!' in text and
+                                  re.search(r'Base case for induction length \d+ proven\.', text),
+                                  'Both induction base and induction step must be proven')
+                          report['proofs'].append({'implementation': implementation, 'counter_bits': width,
+                                                   'run': run, 'status': 'PASS', 'prepared_properties': counts})
+                      models[implementation, width] = model
+                      for path in [model, formal_json]:
+                          immutable[path] = identity(path)
+
+              for (implementation, width), model in models.items():
+                  for bit in (range(17) if width == 32 else range(17, 20)):
+                      label = f'{implementation}-{width}-reach-{bit:02d}'
+                      witness = evidence / (label + '.json')
+                      text = execute(label, f'read_rtlil {quoted(model)}; '
+                                     f'sat -seq 12 -set-assumes -set-at 12 reach[{bit}] 1 -show-ports '
+                                     f'-timeout 60 -dump_json {quoted(witness)}')
+                      require(text.count('SAT solving finished - model found:') == 1, 'Reach target has no complete satisfiability log')
+                      require((int(samples(witness, 'reach', 20)[12], 2) >> bit) & 1, 'Requested reach bit is absent')
+                      failures, waves, observed = inspect_trace(witness, width)
+                      require(not failures, 'Independent trace oracle failed: ' + json.dumps(failures))
+                      if bit in [0, 1]:
+                          mode, count = bit + 1, 0
+                          for step in range(1, 12):
+                              if (waves['rst_n'][step] != '1' or waves['clear_counters'][step] != '0' or
+                                      observed[step]['mode'] != mode or int(waves['scheduler_mode'][step], 2) != mode):
+                                  count = 0
+                              elif waves['tick_enable'][step] == '1':
+                                  count = min(8, count + 1)
+                          require(count == 8, 'Complete eight-tick cadence witness is missing')
+                      report['reachability'].append({'implementation': implementation, 'counter_bits': width,
+                                                     'bit': bit, 'name': reach_names[bit], 'depth': 12,
+                                                     'witness': identity(witness), 'independent_trace_oracle': 'PASS'})
+
+              mutations = {
+                  'early-commit': ('rtl/m31/frp_m31_pkg.sv', "period_index == 3'd7", "period_index == 3'd6", 'state'),
+                  'clear-resets-position': ('rtl/m31/frp_m31_scheduler.sv', '    if (clear_counters) begin',
+                                           "    if (clear_counters) begin\n      tick_index_d = '0;", 'index-update'),
+                  'incoming-mode-count': ('rtl/m31/frp_m31_scheduler.sv',
+                      '      unique case (scheduler_state_q)\n        FRP_SCHED_FREE: begin\n          scheduler_count_free_d =',
+                      '      unique case (frp_decode_scheduler_state(scheduler_mode, tick_index_q[2:0]))\n        FRP_SCHED_FREE: begin\n          scheduler_count_free_d =',
+                      'counter-update'),
+              }
+              for name, (relative, old, new, expected_fault) in mutations.items():
+                  mutant = evidence / 'mutants' / name
+                  shutil.copytree(view, mutant)
+                  path = mutant / relative
+                  text = path.read_text()
+                  require(text.count(old) == 1, 'Mutation site changed: ' + name)
+                  path.write_text(text.replace(old, new))
+                  model, witness = evidence / (name + '.il'), evidence / (name + '-counterexample.json')
+                  execute(name + '-prepare', front(32) + prepare + f'write_rtlil {quoted(model)}', cwd=mutant)
+                  execute(name + '-negative', f'read_rtlil {quoted(model)}; '
+                          'sat -seq 12 -set-assumes -prove-asserts -verify -timeout 60 -show-ports '
+                          f'-dump_json {quoted(witness)}', negative=True)
+                  failures, _, _ = inspect_trace(witness, 32)
+                  require(any(f['property'] == expected_fault for f in failures), 'Counterexample misses intended fault: ' + name)
+                  report['negative_controls'].append({'fault': name, 'status': 'REJECTED', 'observed_fault': failures,
+                                                     'mutated_source': identity(path), 'counterexample': identity(witness)})
+
+              require(len(report['proofs']) == 8 and len(report['reachability']) == 40 and
+                      len(report['negative_controls']) == 3, 'Qualification results are incomplete')
+              for name, expected in expected_sources.items():
+                  require(identity(root / name) == identity(view / name) == expected, 'Source changed: ' + name)
+              for path, expected in immutable.items():
+                  require(identity(path) == expected, 'Prepared input changed: ' + path.name)
+              require(identity(root / workflow) == identity(evidence / Path(workflow).name) == workflow_identity,
+                      'Workflow changed during qualification')
+              report.update(status='PASS', sources_unchanged=True, rtl_contract_proven=True, netlist_contract_proven=True)
+              print('FRP M31 scheduler contract on RTL and netlist: PASS', flush=True)
+          except Exception as error:
+              report.update(status='FAIL', error=str(error))
+              raise
+          finally:
+              write_json('result.json', report)
+              summary = '\n'.join([
+                  '# M31 scheduler contract: ' + report['status'], '',
+                  'Commit: `' + report['source_commit'] + '`', '',
+                  f"Completed induction proofs: {len(report['proofs'])}/8; reach witnesses: {len(report['reachability'])}/40; detected faults: {len(report['negative_controls'])}/3.", '',
+                  'RTL and freshly synthesized netlist; 32-bit production and 3-bit wrap profiles.',
+                  '21 source assertions per model; initial sampled reset is the only assumption.',
+                  'Induction includes its reset base case; all later modes, ticks, clears and resets are unrestricted.',
+                  'Twelve-step witnesses are checked with an independent literal cadence and modular accounting oracle.',
+                  'Scope excludes full-core equivalence, routing, phase arithmetic, liveness and physical reset timing.',
+                  'See result.json, native Yosys logs and WaveJSON traces in the artifact.', '',
+              ])
+              (evidence / 'summary.md').write_text(summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write(summary)
+          PY
+
+      - name: Retain sources, proofs, witnesses, and counterexamples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-26-m31-scheduler-contract-formal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M31_SCHEDULER_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
