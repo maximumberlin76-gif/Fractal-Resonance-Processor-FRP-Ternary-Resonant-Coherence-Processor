@@ -1,0 +1,423 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# This workflow is proprietary and is not licensed under Apache-2.0.
+# Except as required by applicable law, using, reproducing, modifying, or
+# distributing this file requires prior written permission from Maksym Marnov.
+# Referenced dependencies retain their existing licenses.
+
+name: 30 - FRP M31 Phase Request Contract RTL + Netlist Formal
+
+run-name: "30 - FRP M31 Phase Request Contract | 4 proofs @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-30-m31-phase-request-contract-formal-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-phase-request-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Initialize evidence paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' "M31_PHASE_REQUEST_EVIDENCE=$RUNNER_TEMP/frp-m31-phase-request-contract-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m31-phase-request-contract-evidence"
+
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned formal tool
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            python --version
+            python -m pip install --disable-pip-version-check --only-binary=:all: \
+              --timeout 30 --retries 3 yowasp-yosys==0.68.0.0.post1208
+            python -m pip freeze
+          } 2>&1 | tee "$M31_PHASE_REQUEST_EVIDENCE/toolchain.log"
+
+      - name: Prove phase-request contract and check witnesses and negative controls
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          import sys
+          import time
+          import yowasp_yosys
+          from pathlib import Path
+
+          root = Path.cwd().resolve()
+          evidence = Path(os.environ['M31_PHASE_REQUEST_EVIDENCE']).resolve()
+          evidence.mkdir(parents=True, exist_ok=True)
+          view = evidence / 'inputs'
+          workflow = '.github/workflows/frp-30-m31-phase-request-contract-formal.yml'
+          harness = 'formal/m31/frp_m31_phase_request_contract_formal.sv'
+          core_file = 'rtl/m31/frp_m31_phase_request_adapter.sv'
+          top = 'frp_m31_phase_request_contract_formal'
+          core = 'frp_m31_phase_request_adapter'
+          net_top = core + '_netlist'
+          macro = 'FRP_M31_PHASE_REQUEST_CONTRACT_NETLIST'
+          report = {
+              'status': 'FAIL', 'repository': os.environ['GITHUB_REPOSITORY'],
+              'source_commit': os.environ['GITHUB_SHA'],
+              'run_id': os.environ['GITHUB_RUN_ID'], 'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'scope': 'Independent phase-request contract; eight cells, two lanes; RTL and fresh netlist',
+              'input_domain': 'All 52 input bits unrestricted; two-state combinational model',
+              'source_assertions_per_model': 20, 'assumptions_per_model': 0,
+              'proof_method': 'Combinational SAT; two fresh solver runs per implementation',
+              'pending_semantics': '01/11 busy; 00/10 not busy; reserved 10 is not a valid pending state',
+              'commands': [], 'proofs': [], 'reachability': [], 'negative_controls': [],
+              'rtl_contract_proven': False, 'netlist_contract_proven': False,
+              'full_phase_engine_qualified': False, 'full_core_equivalence': False,
+              'global_coverage_closure': False, 'physical_timing_qualified': False,
+              'python_model_equivalence': False,
+          }
+          expected_sources = {
+              'formal/m31/frp_m31_phase_request_contract_formal.sv': {'bytes': 7975, 'sha256': '9a37a3ddcae647d5de82f8d2c95978e3dd08134357c2fcef5ce8bf25e1778a0a'},
+              'rtl/m31/frp_m31_phase_request_adapter.sv': {'bytes': 2251, 'sha256': 'fa78bcfe965270cc74855908aa392989d857575a2097a126539aabb1aab8990d'},
+              'rtl/m31/frp_m31_pkg.sv': {'bytes': 18531, 'sha256': '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94'},
+          }
+          expected_netlist = {'bytes': 91286, 'sha256': '81bf1c05de3e3af04d4c2464d2f0d9ee755a6306e3042e9dca1d24e1b30663ee'}
+          reach_names = [
+              'disabled-full-bank', 'enabled-empty-bank', 'last-cell-only', 'capacity-overflow',
+              'sparse-first-last', 'positive-negative-targets', 'negative-positive-targets',
+              'active-neutral-targets', 'positive-to-negative-request', 'negative-to-positive-request',
+              'positive-pending-owner', 'negative-pending-owner', 'reserved-current', 'reserved-target',
+              'same-state-skipped', 'reserved-scheduler-5', 'reserved-scheduler-6', 'reserved-scheduler-7',
+              'free-mixed-classes', 'balance-selects-neutralization', 'commit-selects-excitation',
+              'excite-selects-excitation', 'neutralize-selects-neutralization', 'reserved-pending-not-busy',
+          ]
+          immutable = {}
+
+          def require(condition, message):
+              if not condition: raise RuntimeError(message)
+
+          def identity(path):
+              raw=path.read_bytes()
+              return {'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest()}
+
+          def write_json(name, value):
+              (evidence/name).write_text(json.dumps(value,indent=2,sort_keys=True)+'\n')
+
+          def quoted(path): return json.dumps(str(path))
+
+          def execute(label, script, cwd=view, negative=False):
+              ys,log=evidence/(label+'.ys'),evidence/(label+'.log')
+              ys.write_text(script+'\n')
+              command=['yowasp-yosys','-Q','-T','-s',str(ys)]
+              entry={'label':label,'argv':command,'script':identity(ys)}
+              report['commands'].append(entry)
+              start=time.monotonic()
+              print('START',label,flush=True)
+              try:
+                  result=subprocess.run(command,cwd=cwd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=240)
+                  log.write_bytes(result.stdout)
+                  entry['returncode']=result.returncode
+              except subprocess.TimeoutExpired as error:
+                  log.write_bytes(error.stdout or b'')
+                  entry['process_timeout']=240
+                  raise
+              finally:
+                  entry['seconds']=round(time.monotonic()-start,2)
+                  write_json('commands.json',report['commands'])
+              text=log.read_text()
+              require('TIMEOUT' not in text.upper(),label+': solver timeout')
+              if negative:
+                  require(result.returncode!=0 and 'SAT proof finished - model found: FAIL!' in text,
+                          label+': expected property counterexample, not a tool failure')
+              else: require(result.returncode==0,label+': Yosys failed; inspect log')
+              for path in [ys,log]: immutable[path]=identity(path)
+              print('DONE',label,flush=True)
+              return text
+
+          port_map=lambda m: {n:(p['direction'],len(p['bits'])) for n,p in m['ports'].items()}
+          input_ports={'enable':('input',1),'retained_state':('input',16),'pending_route':('input',16),
+                       'phase_target':('input',16),'scheduler_state':('input',3)}
+          harness_ports={**input_ports,'observed_outputs':('output',12),'reach':('output',24)}
+          core_ports={**input_ports,'request_valid':('output',2),'request_cell_index':('output',6),'request_target':('output',4)}
+          prepare=(f'prep -top {top} -flatten; memory_map; opt -full; wreduce; opt_clean; '
+                   'chformal -lower; opt -full; opt_clean; ')
+
+          def synthesize(label,directory,canonical=False):
+              netlist,net_json,front=(evidence/(label+suffix) for suffix in ['.v','.json','-frontend.json'])
+              execute(label+'-synthesis',f'read_slang -j 1 --std 1800-2017 --top {core} '
+                  f'-G CELLS=8 -G REQUEST_LANES=2 -G CELL_INDEX_BITS=3 -Irtl/m31 {core_file}; '
+                  f'write_json {quoted(front)}; synth -top {core} -flatten -noshare -run begin:fine; check -assert; '
+                  'techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; select -assert-none t:$shiftx t:$connect; '
+                  f'rename {core} {net_top}; write_verilog -noattr {quoted(netlist)}; write_json {quoted(net_json)}',cwd=directory)
+              modules=json.loads(net_json.read_text())['modules']
+              require(set(modules)=={net_top},'Netlist not one flattened module')
+              module=modules[net_top]
+              require(port_map(module)==core_ports,'Netlist ports changed')
+              require(port_map(json.loads(front.read_text())['modules'][core])==core_ports,'Source ports changed')
+              require(not module.get('processes') and not any(
+                  'dff' in c['type'].lower() or 'latch' in c['type'].lower() for c in module['cells'].values()),'Unexpected state')
+              if canonical:
+                  require(identity(netlist)==expected_netlist,'Fresh netlist differs from validated synthesis')
+              for path in [netlist,net_json,front]: immutable[path]=identity(path)
+              return netlist
+
+          assertions={'a_valid','a_index','a_target','a_first_present','a_second_present','a_compact','a_disabled','a_ascending'}
+          assertions|={f'lane_contract[{lane}].a_{name}' for lane in [0,1]
+              for name in ['eligible','rank','original_target','target_domain','zero_index','zero_target']}
+
+          def build_model(label,netlist=None,canonical=False):
+              model,front=evidence/(label+'.il'),evidence/(label+'-frontend.json')
+              front_cmd=(f'read_verilog -icells {quoted(netlist)}; ' if netlist else '')
+              front_cmd+=f'read_slang -j 1 --std 1800-2017 '+(f'-D {macro} ' if netlist else '')
+              front_cmd+=f'--top {top} -Irtl/m31 {harness}; proc; write_json {quoted(front)}; '
+              execute(label+'-prepare',front_cmd+prepare+f'write_rtlil {quoted(model)}')
+              module=json.loads(front.read_text())['modules'][top]
+              require(port_map(module)==harness_ports,'Harness ports changed')
+              found={name for name,c in module['cells'].items() if c['type']=='$check' and c['parameters']['FLAVOR']=='assert'}
+              require(found==assertions,'Source assertions differ: '+str(found^assertions))
+              require(not any(c['type']=='$check' and c['parameters']['FLAVOR']=='assume' for c in module['cells'].values()),'Unexpected source assumption')
+              counts={kind:len(re.findall(r'^  cell [$]'+kind+' ',model.read_text(),re.M)) for kind in ['assert','assume']}
+              require(1<=counts['assert']<=20 and counts['assume']==0,'Unexpected prepared inventory')
+              if canonical:
+                  require(counts=={'assert':20,'assume':0},'Canonical prepared inventory changed')
+              for path in [model,front]: immutable[path]=identity(path)
+              return model,counts
+
+          def values(path):
+              result={}
+              widths={name:value[1] for name,value in harness_ports.items()}
+              for signal in json.loads(path.read_text())['signal']:
+                  name,data=signal['name'],signal.get('data',[])
+                  require(name in widths and name not in result,'Unexpected or duplicate witness port '+name)
+                  if widths[name]==1:
+                      require(signal['wave'] in ('04','14') and not data,'Unexpected scalar witness encoding')
+                      result[name]=int(signal['wave'][0])
+                      continue
+                  require(signal['wave']=='=4' and len(data)==2 and data[1]=='','Unexpected witness encoding')
+                  require(len(data[0])==widths[name] and re.fullmatch('[01]+',data[0]),'Undefined or truncated witness')
+                  result[name]=int(data[0],2)
+              require(set(result)==set(widths),'Incomplete witness ports')
+              return result
+
+          # Independent numeric-state oracle: decode {-1,0,+1}, classify by the
+          # starting value, filter all cells, sort by cell number, then take two.
+          def oracle(w):
+              numbers={0:0,1:1,3:-1}
+              candidates=[]
+              for cell in range(8):
+                  old=(w['retained_state']>>(2*cell))&3
+                  goal=(w['phase_target']>>(2*cell))&3
+                  pending=(w['pending_route']>>(2*cell))&3
+                  if old not in numbers or goal not in numbers or numbers[old]==numbers[goal] or pending in (1,3): continue
+                  schedules={0,2,3} if numbers[old]==0 else {0,1,4}
+                  if w['scheduler_state'] in schedules: candidates.append((cell,goal))
+              selected=sorted(candidates)[:2] if w['enable'] else []
+              valid=(1<<len(selected))-1
+              index=sum(cell<<(3*lane) for lane,(cell,goal) in enumerate(selected))
+              target=sum(goal<<(2*lane) for lane,(cell,goal) in enumerate(selected))
+              return (valid<<10)|(index<<4)|target,sum(1<<cell for cell,goal in candidates)
+
+          def predicates(w,candidate):
+              en,sched,old,goal,pending,output=[w[k] for k in ['enable','scheduler_state','retained_state','phase_target','pending_route','observed_outputs']]
+              valid,index,target=output>>10,(output>>4)&63,output&15
+              r=[False]*24
+              r[0]=not en and candidate==255 and output==0
+              if en:
+                  r[1]=candidate==0 and sched<5
+                  r[2]=candidate==128 and valid==1
+                  r[3]=candidate==255 and index==8
+                  r[4]=candidate==129 and index==56
+                  r[5]=valid==3 and target==13
+                  r[6]=valid==3 and target==7
+                  r[7]=valid==3 and target==0
+                  r[8]=bool(candidate&1) and old&3==1 and goal&3==3
+                  r[9]=bool(candidate&1) and old&3==3 and goal&3==1
+                  r[10]=candidate==2 and old&3==0 and goal&3==1 and pending&3==1 and sched==0
+                  r[11]=candidate==2 and old&3==0 and goal&3==1 and pending&3==3 and sched==0
+                  r[12]=candidate==2 and old&3==2 and goal&3==1 and pending&3==0 and sched==0
+                  r[13]=candidate==2 and old&3==0 and goal&3==2 and pending&3==0 and sched==0
+                  r[14]=candidate==2 and old&3==1 and goal&3==1 and pending&3==0 and sched==0
+                  for code in [5,6,7]: r[code+10]=sched==code and old==0 and pending==0 and goal==0x5555
+                  r[18]=sched==0 and old&15==4 and goal&15==1 and pending&15==0 and valid==3
+                  for code in [1,2,3,4]: r[code+18]=sched==code and old==1 and goal==7 and pending==0 and valid==1
+                  r[23]=candidate==1 and old&3==0 and goal&3==1 and pending&3==2 and sched==0
+              return sum(int(v)<<bit for bit,v in enumerate(r))
+
+          def inspect(path,negative=False):
+              w=values(path)
+              expected,candidate=oracle(w)
+              require((w['observed_outputs']!=expected)==negative,'Unexpected independent oracle result')
+              require(w['reach']==predicates(w,candidate),'Reach predicate mismatch')
+              return w,expected
+
+          try:
+              require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch', 'Manual dispatch required')
+              require(os.environ['GITHUB_REF'] == 'refs/heads/main', 'Dispatch main only')
+              require(report['repository'] == 'maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor',
+                      'Unexpected repository')
+              head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+              require(head == report['source_commit'], 'Checkout differs from dispatched commit')
+              require(sys.version_info[:2] == (3, 12), 'Python 3.12 required')
+              version = importlib.metadata.version('yowasp-yosys')
+              require(version == '0.68.0.0.post1208', 'Unexpected Yosys package version')
+              wasm = Path(yowasp_yosys.__file__).parent / 'yosys.wasm'
+              report['toolchain'] = {'python': sys.version, 'yowasp-yosys': version, 'wasm': identity(wasm)}
+              require(report['toolchain']['wasm']['sha256'] == 'e37a7e65e3fa4efbbd64a9c1b0e906be16cdc6c4d5273109d17537f78449f38c',
+                      'Yosys WASM differs from the validated tool')
+              require(not view.exists(), 'Evidence inputs already exist; a fresh run is required')
+              workflow_identity = identity(root / workflow)
+              shutil.copyfile(root / workflow, evidence / Path(workflow).name)
+              report['workflow'] = workflow_identity
+              sources = {}
+
+              def visit(name):
+                  if name in sources:
+                      return
+                  path = root / name
+                  require(path.resolve().is_relative_to(root), 'Source escapes repository: ' + name)
+                  require(path.resolve() == path and path.is_file(), 'Missing or linked source: ' + name)
+                  raw = path.read_bytes()
+                  sources[name] = raw
+                  destination = view / name
+                  destination.parent.mkdir(parents=True, exist_ok=True)
+                  destination.write_bytes(raw)
+                  for include in re.findall(r'`include\s+"([^"]+)"', raw.decode()):
+                      candidates = {p.absolute() for p in [path.parent / include, root / 'rtl/m31' / include] if p.is_file()}
+                      require(len(candidates) == 1, 'Missing or ambiguous include: ' + include)
+                      visit(candidates.pop().relative_to(root).as_posix())
+
+              visit(harness)
+              actual = {name: identity(view / name) for name in sorted(sources)}
+              write_json('source-identities.json', actual)
+              require(actual == expected_sources, 'Phase-request sources differ from validated inputs')
+              report['source_identities'] = actual
+              netlist=synthesize('adapter-netlist',view,canonical=True)
+              report['netlist']=identity(netlist)
+              for implementation in ['rtl','netlist']:
+                  model,counts=build_model(implementation,netlist if implementation=='netlist' else None,canonical=True)
+                  print('INVENTORY',implementation,counts,flush=True)
+                  for run in [1,2]:
+                      text=execute(implementation+f'-proof-{run}',f'read_rtlil {quoted(model)}; sat -prove-asserts -verify -timeout 120')
+                      require('SAT proof finished - no model found: SUCCESS!' in text,'Incomplete proof')
+                      report['proofs'].append({'implementation':implementation,'run':run,'status':'PASS','prepared_properties':counts})
+                      write_json('proofs.json',report['proofs'])
+                  for bit in range(24):
+                      label=implementation+f'-reach-{bit:02d}'
+                      witness=evidence/(label+'.json')
+                      text=execute(label,f'read_rtlil {quoted(model)}; sat -set reach[{bit}] 1 -show-ports -timeout 60 -dump_json {quoted(witness)}')
+                      require(text.count('SAT solving finished - model found:')==1,'Missing reach witness')
+                      wave,expected=inspect(witness)
+                      require(wave['reach']&(1<<bit),'Requested reach predicate absent')
+                      immutable[witness]=identity(witness)
+                      report['reachability'].append({'implementation':implementation,'bit':bit,'name':reach_names[bit],'oracle':'PASS','witness':identity(witness)})
+                      write_json('witnesses.json',report['reachability'])
+
+              mutations={
+                  'enable-bypass':('if (enable) begin','if (1\'b1) begin'),
+                  'reverse-priority':('for (int cell_index = 0; cell_index < CELLS; cell_index = cell_index + 1)',
+                                      'for (int cell_index = CELLS-1; cell_index >= 0; cell_index = cell_index - 1)'),
+                  'pending-bypass':('!frp_has_pending_route(pending_value)',"1'b1"),
+                  'one-lane-only':('(selected < REQUEST_LANES)','(selected < REQUEST_LANES-1)'),
+                  'erase-target':('request_target[(selected*2) +: 2] = target_value;',"request_target[(selected*2) +: 2] = 2'b00;"),
+                  'inactive-index':("request_cell_index = '0;","request_cell_index = '1;"),
+                  'scheduler-bypass':('frp_scheduler_allows_transition(scheduler_state, transition_class)',"1'b1"),
+                  'reserved-pending-blocked':('!frp_has_pending_route(pending_value)','(pending_value == FRP_STATE_ZERO)'),
+              }
+              for name,(old,new) in mutations.items():
+                  mutant=evidence/'mutants'/name
+                  shutil.copytree(view,mutant)
+                  path=mutant/core_file
+                  text=path.read_text(); require(text.count(old)==1,'Mutation site changed: '+name)
+                  path.write_text(text.replace(old,new));immutable[path]=identity(path)
+                  mutated_netlist=synthesize(name,mutant)
+                  model,counts=build_model(name,mutated_netlist)
+                  witness=evidence/(name+'-counterexample.json')
+                  execute(name+'-negative',f'read_rtlil {quoted(model)}; sat -prove-asserts -verify '
+                      f'-show-ports -timeout 60 -dump_json {quoted(witness)}',negative=True)
+                  wave,expected=inspect(witness,negative=True)
+                  immutable[witness]=identity(witness)
+                  report['negative_controls'].append({'fault':name,'status':'REJECTED','oracle':'MISMATCH',
+                      'actual':wave['observed_outputs'],'expected':expected,'counterexample':identity(witness),
+                      'mutated_source':identity(path),'mutated_netlist':identity(mutated_netlist)})
+                  write_json('negative-controls.json',report['negative_controls'])
+              require(len(report['proofs'])==4 and len(report['reachability'])==48 and len(report['negative_controls'])==8,'Incomplete checks')
+              require({(p['implementation'],p['run']) for p in report['proofs']} ==
+                      {(implementation,run) for implementation in ['rtl','netlist'] for run in [1,2]}, 'Incomplete proof profiles')
+              require({(w['implementation'],w['bit']) for w in report['reachability']} ==
+                      {(implementation,bit) for implementation in ['rtl','netlist'] for bit in range(24)}, 'Incomplete reach profiles')
+              require({n['fault'] for n in report['negative_controls']} == set(mutations), 'Incomplete fault coverage')
+              for name,expected in expected_sources.items():
+                  require(identity(root/name)==identity(view/name)==expected,'Source changed: '+name)
+              for path,expected in immutable.items():
+                  require(identity(path)==expected,'Evidence changed: '+path.name)
+              require(identity(root/workflow)==identity(evidence/Path(workflow).name)==workflow_identity,
+                      'Workflow changed during qualification')
+              report.update(status='PASS',sources_unchanged=True,rtl_contract_proven=True,netlist_contract_proven=True)
+              print('FRP M31 phase-request contract on RTL and netlist: PASS',flush=True)
+          except Exception as error:
+              report.update(status='FAIL',error=str(error))
+              raise
+          finally:
+              write_json('result.json',report)
+              summary='\n'.join([
+                  '# M31 phase-request contract: '+report['status'], '',
+                  'Commit: `'+report['source_commit']+'`', '',
+                  f"Completed SAT proofs: {len(report['proofs'])}/4; reach witnesses: {len(report['reachability'])}/48; detected faults: {len(report['negative_controls'])}/8.", '',
+                  'Eight cells, two lanes, three-bit indexes; all 52 input bits unrestricted.',
+                  'Twenty assertions, zero assumptions; two fresh SAT proofs per implementation.',
+                  'Independent eligibility and rank contract checks both RTL and fresh synthesized netlist.',
+                  'All twelve output bits are checked, including zero payloads on inactive lanes.',
+                  'Opposite-polarity requests preserve the final target; downstream execution owns the neutral bridge.',
+                  'Pending 01/11 blocks new requests; the existing adapter treats 00/10 as not busy.',
+                  'Reserved pending 10 is included in the proof domain, not certified as a valid pending state.',
+                  'Reserved current/target codes and scheduler codes 5/6/7 cannot generate requests.',
+                  'Every witness and fault counterexample is decoded and checked by an independent Python oracle.',
+                  'Fault controls mutate isolated copies and synthesize them; canonical sources remain unchanged.',
+                  'Scope excludes phase arithmetic, writeback, fairness, full-core and Python-model equivalence, and physical timing.',
+                  'See result.json, source identities, Yosys logs and WaveJSON traces in the artifact.', '',
+              ])
+              (evidence/'summary.md').write_text(summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream:
+                  stream.write(summary)
+          PY
+
+      - name: Retain sources, proofs, witnesses, and counterexamples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-30-m31-phase-request-contract-formal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M31_PHASE_REQUEST_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
