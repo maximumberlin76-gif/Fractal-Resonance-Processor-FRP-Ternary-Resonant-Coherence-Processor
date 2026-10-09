@@ -1,0 +1,496 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# This workflow is proprietary and is not licensed under Apache-2.0.
+# Except as required by applicable law, using, reproducing, modifying, or
+# distributing this file requires prior written permission from Maksym Marnov.
+# Referenced dependencies retain their existing licenses.
+
+name: 33 - FRP M31 Request Capacity Contract RTL + Netlist Formal
+
+run-name: "33 - FRP M31 Request Capacity Contract | 8 proofs @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-33-m31-request-capacity-contract-formal-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-request-capacity-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Initialize evidence paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' "M31_REQUEST_CAPACITY_EVIDENCE=$RUNNER_TEMP/frp-m31-request-capacity-contract-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m31-request-capacity-contract-evidence"
+
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned formal tool
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            python --version
+            python -m pip install --disable-pip-version-check --only-binary=:all: \
+              --timeout 30 --retries 3 yowasp-yosys==0.68.0.0.post1208
+            python -m pip freeze
+          } 2>&1 | tee "$M31_REQUEST_CAPACITY_EVIDENCE/toolchain.log"
+
+      - name: Prove both contracts and check witnesses and negative controls
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, importlib.metadata, json, os, re, shutil, subprocess, sys, time
+          import yowasp_yosys
+          repo = Path.cwd().resolve()
+          evidence = Path(os.environ['M31_REQUEST_CAPACITY_EVIDENCE']).resolve()
+          evidence.mkdir(parents=True, exist_ok=True)
+          view = evidence / 'inputs'
+          workflow = '.github/workflows/frp-33-m31-request-capacity-contract-formal.yml'
+          harness = 'formal/m31/frp_m31_request_capacity_contract_formal.sv'
+          macro = 'FRP_M31_REQUEST_CAPACITY_CONTRACT_NETLIST'
+          report = {'status': 'FAIL', 'repository': os.environ['GITHUB_REPOSITORY'], 'source_commit': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'], 'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'], 'scope': 'Independent request and capacity contracts; eight cells, two lanes, three-bit indices, 32-bit counters', 'public_outputs': 54, 'public_output_bits': 580, 'source_assertions': 54, 'assumptions': 0, 'input_domain': 'All input bit patterns, including reserved ternary/scheduler/transition codes; no out-of-range index in this profile', 'proof_method': 'Unrestricted combinational SAT on RTL and fresh netlists', 'contracts_proven': False, 'full_core_proof': False, 'global_coverage_closure': False, 'physical_timing': False, 'physical_temperature_model': False, 'python_model_equivalence': False, 'commands': [], 'proofs': [], 'witnesses': [], 'negatives': [], 'sources': {}, 'netlists': {}, 'models': {}}
+          immutable = {}
+          expected_sources = {'formal/m31/frp_m31_request_capacity_contract_formal.sv': {'bytes': 26665, 'sha256': '7c2de73f9c5cd35c65c381a83ca104d54f5365ab2bf63a63ec14c1a9f1ec67cd'}, 'rtl/m31/frp_m31_pkg.sv': {'bytes': 18531, 'sha256': '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94'}, 'rtl/m31/frp_m31_request_lanes.sv': {'bytes': 18290, 'sha256': '32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109'}, 'rtl/m31/frp_m31_capacity_guard.sv': {'bytes': 20787, 'sha256': 'd0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123'}}
+          expected_netlists = {'request': {'bytes': 34940, 'sha256': '56fd8e3e14d4f315fb6e2d223910a98457efed6173b6b5e22e20352116039040'}, 'capacity': {'bytes': 61351, 'sha256': '7561388755cfec42dcbc307d409edf4ae296ec617397dd9a0d728b740b89d00e'}}
+          profiles = {'request': {'core': 'frp_m31_request_lanes', 'inputs': {'tick_enable': 1, 'scheduler_state': 3, 'request_valid': 2, 'request_cell_index': 6, 'request_target': 4, 'state_q': 16, 'target_q': 16, 'pending_route_q': 16}, 'outputs': {'request_accept': 2, 'request_reject': 2, 'request_reject_invalid_cell': 2, 'request_reject_invalid_target': 2, 'request_reject_duplicate_cell': 2, 'request_reject_scheduler': 2, 'request_reject_capacity': 2, 'request_reject_pending_busy': 2, 'request_reject_tick_disabled': 2, 'request_neutralized': 2, 'accepted_cell_mask': 8, 'rejected_cell_mask': 8, 'neutral_routed_cell_mask': 8, 'requested_direct_cell_mask': 8, 'accepted_changes': 32, 'requested_lane_events': 32, 'accepted_lane_events': 32, 'rejected_lane_events': 32, 'requested_direct_events': 32, 'prevented_direct_events': 32, 'neutral_routed_events': 32, 'request_lane_order_valid': 1, 'request_cell_domain_valid': 1, 'request_target_domain_valid': 1, 'duplicate_cell_guard_valid': 1, 'scheduler_gate_valid': 1, 'transition_capacity_valid': 1, 'active_neutral_routing_valid': 1, 'no_actual_direct_events': 1, 'no_queue_overflow': 1}, 'reach': 24}, 'capacity': {'core': 'frp_m31_capacity_guard', 'inputs': {'tick_enable': 1, 'scheduler_state': 3, 'request_accept_candidate': 2, 'request_cell_index': 6, 'transition_class': 8, 'pending_completion_candidate': 8, 'neutral_routed_candidate': 8, 'state_q': 16, 'state_candidate_d': 16}, 'outputs': {'request_accept_capacity': 2, 'request_reject_capacity': 2, 'capacity_accept_mask': 8, 'capacity_reject_mask': 8, 'accepted_change_mask': 8, 'accepted_changes': 32, 'capacity_remaining': 32, 'capacity_exhausted': 1, 'switch_load_numerator': 32, 'capacity_candidate_events': 32, 'capacity_accept_events': 32, 'capacity_reject_events': 32, 'capacity_exhausted_events': 32, 'accepted_change_events': 32, 'transition_capacity_valid': 1, 'accepted_changes_within_limit': 1, 'capacity_remaining_valid': 1, 'capacity_exhaustion_valid': 1, 'same_state_capacity_valid': 1, 'pending_capacity_valid': 1, 'active_neutral_capacity_valid': 1, 'switch_load_bound_valid': 1, 'no_queue_overflow': 1, 'no_actual_direct_events': 1}, 'reach': 24}}
+          for p in profiles.values():
+              p['asserts'] = {'a_' + n for n in p['outputs']}
+
+          def require(ok, msg):
+              if not ok:
+                  raise RuntimeError(msg)
+
+          def ident(p):
+              raw = p.read_bytes()
+              return dict(bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest())
+
+          def save(n, obj):
+              (evidence / n).write_text(json.dumps(obj, indent=2, sort_keys=True) + '\n')
+
+          def q(p):
+              return json.dumps(str(p))
+
+          def freeze(*paths):
+              for path in paths:
+                  value = ident(path)
+                  require(path not in immutable or immutable[path] == value, 'Evidence changed: ' + str(path))
+                  immutable[path] = value
+
+          def run(label, script, cwd=view, negative=False):
+              ys, log = (evidence / (label + '.ys'), evidence / (label + '.log'))
+              ys.write_text(script + '\n')
+              t = time.monotonic()
+              print('START', label, flush=True)
+              entry = dict(label=label, script=ident(ys))
+              report['commands'].append(entry)
+              try:
+                  z = subprocess.run(['yowasp-yosys', '-Q', '-T', '-s', str(ys)], cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=300)
+                  log.write_bytes(z.stdout)
+                  entry['returncode'] = z.returncode
+              except subprocess.TimeoutExpired as ex:
+                  log.write_bytes(ex.stdout or b'')
+                  entry['timeout'] = 300
+                  raise
+              finally:
+                  entry['seconds'] = round(time.monotonic() - t, 2)
+                  if log.exists():
+                      entry['log'] = ident(log)
+                  save('commands.json', report['commands'])
+              text = log.read_text()
+              require('TIMEOUT' not in text.upper(), label + ': timeout')
+              if negative:
+                  require(z.returncode != 0 and 'SAT proof finished - model found: FAIL!' in text, label + ': not a property rejection')
+              else:
+                  require(z.returncode == 0, label + ': ' + text[-1800:])
+              freeze(ys, log)
+              print('DONE', label, entry['seconds'], flush=True)
+              return text
+
+          def ports(m):
+              return {k: (v['direction'], len(v['bits'])) for k, v in m['ports'].items()}
+
+          def synth(b, label, directory=view):
+              p = profiles[b]
+              core = p['core']
+              net = evidence / (label + '.v')
+              meta = evidence / (label + '-netlist.json')
+              front = evidence / (label + '-synthesis-frontend.json')
+              run(label + '-synthesis', f'read_slang -j 1 --std 1800-2017 --top {core} ' + '-G CELLS=8 -G STATE_BITS=2 -G REQUEST_LANES=2 -G CELL_INDEX_BITS=3 -G COUNTER_BITS=32 ' + f'-Irtl/m31 rtl/m31/{core}.sv; write_json {q(front)}; synth -top {core} -flatten -noshare -run begin:fine; check -assert; techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; select -assert-none t:$shiftx t:$connect; rename {core} {core}_netlist; write_verilog -noattr {q(net)}; write_json {q(meta)}', cwd=directory)
+              mods = json.loads(meta.read_text())['modules']
+              require(set(mods) == {core + '_netlist'}, 'Netlist modules')
+              m = mods[core + '_netlist']
+              require(ports(m) == ports(json.loads(front.read_text())['modules'][core]) == {**{k: ('input', v) for k, v in p['inputs'].items()}, **{k: ('output', v) for k, v in p['outputs'].items()}}, 'Core ports')
+              require(not m.get('processes') and (not any(('latch' in c['type'].lower() for c in m['cells'].values()))), 'Process/latch')
+              state = {v for c in m['cells'].values() if 'dff' in c['type'].lower() for v in c['connections']['Q']}
+              require(len(state) == 0, 'State width')
+              freeze(net, meta, front)
+              return net
+
+          def prepare(b, label, net=None, directory=view):
+              p = profiles[b]
+              top = f'frp_m31_{b}_contract_formal'
+              model = evidence / (label + '.il')
+              front = evidence / (label + '-frontend.json')
+              run(label + '-prepare', (f'read_verilog -icells {q(net)}; ' if net else '') + f'read_slang -j 1 --std 1800-2017 ' + (f'-D {macro} ' if net else '') + f'--top {top} -Irtl/m31 {harness}; proc; write_json {q(front)}; prep -top {top} -flatten; memory_map; async2sync; opt -full; wreduce; opt_clean; chformal -lower; alumacc; opt -full; opt_clean; write_rtlil {q(model)}', cwd=directory)
+              m = json.loads(front.read_text())['modules'][top]
+              bits = sum(p['outputs'].values())
+              require(ports(m) == {**{k: ('input', v) for k, v in p['inputs'].items()}, 'observed_outputs': ('output', bits), 'expected_outputs': ('output', bits), 'mismatch': ('output', len(p['outputs'])), 'reach': ('output', p['reach'])}, 'Harness ports')
+              checks = [(n, c['parameters']['FLAVOR']) for n, c in m['cells'].items() if c['type'] == '$check']
+              require({n for n, f in checks if f == 'assert'} == p['asserts'] and sum((f == 'assume' for n, f in checks)) == 0, 'Source property inventory')
+              count = {k: len(re.findall('^  cell [$]' + k + ' ', model.read_text(), re.M)) for k in ['assert', 'assume']}
+              require(0 < count['assert'] <= len(p['asserts']) and count['assume'] == 0, 'Prepared property inventory ' + str(count))
+              freeze(model, front)
+              return model
+
+          def prove(b, label, model):
+              text = run(label, f'read_rtlil {q(model)}; sat -prove-asserts -verify -timeout 240')
+              require('SAT proof finished - no model found: SUCCESS!' in text, 'Incomplete proof ' + label)
+              report['proofs'].append(dict(label=label, status='PASS', method='unrestricted combinational SAT'))
+              save('proofs.json', report['proofs'])
+          mutations = {'request-priority': ('request', 'request_accept', '                int lane_index = 0;\n                lane_index < REQUEST_LANES;\n                lane_index = lane_index + 1', '                int lane_index = REQUEST_LANES - 1;\n                lane_index >= 0;\n                lane_index = lane_index - 1'), 'request-pending': ('request', 'request_accept', '&& frp_is_nonzero(\n                        lane_pending_w[lane_index]\n                    );', "&& 1'b0;"), 'request-scheduler': ('request', 'request_accept', 'frp_scheduler_is_commit_capable(sched);', 'frp_scheduler_is_neutralize_capable(sched);'), 'request-paused': ('request', 'request_accept', 'if (!tick_enable) begin', "if (1'b0) begin"), 'request-events': ('request', 'requested_direct_events', 'requested_direct_events\n                                + COUNTER_ONE;', 'requested_direct_events\n                                + 2;'), 'capacity-priority': ('capacity', 'capacity_accept_mask', 'int element_index = 0;\n            element_index < CELLS;\n            element_index = element_index + 1', 'int element_index = CELLS - 1;\n            element_index >= 0;\n            element_index = element_index - 1'), 'capacity-limit': ('capacity', 'accepted_changes', 'REQUEST_LANES[COUNTER_BITS - 1:0];', 'REQUEST_LANES[COUNTER_BITS - 1:0] + 1;'), 'capacity-hold-cost': ('capacity', 'accepted_changes', 'if (class_same_state) begin\n                        request_accept_capacity', 'if (class_same_state) begin\n                        accepted_changes = accepted_changes + 1;\n                        request_accept_capacity'), 'capacity-direct': ('capacity', 'request_accept_capacity', '|| direct_candidate\n', "|| 1'b0\n"), 'capacity-neutral': ('capacity', 'request_accept_capacity', 'if (!neutral_route_legal) begin', "if (1'b0) begin")}
+
+          def nz(v):
+              return v in (1, 3)
+
+          def opp(a, b):
+              return (a, b) in ((1, 3), (3, 1))
+
+          def slots(v, w, n):
+              return [v >> i * w & (1 << w) - 1 for i in range(n)]
+
+          def empty(b):
+              return {n: int(w == 1 and n not in ('capacity_exhausted',)) for n, w in profiles[b]['outputs'].items()}
+
+          def request(w):
+              o = empty('request')
+              old = slots(w['state_q'], 2, 8)
+              target = slots(w['target_q'], 2, 8)
+              saved = slots(w['pending_route_q'], 2, 8)
+              idx = slots(w['request_cell_index'], 3, 2)
+              want = slots(w['request_target'], 2, 2)
+              s = w['scheduler_state']
+              tick = w['tick_enable']
+              o['request_cell_domain_valid'] = int(2 not in old)
+              o['request_target_domain_valid'] = int(2 not in target + saved)
+              duplicate = []
+              allow = []
+              commit = []
+              neutral = []
+              direct = []
+              active = w['request_valid'] if tick else 0
+              for lane in range(2):
+                  i = idx[lane]
+                  a = old[i]
+                  t = want[lane]
+                  commit.append(a == 0 and nz(t))
+                  neutral.append(nz(a) and t == 0)
+                  direct.append(opp(a, t))
+                  allowed = s < 5 and a != 2 and (t != 2) and (a == t or (commit[-1] and s in (0, 2, 3)) or ((neutral[-1] or direct[-1]) and s in (0, 1, 4)))
+                  allow.append(allowed)
+                  duplicate.append(lane == 1 and bool(o['request_accept'] & 1) and (idx[0] == idx[1]))
+                  if not w['request_valid'] & 1 << lane:
+                      continue
+                  if not tick:
+                      o['request_reject_tick_disabled'] |= 1 << lane
+                      continue
+                  o['requested_lane_events'] += 1
+                  reason = ''
+                  if t == 2:
+                      reason = 'invalid_target'
+                      o['request_target_domain_valid'] = 0
+                  elif duplicate[-1]:
+                      reason = 'duplicate_cell'
+                  elif nz(saved[i]):
+                      reason = 'pending_busy'
+                  elif not allowed:
+                      reason = 'scheduler'
+                  if reason:
+                      o['request_reject_' + reason] |= 1 << lane
+                      o['request_reject'] |= 1 << lane
+                      o['rejected_cell_mask'] |= 1 << i
+                      o['rejected_lane_events'] += 1
+                  else:
+                      o['request_accept'] |= 1 << lane
+                      o['accepted_cell_mask'] |= 1 << i
+                      o['accepted_lane_events'] += 1
+                      o['accepted_changes'] += a != t
+                      if direct[-1]:
+                          o['request_neutralized'] |= 1 << lane
+                          o['neutral_routed_cell_mask'] |= 1 << i
+                          o['requested_direct_cell_mask'] |= 1 << i
+                          for n in ['requested_direct_events', 'prevented_direct_events', 'neutral_routed_events']:
+                              o[n] += 1
+              bit = lambda n, i=0: bool(o[n] & 1 << i)
+              r = [not tick and w['request_valid'] == 3, o['request_accept'] == 3 and o['accepted_changes'] == 2, o['request_accept'] == 3 and o['accepted_changes'] == 0, o['request_accept'] == 1 and o['request_reject_duplicate_cell'] == 2, bit('request_reject_invalid_target'), bit('request_reject_pending_busy') and saved[idx[0]] == 1, bit('request_reject_pending_busy') and saved[idx[0]] == 3, bit('request_reject_scheduler') and old[idx[0]] == 2, bit('request_accept') and saved[idx[0]] == 2, bit('request_reject') and bit('request_accept', 1) and (idx[0] == idx[1]), not tick and (not o['request_target_domain_valid']) and (w['target_q'] == 43690)]
+              r += [bit('request_reject_scheduler') and s == j for j in (5, 6, 7)]
+              r += [bit('request_neutralized') and old[idx[0]] == a and (want[0] == b) for a, b in [(1, 3), (3, 1)]]
+              r += [bit('request_neutralized') and s == j for j in (1, 4)]
+              r += [bit('request_accept') and commit[0] and (s == j) for j in (2, 3)]
+              r += [bit('request_accept') and neutral[0] and (s == 0), bit('request_reject_invalid_target', 1) and duplicate[1], bit('request_reject_pending_busy') and (not allow[0]), o['request_neutralized'] == 3]
+              require(len(r) == 24, 'Independent oracle check failed')
+              return (o, sum((int(bool(v)) << i for i, v in enumerate(r))))
+
+          def capacity(w):
+              o = empty('capacity')
+              old = slots(w['state_q'], 2, 8)
+              nxt = slots(w['state_candidate_d'], 2, 8)
+              idx = slots(w['request_cell_index'], 3, 2)
+              kind = slots(w['transition_class'], 4, 2)
+              tick = w['tick_enable']
+              s = w['scheduler_state']
+              pm = w['pending_completion_candidate']
+              nm = w['neutral_routed_candidate']
+              eligible = selected = badpending = 0
+              directmask = 0
+              used = 0
+              lc = [False] * 2
+              bg = [False] * 2
+              bn = [False] * 2
+              bs = [False] * 2
+              rd = [opp(old[i], nxt[i]) for i in idx]
+              for i in range(8):
+                  if not (tick and pm & 1 << i):
+                      continue
+                  if old[i] == 0 and nz(nxt[i]):
+                      eligible |= 1 << i
+                      o['capacity_candidate_events'] += 1
+                      if used < 2:
+                          selected |= 1 << i
+                          o['capacity_accept_mask'] |= 1 << i
+                          o['accepted_change_mask'] |= 1 << i
+                          used += 1
+                          continue
+                  else:
+                      badpending |= 1 << i
+                  o['capacity_reject_mask'] |= 1 << i
+                  o['capacity_reject_events'] += 1
+              for lane, i in enumerate(idx):
+                  if rd[lane]:
+                      directmask |= 1 << i
+                  if not (tick and w['request_accept_candidate'] & 1 << lane):
+                      continue
+                  accept = False
+                  charge = False
+                  if not (pm & 1 << i or o['capacity_accept_mask'] & 1 << i):
+                      bg[lane] = old[i] == 2 or nxt[i] == 2 or kind[lane] > 3 or rd[lane]
+                      if not bg[lane]:
+                          if kind[lane] == 3:
+                              lc[lane] = True
+                              bn[lane] = not (nm & 1 << i and nz(old[i]) and (nxt[i] == 0))
+                              accept = not bn[lane] and used < 2
+                              charge = accept
+                          elif old[i] == nxt[i]:
+                              accept = kind[lane] == 0
+                              bs[lane] = not accept
+                          elif kind[lane] == 0:
+                              bs[lane] = True
+                          else:
+                              lc[lane] = True
+                              accept = used < 2
+                              charge = accept
+                  if lc[lane]:
+                      o['capacity_candidate_events'] += 1
+                  if accept:
+                      o['request_accept_capacity'] |= 1 << lane
+                      o['capacity_accept_mask'] |= 1 << i
+                      if charge:
+                          used += 1
+                          o['accepted_change_mask'] |= 1 << i
+                  else:
+                      o['request_reject_capacity'] |= 1 << lane
+                      o['capacity_reject_mask'] |= 1 << i
+                      o['capacity_reject_events'] += 1
+              o.update(accepted_changes=used, capacity_remaining=2 - used, capacity_exhausted=int(used == 2), switch_load_numerator=used, capacity_accept_events=used, capacity_exhausted_events=int(used == 2), accepted_change_events=used)
+              o['same_state_capacity_valid'] = int(not any(bs))
+              o['pending_capacity_valid'] = int(not badpending)
+              o['active_neutral_capacity_valid'] = int(not any(bn) and (not any((a and b for a, b in zip(bg, rd)))) and (not o['capacity_accept_mask'] & ~o['accepted_change_mask'] & nm))
+              o['no_actual_direct_events'] = int(not o['capacity_accept_mask'] & directmask)
+              o['transition_capacity_valid'] = int(s < 5 and (not any(bg)) and all((o[n] for n in ['same_state_capacity_valid', 'pending_capacity_valid', 'active_neutral_capacity_valid', 'no_actual_direct_events'])))
+              ac = o['request_accept_capacity']
+              rj = o['request_reject_capacity']
+              cnt = eligible.bit_count()
+              r = [not tick and w['request_accept_candidate'] == 3 and (pm == 255), cnt == 8 and selected == 3, cnt == 1 and used == 1, cnt == 2 and ac & 1 and (kind[0] == 0), ac == 3 and used == 0, ac == 3 and used == 2, ac & 1 and rj & 2 and (idx[0] == idx[1]), tick and w['request_accept_candidate'] & 1 and badpending & 1 << idx[0], bg[0] and old[idx[0]] == 2, bg[0] and nxt[idx[0]] == 2, bg[0] and kind[0] == 15, bg[0] and rd[0] and (old[idx[0]] == 1), bg[0] and rd[0] and (old[idx[0]] == 3), ac & 1 and kind[0] == 3 and (old[idx[0]] == 1), ac & 1 and kind[0] == 3 and (old[idx[0]] == 3), bn[0] and (not nm & 1 << idx[0]), bs[0] and kind[0] == 0, bs[0] and kind[0] == 1, lc[0] and (not bn[0]) and rj & 1 and (selected.bit_count() == 2), tick and ac & 1 and (s == 7), ac & 1 and kind[0] == 0 and nm & 1 << idx[0], cnt == 0 and o['capacity_candidate_events'] == 0 and (badpending != 0), rj & 1 and ac & 2 and (idx[0] == idx[1]), cnt == 7 and lc[0] and (o['capacity_candidate_events'] == 8) and (o['capacity_reject_events'] >= 6)]
+              require(len(r) == 24, 'Independent oracle check failed')
+              return (o, sum((int(bool(v)) << i for i, v in enumerate(r))))
+
+          def unpack(b, v):
+              left = sum(profiles[b]['outputs'].values())
+              o = {}
+              for n, bits in profiles[b]['outputs'].items():
+                  left -= bits
+                  o[n] = v >> left & (1 << bits) - 1
+              return o
+
+          def decode(path, b):
+              p = profiles[b]
+              total = sum(p['outputs'].values())
+              widths = {**p['inputs'], 'observed_outputs': total, 'expected_outputs': total, 'mismatch': len(p['outputs']), 'reach': 24}
+              result = {}
+              for x in json.loads(path.read_text())['signal']:
+                  n = x['name']
+                  require(n in widths and n not in result, n)
+                  bits = widths[n]
+                  data = x.get('data', [])
+                  if bits == 1:
+                      require(x['wave'] in ('04', '14') and (not data), 'Independent oracle check failed')
+                      v = x['wave'][0]
+                  else:
+                      require(x['wave'] == '=4' and len(data) == 2 and (data[1] == ''), 'Independent oracle check failed')
+                      v = data[0]
+                  require(re.fullmatch('[01]{' + str(bits) + '}', v), 'Independent oracle check failed')
+                  result[n] = int(v, 2)
+              require(set(result) == set(widths), 'Independent oracle check failed')
+              return result
+
+          def inspect(path, b, negative=None):
+              w = decode(path, b)
+              o, r = (request if b == 'request' else capacity)(w)
+              exp = unpack(b, w['expected_outputs'])
+              obs = unpack(b, w['observed_outputs'])
+              require(o == exp, (path, 'checker oracle', [(n, o[n], exp[n]) for n in o if o[n] != exp[n]]))
+              require(w['reach'] == r, (path, 'reach', hex(w['reach']), hex(r)))
+              m = sum((int(o[n] != obs[n]) << j for j, n in enumerate(profiles[b]['outputs'])))
+              require(m == w['mismatch'], (path, 'mismatch'))
+              if negative is None:
+                  require(m == 0, (path, 'actual oracle'))
+              else:
+                  require(o[negative] != obs[negative], (path, 'intended fault', negative))
+              return w
+          try:
+              require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch', 'Manual dispatch only')
+              require(os.environ['GITHUB_REF'] == 'refs/heads/main', 'Select main for this workflow')
+              require(subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip() == report['source_commit'], 'Checkout commit mismatch')
+              require(not view.exists() and (not evidence.is_relative_to(repo)), 'Fresh external evidence directory required')
+              workflow_identity = ident(repo / workflow)
+              shutil.copyfile(repo / workflow, evidence / Path(workflow).name)
+              report['workflow'] = workflow_identity
+              sources = {}
+
+              def visit(name):
+                  if name in sources:
+                      return
+                  path = repo / name
+                  require(path.is_file() and (not path.is_symlink()), 'Missing or linked source: ' + name)
+                  sources[name] = ident(path)
+                  destination = view / name
+                  destination.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(path, destination)
+                  freeze(destination)
+                  for include in re.findall('`include\\s+"([^"]+)"', path.read_text()):
+                      candidates = {p.resolve() for p in [path.parent / include, repo / 'rtl/m31' / include] if p.is_file()}
+                      require(len(candidates) == 1, 'Ambiguous include: ' + include)
+                      visit(candidates.pop().relative_to(repo).as_posix())
+              visit(harness)
+              report['sources'] = sources
+              save('source-identities.json', sources)
+              require(sources == expected_sources, 'Request/capacity contract sources differ from validated inputs')
+              require(not subprocess.check_output(['git', 'status', '--porcelain'], text=True), 'Checkout is not clean')
+              require(sys.version_info[:2] == (3, 12), 'Python 3.12 required')
+              require(importlib.metadata.version('yowasp-yosys') == '0.68.0.0.post1208', 'Yosys package changed')
+              wasm = ident(Path(yowasp_yosys.__file__).parent / 'yosys.wasm')
+              require(wasm['sha256'] == 'e37a7e65e3fa4efbbd64a9c1b0e906be16cdc6c4d5273109d17537f78449f38c', 'Yosys WASM changed')
+              report['toolchain'] = {'python': sys.version, 'yowasp_yosys': importlib.metadata.version('yowasp-yosys'), 'wasm': wasm}
+              save('toolchain.json', report['toolchain'])
+              for b, p in profiles.items():
+                  net = synth(b, b + '-netlist')
+                  report['netlists'][b] = ident(net)
+                  require(ident(net) == expected_netlists[b], 'Fresh netlist identity changed: ' + b)
+                  for impl, netarg in [('rtl', None), ('netlist', net)]:
+                      label = b + '-' + impl
+                      model = prepare(b, label, netarg)
+                      report['models'][label] = ident(model)
+                      for repeat in [1, 2]:
+                          prove(b, label + f'-proof-{repeat}', model)
+                      for bit in range(p['reach']):
+                          label2 = label + f'-reach-{bit:02d}'
+                          path = evidence / (label2 + '.json')
+                          text = run(label2, f'read_rtlil {q(model)}; sat -set reach[{bit}] 1 -show-ports -timeout 60 -dump_json {q(path)}')
+                          require('SAT solving finished - model found:' in text, 'No witness')
+                          w = inspect(path, b)
+                          require(w['reach'] & 1 << bit, 'Wrong target')
+                          freeze(path)
+                          report['witnesses'].append(dict(profile=b, implementation=impl, bit=bit, identity=ident(path), oracle='PASS'))
+                          save('witnesses.json', report['witnesses'])
+              for name, (b, field, old, new) in mutations.items():
+                  directory = evidence / 'mutants' / name
+                  shutil.copytree(view, directory)
+                  path = directory / f"rtl/m31/{profiles[b]['core']}.sv"
+                  raw = path.read_text()
+                  require(raw.count(old) == 1, 'Mutation site ' + name)
+                  path.write_text(raw.replace(old, new))
+                  freeze(*[p for p in directory.rglob('*') if p.is_file()])
+                  net = synth(b, name, directory)
+                  for impl, netarg in [('rtl', None), ('netlist', net)]:
+                      label = name + '-' + impl
+                      model = prepare(b, label, netarg, directory)
+                      witness = evidence / (label + '-counterexample.json')
+                      bit = list(profiles[b]['outputs']).index(field)
+                      run(label + '-negative', f'read_rtlil {q(model)}; sat -set mismatch[{bit}] 1 -prove-asserts -verify -show-ports -timeout 60 -dump_json {q(witness)}', negative=True)
+                      inspect(witness, b, field)
+                      freeze(witness)
+                      report['negatives'].append(dict(fault=name, field=field, implementation=impl, status='REJECTED', source=ident(path), netlist=ident(net), counterexample=ident(witness)))
+                      save('negatives.json', report['negatives'])
+              require(len(report['proofs']) == 8 and len(report['witnesses']) == 96 and (len(report['negatives']) == 20), 'Incomplete checks')
+              require({p['label'] for p in report['proofs']} == {b + '-' + i + '-proof-' + str(n) for b in profiles for i in ('rtl', 'netlist') for n in (1, 2)}, 'Proof profiles incomplete')
+              require({(w['profile'], w['implementation'], w['bit']) for w in report['witnesses']} == {(b, i, n) for b in profiles for i in ('rtl', 'netlist') for n in range(profiles[b]['reach'])}, 'Witness profiles incomplete')
+              require({(n['fault'], n['implementation']) for n in report['negatives']} == {(m, i) for m in mutations for i in ('rtl', 'netlist')}, 'Fault profiles incomplete')
+              for name, expected in expected_sources.items():
+                  require(ident(repo / name) == ident(view / name) == expected, 'Source changed: ' + name)
+              for path, expected in immutable.items():
+                  require(ident(path) == expected, 'Evidence changed: ' + str(path))
+              save('immutable-evidence.json', {str(p.relative_to(evidence)): v for p, v in immutable.items()})
+              require(ident(repo / workflow) == ident(evidence / Path(workflow).name) == workflow_identity, 'Workflow changed')
+              require(not subprocess.check_output(['git', 'status', '--porcelain'], text=True), 'Checkout changed')
+              report.update(status='PASS', contracts_proven=True, sources_unchanged=True)
+              print('FRP M31 independent request and capacity contracts: PASS', flush=True)
+          except Exception as error:
+              report.update(status='FAIL', error=str(error))
+              raise
+          finally:
+              save('result.json', report)
+              summary = '\n'.join(['# M31 request and capacity contracts: ' + report['status'], '', 'Commit: `' + report['source_commit'] + '`', '', f"Completed proof runs: {len(report['proofs'])}/8; witnesses: {len(report['witnesses'])}/96; detected faults: {len(report['negatives'])}/20.", '', 'Eight cells, two request lanes, three-bit indices and 32-bit event counters.', 'All 54 public outputs (580 bits) are checked on unchanged RTL and fresh netlists.', 'Unrestricted combinational proofs: no assumptions; reserved input codes are included.', 'Request contract: lane priority, pending ownership, scheduler admission, active-zero routing, rejection reasons, masks and counters.', 'Capacity contract: ranked pending priority, at most two changes, free same-state acceptance, ownership, metadata diagnostics and event accounting.', 'Four proof profiles are each repeated in fresh SAT solvers.', 'All 48 witness targets are checked on both RTL and netlist with an independent Python oracle.', 'Ten isolated source mutations must fail with verified counterexamples on both implementations.', 'Canonical source bytes, tool WASM and fresh netlists are hash-pinned; evidence is checked for changes.', 'Scope excludes other parameter profiles, out-of-range indices, integrated-core proof, global coverage closure, physical timing, four-state behavior and Python reference-model equivalence.', 'Artifacts retain input snapshots, identities, solver scripts/logs, witnesses and counterexamples.', ''])
+              (evidence / 'summary.md').write_text(summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write(summary)
+          PY
+
+      - name: Retain sources, proofs, witnesses, and counterexamples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-33-m31-request-capacity-contract-formal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M31_REQUEST_CAPACITY_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
