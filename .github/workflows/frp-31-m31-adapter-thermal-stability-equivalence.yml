@@ -1,0 +1,508 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# This workflow is proprietary and is not licensed under Apache-2.0.
+# Except as required by applicable law, using, reproducing, modifying, or
+# distributing this file requires prior written permission from Maksym Marnov.
+# Referenced dependencies retain their existing licenses.
+
+name: 31 - FRP M31 Adapter Thermal Stability RTL + Netlist Equivalence
+
+run-name: "31 - FRP M31 Adapter Thermal Stability | 6 proofs @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-31-m31-adapter-thermal-stability-equivalence-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-bundled-equivalence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Initialize evidence paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' "M31_BUNDLED_EQUIVALENCE_EVIDENCE=$RUNNER_TEMP/frp-m31-bundled-equivalence-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m31-bundled-equivalence-evidence"
+
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned formal tool
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            python --version
+            python -m pip install --disable-pip-version-check --only-binary=:all: \
+              --timeout 30 --retries 3 yowasp-yosys==0.68.0.0.post1208
+            python -m pip freeze
+          } 2>&1 | tee "$M31_BUNDLED_EQUIVALENCE_EVIDENCE/toolchain.log"
+
+      - name: Prove all three blocks and check witnesses and negative controls
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, importlib.metadata, json, os, re, shutil, subprocess, sys, time
+          import yowasp_yosys
+
+          repo = Path.cwd().resolve()
+          evidence = Path(os.environ['M31_BUNDLED_EQUIVALENCE_EVIDENCE']).resolve()
+          evidence.mkdir(parents=True, exist_ok=True)
+          view = evidence / 'inputs'
+          workflow = '.github/workflows/frp-31-m31-adapter-thermal-stability-equivalence.yml'
+          harness = 'formal/m31/frp_m31_adapter_thermal_stability_equivalence_formal.sv'
+          report = {
+              'status': 'FAIL', 'repository': os.environ['GITHUB_REPOSITORY'],
+              'source_commit': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'],
+              'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'scope': 'Three independent RTL/netlist equivalence tops; eight cells, two lanes',
+              'public_output_bits': 205, 'source_assertions': 10,
+              'input_domain': 'Unrestricted combinational inputs; thermal initial sampled reset only',
+              'proof_method': 'Combinational SAT; thermal reset base plus one-step public-state induction',
+              'equivalence_proven': False, 'full_core_equivalence': False,
+              'independent_functional_proof': False, 'global_coverage_closure': False,
+              'physical_timing': False, 'python_model_equivalence': False,
+              'commands': [], 'proofs': [], 'reachability': [], 'negative_controls': [],
+              'sources': {}, 'netlists': {}, 'models': {},
+          }
+          immutable = {}
+          expected_sources = {
+              'formal/m31/frp_m31_adapter_thermal_stability_equivalence_formal.sv': {'bytes': 12970, 'sha256': 'b94b851b700aa1477a50918a153782d4713f566a169acc483fd10f887d4f0f76'},
+              'rtl/m31/frp_m31_fixed_point_pkg.sv': {'bytes': 7278, 'sha256': '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24'},
+              'rtl/m31/frp_m31_phase_request_adapter.sv': {'bytes': 2251, 'sha256': 'fa78bcfe965270cc74855908aa392989d857575a2097a126539aabb1aab8990d'},
+              'rtl/m31/frp_m31_pkg.sv': {'bytes': 18531, 'sha256': '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94'},
+              'rtl/m31/frp_m31_stability.sv': {'bytes': 2203, 'sha256': '69c06833e6dfbb28e25b74a5787dcd03756dddf0f66726de3ea47c1ad2931931'},
+              'rtl/m31/frp_m31_thermal_proxy.sv': {'bytes': 1883, 'sha256': '34df4ebfc5dfad8e3e5e454e560404585de5c881e6f75abaae367d3bd9fb11bd'},
+          }
+          expected_netlists = {
+              'adapter': {'bytes': 91286, 'sha256': '81bf1c05de3e3af04d4c2464d2f0d9ee755a6306e3042e9dca1d24e1b30663ee'},
+              'stability': {'bytes': 21734, 'sha256': '942152a70f9501931a4dc127fedb4b214cd506d8be123250db28da2b34a5e5e2'},
+              'thermal': {'bytes': 10670, 'sha256': 'cfdef894b60e7c5b31cdf35ff66032f54806c1be51bccbb5b4f6baf4093a5865'},
+          }
+          profiles={
+           'adapter':{'top':'frp_m31_phase_request_equivalence_formal','core':'frp_m31_phase_request_adapter','params':'-G CELLS=8 -G REQUEST_LANES=2 -G CELL_INDEX_BITS=3 ',
+           'inputs':{'enable':1,'retained_state':16,'pending_route':16,'phase_target':16,'scheduler_state':3},
+           'outputs':{'request_valid':2,'request_cell_index':6,'request_target':4},'reach':8},
+           'thermal':{'top':'frp_m31_thermal_equivalence_formal','core':'frp_m31_thermal_proxy','params':'',
+           'inputs':{'clk':1,'rst_n':1,'tick_enable':1,'clear':1,'normalized_cycle_cost_q16':32},
+           'outputs':{'temperature_proxy_q16':32,'peak_temperature_proxy_q16':32,'sample_count_q':32},'reach':12},
+           'stability':{'top':'frp_m31_stability_equivalence_formal','core':'frp_m31_stability','params':'-G CELLS=8 ',
+           'inputs':{'retained_state':16,'global_coherence_q30':32,'cluster_coherence_q30':32,'temperature_proxy_q16':32,'switch_load_q16':32},
+           'outputs':{'coherence_capacity_q16':32,'pressure_q16':32,'stability_margin_q16':32,'stable':1},'reach':16}}
+          reach_names = {
+              'adapter': ['disabled-bank', 'last-cell', 'two-polarities', 'opposite-target',
+                          'pending-owner', 'commit-excitation', 'reserved-scheduler', 'reserved-pending'],
+              'thermal': ['heat-from-zero', 'negative-from-zero', 'cool-hold-peak', 'new-peak',
+                          'paused-nonzero', 'clear-paused', 'clear-ticking', 'reset-reasserted',
+                          'maximum-cost', 'minimum-cost', 'zero-cost-cooling', 'zero-cost-warming'],
+              'stability': ['neutral-count-'+str(n) for n in range(9)] +
+                           ['positive-pressure-saturation', 'negative-pressure-saturation',
+                            'margin-zero', 'margin-plus-one', 'margin-minus-one',
+                            'positive-margin-wrap', 'negative-margin-wrap'],
+          }
+
+          def require(value,message):
+              if not value:raise RuntimeError(message)
+          def ident(path):
+              raw=path.read_bytes();return {'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest()}
+          def save(name,value):(evidence/name).write_text(json.dumps(value,indent=2,sort_keys=True)+'\n')
+          def q(path):return json.dumps(str(path))
+          def freeze(*paths):
+              for path in paths:
+                  value=ident(path)
+                  require(path not in immutable or immutable[path]==value,'Evidence changed: '+path.name)
+                  immutable[path]=value
+
+          def run(label,script,cwd=view,negative=False):
+              ys,log=evidence/(label+'.ys'),evidence/(label+'.log')
+              ys.write_text(script+'\n');entry={'label':label,'script':ident(ys)};report['commands'].append(entry)
+              start=time.monotonic();print('START',label,flush=True)
+              try:
+                  result=subprocess.run(['yowasp-yosys','-Q','-T','-s',str(ys)],cwd=cwd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=240)
+                  log.write_bytes(result.stdout);entry['returncode']=result.returncode
+              except subprocess.TimeoutExpired as error:
+                  log.write_bytes(error.stdout or b'');entry['process_timeout']=240;raise
+              finally:
+                  entry['seconds']=round(time.monotonic()-start,2)
+                  if log.exists():entry['log']=ident(log)
+                  save('commands.json',report['commands'])
+              text=log.read_text();require('TIMEOUT' not in text.upper(),label+': timeout')
+              if negative=='equiv':
+                  require(result.returncode!=0 and re.search(r'ERROR: Found [1-9][0-9]* unproven \$equiv cells in',text),
+                          label+': missing inductive rejection')
+              elif negative:require(result.returncode!=0 and 'SAT proof finished - model found: FAIL!' in text,label+': missing property counterexample')
+              else:require(result.returncode==0,label+': tool failed')
+              freeze(ys,log);print('DONE',label,entry['seconds'],flush=True);return text
+
+          def ports(module):return {k:(v['direction'],len(v['bits'])) for k,v in module['ports'].items()}
+          def synth(profile,label,directory,canonical=False):
+              p=profiles[profile];core=p['core'];nt=core+'_netlist'
+              net,meta,front=(evidence/(label+suffix) for suffix in ['.v','.json','-synthesis-frontend.json'])
+              run(label+'-synthesis',f'read_slang -j 1 --std 1800-2017 --top {core} {p["params"]}-Irtl/m31 rtl/m31/{core}.sv; '
+                  f'write_json {q(front)}; synth -top {core} -flatten -noshare -run begin:fine; check -assert; '
+                  'techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; select -assert-none t:$shiftx t:$connect; '
+                  f'rename {core} {nt}; write_verilog -noattr {q(net)}; write_json {q(meta)}',cwd=directory)
+              modules=json.loads(meta.read_text())['modules'];require(set(modules)=={nt},'Invalid synthesized modules')
+              m=modules[nt];expected={**{k:('input',v) for k,v in p['inputs'].items()},**{k:('output',v) for k,v in p['outputs'].items()}}
+              require(ports(m)==ports(json.loads(front.read_text())['modules'][core])==expected,'Core ports differ')
+              require(not m.get('processes') and not any('latch' in c['type'].lower() for c in m['cells'].values()),'Unexpected process or latch')
+              state={b for c in m['cells'].values() if 'dff' in c['type'].lower() for b in c['connections']['Q']}
+              public={b for v in m['ports'].values() if v['direction']=='output' for b in v['bits'] if isinstance(b,int)}
+              require((len(state)==96 and state<=public) if profile=='thermal' else not state,'Unexpected state inventory')
+              if canonical:require(ident(net)==expected_netlists[profile],'Fresh netlist identity changed: '+profile)
+              freeze(net,meta,front)
+              return net
+
+          def prepare(profile,label,net,canonical=False):
+              p=profiles[profile];top=p['top'];model,front=evidence/(label+'.il'),evidence/(label+'-frontend.json')
+              run(label+'-prepare',f'read_verilog -icells {q(net)}; read_slang -j 1 --std 1800-2017 --top {top} -Irtl/m31 {harness}; '
+                  f'proc; write_json {q(front)}; prep -top {top} -flatten; memory_map; async2sync; opt -full; wreduce; opt_clean; '
+                  f'chformal -lower; alumacc; opt -full; opt_clean; write_rtlil {q(model)}')
+              m=json.loads(front.read_text())['modules'][top];total=sum(p['outputs'].values())
+              require(ports(m)=={**{k:('input',v) for k,v in p['inputs'].items()},'rtl_outputs':('output',total),
+                  'netlist_outputs':('output',total),'mismatch':('output',len(p['outputs'])),'reach':('output',p['reach'])},'Harness ports differ')
+              checks={n:c for n,c in m['cells'].items() if c['type']=='$check'}
+              require({n for n,c in checks.items() if c['parameters']['FLAVOR']=='assert'}=={'a_'+n for n in p['outputs']},'Missing source assertions')
+              require(sum(c['parameters']['FLAVOR']=='assume' for c in checks.values())==int(profile=='thermal'),'Unexpected source assumptions')
+              counts={kind:len(re.findall(r'^  cell [$]'+kind+' ',model.read_text(),re.M)) for kind in ['assert','assume']}
+              require(0<counts['assert']<=len(p['outputs']) and counts['assume']==int(profile=='thermal'),'Unexpected prepared inventory')
+              if canonical:require(counts=={'assert':len(p['outputs']),'assume':int(profile=='thermal')},'Canonical property count changed')
+              freeze(model,front)
+              return model,counts
+
+          def thermal_step(label,net):
+              core=profiles['thermal']['core']; nt=core+'_netlist'
+              front=evidence/(label+'-cores.json'); model=evidence/(label+'-cores.il')
+              run(label+'-prepare',f'read_slang -j 1 --std 1800-2017 --top {core} -Irtl/m31 rtl/m31/{core}.sv; '
+                  f'read_verilog -icells {q(net)}; setattr -mod -unset top; proc; memory_map; async2sync; opt -full; '
+                  f'wreduce; opt_clean; alumacc; opt -full; opt_clean; write_json {q(front)}; write_rtlil {q(model)}')
+              modules=json.loads(front.read_text())['modules'];require(set(modules)=={core,nt},'Thermal core inventory')
+              p=profiles['thermal'];expected={**{k:('input',v) for k,v in p['inputs'].items()},**{k:('output',v) for k,v in p['outputs'].items()}}
+              for name,m in modules.items():
+                  require(ports(m)==expected and not m.get('processes'),'Thermal core interface')
+                  state=[b for c in m['cells'].values() if 'dff' in c['type'].lower() for b in c['connections']['Q']]
+                  require(len(state)==len(set(state))==96,'Thermal state width')
+              common=set(modules[core]['netnames'])&set(modules[nt]['netnames'])
+              blacklist=evidence/(label+'-blacklist.txt')
+              blacklist.write_text('\n'.join(sorted(common-set(p['inputs'])-set(p['outputs'])))+'\n')
+              proof=evidence/(label+'-induction.il');inventory=evidence/(label+'-inventory.json')
+              run(label+'-miter',f'read_rtlil {q(model)}; equiv_make -blacklist {blacklist} {core} {nt} thermal_equiv; '
+                  f'hierarchy -top thermal_equiv; opt -full; write_rtlil {q(proof)}; write_json {q(inventory)}')
+              m=json.loads(inventory.read_text())['modules']['thermal_equiv'];cells=[c for c in m['cells'].values() if c['type']=='$equiv']
+              public={b for name in p['outputs'] for b in m['ports'][name]['bits']}
+              require(len(cells)==len(public)==96 and {c['connections']['Y'][0] for c in cells}==public,'Public-state induction boundary')
+              require(not any(c['type'] in ('$assume','$anyconst','$anyseq') for c in m['cells'].values()),'Unexpected induction assumptions')
+              freeze(front,model,blacklist,proof,inventory)
+              return proof
+
+          def thermal_induction(label,proof,negative=False):
+              proven=evidence/(label+'-proven.json')
+              script=f'read_rtlil {q(proof)}; equiv_simple -seq 1; equiv_induct -seq 1; equiv_status -assert; write_json {q(proven)}'
+              if negative:
+                  run(label,script,negative='equiv')
+                  return
+              text=run(label,script);require('Equivalence successfully proven!' in text,'Induction incomplete')
+              m=json.loads(proven.read_text())['modules']['thermal_equiv'];cells=[c for c in m['cells'].values() if c['type']=='$equiv']
+              require(len(cells)==96 and all(c['connections']['A']==c['connections']['B'] for c in cells),'Unproven state bits')
+              freeze(proven)
+
+          mask=(1<<32)-1
+
+          def signed(v):return v-(1<<32) if v&(1<<31) else v
+          def clip(v):return max(-(1<<31),min((1<<31)-1,v))
+          def rounded(v):
+              quotient,remainder=divmod(abs(v),1<<30)
+              quotient+=int(remainder>=(1<<29))
+              return -quotient if v<0 else quotient
+
+          def unpack(profile,v):
+              result=[];remaining=sum(profiles[profile]['outputs'].values())
+              for bits in profiles[profile]['outputs'].values():
+                  remaining-=bits;result.append((v>>remaining)&((1<<bits)-1))
+              return result
+
+          def pack(profile,values):
+              result=0
+              for value,bits in zip(values,profiles[profile]['outputs'].values()):result=(result<<bits)|(value&((1<<bits)-1))
+              return result
+
+          def decode(path,profile):
+              p=profiles[profile];total=sum(p['outputs'].values())
+              widths={**p['inputs'],'rtl_outputs':total,'netlist_outputs':total,'mismatch':len(p['outputs']),'reach':p['reach']}
+              signals=json.loads(path.read_text())['signal']
+              require(len({s['name'] for s in signals})==len(signals),'Duplicate trace signal')
+              if profile=='thermal':
+                  for s in signals:
+                      if s['name'] not in widths:
+                          require(s['name'] in ('previous_tick','previous_reset','previous_cost','previous_clear','previous [95:64]',
+                              'previous [63:32]','previous [31:0]','history_valid') or re.fullmatch(r'\$auto\$async2sync.cc:[0-9]+:execute\$[0-9]+',s['name']), 'Unexpected initial-state signal')
+                          require(s['wave'][1:]=='444444','Unexpected non-port waveform')
+                  signals=[s for s in signals if s['name'] in widths]
+              require(len(signals)==len(widths),'Trace port count')
+              result={}
+              for s in signals:
+                  name=s['name'];require(name in widths and name not in result,'Invalid trace port')
+                  bits=widths[name]
+                  if profile!='thermal':
+                      data=s.get('data',[])
+                      if bits==1:
+                          require(s['wave'] in ('04','14') and not data,'Scalar format');v=s['wave'][0]
+                      else:
+                          require(s['wave']=='=4' and len(data)==2 and data[1]=='','Vector format');v=data[0]
+                      require(re.fullmatch('[01]{'+str(bits)+'}',v),'Undefined trace');result[name]=[int(v,2)]
+                  else:
+                      data=iter(s.get('data',[]));values=[];v=None
+                      for i,c in enumerate(s['wave']):
+                          if c in '4=':
+                              if 'data' in s:v=next(data)
+                              else:require(bits==1 and i==0 and c=='4','Scalar initial encoding');v=None
+                          elif c in '01':require(bits==1,'Vector encoded as scalar');v=c
+                          else:require(c=='.','Unsupported encoding')
+                          values.append(v)
+                      require(len(values)==7,'Six-step trace required')
+                      require(all(re.fullmatch('[01]{'+str(bits)+'}',v or '') for v in values[1:]),'Undefined sampled port '+name)
+                      result[name]=[None]+[int(v,2) for v in values[1:]]
+              require(set(result)==set(widths),'Missing trace ports');return result
+
+          def expected_comb(profile,w):
+              if profile=='adapter':
+                  numbers={0:0,1:1,3:-1};candidates=[]
+                  for cell in range(8):
+                      old=(w['retained_state']>>(2*cell))&3;goal=(w['phase_target']>>(2*cell))&3;pending=(w['pending_route']>>(2*cell))&3
+                      if old not in numbers or goal not in numbers or old==goal or pending in (1,3):continue
+                      if w['scheduler_state'] in ({0,2,3} if numbers[old]==0 else {0,1,4}):candidates.append((cell,goal))
+                  chosen=sorted(candidates)[:2] if w['enable'] else []
+                  return [(1<<len(chosen))-1,sum(cell<<(3*i) for i,(cell,goal) in enumerate(chosen)),sum(goal<<(2*i) for i,(cell,goal) in enumerate(chosen))]
+              n=sum(((w['retained_state']>>(2*i))&3)==0 for i in range(8))
+              capacity=clip(53740+clip(rounded(22282*signed(w['global_coherence_q30'])))+
+                  clip(rounded(10486*signed(w['cluster_coherence_q30'])))+clip(rounded(5243*n*(1<<27))))
+              pressure=clip(signed(w['temperature_proxy_q16'])+signed(w['switch_load_q16']))
+              margin=signed((capacity-pressure)&mask)
+              return [capacity,pressure,margin,int(margin>0)]
+
+          def comb_reach(profile,w,actual):
+              if profile=='adapter':
+                  valid,index,target=actual;en=w['enable'];old=w['retained_state'];goal=w['phase_target'];pending=w['pending_route'];sched=w['scheduler_state']
+                  tests=[not en and old==0 and pending==0 and goal==0x5555 and sched==0,
+                      en and valid==1 and index&7==7,en and valid==3 and target==13,
+                      en and old&3==1 and goal&3==3 and valid&1 and index&7==0,
+                      en and pending&3==1 and old&3==0 and goal&3==1 and sched==0 and valid&1 and index&7!=0,
+                      en and sched==2 and old==0 and valid==3,
+                      en and sched>=5 and old==0 and pending==0 and goal==0x5555,
+                      en and pending&3==2 and old&3==0 and goal&3==1 and sched==0 and valid&1 and index&7==0]
+              else:
+                  cap,pressure,margin=[signed(v) for v in actual[:3]]
+                  n=sum(((w['retained_state']>>(2*i))&3)==0 for i in range(8))
+                  wp=signed(w['temperature_proxy_q16'])+signed(w['switch_load_q16']);wm=cap-pressure
+                  tests=[n==i for i in range(9)]+[wp>(1<<31)-1,wp<-(1<<31),margin==0,margin==1,margin==-1,wm>(1<<31)-1,wm<-(1<<31)]
+              return sum(int(bool(v))<<i for i,v in enumerate(tests))
+
+          def thermal_reach(w,prev,a,b):
+              tests=[False]*12;t,peak,count=signed(a[0]),signed(a[1]),a[2];pt,pp,pc=signed(b[0]),signed(b[1]),b[2]
+              cost=signed(prev['normalized_cycle_cost_q16'])
+              if prev['rst_n'] and w['rst_n']:
+                  if prev['tick_enable'] and not prev['clear']:
+                      tests[0]=pt==0 and cost>0 and t>0
+                      tests[1]=pt==0 and cost<0 and t<0 and peak==0
+                      tests[2]=pp>0 and t<pt and peak==pp
+                      tests[3]=peak>pp
+                      tests[8]=cost==(1<<31)-1 and t>0
+                      tests[9]=cost==-(1<<31) and t<0
+                      tests[10]=cost==0 and pt>0 and t<pt
+                      tests[11]=cost==0 and pt<0 and t>pt
+                  tests[4]=not prev['tick_enable'] and not prev['clear'] and pt!=0
+                  tests[5]=prev['clear'] and not prev['tick_enable'] and pc!=0
+                  tests[6]=prev['clear'] and prev['tick_enable'] and pc!=0 and cost!=0
+              tests[7]=prev['rst_n'] and not w['rst_n'] and pc!=0
+              return sum(int(bool(v))<<i for i,v in enumerate(tests))
+
+          def thermal_stimulus(bit):
+              # Concrete existence witnesses; the inductive proof keeps inputs arbitrary.
+              samples=[dict(rst_n=int(step!=1),tick_enable=0,clear=0,normalized_cycle_cost_q16=0) for step in range(1,7)]
+              if bit in (2,3,4,5,6,7,10,11):
+                  samples[2].update(tick_enable=1,normalized_cycle_cost_q16=(-65536 if bit==11 else 65536)&mask)
+              if bit in (0,1,2,3,8,9,10,11):
+                  cost={0:65536,1:-65536,2:0,3:131072,8:(1<<31)-1,9:-(1<<31),10:0,11:0}[bit]
+                  samples[4].update(tick_enable=1,normalized_cycle_cost_q16=cost&mask)
+              if bit in (5,6):samples[4].update(clear=1,tick_enable=int(bit==6),normalized_cycle_cost_q16=65536 if bit==6 else 0)
+              if bit==7:samples[5]['rst_n']=0
+              return '-set clk 0 '+ ' '.join(f'-set-at {step} {name} '+(f"32'h{value:08x}" if name=='normalized_cycle_cost_q16' else str(value))
+                  for step,w in enumerate(samples,1) for name,value in w.items())
+
+          def inspect(path,profile,negative_bit=None):
+              waves=decode(path,profile);seen=[]
+              steps=range(2,7) if profile=='thermal' else [0]
+              for step in steps:
+                  w={name:v[step] for name,v in waves.items()};a=unpack(profile,w['rtl_outputs']);b=unpack(profile,w['netlist_outputs'])
+                  if profile=='thermal':
+                      prev={name:v[step-1] for name,v in waves.items()};before=unpack(profile,prev['rtl_outputs'])
+                      if not w['rst_n'] or not prev['rst_n'] or prev['clear']:expected=[0,0,0]
+                      elif prev['tick_enable']:
+                          temp=clip(clip(rounded(signed(before[0])*1020054733))+clip(rounded(signed(prev['normalized_cycle_cost_q16'])*10737418)))
+                          expected=[temp,max(signed(before[1]),temp),(before[2]+1)&mask]
+                      else:expected=before
+                      reach=thermal_reach(w,prev,a,before)
+                  else:expected=expected_comb(profile,w);reach=comb_reach(profile,w,a)
+                  require(w['rtl_outputs']==pack(profile,expected),profile+': canonical RTL oracle mismatch')
+                  m=sum(int(x!=y)<<i for i,(x,y) in enumerate(zip(a,b)))
+                  require(w['mismatch']==m,'Mismatch bit mapping')
+                  require(w['reach']==reach,'Reach oracle mismatch')
+                  if negative_bit is None:require(m==0 and w['netlist_outputs']==pack(profile,expected),'Netlist oracle mismatch')
+                  seen.append(m)
+              if negative_bit is not None:require(any(m&(1<<negative_bit) for m in seen),'Intended field fault not detected')
+              return waves
+
+          mutations={
+          'adapter-valid':('adapter',0,'(selected < REQUEST_LANES)','(selected < 0)'),
+          'adapter-order':('adapter',1,'for (int cell_index = 0; cell_index < CELLS; cell_index = cell_index + 1)',
+                          'for (int cell_index = CELLS-1; cell_index >= 0; cell_index = cell_index - 1)'),
+          'adapter-target':('adapter',2,'request_target[(selected*2) +: 2] = target_value;',"request_target[(selected*2) +: 2] = 2'b00;"),
+           'thermal-temperature':('thermal',0,'\n      temperature_proxy_q16 <= temperature_d;',"\n      temperature_proxy_q16 <= temperature_d ^ 32'sh80000000;"),
+           'thermal-peak':('thermal',1,'peak_temperature_proxy_q16 <= temperature_d;',"peak_temperature_proxy_q16 <= temperature_d ^ 32'sh80000000;"),
+           'thermal-count':('thermal',2,"sample_count_q <= sample_count_q + 32'd1;","sample_count_q <= sample_count_q + 32'd3;"),
+           'stability-capacity':('stability',0,"capacity_sum = 64'sd53740;","capacity_sum = 64'sd53741;"),
+           'stability-pressure':('stability',1,'pressure_q16 = frp_m31_sat_s32(pressure_sum);',"pressure_q16 = frp_m31_sat_s32(pressure_sum) ^ 32'sh80000000;"),
+           'stability-margin':('stability',2,'stability_margin_q16 = coherence_capacity_q16 - pressure_q16;','stability_margin_q16 = coherence_capacity_q16 + pressure_q16;'),
+           'stability-flag':('stability',3,'stable = stability_margin_q16 > 0;','stable = stability_margin_q16 >= 0;')}
+          try:
+              require(os.environ['GITHUB_EVENT_NAME']=='workflow_dispatch','Manual dispatch only')
+              require(os.environ['GITHUB_REF']=='refs/heads/main','Select main for this workflow')
+              require(subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()==report['source_commit'],'Checkout commit mismatch')
+              require(not view.exists() and not evidence.is_relative_to(repo),'Fresh external evidence directory required')
+              workflow_identity=ident(repo/workflow)
+              shutil.copyfile(repo/workflow,evidence/Path(workflow).name)
+              report['workflow']=workflow_identity
+              sources={}
+              def visit(name):
+                  if name in sources:return
+                  path=repo/name
+                  require(path.is_file() and not path.is_symlink(),'Missing or linked source: '+name)
+                  sources[name]=ident(path)
+                  destination=view/name;destination.parent.mkdir(parents=True,exist_ok=True)
+                  shutil.copyfile(path,destination)
+                  for include in re.findall(r'`include\s+"([^"]+)"',path.read_text()):
+                      candidates={p.resolve() for p in [path.parent/include,repo/'rtl/m31'/include] if p.is_file()}
+                      require(len(candidates)==1,'Ambiguous include: '+include)
+                      visit(candidates.pop().relative_to(repo).as_posix())
+              visit(harness)
+              report['sources']=sources;save('source-identities.json',sources)
+              require(sources==expected_sources,'Bundled equivalence sources differ from validated inputs')
+              require(not subprocess.check_output(['git','status','--porcelain'],text=True),'Checkout is not clean')
+              require(sys.version_info[:2]==(3,12),'Python 3.12 required')
+              require(importlib.metadata.version('yowasp-yosys')=='0.68.0.0.post1208','Yosys package changed')
+              wasm=ident(Path(yowasp_yosys.__file__).parent/'yosys.wasm')
+              require(wasm['sha256']=='e37a7e65e3fa4efbbd64a9c1b0e906be16cdc6c4d5273109d17537f78449f38c','Yosys WASM changed')
+              report['toolchain']={'python':sys.version,'yowasp_yosys':importlib.metadata.version('yowasp-yosys'),'wasm':wasm}
+              save('toolchain.json',report['toolchain'])
+              for profile,p in profiles.items():
+                  net=synth(profile,profile+'-netlist',view,canonical=True);report['netlists'][profile]=ident(net)
+                  model,counts=prepare(profile,profile,net,canonical=True);report['models'][profile]={'identity':ident(model),'properties':counts}
+                  if profile=='thermal':
+                      induction=thermal_step('thermal-public-state',net)
+                      report['thermal_induction']={'model':ident(induction),'matched_bits':96,'steps':1,'base_steps':2}
+                  for attempt in [1,2]:
+                      flags='-seq 2 -set-assumes ' if profile=='thermal' else ''
+                      text=run(profile+f'-proof-{attempt}',f'read_rtlil {q(model)}; sat {flags}-prove-asserts -verify -timeout 120')
+                      require('SAT proof finished - no model found: SUCCESS!' in text,'Proof incomplete')
+                      if profile=='thermal':thermal_induction('thermal-transition-'+str(attempt),induction)
+                      report['proofs'].append({'profile':profile,'run':attempt,'status':'PASS','properties':counts})
+              for profile,p in profiles.items():
+                  model=evidence/(profile+'.il')
+                  require(ident(model)==report['models'][profile]['identity'],'Prepared model changed')
+                  for bit in range(p['reach']):
+                      label=profile+f'-reach-{bit:02d}';witness=evidence/(label+'.json')
+                      opts=f'-seq 6 -set-assumes {thermal_stimulus(bit)} -set-at 6 reach[{bit}] 1' if profile=='thermal' else f'-set reach[{bit}] 1'
+                      text=run(label,f'read_rtlil {q(model)}; sat {opts} -show-ports -timeout 60 -dump_json {q(witness)}')
+                      require('SAT solving finished - model found:' in text,'Missing reach model')
+                      waves=inspect(witness,profile);require(waves['reach'][6 if profile=='thermal' else 0]&(1<<bit),'Wrong reach target')
+                      report['reachability'].append({'profile':profile,'bit':bit,'name':reach_names[profile][bit],'rtl_oracle':'PASS','netlist_oracle':'PASS','witness':ident(witness)})
+                      freeze(witness)
+                      save('witnesses.json',report['reachability'])
+              for name,(profile,bit,old,new) in mutations.items():
+                  mutant=evidence/'mutants'/name;shutil.copytree(view,mutant)
+                  path=mutant/'rtl/m31'/(profiles[profile]['core']+'.sv')
+                  raw=path.read_text();require(raw.count(old)==1,'Mutation site changed '+name);path.write_text(raw.replace(old,new))
+                  net=synth(profile,name,mutant);model,counts=prepare(profile,name,net);witness=evidence/(name+'-counterexample.json')
+                  opts=f'-seq 6 -set-assumes {thermal_stimulus(3)} ' if profile=='thermal' else ''
+                  run(name+'-negative',f'read_rtlil {q(model)}; sat {opts}-prove-asserts -verify -show-ports -timeout 60 -dump_json {q(witness)}',negative=True)
+                  inspect(witness,profile,bit)
+                  if profile=='thermal':thermal_induction(name+'-inductive-negative',thermal_step(name+'-state',net),negative=True)
+                  report['negative_controls'].append({'fault':name,'profile':profile,'mismatch_bit':bit,'status':'REJECTED',
+                      'canonical_rtl_oracle':'PASS','source':ident(path),'netlist':ident(net),'counterexample':ident(witness)})
+                  freeze(path,witness)
+                  save('negative-controls.json',report['negative_controls'])
+              require(len(report['proofs'])==6 and len(report['reachability'])==36 and len(report['negative_controls'])==10,'Incomplete validation')
+              for name,expected in report['sources'].items():require(ident(repo/name)==ident(view/name)==expected,'Source changed '+name)
+              for profile,p in profiles.items():
+                  require(ident(evidence/(profile+'.il'))==report['models'][profile]['identity'],'Canonical model changed')
+                  require(ident(evidence/(profile+'-netlist.v'))==report['netlists'][profile],'Canonical netlist changed')
+              require({(p['profile'],p['run']) for p in report['proofs']}=={(p,n) for p in profiles for n in (1,2)},'Proof profiles incomplete')
+              require({(w['profile'],w['bit']) for w in report['reachability']}=={(p,b) for p in profiles for b in range(profiles[p]['reach'])},'Witness profiles incomplete')
+              require({n['fault'] for n in report['negative_controls']}==set(mutations),'Fault profiles incomplete')
+              for path,expected in immutable.items():require(ident(path)==expected,'Evidence changed: '+path.name)
+              require(ident(repo/workflow)==ident(evidence/Path(workflow).name)==workflow_identity,'Workflow changed')
+              require(not subprocess.check_output(['git','status','--porcelain'],text=True),'Checkout changed')
+              report.update(status='PASS',equivalence_proven=True,sources_unchanged=True)
+              print('FRP M31 bundled adapter, thermal and stability equivalence: PASS',flush=True)
+          except Exception as error:
+              report.update(status='FAIL',error=str(error))
+              raise
+          finally:
+              save('result.json',report)
+              summary='\n'.join([
+                  '# M31 bundled equivalence: '+report['status'], '',
+                  'Commit: `'+report['source_commit']+'`', '',
+                  f"Completed proof runs: {len(report['proofs'])}/6; witnesses: {len(report['reachability'])}/36; detected faults: {len(report['negative_controls'])}/10.", '',
+                  'Three independent blocks; all 205 public output bits compared.',
+                  'Adapter: 12 bits, eight cells, two lanes; unrestricted combinational inputs.',
+                  'Thermal: 96 bits, including peak and full sample counter; initial sampled reset only.',
+                  'Thermal proof requires both reset-base SAT and the one-step transition for exactly 96 public-state equivalence cells.',
+                  'Stability: 97 bits; full signed input domain, including existing 32-bit margin wrap.',
+                  'Each proof is repeated in a fresh solver; witnesses and fault traces are checked by Python arithmetic oracles.',
+                  'Thermal witness stimuli are concrete examples, not constraints on the inductive proof.',
+                  'All ten faults must fail SAT; thermal faults must also fail the inductive equivalence checker.',
+                  'Canonical sources and fresh netlists are hash-pinned; mutations use isolated copies.',
+                  'Scope excludes integrated-core proof, independent functional formal contracts, liveness, physical timing and Python-model equivalence.',
+                  'Artifacts retain input snapshots, source identities, solver scripts/logs, witnesses and counterexamples.', '',
+              ])
+              (evidence/'summary.md').write_text(summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream:stream.write(summary)
+          PY
+
+      - name: Retain sources, proofs, witnesses, and counterexamples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-31-m31-adapter-thermal-stability-equivalence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M31_BUNDLED_EQUIVALENCE_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
