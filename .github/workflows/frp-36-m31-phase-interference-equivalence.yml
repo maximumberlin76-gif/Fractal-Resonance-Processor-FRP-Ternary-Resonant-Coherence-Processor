@@ -1,0 +1,466 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# This workflow is proprietary and is not licensed under Apache-2.0.
+# Except as required by applicable law, using, reproducing, modifying, or
+# distributing this file requires prior written permission from Maksym Marnov.
+# Referenced dependencies retain their existing licenses.
+
+name: 36 - FRP M31 Phase Interference RTL + Netlist Equivalence
+run-name: "36 - FRP M31 Phase Interference | 44 proofs @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-36-m31-phase-interference-equivalence-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  qualify-phase-interference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Initialize evidence paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' "M31_PHASE_EQ_EVIDENCE=$RUNNER_TEMP/frp-m31-phase-equivalence-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/frp-m31-phase-equivalence-evidence"
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install the pinned verification tools
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            python --version
+            python -m pip install --disable-pip-version-check --only-binary=:all: \
+              --timeout 30 --retries 3 yowasp-yosys==0.68.0.0.post1208 \
+              z3-solver==5.1.0.0 verilator==5.48.0
+            python -m pip freeze
+            g++ --version
+            make --version
+          } 2>&1 | tee "$M31_PHASE_EQ_EVIDENCE/toolchain.log"
+      - name: Prove the complete phase engine and validate independent replay
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, importlib.metadata, importlib.util, json, math, os, random, re, shutil, subprocess, sys, time
+          import yowasp_yosys
+          REPO = Path.cwd().resolve()
+          E = Path(os.environ['M31_PHASE_EQ_EVIDENCE']).resolve()
+          E.mkdir(parents=True, exist_ok=True)
+          VIEW, SIM, BUILD = E/'formal-inputs', E/'simulation-inputs', E.parent/(E.name+'-build')
+          WORKFLOW = '.github/workflows/frp-36-m31-phase-interference-equivalence.yml'
+          C = 'frp_m31_phase_interference'
+          N, TOP = C+'_netlist', C+'_equivalence_formal'
+          HARNESS = 'formal/m31/'+TOP+'.sv'
+          CORE = 'rtl/m31/'+C+'.sv'
+          FIELDS = [['phase_word_q', 256], ['frequency_current_q16', 256], ['coupling_field_q16', 256], ['phase_projection_q30', 256], ['phase_target', 16], ['pair_coherence_q30', 32], ['cluster_coherence_q30', 32], ['global_coherence_q30', 32], ['organization_dispersion_q30', 32]]
+          INPUT_PORTS = [['clk', 1], ['rst_n', 1], ['tick_enable', 1], ['load_valid', 1], ['phase_load', 256], ['frequency_load_q16', 256], ['gamma_effective_word', 256], ['thermal_node_factor_q30', 256], ['retained_state', 16], ['switch_activity', 8], ['scheduler_state', 3]]
+          INPUTS = INPUT_PORTS[1:]
+          EXPECTED_SOURCES = {'formal/m31/frp_m31_phase_interference_equivalence_formal.sv': {'bytes': 9882, 'sha256': '239fd641a2b7a496a5e1d648d9a5a17485a40a6509c1d894f08c81e950b3144b'}, 'rtl/m31/frp_m31_phase_interference.sv': {'bytes': 11627, 'sha256': 'd3ccabcd304c4ca66dcd31c75d233a16fe61c3181f797162e91674e1992d475d'}, 'rtl/m31/frp_m31_fixed_point_pkg.sv': {'bytes': 7278, 'sha256': '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24'}, 'rtl/m31/frp_m31_pkg.sv': {'bytes': 18531, 'sha256': '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94'}, 'rtl/m31/frp_m31_sin_q30.mem': {'bytes': 36864, 'sha256': 'adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d'}}
+          EXPECTED_NETLIST = {'bytes': 699993, 'sha256': 'ef0bada6b971b3a7ac938603bb844f9a021e32a85d3a2ff7cc8b3fff0ca98f1a'}
+          report = dict(status='FAIL', source_commit=os.environ['GITHUB_SHA'], run_id=os.environ['GITHUB_RUN_ID'], run_attempt=os.environ['GITHUB_RUN_ATTEMPT'], equivalence_proven=False, global_coverage_closure=False, full_m32_proof=False, physical_timing=False, python_reference_model_equivalence=False, commands=[], proofs={}, negatives=[])
+          immutable = {}
+          def ident(p):
+              b=p.read_bytes(); return dict(bytes=len(b), sha256=hashlib.sha256(b).hexdigest())
+          def save(name,value):
+              (E/name).write_text(json.dumps(value,indent=2,sort_keys=True)+'\n')
+          def freeze(p):
+              h=ident(p); assert p not in immutable or immutable[p]==h, str(p); immutable[p]=h
+
+          def command(label,args,cwd=VIEW,timeout=600,negative=False):
+              log=E/(label+'.log'); assert not log.exists(), label
+              print('START '+label,flush=True); started=time.monotonic()
+              entry=dict(label=label, argv=[str(a) for a in args]); report['commands'].append(entry)
+              with log.open('wb') as stream:
+                  try:
+                      process=subprocess.run(args,cwd=cwd,stdout=stream,stderr=subprocess.STDOUT,timeout=timeout)
+                  except subprocess.TimeoutExpired:
+                      entry.update(status='TIMEOUT',seconds=round(time.monotonic()-started,3)); freeze(log); raise
+              entry.update(returncode=process.returncode,seconds=round(time.monotonic()-started,3)); freeze(log)
+              assert negative or process.returncode==0, label+' failed: '+log.read_text()[-1500:]
+              return process.returncode,log
+
+          def yosys(label,script):
+              p=E/(label+'.ys'); p.write_text(script+'\n'); freeze(p)
+              return command(label,['yowasp-yosys','-Q','-T','-s',str(p)])
+
+          try:
+              assert sys.flags.optimize==0, 'Python assertions must remain enabled'
+              assert os.environ['GITHUB_EVENT_NAME']=='workflow_dispatch', 'Manual dispatch only'
+              assert os.environ['GITHUB_REF']=='refs/heads/main', 'Run on main only'
+              assert subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()==report['source_commit'], 'Dispatched commit mismatch'
+              assert not subprocess.check_output(['git','status','--porcelain'],text=True), 'Checkout is dirty'
+              for relative,wanted in EXPECTED_SOURCES.items():
+                  assert ident(REPO/relative)==wanted, 'Validated source mismatch: '+relative
+                  for root in (VIEW,SIM):
+                      p=root/relative; p.parent.mkdir(parents=True,exist_ok=True); shutil.copyfile(REPO/relative,p)
+                  freeze(SIM/relative)
+              shutil.copyfile(REPO/WORKFLOW,E/Path(WORKFLOW).name); workflow_identity=ident(REPO/WORKFLOW); freeze(E/Path(WORKFLOW).name)
+              words=[int(s,16) for s in (VIEW/'rtl/m31/frp_m31_sin_q30.mem').read_text().split()]
+              assert len(words)==4096 and all(0<=w<2**32 for w in words)
+              expected_sine=[int(math.copysign(math.floor(abs(math.sin(2*math.pi*i/4096))*2**30+0.5),math.sin(2*math.pi*i/4096))) for i in range(4096)]
+              assert words==[v&0xffffffff for v in expected_sine], 'Independent ROM validation failed'
+              source=(VIEW/CORE).read_text()
+              pattern=r'    if \(sin_lut[^\n]+\)\n      \$fatal\([^;\n]+\);\n'
+              removed=re.findall(pattern,source); assert len(removed)==4, 'ROM guard normalization mismatch'
+              normalized=re.sub(pattern,'',source)
+              assert hashlib.sha256(normalized.encode()).hexdigest()=='09302236b4a7734be9ac0890df4a7a577541a73c441ae7db3e70da8465f1c3ef'
+              (VIEW/CORE).write_text(normalized); (E/'removed-simulation-guards.txt').write_text(''.join(removed)); freeze(E/'removed-simulation-guards.txt')
+              for relative in EXPECTED_SOURCES: freeze(VIEW/relative)
+              wasm=Path(yowasp_yosys.__file__).parent/'yosys.wasm'
+              assert ident(wasm)['sha256']=='e37a7e65e3fa4efbbd64a9c1b0e906be16cdc6c4d5273109d17537f78449f38c'
+              assert importlib.metadata.version('yowasp-yosys')=='0.68.0.0.post1208'
+              assert importlib.metadata.version('z3-solver')=='5.1.0.0'
+              assert importlib.metadata.version('verilator')=='5.48.0'
+              Z3=shutil.which('z3'); assert Z3 and ident(Path(Z3))['sha256']=='54bae839dd54e262edac6f755fc99659ce2a121301faff20a3e3b94478dcead0'
+              vroot=Path(next(iter(importlib.util.find_spec('verilator').submodule_search_locations)))
+              os.environ['VERILATOR_ROOT']=str(vroot); os.environ['PATH']=str(vroot/'bin')+os.pathsep+os.environ['PATH']
+              save('sources.json',EXPECTED_SOURCES)
+              save('tools.json',dict(yosys=importlib.metadata.version('yowasp-yosys'),wasm=ident(wasm),z3=ident(Path(Z3)),verilator=importlib.metadata.version('verilator')))
+              q=lambda p:json.dumps(str(p))
+              net=E/'word-netlist.v'
+              yosys('synthesis',f'read_slang -j 1 --std 1800-2017 --top {C} -Irtl/m31 {CORE}; synth -top {C} -flatten -noshare -noalumacc -run begin:fine; check -assert; techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; select -assert-none t:$shiftx t:$connect; rename {C} {N}; write_verilog -noattr {q(net)}; write_json {q(E/"netlist.json")}')
+              assert ident(net)==EXPECTED_NETLIST, 'Fresh netlist differs from validated synthesis'
+              freeze(net); freeze(E/'netlist.json')
+              yosys('formal-front',f'read_verilog -icells {q(net)}; read_slang -j 1 --std 1800-2017 --top {TOP} -Irtl/m31 {HARNESS}; proc; opt_clean; write_json {q(E/"formal-front.json")}')
+              front=json.loads((E/'formal-front.json').read_text())['modules'][TOP]
+              checks={n:c['parameters']['FLAVOR'] for n,c in front['cells'].items() if c['type']=='$check'}
+              assert {n for n,v in checks.items() if v=='assert'}=={'a_'+n for n,w in FIELDS}
+              assert list(checks.values()).count('assume')==1 and len(checks)==10
+              freeze(E/'formal-front.json')
+              yosys('cores',f'read_slang -j 1 --std 1800-2017 --top {C} -Irtl/m31 {CORE}; read_verilog -icells {q(net)}; setattr -mod -unset top; proc; memory_collect; async2sync; opt -full; wreduce; opt_clean; write_rtlil {q(E/"cores.il")}; write_json {q(E/"word-cores.json")}; dffunmap; check -assert; write_smt2 -wires {q(E/"word-cores.smt2")}')
+              for name in ('cores.il','word-cores.json','word-cores.smt2'):freeze(E/name)
+              # Read complete SMT declarations; no identifier matching for proof cut points.
+              s=(E/'word-cores.smt2').read_text();defs={};order=[];acc=[];depth=0
+              for line in s.splitlines():
+               if line.startswith(('(declare-','(define-')):
+                assert not acc;acc=[line]
+               elif acc:acc.append(line)
+               else:continue
+               code=re.sub(r'\|[^|]*\|','symbol',line.split(';')[0]);depth+=code.count('(')-code.count(')')
+               if not depth:
+                text='\n'.join(acc);name=re.match(r'\((?:declare|define)-\S+ \|([^|]+)\|',text)[1];defs[name]=text;order.append(name);acc=[]
+              assert not acc
+              models=json.loads((E/'word-cores.json').read_text())['modules'];inputs=INPUT_PORTS;fields=FIELDS
+              assert set(models)=={C,N}
+              expected_ports={**{n:('input',w) for n,w in INPUT_PORTS},**{n:('output',w) for n,w in FIELDS}}
+              for model in models.values():
+               assert {n:(v['direction'],len(v['bits'])) for n,v in model['ports'].items()}==expected_ports
+               assert not model.get('processes')
+               sequential=[c for c in model['cells'].values() if 'ff' in c['type'].lower() or 'latch' in c['type'].lower()]
+               assert len(sequential)==16 and all(c['type']=='$sdff' for c in sequential)
+               qb=[b for c in sequential for b in c['connections']['Q']];assert len(qb)==len(set(qb))==512
+               assert not any(c['type'] in ('$assume','$anyseq','$anyconst') for c in model['cells'].values())
+              replace={};const={};state={};nextd={};maps={};register_ids={}
+              def alias(name):
+               text=defs[name];a=re.findall(r'\|([^|]+)\|',text);args=[x for x in a if x not in (name,name.split('_n ')[0]+'_s')];assert len(args)==1,(name,args);return args[0]
+              def bind(m,name,label):
+               raw=alias(m+'_n '+name);d=defs[raw];pat=r'\(declare-fun \|[^|]+\| \(\|[^|]+\|\) (.+)\)';match=re.match(pat,d.split(';')[0].strip());assert match,d
+               typ=match[1];key='shared_'+label
+               if key in const:assert const[key]==typ
+               const[key]=typ;replace[raw]=f'(define-fun |{raw}| ((state |{m}_s|)) {typ} |{key}|)';return raw
+              def sexpr(text):
+               tokens=iter(re.findall(r'\|[^|]*\||[()]|[^()\s]+',text.split(';')[0]))
+               def one(t):
+                if t!='(':return t
+                out=[]
+                for t in tokens:
+                 if t==')':return out
+                 out.append(one(t))
+                raise RuntimeError('Unclosed SMT expression')
+               result=one(next(tokens));assert next(tokens,None) is None;return result
+
+              def bitmap(x):
+               if isinstance(x,str):raise RuntimeError('Non-symbolic input bit '+x)
+               if x[0]=='concat':return bitmap(x[2])+bitmap(x[1])
+               if isinstance(x[0],list):
+                tag,op,hi,lo=x[0];assert (tag,op)==('_','extract');return bitmap(x[1])[int(lo):int(hi)+1]
+               if x[0]=='=':
+                assert x[2]=='#b1';bits=bitmap(x[1]);assert len(bits)==1;return bits
+               raw=x[0].strip('|');assert x[1]=='state';node=sexpr(defs[raw]);assert node[0] in ('declare-fun','define-fun');typ=node[3]
+               width=1 if typ=='Bool' else int(typ[2]);return [(raw,i) for i in range(width)]
+
+              def input_bind(m,name,width):
+               tree=sexpr(defs[m+'_n '+name]);bits=bitmap(tree[4]);assert len(bits)==len(set(bits))==width
+               grouped={}
+               for i,(raw,j) in enumerate(bits):grouped.setdefault(raw,{})[j]=i
+               key='shared_input_'+name;const[key]=f'(_ BitVec {width})'
+               for raw,remap in grouped.items():
+                typ=sexpr(defs[raw])[3];n=1 if typ=='Bool' else int(typ[2]);assert set(remap)==set(range(n))
+                parts=[];a=0
+                while a<n:
+                 b=a
+                 while b+1<n and remap[b+1]==remap[b]+1:b+=1
+                 parts.append(f'((_ extract {remap[b]} {remap[a]}) |{key}|)');a=b+1
+                expr=parts[0]
+                for part in parts[1:]:expr=f'(concat {part} {expr})'
+                typestr='Bool' if typ=='Bool' else f'(_ BitVec {n})'
+                if typ=='Bool':expr=f'(= {expr} #b1)'
+                replace[raw]=f'(define-fun |{raw}| ((state |{m}_s|)) {typestr} {expr})'
+
+              for m,v in models.items():
+               maps[m]={};state[m]={};register_ids[m]={}
+               for name,w in inputs:input_bind(m,name,w)
+               ff={tuple(c['connections']['Q']):(name,c) for name,c in v['cells'].items() if c['type']=='$sdff'};assert len(ff)==16
+               for field in ('phase_word_q','frequency_current_q16'):
+                bits=v['ports'][field]['bits']
+                for i in range(8):
+                 part=bits[32*i:32*(i+1)];found=[c for c in v['cells'].values() if c['type']=='$mux' and c['connections']['Y']==part];assert len(found)==1
+                 mux=found[0]['connections'];assert mux['S']==v['ports']['rst_n']['bits'];q=tuple(mux['B']);fname,f=ff[q]
+                 assert f['connections']['SRST']==v['ports']['rst_n']['bits'];assert f['connections']['CLK']==v['ports']['clk']['bits'];assert int(f['parameters']['SRST_POLARITY'],2)==0;assert int(f['parameters']['CLK_POLARITY'],2)==1
+                 value=(i<<29) if field=='phase_word_q' else 65536;assert f['parameters']['SRST_VALUE']==f'{value:032b}';assert mux['A']==list(f'{value:032b}'[::-1])
+                 aliases=[n for n,w in v['netnames'].items() if w['bits']==list(q)];assert len(aliases)==1
+                 label=f'{field}_{i}';raw=bind(m,aliases[0],'state_'+label);maps[m][label]={'ff':fname,'reset':value,'raw':raw};register_ids[m][raw]=label;state[m][label]=raw
+               assert len({maps[m][x]['ff'] for x in maps[m]})==16
+               mem=[c for c in v['cells'].values() if c['type']=='$mem_v2'];assert len(mem)==1;mem=mem[0]['parameters'];assert int(mem['WR_PORTS'],2)==0;assert int(mem['SIZE'],2)==4096;assert int(mem['WIDTH'],2)==32
+               assert int(mem['RD_PORTS'],2)==72 and int(mem['RD_CLK_ENABLE'],2)==0
+               assert len(mem['INIT'])==131072 and set(mem['INIT'])<={'0','1'}
+               assert [int(mem['INIT'][-32*(i+1):131072-32*i],2) for i in range(4096)]==words
+               if m==C:memory_init=mem['INIT']
+               else:assert memory_init==mem['INIT']
+               raw=next(x for x,d in defs.items() if x.startswith(m+'#') and d.startswith('(declare-fun') and '(Array' in d);const['shared_ROM']='(Array (_ BitVec 12) (_ BitVec 32))';replace[raw]=f'(define-fun |{raw}| ((state |{m}_s|)) (Array (_ BitVec 12) (_ BitVec 32)) |shared_ROM|)'
+               # Each next-state expression comes from the exported complete transition.
+               trans=defs[m+'_t'];pairs=re.findall(r'\(= \(\|([^|]+)\| state\) \(\|([^|]+)\| next_state\)\)',trans);assert len(pairs)==17
+               nextd[m]={register_ids[m][b]:a for a,b in pairs if b in register_ids[m]};assert len(nextd[m])==16
+              save('state-correspondence.json',maps);freeze(E/'state-correspondence.json')
+
+              results={}
+              def check(name,expression):
+               need=set();todo=re.findall(r'\|([^|]+)\|',expression)
+               while todo:
+                x=todo.pop()
+                if x in need:continue
+                assert x in defs,x;need.add(x)
+                if x not in replace:todo.extend(set(re.findall(r'\|([^|]+)\|',defs[x]))-need)
+               decls=[x for x in need if defs[x].startswith('(declare-fun')];assert all(x in replace for x in decls),(name,[x for x in decls if x not in replace])
+               text='(set-option :timeout 120000)\n'+'\n'.join(f'(declare-fun |{n}| () {typ})' for n,typ in const.items())+'\n'+'\n'.join(replace.get(x,defs[x]) for x in order if x in need)+'\n'+f'(declare-fun r () |{C}_s|)\n(declare-fun n () |{N}_s|)\n(assert {expression})\n(check-sat)\n'
+               p=E/(name+'.smt2');p.write_text(text);freeze(p)
+               code,log=command('prove-'+name,[Z3,str(p)],timeout=150)
+               out=log.read_text().strip();results[name]=dict(result=out,query=ident(p),log=ident(log));report['proofs']=results;save('proofs.json',results)
+               return out=='unsat' and code==0
+
+              addresses='(or '+' '.join(f'(not (= (|{C}_m:R{i}A sin_lut| r) (|{N}_m:R{i}A sin_lut| n)))' for i in range(72))+')'
+              assert check('all-72-ROM-addresses',addresses)
+              for i in range(72):
+               key=f'ROM_read_{i}';const[key]='(_ BitVec 32)'
+               for m in (C,N):
+                name=m+f'_m:R{i}D sin_lut';tree=sexpr(defs[name]);assert len(tree[4])==2 and tree[4][1]=='state';raw=tree[4][0].strip('|');assert '(select ' in defs[raw];assert raw not in replace
+                replace[raw]=f'(define-fun |{raw}| ((state |{m}_s|)) (_ BitVec 32) |{key}|)'
+              for name,_ in fields:
+               assert check(name,f'(not (= (|{C}_n {name}| r) (|{N}_n {name}| n)))'), name
+               if name=='coupling_field_q16':
+                for m in (C,N):input_bind(m,name,256)
+              name='frequency_d'
+              assert check(name,f'(not (= (|{C}_n {name}| r) (|{N}_n {name}| n)))')
+              for m in (C,N):input_bind(m,name,256)
+              scale={m:{} for m in (C,N)}
+              for m in (C,N):
+               for raw,d in defs.items():
+                if raw.startswith(m+'#') and '(bvmul ' in d and any(int(v,2)==44798133900177 for v in re.findall(r'#b([01]+)',d)):
+                 tree=sexpr(d);assert tree[3]==['_','BitVec','79']
+                 refs=set(re.findall(r'\|([^|]+)\|',d))-{raw,m+'_s'};assert len(refs)==1
+                 vel=refs.pop();assert sexpr(defs[vel])[3]==['_','BitVec','32'];scale[m][raw]=vel
+               assert len(scale[m])==8
+              def abstract_pair(a,b,width,label):
+               const[label]=f'(_ BitVec {width})'
+               for m,raw in ((C,a),(N,b)):
+                assert raw not in replace and sexpr(defs[raw])[3]==['_','BitVec',str(width)]
+                replace[raw]=f'(define-fun |{raw}| ((state |{m}_s|)) (_ BitVec {width}) |{label}|)'
+              consumed={C:set(),N:set()}
+              for i in range(8):
+               match={}
+               for m in (C,N):
+                roots={raw for raw,bit in bitmap(sexpr(defs[m+'_n phase_d'])[4])[i*32:(i+1)*32]};seen=set();todo=list(roots);hit=set()
+                while todo:
+                 x=todo.pop()
+                 if x in seen:continue
+                 seen.add(x)
+                 if x in scale[m]:hit.add(x);continue
+                 if x not in replace:todo.extend(set(re.findall(r'\|([^|]+)\|',defs[x]))-seen)
+                assert len(hit)==1;match[m]=hit.pop();consumed[m].add(match[m])
+               a,b=scale[C][match[C]],scale[N][match[N]]
+               assert check(f'velocity_{i}',f'(not (= (|{a}| r) (|{b}| n)))')
+               abstract_pair(a,b,32,f'common_velocity_{i}')
+               a,b=match[C],match[N]
+               assert check(f'phase_product_{i}',f'(not (= (|{a}| r) (|{b}| n)))')
+               abstract_pair(a,b,79,f'common_phase_product_{i}')
+              assert all(len(v)==8 for v in consumed.values())
+              name='phase_d'
+              assert check(name,f'(not (= (|{C}_n {name}| r) (|{N}_n {name}| n)))')
+              for m in (C,N):input_bind(m,name,256)
+              for label in nextd[C]:
+               assert check('next_'+label,f'(not (= (|{nextd[C][label]}| r) (|{nextd[N][label]}| n)))'),label
+              assert len(results)==44 and all(r['result']=='unsat' for r in results.values())
+              print('ALL PUBLIC OUTPUTS, RESET BASE, ROM ADDRESSES AND STATE TRANSITIONS PROVEN',flush=True)
+              MASK=(1<<32)-1
+              SIN=[int(math.copysign(math.floor(abs(math.sin(2*math.pi*i/4096))*(1<<30)+0.5),math.sin(2*math.pi*i/4096))) for i in range(4096)]
+              def signed(x):return (x&MASK)-(1<<32) if x&(1<<31) else x&MASK
+              def bank(x,w=32,n=8):return [x>>(w*i)&((1<<w)-1) for i in range(n)]
+              def packed(xs,w=32):return sum((x&((1<<w)-1))<<(w*i) for i,x in enumerate(xs))
+              def unpack(x,fields):
+               r={}
+               for n,w in reversed(fields):r[n]=x&((1<<w)-1);x>>=w
+               assert not x
+               return r
+              def pack(d,fields):
+               x=0
+               for n,w in fields:x=(x<<w)|(d[n]&((1<<w)-1))
+               return x
+              def rnd(x,d):return (-1 if x<0 else 1)*((abs(x)+d//2)//d)
+              def clip(x):return max(-(1<<31),min((1<<31)-1,x))
+              def mul(x,y,b):return clip(rnd(x*y,1<<b))
+              def reset():return {'phase':[i<<29 for i in range(8)],'freq':[65536]*8}
+              def outputs(q,w):
+               phase=q['phase'];gam=bank(w['gamma_effective_word']);therm=list(map(signed,bank(w['thermal_node_factor_q30'])));coupling=[]
+               for i in range(8):
+                total=0
+                for j in range(8):
+                 if i==j:continue
+                 dist=i^j;weight=516461574 if dist==1 else 158959695 if dist<4 else 59840215
+                 factor=mul(weight,mul(therm[i],therm[j],30),30)
+                 sine=SIN[((phase[j]-phase[i]-gam[i])&MASK)>>20]
+                 total+=mul(factor,sine,30)
+                coupling.append(mul(18350,clip(rnd(clip(total),1<<14)),16))
+               sine=[SIN[x>>20] for x in phase]
+               def coherence(indices):
+                x=rnd(sum(SIN[((phase[i]>>20)+1024)%4096] for i in indices),len(indices));y=rnd(sum(sine[i] for i in indices),len(indices));return min(1<<30,math.isqrt(x*x+y*y))
+               clusters=[coherence(list(range(k,k+4))) for k in (0,4)]
+               return dict(phase_word_q=packed(phase),frequency_current_q16=packed(q['freq']),coupling_field_q16=packed(coupling),phase_projection_q30=packed(sine),phase_target=packed([1 if x>354334802 else 3 if x< -354334802 else 0 for x in sine],2),pair_coherence_q30=rnd(sum(coherence([i,i+1]) for i in range(0,8,2)),4),cluster_coherence_q30=rnd(sum(clusters),2),global_coherence_q30=coherence(list(range(8))),organization_dispersion_q30=rnd(abs(clusters[0]-clusters[1]),2))
+              def advance(q,w,r):
+               if not w['rst_n']:return reset()
+               if w['load_valid']:return dict(phase=bank(w['phase_load']),freq=list(map(signed,bank(w['frequency_load_q16']))))
+               if not w['tick_enable']:return {'phase':q['phase'].copy(),'freq':q['freq'].copy()}
+               phases=[];freqs=[];coupling=list(map(signed,bank(r['coupling_field_q16'])));states=bank(w['retained_state'],2)
+               for i in range(8):
+                target=65536+(3932 if states[i] in (1,3) else 0)+(7864 if w['switch_activity']>>i&1 else 0)
+                f=clip(q['freq'][i]+clip(rnd((target-q['freq'][i])*19661,65536)));freqs.append(f)
+                push=655 if w['scheduler_state']==2 else 393 if w['scheduler_state']==3 else 197
+                v=signed(mul(f,3932,16)+push+coupling[i]);delta=rnd(v*44798133900177,1<<32);phases.append((q['phase'][i]+delta)&MASK)
+               return dict(phase=phases,freq=freqs)
+              def reach(q,w,r,p,pq):
+               a=[False]*16
+               if p is not None and p['rst_n'] and w['rst_n']:
+                a[0]=p['load_valid'] and p['tick_enable'] and r['phase_word_q']==p['phase_load'] and r['frequency_current_q16']==p['frequency_load_q16'] and p['phase_load']!=packed(pq['phase'])
+                a[1]=p['load_valid'] and not p['tick_enable'] and r['phase_word_q']==p['phase_load'] and p['frequency_load_q16']!=packed(pq['freq'])
+                a[2]=not p['load_valid'] and not p['tick_enable'] and r['phase_word_q']==packed(pq['phase']) and r['frequency_current_q16']==packed(pq['freq'])
+                for k in range(5):a[3+k]=not p['load_valid'] and p['tick_enable'] and p['scheduler_state']==k and r['phase_word_q']!=packed(pq['phase'])
+                a[8]=not p['load_valid'] and p['tick_enable'] and p['scheduler_state']==7 and r['phase_word_q']!=packed(pq['phase'])
+                a[9]=p['load_valid'] and p['frequency_load_q16']&(1<<31) and (r['frequency_current_q16']&MASK)==(p['frequency_load_q16']&MASK)
+                a[10]=p['load_valid'] and p['frequency_load_q16']&((1<<64)-1)==0x7fffffff80000000
+               if p is not None and w['rst_n']:
+                a[11]=w['thermal_node_factor_q30']==0 and r['coupling_field_q16']==0
+                a[12]=w['gamma_effective_word']&MASK==MASK and r['phase_word_q']&MASK!=0
+                a[13]=w['thermal_node_factor_q30']&((1<<64)-1)==0x40000000 and r['coupling_field_q16']&MASK!=0
+                a[14]=r['phase_target']&63==0b001101 and r['global_coherence_q30']!=0
+               if p is not None:a[15]=p['rst_n'] and not w['rst_n'] and packed(pq['phase'])!=packed(reset()['phase'])
+               return sum(int(bool(x))<<i for i,x in enumerate(a))
+              def validate(path):
+               q=reset();prev=None;prevq=reset();seen=0;count=0;hashes=[]
+               for line in path.read_text().splitlines():
+                if not line.startswith('FRP_PHASE '):continue
+                _,idx,inp,rtl,net,mis,rr=line.split();w=unpack(int(inp,16),INPUTS)
+                if not w['rst_n']:q=reset()
+                r=outputs(q,w);a=unpack(int(rtl,16),FIELDS);b=unpack(int(net,16),FIELDS)
+                if count:
+                 assert a==b==r,(idx,{k:(a[k],b[k],r[k]) for k in r if a[k]!=r[k] or b[k]!=r[k]});assert int(mis,16)==0
+                 wanted=reach(q,w,r,prev,prevq);assert wanted==int(rr,16),(idx,hex(wanted),rr);seen|=wanted
+                prevq=q;prev=w;q=advance(q,w,r);count+=1
+               assert count>0
+               return dict(samples=count,checked_samples=count-1,public_outputs=9,public_bits=1168,reach_mask=f'{seen:04x}')
+              rng=random.Random(0x31_36);vectors=[]
+              def item(**kw):
+               d=dict(rst_n=1,tick_enable=0,load_valid=0,phase_load=packed([i<<29 for i in range(8)]),frequency_load_q16=packed([65536]*8),gamma_effective_word=packed([644245094]*8),thermal_node_factor_q30=packed([1<<30]*8),retained_state=0,switch_activity=0,scheduler_state=0);d.update(kw);vectors.append(d);return d
+              item(rst_n=0)
+              pbank=packed([0x40000000,0xc0000000,0,0x40000000,0x40000000,0,0x20000000,0x30000000]);fbank=packed([0x80000000,0x7fffffff,-65536,-1,0,1,65536,131072])
+              item(load_valid=1,tick_enable=1,phase_load=pbank,frequency_load_q16=fbank);item();item(load_valid=1,phase_load=pbank,frequency_load_q16=packed([65536]*8));item();item()
+              for k in range(8):item(tick_enable=1,scheduler_state=k,retained_state=0x39c6,switch_activity=0x55)
+              item(thermal_node_factor_q30=0);item(gamma_effective_word=packed([0xffffffff]*8));item(thermal_node_factor_q30=packed([1<<30,0]+[1<<30]*6));item(rst_n=0);item()
+              for start in range(0,4096,8):
+               phases=packed([((start+i)<<20)|(rng.getrandbits(20)) for i in range(8)]);freqs=packed([rng.getrandbits(32) for _ in range(8)])
+               item(load_valid=1,tick_enable=start%16==0,phase_load=phases,frequency_load_q16=freqs)
+               item(tick_enable=1,scheduler_state=(start//8)%8,gamma_effective_word=packed([rng.getrandbits(32) for _ in range(8)]),thermal_node_factor_q30=packed([rng.getrandbits(32) for _ in range(8)]),retained_state=rng.getrandbits(16),switch_activity=rng.getrandbits(8))
+              for k in range(256):
+               item(rst_n=int(k%37!=0),tick_enable=rng.getrandbits(1),load_valid=int(k%5==0),phase_load=rng.getrandbits(256),frequency_load_q16=rng.getrandbits(256),gamma_effective_word=rng.getrandbits(256),thermal_node_factor_q30=rng.getrandbits(256),retained_state=rng.getrandbits(16),switch_activity=rng.getrandbits(8),scheduler_state=rng.getrandbits(3))
+              item();(E/'simulation-vectors.json').write_text(json.dumps(vectors,indent=2)+'\n');(SIM/'vectors.mem').write_text(''.join(f'{pack(v,INPUTS):0264x}\n' for v in vectors))
+              s='`timescale 1ns/1ps\n`include "frp_m31_phase_interference_equivalence_formal.sv"\nmodule phase_equivalence_tb;\n  logic clk = 0;\n'
+              for n,w in INPUTS:s+='  logic '+(f'[{w-1}:0] ' if w>1 else '')+n+' = 0;\n'
+              s+='  wire [1167:0] rtl_outputs, netlist_outputs;\n  wire [8:0] mismatch;\n  wire [15:0] reach;\n  frp_m31_phase_interference_equivalence_formal dut (.*);\n'
+              s+=f'  logic [1053:0] vectors [0:{len(vectors)-1}];\n  initial begin\n    $readmemh("vectors.mem", vectors);\n    for (int i=0; i<{len(vectors)}; i++) begin\n      clk=0;\n      '+ '{'+', '.join(n for n,w in INPUTS)+'} = vectors[i];\n      #1;\n      $display("FRP_PHASE %0d %h %h %h %h %h", i, vectors[i], rtl_outputs, netlist_outputs, mismatch, reach);\n      if (i > 0 && mismatch != 0) $fatal(1, "Settled RTL/netlist mismatch %h", mismatch);\n      clk=1; #1;\n    end\n    $display("FRP_PHASE_DONE");\n    $finish;\n  end\nendmodule\n'
+              (SIM/'tb.sv').write_text(s);freeze(SIM/'vectors.mem');freeze(SIM/'tb.sv');freeze(E/'simulation-vectors.json')
+              I=dict(INPUT_PORTS);F=dict(FIELDS)
+              raw=(net).read_text();anchor='module frp_m31_phase_interference_netlist(';assert raw.count(anchor)==1
+              raw=raw.replace(anchor,'module frp_m31_phase_interference_netlist_unmodified(')
+              wrapper='module frp_m31_phase_interference_netlist (\n'
+              ports=['  input wire '+(f'[{w-1}:0] ' if w>1 else '')+n for n,w in I.items()]+['  output wire '+(f'[{w-1}:0] ' if w>1 else '')+n for n,w in F.items()]
+              wrapper+=',\n'.join(ports)+'\n);\n  integer fault=0;\n  initial begin\n    if (!$value$plusargs("fault=%d",fault)) fault=0;\n  end\n'
+              for n,w in F.items():wrapper+=f'  wire [{w-1}:0] correct_{n};\n'
+              con=[f'    .{n}({n})' for n in I]+[f'    .{n}(correct_{n})' for n in F]
+              wrapper+='  frp_m31_phase_interference_netlist_unmodified original (\n'+',\n'.join(con)+'\n  );\n'
+              for k,(n,w) in enumerate(F.items()):wrapper+=f"  assign {n} = correct_{n} ^ ((fault == {k+1}) ? {w}'h1 : {w}'h0);\n"
+              wrapper+='endmodule\n';(E/'output-faults.v').write_text(raw+'\n'+wrapper)
+              freeze(E/'output-faults.v')
+              args=['verilator','--binary','--sv','--timing','--no-assert','-Wall','-Wno-fatal','-CFLAGS','-std=c++20 -O2','-MAKEFLAGS','VK_PCH_I_FAST=','-MAKEFLAGS','VK_PCH_I_SLOW=','--build-jobs','2','--output-split','10000','--top-module','phase_equivalence_tb','--Mdir',str(BUILD/'obj'),'-Irtl/m31','-Iformal/m31',str(E/'output-faults.v'),'tb.sv']
+              BUILD.mkdir(parents=True,exist_ok=True)
+              command('simulator-build',args,cwd=SIM,timeout=1200)
+              exe=BUILD/'obj/Vphase_equivalence_tb'
+              for fault in range(10):
+               code,p=command('output-fault-'+str(fault),[str(exe),f'+fault={fault}'],cwd=SIM,timeout=120,negative=fault!=0)
+               if fault==0:
+                assert code==0 and 'FRP_PHASE_DONE' in p.read_text()
+                result=validate(p);assert result==dict(samples=1300,checked_samples=1299,public_outputs=9,public_bits=1168,reach_mask='ffff')
+                report['simulation']=result;save('simulation.json',result)
+               else:
+                text=p.read_text();assert code!=0 and 'Settled RTL/netlist mismatch' in text and 'FRP_PHASE_DONE' not in text
+                lines=[s for s in text.splitlines() if s.startswith('FRP_PHASE ')];assert lines
+                tokens=lines[-1].split();assert int(tokens[1])==1
+                rtl,gate=unpack(int(tokens[3],16),FIELDS),unpack(int(tokens[4],16),FIELDS);name=FIELDS[fault-1][0]
+                assert [f for f in rtl if rtl[f]!=gate[f]]==[name] and rtl[name]^gate[name]==1
+                assert int(tokens[5],16)==1<<(fault-1)
+                report['negatives'].append(dict(field=name,status='REJECTED',sample=1,mismatch_bit=fault-1,log=ident(p)))
+                save('negatives.json',report['negatives'])
+              assert len(report['negatives'])==9
+              for relative,wanted in EXPECTED_SOURCES.items():
+               assert ident(REPO/relative)==ident(SIM/relative)==wanted, 'Source changed: '+relative
+              for path,wanted in immutable.items():assert ident(path)==wanted, 'Evidence changed: '+str(path)
+              assert ident(REPO/WORKFLOW)==workflow_identity and not subprocess.check_output(['git','status','--porcelain'],text=True)
+              save('immutable-evidence.json',{str(p.relative_to(E)):h for p,h in immutable.items()})
+              report.update(status='PASS',equivalence_proven=True,sources_unchanged=True,public_outputs=9,public_output_bits=1168,state_bits=512,rom_addresses_proven=72,rom_words_checked=4096,netlist=EXPECTED_NETLIST)
+              print('FRP M31 phase interference RTL/netlist equivalence: PASS',flush=True)
+          except Exception as error:
+              report.update(status='FAIL',error=str(error)); raise
+          finally:
+              save('result.json',report)
+              summary='\n'.join(['# M31 phase interference equivalence: '+report['status'],'','Commit: `'+report['source_commit']+'`','',f"Formal tasks: {len(report['proofs'])}/44; detected output faults: {len(report['negatives'])}/9.",'All nine public outputs (1168 bits) and all 512 retained state bits are covered.','Reset base, all next-state words and 72 ROM read addresses must pass.','Cut points are introduced only after their equality has been proved; SAT, UNKNOWN and timeouts fail the run.','Fresh Yosys coarse synthesis preserves word arithmetic (-noalumacc); no technology mapping or timing claim.','Sampled two-state semantics; only initial reset is assumed by the committed harness.','Independent Python integer/analytic-sine simulation checks 1299 samples, all 16 witness bits and all 4096 sine addresses.','Simulation uses settled mismatch checks; all nine formal assertions remain present in the formal frontend.','Scope excludes complete M32, exhaustive coverage, liveness, physical resonance and Python reference-model equivalence.',''])
+              (E/'summary.md').write_text(summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream:stream.write(summary)
+          PY
+      - name: Retain sources, proofs, replay, and counterexamples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-36-m31-phase-interference-equivalence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.M31_PHASE_EQ_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
