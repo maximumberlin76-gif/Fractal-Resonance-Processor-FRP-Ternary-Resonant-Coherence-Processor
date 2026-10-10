@@ -1,0 +1,553 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# This workflow is proprietary and is not licensed under Apache-2.0.
+# Referenced dependencies retain their existing licenses.
+name: 37 - FRP M31 Phase Interference Contract RTL + Netlist Formal
+run-name: "37 - FRP M31 Phase Contract | 21 assertions @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-37-m31-phase-contract-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Prepare evidence
+        run: |
+          set -euo pipefail
+          printf '%s\n' "FRP37_EVIDENCE=$RUNNER_TEMP/frp-37-evidence" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install pinned verification tools
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python -m pip install --disable-pip-version-check --only-binary=:all: \
+            --timeout 30 --retries 3 yowasp-yosys==0.68.0.0.post1208 \
+            z3-solver==5.1.0.0 verilator==5.48.0
+      - name: Prove, replay and challenge the complete contract
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          from pathlib import Path
+          import os, json
+          E=Path(os.environ['FRP37_EVIDENCE']).resolve()
+          report={'status':'FAIL','contract_proven':False}
+          try:
+              from pathlib import Path
+              import os, re, sys, json, hashlib, shutil, subprocess, textwrap, time, math, random
+              import z3
+              R=Path.cwd().resolve(); E=Path(os.environ['FRP37_EVIDENCE']).resolve()
+              assert not E.exists(), 'Evidence directory must be fresh'
+              E.mkdir(parents=True)
+              C='frp_m31_phase_interference'; N=C+'_netlist'; TOP=C+'_contract_formal'
+              CORE='rtl/m31/'+C+'.sv'; HARNESS='formal/m31/'+TOP+'.sv'
+              WORKFLOW='.github/workflows/frp-37-m31-phase-interference-contract-formal.yml'
+              BASE='.github/workflows/frp-36-m31-phase-interference-equivalence.yml'
+              Z3=shutil.which('z3'); assert Z3
+              report=dict(status='FAIL',commit=os.environ['GITHUB_SHA'],contract_proven=False,
+                          full_m32_proof=False,physical_timing=False,commands=[])
+              def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+              def save(name,value):(E/name).write_text(json.dumps(value,indent=2,sort_keys=True)+'\n')
+              def run(label,args,timeout=900,neg=False,cwd=None):
+                  print('START',label,flush=True);p=E/(label+'.log');assert not p.exists()
+                  entry=dict(label=label,argv=[str(a) for a in args]);report['commands'].append(entry)
+                  started=time.monotonic()
+                  with p.open('wb') as stream:
+                      result=subprocess.run(args,cwd=cwd or VIEW,stdout=stream,stderr=subprocess.STDOUT,timeout=timeout)
+                  entry.update(returncode=result.returncode,seconds=round(time.monotonic()-started,3))
+                  assert neg or result.returncode==0, label+': '+p.read_text()[-2000:]
+                  return result.returncode,p
+              def yosys(label,script,cwd):
+                  p=E/(label+'.ys');p.write_text(script+'\n')
+                  return run(label,['yowasp-yosys','-Q','-T','-s',str(p)],cwd=cwd)
+              def fun(source,name):
+                  candidates=re.findall(r'  function automatic\b[\s\S]*?  endfunction',source)
+                  hits=[f for f in candidates if re.search(r'\b'+name+r'\s*\(',f.split(';',1)[0])]
+                  assert len(hits)==1,name
+                  return hits[0]
+              assert sys.flags.optimize==0
+              assert sha(R/HARNESS)=='45296e7ce71423f9fada1ba239e8661e5b1878d0a1edf6383f465a932733dc33'
+              assert sha(R/BASE)=='b4ab4f4a5868088d2198722975db5b3af9bea88b02046a30bd2a586f714ac1b3'
+              original_harness=(R/HARNESS).read_text(); workflow_sha=sha(R/WORKFLOW)
+              # Execute the source-pinned qualification engine from workflow 36 on THIS
+              # checkout. No workflow dispatch, remote result, cached PASS or network fetch.
+              base=(R/BASE).read_text()
+              base_program=textwrap.dedent(base.split("          python - <<'PY'\n",1)[1].split('\n          PY',1)[0])
+              os.environ['M31_PHASE_EQ_EVIDENCE']=str(E/'rtl-netlist')
+              base_scope={'__name__':'__main__'}
+              exec(compile(base_program,BASE,'exec'),base_scope)
+              assert base_scope['report']['status']=='PASS' and len(base_scope['report']['proofs'])==44
+              report['rtl_netlist_proven']=True
+              V=E/'proof-inputs'; VIEW=V
+              sources=[CORE,HARNESS,'rtl/m31/frp_m31_pkg.sv','rtl/m31/frp_m31_fixed_point_pkg.sv','rtl/m31/frp_m31_sin_q30.mem']
+              source_hashes={rel:sha(R/rel) for rel in sources}
+              for rel in sources:
+                  p=V/rel;p.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(R/rel,p)
+              core=(V/CORE).read_text();pattern=r'    if \(sin_lut[^\n]+\)\n      \$fatal\([^;\n]+\);\n'
+              assert len(re.findall(pattern,core))==4
+              (V/CORE).write_text(re.sub(pattern,'',core))
+              net=E/'word-netlist.v';shutil.copyfile(base_scope['net'],net)
+              assert sha(net)=='ef0bada6b971b3a7ac938603bb844f9a021e32a85d3a2ff7cc8b3fff0ca98f1a'
+              # Preserve and parse the exact committed contract for both implementations.
+              for variant in ('rtl','netlist'):
+                  out=E/(variant+'-original.json')
+                  pre=f'read_verilog -icells "{net}"; ' if variant=='netlist' else ''
+                  macro='-D FRP_M31_PHASE_CONTRACT_NETLIST ' if variant=='netlist' else ''
+                  yosys(variant+'-original',pre+f'read_slang -j 1 --std 1800-2017 --top {TOP} {macro}-Irtl/m31 {HARNESS}; proc; opt_clean; write_json "{out}";',V)
+                  checks=[c['parameters']['FLAVOR'] for c in json.loads(out.read_text())['modules'][TOP]['cells'].values() if c['type']=='$check']
+                  assert checks.count('assert')==21 and checks.count('assume')==1 and len(checks)==22
+
+              class Model:
+                  def __init__(self, path, top, out, z3):
+                      self.top,self.out,self.z3=top,Path(out),z3
+                      self.defs={};self.order=[];self.replace={};self.constants={};self.constraints=[];self.results={}
+                      acc=[];depth=0
+                      for line in Path(path).read_text().splitlines():
+                          if line.startswith(('(declare-','(define-')):
+                              assert not acc;acc=[line]
+                          elif acc:acc.append(line)
+                          else:continue
+                          code=re.sub(r'\|[^|]*\|','symbol',line.split(';')[0]);depth+=code.count('(')-code.count(')')
+                          if not depth:
+                              text='\n'.join(acc);name=re.match(r'\((?:declare|define)-\S+ \|([^|]+)\|',text)[1]
+                              self.defs[name]=text;self.order.append(name);acc=[]
+                      assert not acc
+                  def n(self,name,state='s'):
+                      assert self.top+'_n '+name in self.defs,name
+                      return f'(|{self.top}_n {name}| {state})'
+                  def raw(self,name,state='s'):return f'(|{name}| {state})'
+                  def dependencies(self,expression):
+                      need=set();todo=re.findall(r'\|([^|]+)\|',expression)
+                      while todo:
+                          name=todo.pop()
+                          if name in need:continue
+                          assert name in self.defs,name
+                          need.add(name)
+                          if name not in self.replace:todo.extend(set(re.findall(r'\|([^|]+)\|',self.defs[name]))-need)
+                      return need
+                  def text(self,expression,constraints=(),timeout=60000):
+                      assumptions=self.constraints+list(constraints)
+                      need=self.dependencies(expression+' '.join(assumptions))
+                      return f'(set-option :timeout {timeout})\n'+'\n'.join(f'(declare-fun |{n}| () {t})' for n,t in self.constants.items())+'\n'+'\n'.join(self.replace.get(n,self.defs[n]) for n in self.order if n in need)+f'\n(declare-fun s () |{self.top}_s|)\n(declare-fun t () |{self.top}_s|)\n'+'\n'.join('(assert '+c+')' for c in assumptions)+f'\n(assert {expression})\n(check-sat)\n'
+                  def check(self,name,expression,constraints=(),timeout=60000):
+                      p=self.out/(name+'.smt2');p.write_text(self.text(expression,constraints,timeout))
+                      start=time.monotonic();print('PROVE',name,flush=True)
+                      r=subprocess.run([self.z3,str(p)],capture_output=True,text=True,timeout=timeout/1000+20)
+                      (self.out/(name+'.log')).write_text(r.stdout+r.stderr)
+                      self.results[name]={'result':r.stdout.strip(),'seconds':round(time.monotonic()-start,3)}
+                      print(name,self.results[name],flush=True)
+                      return r.returncode==0 and r.stdout.strip()=='unsat'
+                  def abstract(self,raw,width,label):
+                      assert raw not in self.replace,raw
+                      self.constants[label]=f'(_ BitVec {width})'
+                      self.replace[raw]=f'(define-fun |{raw}| ((state |{self.top}_s|)) (_ BitVec {width}) |{label}|)'
+
+              def sexpr(text):
+                  tokens=iter(re.findall(r'\|[^|]*\||[()]|[^()\s]+',text.split(';')[0]))
+                  def one(t):
+                      if t!='(':return t
+                      out=[]
+                      for t in tokens:
+                          if t==')':return out
+                          out.append(one(t))
+                      raise RuntimeError('Unclosed SMT expression')
+                  result=one(next(tokens));assert next(tokens,None) is None;return result
+
+              HV=E/'helpers';HV.mkdir()
+              text=(R/'formal/m31/frp_m31_phase_interference_contract_formal.sv').read_text()
+              pkg=text[text.index('package frp_m31_phase_contract_pkg;'):text.index('endpackage')+10]
+              s='`include "frp_m31_fixed_point_pkg.sv"\n'+pkg+'\nmodule lemmas(input logic signed [63:0] x,input logic signed [31:0] velocity,output logic [31:0] sat_a,sat_b,phase_a,phase_b,\n'
+              s+=',\n'.join('output logic [63:0] ra'+str(k)+',rb'+str(k) for k in [1,2,3,14,16,30])+');\n'
+              s+='assign sat_a=frp_m31_fixed_point_pkg::frp_m31_sat_s32(x);\nassign sat_b=frp_m31_phase_contract_pkg::clip_s32(x);\nassign phase_a=frp_m31_fixed_point_pkg::frp_m31_velocity_to_phase_word(velocity);\nassign phase_b=frp_m31_phase_contract_pkg::phase_increment(velocity);\n'
+              for k in [1,2,3,14,16,30]:s+=f'assign ra{k}=frp_m31_fixed_point_pkg::frp_m31_round_shift_s64(x,{k});\nassign rb{k}=frp_m31_phase_contract_pkg::round_pow2(x,{k});\n'
+              s+='endmodule\n';(HV/'lemmas.sv').write_text(s)
+              script=f'read_slang -j 1 --std 1800-2017 --top lemmas -I{R}/rtl/m31 lemmas.sv; proc; opt -full; wreduce; opt_clean; check -assert; write_smt2 -wires "{E}/helpers.smt2"; write_json "{E}/helpers.json";'
+              yosys('helpers-export',script,HV)
+              m=Model(E/'helpers.smt2','lemmas',E,Z3)
+              assert m.check('saturation_64',f'(not (= {m.n("sat_a")} {m.n("sat_b")}))')
+              for k in [1,2,3,14,16,30]:
+                  assert m.check(f'round_{k}',f'(not (= {m.n("ra"+str(k))} {m.n("rb"+str(k))}))',[f'(bvsge {m.n("x")} #xc000000000000000)',f'(bvsle {m.n("x")} #x4000000000000000)'])
+              # Both phase-conversion products use the same signed extension and constant.
+              products=[n for n,d in m.defs.items() if '(bvmul ' in d];print('PRODUCTS',[(n,sexpr(m.defs[n])[3]) for n in products],flush=True)
+              assert len(products)==1 and sexpr(m.defs[products[0]])[3]==['_','BitVec','79']
+              hm=json.loads((E/'helpers.json').read_text())['modules']['lemmas']
+              hmul=[c for c in hm['cells'].values() if c['type']=='$mul'];assert len(hmul)==1
+              hc=hmul[0]['connections'];hp=hmul[0]['parameters']
+              assert hc['A']==hm['ports']['velocity']['bits'] and len(hc['Y'])==79
+              assert all(int(hp[p],2)==1 for p in ('A_SIGNED','B_SIGNED'))
+              assert set(hc['B'])<={'0','1'} and hc['B'][-1]=='0'
+              assert int(''.join(hc['B'][::-1]),2)==44798133900177
+              m.abstract(products[0],79,'phase_product')
+              assert (1<<31)*44798133900177 < (1<<77)
+              assert m.check('phase_increment_32',f'(not (= {m.n("phase_a")} {m.n("phase_b")}))',[f'(bvsge {m.raw(products[0])} (_ bv{(1<<79)-(1<<77)} 79))',f'(bvsle {m.raw(products[0])} (_ bv{1<<77} 79))'])
+              (E/'helper-proofs.json').write_text(json.dumps(m.results,indent=2)+'\n')
+
+              # Source-locked mathematical lifting of the two literal loops. At bit k,
+              # DUT root = r * 2**(k+1); reference root = r and remainder = t.
+              # The processed input prefix is r*r+t, with 0 <= t <= 2*r.
+              # Bounds below prove that every SV shift, product and subtraction is exact
+              # in its declared 32/64/66-bit width; this is not a sampled root test.
+              r,t,d,low,n=z3.Ints('root remainder digit low radicand')
+              records={}
+              save('root-source-binding.json',{
+                  'dut':dict(source=CORE,function='isqrt_u64',sha256=hashlib.sha256(fun(core,'isqrt_u64').encode()).hexdigest()),
+                  'reference':dict(source=HARNESS,function='root_u64',sha256=hashlib.sha256(fun(original_harness,'root_u64').encode()).hexdigest()),
+                  'method':'Integer loop induction with exact finite-width bounds; source identities are mandatory.'})
+              def lemma(name,premise,goal,expected=z3.unsat):
+                  solver=z3.Solver();solver.set(timeout=30000);solver.add(premise,z3.Not(goal))
+                  (E/(name+'.smt2')).write_text(solver.to_smt2())
+                  result=solver.check();(E/(name+'.log')).write_text(str(result)+'\n')
+                  assert result==expected,(name,result)
+                  records[name]=str(result)
+              lemma('root_initial_prefix',z3.And(n>=0,n<2**64),n/2**64==0)
+              for k in range(31,-1,-1):
+                  factor=4**k;prefix=r*r+t
+                  rmax=2**(31-k)-1
+                  assert (4*(rmax*rmax+2*rmax)+3)*factor+factor-1==2**64-1
+                  assert ((2*rmax+1)*2**k)**2 < 2**64
+                  radicand=(4*prefix+d)*factor+low
+                  trial=(2*r+1)*2**k
+                  difference=z3.simplify(radicand-trial*trial,som=True)
+                  choose=4*t+d>=4*r+1
+                  premise=z3.And(r>=0,r<2**(31-k),t>=0,t<=2*r,d>=0,d<4,low>=0,low<factor)
+                  goal=[(difference>=0)==choose,trial>=0,trial<2**32,
+                        4*t+d>=0,4*t+d<2**66,4*r+1<2**66]
+                  for take in (0,1):
+                      rr=2*r+take;tt=4*t+d-take*(4*r+1)
+                      # Expand the polynomial identity before solving; no multiplication
+                      # is silently approximated by a free value.
+                      residual=z3.simplify(4*prefix+d-(rr*rr+tt),som=True)
+                      goal.append(z3.Implies(choose if take else z3.Not(choose),
+                          z3.And(residual==0,rr>=0,rr<2**(32-k),tt>=0,tt<=2*rr)))
+                  lemma(f'root_digit_{k:02d}',premise,z3.And(*goal))
+                  # The OR in the trial-square implementation equals addition because
+                  # the retained root has k+1 zero low bits. Check the actual BV widths.
+                  b=z3.BitVec('prefix_bits',32)
+                  bv=z3.Solver();bv.set(timeout=30000)
+                  bv.add(z3.ULT(b,z3.BitVecVal(2**(31-k),32)),
+                         ((b << (k+1)) | z3.BitVecVal(1<<k,32)) != ((b << (k+1))+z3.BitVecVal(1<<k,32)))
+                  (E/f'root_or_{k:02d}.smt2').write_text(bv.to_smt2())
+                  answer=bv.check();assert answer==z3.unsat
+                  (E/f'root_or_{k:02d}.log').write_text(str(answer)+'\n');records[f'root_or_{k:02d}']=str(answer)
+              lemma('root_final_interval',z3.And(r>=0,r<2**32,t>=0,t<=2*r),
+                    z3.And(z3.simplify((r*r+t)-r*r,som=True)>=0,
+                           z3.simplify((r+1)*(r+1)-(r*r+t),som=True)>0))
+              # Fail the negative control if an incorrect restoring threshold is accepted.
+              lemma('root_threshold_negative',z3.And(r==0,t==0,d==1),
+                    (4*t+d>=4*r+2)==(4*t+d>=4*r+1),z3.sat)
+              (E/'root-proofs.json').write_text(json.dumps(records,indent=2)+'\n')
+              print('ROOT LEMMAS PASS',len(records),flush=True)
+
+              # Discharge rounding premises on the ORIGINAL arithmetic, before any
+              # equivalence replacement. Added assertions observe arguments only.
+              h=original_harness;f=fun(h,'round_pow2')
+              monitor="      assert (value >= -64'sd4611686018427387904 && value <= 64'sd4611686018427387904);"
+              f=f.replace('    begin\n','    begin\n'+monitor+'\n',1)
+              h=h.replace(fun(h,'round_pow2'),f)
+              domain_line=h[:h.index(monitor)].count('\n')+1
+              (V/HARNESS).write_text(h)
+              yosys('original-domains',f'read_slang -j 1 --std 1800-2017 --top {TOP} -Irtl/m31 {HARNESS}; proc; memory_share; memory_collect; async2sync; opt -full; wreduce; opt_clean; write_json "{E}/original-domains.json";',V)
+
+              design=json.loads((E/'original-domains.json').read_text());top='frp_m31_phase_interference_contract_formal';model=design['modules'][top]
+              cells=model['cells'];drivers={}
+              for name,c in cells.items():
+                  for port,direction in c['port_directions'].items():
+                      if direction=='output':
+                          key=tuple(c['connections'][port]);assert key not in drivers
+                          drivers[key]=(name,c)
+              def interval(bits,signed,env=None,seen=()):
+                  env={} if env is None else env
+                  w=len(bits);weights={};fixed=0
+                  for i,b in enumerate(bits):
+                      weight=-(1<<i) if signed and i==w-1 else 1<<i
+                      b=str(env[b]) if b in env else b
+                      if b in ('0','1'):fixed+=int(b)*weight
+                      else:assert isinstance(b,int);weights[b]=weights.get(b,0)+weight
+                  broad=(fixed+sum(min(0,x) for x in weights.values()),fixed+sum(max(0,x) for x in weights.values()))
+                  if broad[0]>=-(1<<62) and broad[1]<=(1<<62):return broad
+                  key=tuple(bits)
+                  if key not in drivers or key in seen:return broad
+                  name,c=drivers[key];p=c['parameters'];x=c['connections'];seen=seen+(key,)
+                  if c['type']=='$mux':
+                      assert len(x['S'])==1
+                      branches=[]
+                      for v,port in [(0,'A'),(1,'B')]:
+                          s=x['S'][0]
+                          if s in ('0','1') and int(s)!=v:continue
+                          if s in env and env[s]!=v:continue
+                          local=dict(env)
+                          if isinstance(s,int):local[s]=v
+                          branches.append(interval(x[port],signed,local,seen))
+                      return min(b[0] for b in branches),max(b[1] for b in branches)
+                  if c['type'] not in ('$mul','$neg'):return broad
+                  native=bool(int(p['A_SIGNED'],2))
+                  if c['type']=='$mul':native=native and bool(int(p['B_SIGNED'],2))
+                  a=interval(x['A'],native,env,seen)
+                  if c['type']=='$neg':candidate=(-a[1],-a[0])
+                  else:
+                      b=interval(x['B'],native,env,seen);values=[i*j for i in a for j in b];candidate=(min(values),max(values))
+                  low=-(1<<(w-1)) if signed else 0;high=(1<<(w-int(signed)))-1
+                  if low<=candidate[0]<=candidate[1]<=high:
+                      return max(broad[0],candidate[0]),min(broad[1],candidate[1])
+                  return broad
+              def constant(bits,signed):
+                  assert set(bits)<={'0','1'}
+                  x=sum(int(v)<<i for i,v in enumerate(bits))
+                  return x-(1<<len(bits)) if signed and bits[-1]=='1' else x
+              domain_report={};remove=[]
+              for name,c in cells.items():
+                  if c['type']!='$assert' or not c['attributes'].get('src','').startswith(HARNESS+':'+str(domain_line)+'.'):continue
+                  assert c['connections']['EN']==['1']
+                  n,gate=drivers[tuple(c['connections']['A'])];assert gate['type']=='$logic_and'
+                  bounds=[]
+                  for port,op,limit in [('A','$ge',-(1<<62)),('B','$le',1<<62)]:
+                      gn,compare=drivers[tuple(gate['connections'][port])]
+                      assert compare['type']==op
+                      assert all(int(compare['parameters'][s],2)==1 for s in ('A_SIGNED','B_SIGNED'))
+                      assert constant(compare['connections']['B'],True)==limit
+                      bound=interval(compare['connections']['A'],True)
+                      assert (bound[0]>=limit if op=='$ge' else bound[1]<=limit),(name,op,bound)
+                      bounds.append(bound)
+                  domain_report[name]=bounds;remove.append(name)
+              assert len(remove)==161,len(remove)
+              for name in remove:del cells[name]
+              assert sum(c['type']=='$assert' for c in cells.values())==21
+              (E/'rounding-domains.json').write_text(json.dumps(domain_report,indent=2)+'\n')
+              (E/'domains-closed.json').write_text(json.dumps(design)+'\n')
+              print('DOMAIN PASS',len(domain_report),flush=True)
+
+              # Congruence replacement in a separate proof view only. Each changed
+              # helper has its own closed lemma; original sources and replay stay intact.
+              h=original_harness
+              for name,args,typ,expr in [
+               ('round_pow2','input wide_t value, input int shift','wide_t','frp_m31_fixed_point_pkg::frp_m31_round_shift_s64(value, shift)'),
+               ('clip_s32','input wide_t value','logic signed [31:0]','frp_m31_fixed_point_pkg::frp_m31_sat_s32(value)'),
+               ('phase_increment','input logic signed [31:0] velocity','logic [31:0]','frp_m31_fixed_point_pkg::frp_m31_velocity_to_phase_word(velocity)')]:
+                  h=h.replace(fun(h,name),f'  function automatic {typ} {name}({args});\n    return {expr};\n  endfunction')
+              h=h.replace(fun(h,'root_u64'),fun(core,'isqrt_u64').replace('isqrt_u64','root_u64').replace('radicand','value'))
+              (V/HARNESS).write_text(h)
+              yosys('lemma-reduced-model',f'read_slang -j 1 --std 1800-2017 --top {TOP} -Irtl/m31 {HARNESS}; proc; memory_share; memory_collect; async2sync; opt -full; wreduce; opt_clean; write_json "{E}/model.json"; dffunmap; check -assert; write_smt2 -wires "{E}/model.smt2";',V)
+
+              C=TOP
+              m=Model(E/'model.smt2',C,E,Z3)
+              model=json.loads((E/'model.json').read_text())['modules'][C]
+              assert sum(c['type']=='$assert' for c in model['cells'].values())==21
+              memories=[c for c in model['cells'].values() if c['type']=='$mem_v2'];assert len(memories)==2
+              words=[int(w,16) for w in (R/'rtl/m31/frp_m31_sin_q30.mem').read_text().split()]
+              for memory in memories:
+                  p=memory['parameters'];assert int(p['WR_PORTS'],2)==0 and int(p['RD_CLK_ENABLE'],2)==0
+                  assert int(p['SIZE'],2)==4096 and int(p['WIDTH'],2)==32
+                  assert len(p['INIT'])==131072 and set(p['INIT'])<={'0','1'}
+                  assert [int(p['INIT'][-32*(i+1):131072-32*i],2) for i in range(4096)]==words
+              arrays=[n for n,d in m.defs.items() if d.startswith('(declare-fun') and '(Array' in d]
+              assert len(arrays)==2
+              m.constants['rom']='(Array (_ BitVec 12) (_ BitVec 32))'
+              for n in arrays:m.replace[n]=f'(define-fun |{n}| ((state |{C}_s|)) (Array (_ BitVec 12) (_ BitVec 32)) |rom|)'
+              cells=json.loads((E/'model.json').read_text())['modules'][C]['cells']
+              selfmul={tuple(c['connections']['Y']):(n,c) for n,c in cells.items() if c['type']=='$mul' and c['connections']['A']==c['connections']['B']}
+              sq=sorted([n for n,c in cells.items() if c['type']=='$add' and tuple(c['connections']['A']) in selfmul and tuple(c['connections']['B']) in selfmul],key=lambda n:int(n[1:]))
+              assert len(sq)==14
+              for i,(a,b) in enumerate(zip(sq[:7],sq[7:])):
+                  raws=[]
+                  for cell in (a,b):
+                      raw=[n for n,d in m.defs.items() if d.endswith('; '+cell+'y')];assert len(raw)==1
+                      raws.append(raw[0])
+                  def operands(raw):
+                      tree=sexpr(m.defs[raw]);assert tree[4][0]=='bvadd'
+                      return [x[0][1:-1] for x in tree[4][1:]]
+                  for j,(ma,mb) in enumerate(zip(operands(raws[0]),operands(raws[1]))):
+                      args=[]
+                      for name in (ma,mb):
+                          tree=sexpr(m.defs[name]);assert tree[4][0]=='bvmul' and tree[4][1]==tree[4][2]
+                          args.append(tree[4][1][0][1:-1])
+                      assert m.check(f'mean_{i}_{j}',f'(not (= {m.raw(args[0])} {m.raw(args[1])}))')
+                      for raw in args:m.abstract(raw,64,f'mean_{i}_{j}')
+                  assert m.check(f'radicand_{i}',f'(not (= {m.raw(raws[0])} {m.raw(raws[1])}))')
+                  for raw in raws:m.abstract(raw,64,f'radicand_{i}')
+              for bit in [3,4,2,5,6,7,8]:
+                  assert m.check('field_'+str(bit),f'(= ((_ extract {bit} {bit}) {m.n("mismatch")}) #b1)'),bit
+
+              def chunks(node):
+                  if node[0]=='concat':return chunks(node[2])+chunks(node[1])
+                  assert len(node)==2 and node[1]=='state',node
+                  raw=node[0][1:-1];assert sexpr(m.defs[raw])[3]==['_','BitVec','32']
+                  return [raw]
+              def ordered(name):
+                  bank=name.split('.')[1].split('_')[0]
+                  q=chunks(sexpr(m.defs[C+'_n dut.'+bank+'_q'])[4])
+                  public=chunks(sexpr(m.defs[C+'_n dut.'+('phase_word_q' if bank=='phase' else 'frequency_current_q16')])[4])
+                  d=chunks(sexpr(m.defs[C+'_n '+name])[4]);assert len(q)==len(public)==len(d)==8
+                  return [d[q.index(x)] for x in public]
+              def concat(raws):
+                  x=m.raw(raws[0])
+                  for raw in raws[1:]:x=f'(concat {m.raw(raw)} {x})'
+                  return x
+              def product_cuts(left,right,constant,prefix):
+                  scales={n for n,d in m.defs.items() if '(bvmul ' in d and any(int(v,2)==constant for v in re.findall(r'#b([01]+)',d))}
+                  used=set()
+                  for i,(a,b) in enumerate(zip(left,right)):
+                      chosen=[];args=[]
+                      for raw in (a,b):
+                          hits=m.dependencies(m.raw(raw)) & scales;assert len(hits)==1,(prefix,i,hits)
+                          product=hits.pop();chosen.append(product);used.add(product)
+                          refs=set(re.findall(r'\|([^|]+)\|',m.defs[product]))-{product,C+'_s'};assert len(refs)==1
+                          args.append(refs.pop())
+                      width=int(sexpr(m.defs[args[0]])[3][2]);assert sexpr(m.defs[args[1]])[3]==['_','BitVec',str(width)]
+                      assert m.check(f'{prefix}_argument_{i}',f'(not (= {m.raw(args[0])} {m.raw(args[1])}))')
+                      for raw in set(args):m.abstract(raw,width,f'{prefix}_argument_{i}')
+                      width=int(sexpr(m.defs[chosen[0]])[3][2]);assert sexpr(m.defs[chosen[1]])[3]==['_','BitVec',str(width)]
+                      assert m.check(f'{prefix}_product_{i}',f'(not (= {m.raw(chosen[0])} {m.raw(chosen[1])}))')
+                      for raw in set(chosen):m.abstract(raw,width,f'{prefix}_product_{i}')
+                  assert used==scales,(prefix,len(used),len(scales))
+              product_cuts(ordered('dut.frequency_d'),chunks(sexpr(m.defs[C+'_n next_frequency'])[4]),19661,'frequency')
+              assert m.check('next_frequency',f'(not (= {concat(ordered("dut.frequency_d"))} {m.n("next_frequency")}))')
+              for i,(a,b) in enumerate(zip(ordered('dut.frequency_d'),chunks(sexpr(m.defs[C+'_n next_frequency'])[4]))):
+                  for raw in (a,b):m.abstract(raw,32,f'frequency_d_{i}')
+              product_cuts(ordered('dut.phase_d'),chunks(sexpr(m.defs[C+'_n next_phase'])[4]),44798133900177,'phase')
+              assert m.check('next_phase',f'(not (= {concat(ordered("dut.phase_d"))} {m.n("next_phase")}))')
+              for i,(a,b) in enumerate(zip(ordered('dut.phase_d'),chunks(sexpr(m.defs[C+'_n next_phase'])[4]))):
+                  for raw in (a,b):m.abstract(raw,32,f'phase_d_{i}')
+              def inv(s):return f'(= ((_ extract 1 0) {m.n("mismatch",s)}) #b00)'
+              assert m.check('reset_base',f'(and (not {m.n("rst_n")}) (not {inv("s")}))')
+              assert m.check('state_induction',f'(not {inv("t")})',[inv('s'),f'(|{C}_t| s t)'])
+              assert m.check('all_21_assertions',f'(not (|{C}_a| s))',[inv('s')])
+              (E/'proofs.json').write_text(json.dumps(m.results,indent=2)+'\n')
+
+              CORE_NAME='frp_m31_phase_interference'
+              N=CORE_NAME+'_netlist';TOP=CORE_NAME+'_contract_formal'
+              VIEW=E/'simulation';BUILD=E.parent/(E.name+'-contract-build');BUILD.mkdir()
+              for rel in sources:
+                  p=VIEW/rel;p.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(R/rel,p)
+              workflow=(R/'.github/workflows/frp-36-m31-phase-interference-equivalence.yml').read_text()
+              program=textwrap.dedent(workflow.split("          python - <<'PY'\n",1)[1].split('\n          PY',1)[0])
+              block=textwrap.dedent(program[program.index('    MASK=(1<<32)-1'):program.index('    rng=random.Random')])
+              exec(block,globals())
+              FIELDS=[['phase_word_q',256],['frequency_current_q16',256],['coupling_field_q16',256],['phase_projection_q30',256],['phase_target',16],['pair_coherence_q30',32],['cluster_coherence_q30',32],['global_coherence_q30',32],['organization_dispersion_q30',32]]
+              INPUT_PORTS=[['clk',1],['rst_n',1],['tick_enable',1],['load_valid',1],['phase_load',256],['frequency_load_q16',256],['gamma_effective_word',256],['thermal_node_factor_q30',256],['retained_state',16],['switch_activity',8],['scheduler_state',3]]
+              INPUTS=INPUT_PORTS[1:]
+              vectors_block=textwrap.dedent(program[program.index('    rng=random.Random'):program.index("    item();(E/'simulation-vectors.json')")])
+              exec(vectors_block,globals())
+              # Explicit coherence geometries, positive/negative wraps, signed thermal rails.
+              for phases,freq in [([0]*8,[65536]*8),([i<<29 for i in range(8)],[65536]*8),([0]*4+[0,1<<30,1<<31,3<<30],[65536]*8),([0xfffffff0]*8,[65536]*8),([0]*8,[-65536]*8)]:
+               item(load_valid=1,phase_load=packed(phases),frequency_load_q16=packed(freq));item(tick_enable=1,thermal_node_factor_q30=0);item()
+              item(load_valid=1,phase_load=pbank);item(thermal_node_factor_q30=packed([0x80000000,0x7fffffff]+[1<<30]*6));item()
+              # Continuous state evolution and changing thermal/gamma controls.
+              for k in range(768):
+               item(tick_enable=1,load_valid=int(k%97==0),phase_load=rng.getrandbits(256),frequency_load_q16=rng.getrandbits(256),gamma_effective_word=rng.getrandbits(256),thermal_node_factor_q30=rng.getrandbits(256),retained_state=rng.getrandbits(16),switch_activity=rng.getrandbits(8),scheduler_state=k%8)
+              item()
+              (E/'vectors.json').write_text(json.dumps(vectors,indent=2)+'\n')
+              (VIEW/'vectors.mem').write_text(''.join(f'{pack(v,INPUTS):0264x}\n' for v in vectors))
+              I=dict(INPUT_PORTS);F=dict(FIELDS)
+              raw=net.read_text().replace('module '+N+'(','module '+N+'_original(')
+              wrapper='module '+N+' (\n'+',\n'.join(['input wire '+(f'[{w-1}:0] ' if w>1 else '')+n for n,w in I.items()]+[f'output wire [{w-1}:0] '+n for n,w in F.items()])+'\n);\n'
+              wrapper+='integer source_kind=0, fault=0; initial begin void\'($value$plusargs("source=%d",source_kind)); void\'($value$plusargs("fault=%d",fault)); end\n'
+              for prefix in ('r_','n_'):
+               for name,width in F.items():wrapper+=f'wire [{width-1}:0] {prefix}{name};\n'
+              for core,prefix in ((CORE_NAME,'r_'),(N+'_original','n_')):
+               cons=[]
+               for name in I:
+                expression=name
+                if name=='gamma_effective_word':expression="(fault == 10 ? 256'd0 : gamma_effective_word)"
+                if name=='load_valid':expression='(load_valid && (fault != 11 || tick_enable))'
+                if name=='thermal_node_factor_q30':expression="(fault == 12 ? 256'd0 : thermal_node_factor_q30)"
+                if name=='scheduler_state':expression="(fault == 13 ? 3'd0 : scheduler_state)"
+                if name=='frequency_load_q16':expression="(frequency_load_q16 ^ (fault == 14 ? 256'h80000000 : 256'd0))"
+                if core==CORE_NAME and name=='scheduler_state':expression="frp_m31_pkg::frp_m31_scheduler_state_e'("+expression+')'
+                cons.append(f'.{name}({expression})')
+               cons += [f'.{name}({prefix}{name})' for name in F]
+               wrapper+=core+' '+prefix+'dut ('+', '.join(cons)+');\n'
+              for k,(n,w) in enumerate(F.items()):wrapper+=f"assign {n} = (source_kind == 0 ? r_{n} : n_{n}) ^ (fault == {k+1} ? {w}'h1 : {w}'h0);\n"
+              wrapper+='endmodule\n';(E/'selected-dut.v').write_text('`include "frp_m31_phase_interference.sv"\n'+raw+'\n'+wrapper)
+              s='`timescale 1ns/1ps\n`define FRP_M31_PHASE_CONTRACT_NETLIST\n`include "frp_m31_phase_interference_contract_formal.sv"\nmodule tb;\nlogic clk=0;\n'
+              for n,w in INPUTS:s+='logic '+(f'[{w-1}:0] ' if w>1 else '')+n+'=0;\n'
+              s+='wire [1167:0] observed_outputs, expected_outputs; wire [8:0] mismatch; wire [23:0] reach;\n'+TOP+' dut (.*);\n'
+              s+=f'logic [1053:0] vectors[0:{len(vectors)-1}]; initial begin $readmemh("vectors.mem",vectors); for(int i=0;i<{len(vectors)};i++) begin clk=0; '+ '{'+','.join(n for n,w in INPUTS)+'}=vectors[i]; #1; $display("FRP_PHASE %0d %h %h %h %h %h", i,vectors[i],observed_outputs,expected_outputs,mismatch,reach); if(i>0 && mismatch!=0) $fatal(1,"CONTRACT_MISMATCH %h",mismatch); clk=1; #1; end $display("DONE_CONTRACT"); $finish; end\nendmodule\n'
+              (VIEW/'tb.sv').write_text(s)
+              exe=BUILD/'obj/Vtb'
+              assert not exe.exists()
+              if True:
+               run('compile',['verilator','--binary','--sv','--timing','--no-assert','-Wno-fatal','-CFLAGS','-std=c++20 -O2','-MAKEFLAGS','VK_PCH_I_FAST=','-MAKEFLAGS','VK_PCH_I_SLOW=','--build-jobs','2','--output-split','10000','--top-module','tb','--Mdir',str(BUILD/'obj'),'-Irtl/m31','-Iformal/m31',str(E/'selected-dut.v'),'tb.sv'],timeout=1200)
+              results={}
+              for source_kind in range(2):
+               code,p=run('simulation-'+str(source_kind),[str(exe),f'+source={source_kind}'])
+               lines=[x.split() for x in p.read_text().splitlines() if x.startswith('FRP_PHASE ')]
+               assert len(lines)==len(vectors) and 'DONE_CONTRACT' in p.read_text()
+               state=reset();coverage=0
+               for i,tokens in enumerate(lines):
+                w=unpack(int(tokens[2],16),INPUTS);assert w==vectors[i]
+                if not w['rst_n']:state=reset()
+                wanted=outputs(state,w);actual=unpack(int(tokens[3],16),FIELDS);expected=unpack(int(tokens[4],16),FIELDS)
+                if i:assert actual==expected==wanted,(i,{n:(actual[n],expected[n],wanted[n]) for n in wanted if actual[n]!=wanted[n] or expected[n]!=wanted[n]})
+                coverage|=int(tokens[6],16);state=advance(state,w,wanted)
+               assert coverage==0xffffff,hex(coverage)
+               results['rtl' if source_kind==0 else 'netlist']=dict(samples=len(lines),checked_samples=len(lines)-1,reach=f'{coverage:06x}')
+              for fault in range(1,15):
+               code,p=run('negative-'+str(fault),[str(exe),'+source=0',f'+fault={fault}'],neg=True)
+               assert code!=0 and 'CONTRACT_MISMATCH' in p.read_text() and 'DONE_CONTRACT' not in p.read_text()
+               lines=[x.split() for x in p.read_text().splitlines() if x.startswith('FRP_PHASE ')]
+               assert int(lines[-1][5],16)!=0
+               results['fault_'+str(fault)]=dict(status='REJECTED',sample=int(lines[-1][1]),mismatch=lines[-1][5])
+              (E/'results.json').write_text(json.dumps(results,indent=2)+'\n')
+              print(json.dumps(results,indent=2),flush=True)
+
+              assert all(sha(R/p)==v for p,v in source_hashes.items())
+              assert sha(R/WORKFLOW)==workflow_sha
+              assert not subprocess.check_output(['git','status','--porcelain'],text=True).strip()
+              report.update(status='PASS',contract_proven=True,assertions=21,public_output_bits=1168,
+                            retained_bits=512,rounding_domains=161,contract_queries=65,
+                            helper_queries=8,root_unsat_queries=66,root_negative='SAT_EXPECTED',
+                            replay=results,source_hashes=source_hashes)
+
+          except Exception as error:
+              report.update(status='FAIL',contract_proven=False,error=str(error))
+              raise
+          finally:
+              E.mkdir(parents=True,exist_ok=True)
+              (E/'result-37.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+              summary='\n'.join([
+                  '# M31 independent phase contract: '+report['status'],
+                  '', 'Commit: `'+os.environ['GITHUB_SHA']+'`', '',
+                  'PASS requires: fresh RTL/netlist equivalence, source-bound arithmetic lemmas,',
+                  'original-expression rounding bounds, reset base, state induction, all 21 assertions,',
+                  '24 witness bits and rejection of 14 deliberately injected faults.',
+                  'Restoring/trial-square root equivalence uses integer loop induction and exact width bounds.',
+                  'Other lemmas and the complete reduced miter use SMT exported from SystemVerilog.',
+                  'SAT, UNKNOWN, missing obligations and timeouts fail qualification.',
+                  'Replay uses the original contract and original RTL; immediate delta-cycle assertions',
+                  'are replaced only in simulation by an explicit settled mismatch fatal check.',
+                  'Scope: eight cells, sampled two-state semantics, 1168 public bits and 512 retained bits.',
+                  'No full M32, technology mapping, timing, physical resonance or language-percentage claim.', ''])
+              (E/'summary-37.md').write_text(summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream:stream.write(summary)
+          PY
+      - name: Retain all proof and replay evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-37-phase-contract-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.FRP37_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
