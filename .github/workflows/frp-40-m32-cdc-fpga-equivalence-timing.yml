@@ -79,6 +79,27 @@ jobs:
           def read(name):
               return json.loads((E/name).read_text())
 
+          def validate_wavejson(label):
+              path=E/(label+'.json')
+              data=json.loads(path.read_text())
+              require(isinstance(data,dict) and isinstance(data.get('signal'),list)
+                      and data['signal'], 'Invalid WaveJSON structure: '+label)
+              names=[]
+              for signal in data['signal']:
+                  require(isinstance(signal,dict), 'Invalid WaveJSON signal: '+label)
+                  name=signal.get('name');wave=signal.get('wave')
+                  require(isinstance(name,str) and name and isinstance(wave,str) and wave,
+                          'Invalid WaveJSON name/wave: '+label)
+                  require(not any(ord(c)<32 for c in name), 'Control character in signal name: '+label)
+                  require('data' not in signal or (isinstance(signal['data'],list)
+                          and all(isinstance(v,str) for v in signal['data'])), 'Invalid WaveJSON data: '+label)
+                  names.append(name)
+              require(len(names)==len(set(names)), 'Duplicate WaveJSON signal: '+label)
+              require({'trigger','in_fault','in_host_clk','in_core_clk'}<=set(names),
+                      'Missing WaveJSON proof signals: '+label)
+              report.setdefault('wavejson',{})[label]=dict(status='PASS',signals=len(names),
+                                                          sha256=sha(path.read_bytes()))
+
           def run(label, argv, negative=False):
               require(not (E/(label+'.log')).exists(), 'Repeated command '+label)
               start=time.monotonic()
@@ -174,7 +195,13 @@ jobs:
                   write(kind+'.json',dict(modules={kind:model}))
               # Deferred loading elaborates only the actual SB primitives used above.
               yosys('primitive-model',f'read_verilog -defer -D ICE40_HX +/ice40/cells_sim.v; read_json "{E}/gate.json"; hierarchy -check -top gate; proc; flatten; write_rtlil "{E}/gate.il"')
-              yosys('miter',f'read_rtlil "{E}/gate.il"; read_json "{E}/gold.json"; miter -equiv -make_outputs -make_outcmp -flatten gold gate check40; hierarchy -check -top check40; proc; flatten; clk2fflogic; opt_clean; check -assert; write_rtlil "{E}/miter.il"')
+              yosys('miter',f'read_rtlil "{E}/gate.il"; read_json "{E}/gold.json"; miter -equiv -make_outputs -make_outcmp -flatten gold gate check40; hierarchy -check -top check40; proc; flatten; clk2fflogic; opt_clean; check -assert; rename -enumerate -pattern frp40_trace_% ; write_json "{E}/miter-names.json"; write_rtlil "{E}/miter.il"')
+              # Yosys WaveJSON does not escape backslashes in private signal names.
+              # Rename private objects BEFORE solving; raw solver traces are never repaired.
+              # Ports keep their names, and rename does not alter logic or constraints.
+              named=read('miter-names.json')['modules']['check40']
+              require(all(re.fullmatch(r'[A-Za-z0-9_.$:\[\]-]+',n)
+                          for n in named['netnames']), 'Unsafe WaveJSON signal name')
               initial='-set-at 1 in_host_rst_n 0 -set-at 1 in_core_rst_n 0'
               def sat(label,options,negative=False):
                   return yosys(label,f'read_rtlil "{E}/miter.il"; sat -timeout 60 {initial} {options}',negative)
@@ -186,9 +213,12 @@ jobs:
                   label='fault-'+str(i)
                   log=sat(label,f'-seq 3 -set in_fault {i} -prove trigger 0 -verify -show-ports -dump_json "{E}/{label}.json"',True)
                   require('SAT proof finished - model found: FAIL!' in log, 'Missing expected counterexample '+n)
+                  validate_wavejson(label)
                   label='reach-'+str(i)
                   log=sat(label,f'-seq 20 -set in_fault 0 -set in_host_rst_n 1 -set in_core_rst_n 1 -set-at 20 gold_{n}[0] 1 -show-ports -dump_json "{E}/{label}.json"')
                   require('SAT solving finished - model found:' in log, 'Unreachable output '+n)
+                  validate_wavejson(label)
+              require(set(report['wavejson'])=={f'{k}-{i}' for k in ['fault','reach'] for i in range(1,13)}, 'Incomplete WaveJSON validation')
               report.update(fault_counterexamples=12,reachable_outputs=12)
               def place(label,sdc,negative=False):
                   argv=['yowasp-nextpnr-ice40','--hx8k','--package','ct256','--json',str(E/'mapped-a.json'),
@@ -221,6 +251,10 @@ jobs:
               report['warnings']={p.name:[l for l in p.read_text().splitlines() if 'Warning:' in l] for p in E.glob('*.log')}
               for p,h in PINS.items():require(sha((R/p).read_bytes())==h,'Source changed '+p)
               require(not subprocess.check_output(['git','status','--porcelain'],text=True).strip(), 'Checkout changed')
+              json_paths=sorted(E.rglob('*.json'))
+              for path in json_paths:
+                  json.loads(path.read_text())
+              report['json_files_validated']=len(json_paths)
               report['status']='PASS'
           except Exception as error:
               report['error']=str(error)
@@ -236,6 +270,7 @@ jobs:
                   'Independent clock histories; only initial host/core resets are constrained.',
                   'Two-state clk2fflogic semantics, including its asynchronous hold convention.',
                   '12 expected output counterexamples and 12 reachable-output witnesses.',
+                  'All 24 raw WaveJSON traces must parse and retain the required proof signals.',
                   'Two fresh HX8K-CT256 synthesis runs; repeated placement and routing with seed 1.',
                   'Host/core intra-clock constraints: 10 MHz / 8 MHz; negative timing control.',
                   'Automatic IO placement, unbound board pinout; independent-clock timing ignored.',
