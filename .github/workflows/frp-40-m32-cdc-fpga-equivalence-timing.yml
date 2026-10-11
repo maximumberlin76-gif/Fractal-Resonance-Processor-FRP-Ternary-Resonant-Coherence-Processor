@@ -1,0 +1,256 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist).
+# This workflow is proprietary and is governed by the repository license.
+# Referenced dependencies retain their own licenses.
+name: 40 - FRP M32 CDC Bridge FPGA Equivalence and Timing
+run-name: "40 - FRP CDC FPGA | RTL equivalence + routed timing @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-40-cdc-fpga-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  qualify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Prepare evidence location
+        run: |
+          set -euo pipefail
+          printf '%s\n' "FRP40_EVIDENCE=$RUNNER_TEMP/frp-40-evidence" >> "$GITHUB_ENV"
+      - name: Install pinned implementation tools
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            yowasp-yosys==0.68.0.0.post1208 \
+            yowasp-nextpnr-ice40==0.11.1.0.post826 \
+            yowasp-runtime==1.96 wasmtime==47.0.1
+      - name: Prove equivalence and qualify routed bridge implementation
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import os, sys, json, re, hashlib, subprocess, time, copy, collections
+          import importlib.metadata as metadata
+
+          R = Path.cwd().resolve()
+          E = Path(os.environ['FRP40_EVIDENCE']).resolve()
+          TOP = 'frp40_bridge'
+          PINS = {
+              'rtl/m23/frp_m23_csr_cdc_bridge.sv': 'f56e3d5c3d4c07ffb54bc0a4d2968be0bdb9fff37106826d854139da2f2f6078',
+              'fpga/m32_csr/frp_m32_csr_cdc_top.sv': '1bbd0b3303cf0d0e4720100cb98759f7beba53c9ebceec861d9d73692938d576',
+              'constraints/m26/frp_m26_ice40_hx8k_ct256.sdc': 'fb14c501f2f568301d2697304cc69c721293e8ee888dc25fe4ecc6ea984e0957',
+          }
+          BRIDGE, BINDING, SDC = PINS
+          report = dict(status='FAIL', commands=[], physical_measurements=False,
+                        full_m32_implementation=False, cdc_protocol_closure=False,
+                        board_pinout_bound=False, metastability_proven=False,
+                        cross_clock_timing_closed=False, io_timing_closed=False)
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def sha(data):
+              return hashlib.sha256(data).hexdigest()
+
+          def write(name, value):
+              (E/name).write_text(value if isinstance(value,str) else json.dumps(value,indent=2)+'\n')
+
+          def read(name):
+              return json.loads((E/name).read_text())
+
+          def run(label, argv, negative=False):
+              require(not (E/(label+'.log')).exists(), 'Repeated command '+label)
+              start=time.monotonic()
+              with (E/(label+'.log')).open('w') as stream:
+                  p=subprocess.run(argv,cwd=R,stdout=stream,stderr=subprocess.STDOUT,timeout=600)
+              report['commands'].append(dict(label=label,argv=argv,returncode=p.returncode,
+                                            seconds=round(time.monotonic()-start,3)))
+              log=(E/(label+'.log')).read_text()
+              require((p.returncode!=0) if negative else (p.returncode==0), label+'\n'+log[-2000:])
+              return log
+
+          def yosys(label, script, negative=False):
+              write(label+'.ys',script+'\n')
+              return run(label,['yowasp-yosys','-Q','-T','-s',str(E/(label+'.ys'))],negative)
+
+          try:
+              require(not E.exists(), 'Fresh evidence directory required')
+              E.mkdir(parents=True)
+              require(sys.flags.optimize==0, 'Python assertions disabled')
+              require(os.environ['GITHUB_EVENT_NAME']=='workflow_dispatch', 'Manual dispatch only')
+              require(os.environ['GITHUB_REF']=='refs/heads/main', 'main only')
+              commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+              require(commit==os.environ['GITHUB_SHA'], 'Checkout mismatch')
+              require(not subprocess.check_output(['git','status','--porcelain'],text=True).strip(), 'Dirty checkout')
+              report.update(commit=commit,run_id=os.environ['GITHUB_RUN_ID'],
+                            run_attempt=os.environ['GITHUB_RUN_ATTEMPT'],source_hashes=PINS,
+                            scope='M23 CDC bridge instantiated by M32; standalone HX8K-CT256 implementation')
+              for path,digest in PINS.items():
+                  data=(R/path).read_bytes()
+                  require(sha(data)==digest, 'Source identity mismatch: '+path)
+                  target=E/'sources'/path;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(data)
+              versions={p:metadata.version(p) for p in ['yowasp-yosys','yowasp-nextpnr-ice40','yowasp-runtime','wasmtime']}
+              require(versions['yowasp-yosys']=='0.68.0.0.post1208', 'Yosys version')
+              require(versions['yowasp-nextpnr-ice40']=='0.11.1.0.post826', 'nextpnr version')
+              write('tools.json',versions)
+              run('yosys-version',['yowasp-yosys','-V'])
+              run('nextpnr-version',['yowasp-nextpnr-ice40','--version'])
+              source=(R/BRIDGE).read_text()
+              header=source[source.index('module '):source.index(');')+2]
+              ports=re.findall(r'(input|output)\s+logic\s*(\[[^]]+\])?\s*(\w+)',header)
+              public=[(d,w,n) for d,w,n in ports if not n.endswith('_debug')]
+              require(len(ports)==29 and len(public)==25, 'Bridge interface changed')
+              top=['module '+TOP+' (',',\n'.join('  '+d+' wire '+(w+' ' if w else '')+n for d,w,n in public),');',
+                   'frp_m23_csr_cdc_bridge u_bridge (',
+                   ',\n'.join('  .'+n+'('+('' if n.endswith('_debug') else n)+')' for _,_,n in ports),');','endmodule']
+              write('top.v','\n'.join(top)+'\n')
+              yosys('rtl',f'read_verilog -sv {BRIDGE} "{E}/top.v"; hierarchy -check -top {TOP}; proc; flatten; check -assert; write_json "{E}/rtl.json"')
+              raw=read('rtl.json');rtl=raw['modules'][TOP]
+              require(all(not v['attributes'].get('blackbox') for v in raw['modules'].values()), 'Unexpected abstraction')
+              inputs={n:len(p['bits']) for n,p in rtl['ports'].items() if p['direction']=='input'}
+              outputs={n:len(p['bits']) for n,p in rtl['ports'].items() if p['direction']=='output'}
+              require(len(outputs)==12 and sum(outputs.values())==81 and sum(inputs.values())==82, 'Port coverage')
+              # Keep all original state names for an explicit, proved correspondence.
+              # These attributes preserve observations; no data or control is tied off.
+              q=set(b for c in rtl['cells'].values() if c['type']=='$adff' for b in c['connections']['Q'])
+              state={n:v['bits'] for n,v in rtl['netnames'].items() if not v['hide_name'] and n.startswith('u_bridge.') and set(v['bits'])<=q}
+              require(len(q)==163 and set(b for bits in state.values() for b in bits)==q, 'Incomplete retained-state coverage')
+              for n in state:
+                  rtl['netnames'][n]['attributes']['keep']='1'
+              write('kept.json',raw)
+              write('interface.json',dict(inputs=inputs,outputs=outputs,state=state,retained_bits=len(q)))
+              for label in ['a','b']:
+                  yosys('synth-'+label,f'read_json "{E}/kept.json"; synth_ice40 -top {TOP} -json "{E}/mapped-{label}.json"; write_verilog -noattr "{E}/mapped-{label}.v"')
+              require((E/'mapped-a.json').read_bytes()==(E/'mapped-b.json').read_bytes(), 'Synthesis is not reproducible')
+              mapped=read('mapped-a.json')['modules'][TOP]
+              types=collections.Counter(c['type'] for c in mapped['cells'].values())
+              require(set(types)<= {'SB_DFFR','SB_DFFER','SB_LUT4','$scopeinfo'}, 'Unexpected primitive or blackbox')
+              require(types['SB_DFFR']+types['SB_DFFER']==163, 'State count changed')
+              require(mapped['ports'].keys()==rtl['ports'].keys(), 'Mapped public ports changed')
+              for n,p in rtl['ports'].items():
+                  require(p['direction']==mapped['ports'][n]['direction'] and len(p['bits'])==len(mapped['ports'][n]['bits']), 'Mapped port changed '+n)
+              for n in state:
+                  require(n in mapped['netnames'] and len(mapped['netnames'][n]['bits'])==len(state[n]), 'Missing state '+n)
+              report['mapped_cells']=dict(types)
+              # Add read-only observations to COPIES of both designs. The placed JSON
+              # remains unmodified. State equality is proved, never assumed.
+              for kind,base in [('gold',rtl),('gate',mapped)]:
+                  model=copy.deepcopy(base)
+                  for i,n in enumerate(state):
+                      model['ports']['state_'+str(i)]=dict(direction='output',bits=model['netnames'][n]['bits'])
+                  bit=max(b for v in model['netnames'].values() for b in v['bits'] if isinstance(b,int))+1
+                  fault=list(range(bit,bit+4));bit+=4
+                  model['ports']['fault']=dict(direction='input',bits=fault)
+                  if kind=='gate':
+                      for i,n in enumerate(outputs,1):
+                          original=model['ports'][n]['bits'][0]
+                          model['cells']['fault_select_'+str(i)]=dict(type='$eq',parameters=dict(A_SIGNED=0,B_SIGNED=0,A_WIDTH=4,B_WIDTH=4,Y_WIDTH=1),attributes={},port_directions=dict(A='input',B='input',Y='output'),connections=dict(A=fault,B=list(format(i,'04b')[::-1]),Y=[bit]))
+                          model['cells']['fault_flip_'+str(i)]=dict(type='$xor',parameters=dict(A_SIGNED=0,B_SIGNED=0,A_WIDTH=1,B_WIDTH=1,Y_WIDTH=1),attributes={},port_directions=dict(A='input',B='input',Y='output'),connections=dict(A=[original],B=[bit],Y=[bit+1]))
+                          model['ports'][n]['bits'][0]=bit+1
+                          model['netnames']['unmodified_'+n]=model['netnames'].pop(n)
+                          model['netnames'][n]=dict(hide_name=0,bits=list(model['ports'][n]['bits']),attributes={})
+                          bit+=2
+                  write(kind+'.json',dict(modules={kind:model}))
+              # Deferred loading elaborates only the actual SB primitives used above.
+              yosys('primitive-model',f'read_verilog -defer -D ICE40_HX +/ice40/cells_sim.v; read_json "{E}/gate.json"; hierarchy -check -top gate; proc; flatten; write_rtlil "{E}/gate.il"')
+              yosys('miter',f'read_rtlil "{E}/gate.il"; read_json "{E}/gold.json"; miter -equiv -make_outputs -make_outcmp -flatten gold gate check40; hierarchy -check -top check40; proc; flatten; clk2fflogic; opt_clean; check -assert; write_rtlil "{E}/miter.il"')
+              initial='-set-at 1 in_host_rst_n 0 -set-at 1 in_core_rst_n 0'
+              def sat(label,options,negative=False):
+                  return yosys(label,f'read_rtlil "{E}/miter.il"; sat -timeout 60 {initial} {options}',negative)
+              log=sat('induction','-seq 3 -tempinduct -maxsteps 8 -set in_fault 0 -prove trigger 0 -verify')
+              require('Induction step proven: SUCCESS!' in log and 'Base case for induction length' in log, 'Unbounded induction did not close')
+              report['equivalence']=dict(result='PASS',public_outputs=12,public_bits=81,retained_bits=163,
+                                         initial_resets_only=True,independent_clocks=True)
+              for i,n in enumerate(outputs,1):
+                  label='fault-'+str(i)
+                  log=sat(label,f'-seq 3 -set in_fault {i} -prove trigger 0 -verify -show-ports -dump_json "{E}/{label}.json"',True)
+                  require('SAT proof finished - model found: FAIL!' in log, 'Missing expected counterexample '+n)
+                  label='reach-'+str(i)
+                  log=sat(label,f'-seq 20 -set in_fault 0 -set in_host_rst_n 1 -set in_core_rst_n 1 -set-at 20 gold_{n}[0] 1 -show-ports -dump_json "{E}/{label}.json"')
+                  require('SAT solving finished - model found:' in log, 'Unreachable output '+n)
+              report.update(fault_counterexamples=12,reachable_outputs=12)
+              def place(label,sdc,negative=False):
+                  argv=['yowasp-nextpnr-ice40','--hx8k','--package','ct256','--json',str(E/'mapped-a.json'),
+                        '--asc',str(E/(label+'.asc')),'--write',str(E/(label+'-routed.json')),
+                        '--report',str(E/(label+'-timing.json')),'--sdf',str(E/(label+'.sdf')),
+                        '--sdc',str(sdc),'--pcf-allow-unconstrained','--seed','1','--threads','1',
+                        '--placer','heap','--router','router1','--ignore-rel-clk']
+                  return run(label,argv,negative)
+              for label in ['pnr-a','pnr-b']:
+                  log=place(label,R/SDC)
+                  data=read(label+'-timing.json'); clocks=data['fmax']
+                  require(len(clocks)==2, 'Missing clock timing')
+                  for name,target in [('host_clk',10),('core_clk',8)]:
+                      found=[v for k,v in clocks.items() if k.startswith(name+'$')]
+                      require(len(found)==1 and found[0]['constraint']==target and found[0]['achieved']>=target, 'Clock target failed '+name)
+                  for n,v in data['utilization'].items():
+                      require(0<=v['used']<=v['available'], 'Resource overflow '+n)
+                  require(data['utilization']['SB_IO']['used']==163, 'Missing physical ports')
+                  require((E/(label+'.asc')).stat().st_size>10000 and (E/(label+'.sdf')).stat().st_size>1000, 'Missing routed outputs')
+              for suffix in ['.asc','-routed.json','-timing.json']:
+                  require((E/('pnr-a'+suffix)).read_bytes()==(E/('pnr-b'+suffix)).read_bytes(), 'Implementation differs: '+suffix)
+              report['implementation']=read('pnr-a-timing.json')
+              report['reproducible']=True
+              # Reject a deliberately impossible clock constraint with a timing failure,
+              # not a missing tool, malformed source or generic nonzero exit status.
+              write('impossible.sdc','create_clock -name host_clk -period 0.001 [get_ports host_clk]\ncreate_clock -name core_clk -period 0.001 [get_ports core_clk]\n')
+              log=place('timing-negative',E/'impossible.sdc',True)
+              require('FAIL at' in log and 'Max frequency for clock' in log, 'Expected timing violation not reported')
+              report['timing_negative']='REJECTED_BY_TIMING'
+              report['warnings']={p.name:[l for l in p.read_text().splitlines() if 'Warning:' in l] for p in E.glob('*.log')}
+              for p,h in PINS.items():require(sha((R/p).read_bytes())==h,'Source changed '+p)
+              require(not subprocess.check_output(['git','status','--porcelain'],text=True).strip(), 'Checkout changed')
+              report['status']='PASS'
+          except Exception as error:
+              report['error']=str(error)
+              raise
+          finally:
+              E.mkdir(parents=True,exist_ok=True)
+              report['evidence_hashes']={str(p.relative_to(E)):sha(p.read_bytes()) for p in sorted(E.rglob('*')) if p.is_file()}
+              write('result-40.json',report)
+              summary='\n'.join([
+                  '# M32 CDC bridge FPGA implementation: '+report['status'], '',
+                  'Exact RTL-to-iCE40 primitive equivalence: all 12 public outputs (81 bits)',
+                  'and all 163 retained bits, reset base plus unbounded temporal induction.',
+                  'Independent clock histories; only initial host/core resets are constrained.',
+                  'Two-state clk2fflogic semantics, including its asynchronous hold convention.',
+                  '12 expected output counterexamples and 12 reachable-output witnesses.',
+                  'Two fresh HX8K-CT256 synthesis runs; repeated placement and routing with seed 1.',
+                  'Host/core intra-clock constraints: 10 MHz / 8 MHz; negative timing control.',
+                  'Automatic IO placement, unbound board pinout; independent-clock timing ignored.',
+                  'Scope is the actual M23 bridge used by M32, not the complete M32 processor.',
+                  'This does not close the end-to-end CSR/CDC protocol, CDC physical constraints,',
+                  'IO or reset recovery/removal timing, metastability, board measurements,',
+                  'power/thermal measurements, complete-core implementation or Python identity.', ''])
+              write('summary-40.md',summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write(summary)
+          PY
+      - name: Upload implementation and proof evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-40-m32-cdc-fpga-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-40-evidence/
+          if-no-files-found: error
+          retention-days: 90
