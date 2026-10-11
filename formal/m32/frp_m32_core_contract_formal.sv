@@ -726,3 +726,195 @@ module frp_m32_core_contract_formal (
     mismatch[8] = actual.coherence_capacity_q16 != expected.coherence_capacity_q16;
     mismatch[9] = actual.coupling_field_q16 != expected.coupling_field_q16;
     mismatch[10] = actual.execution_request_cell_index != expected.execution_request_cell_index;
+    mismatch[11] = actual.execution_request_target != expected.execution_request_target;
+    mismatch[12] = actual.execution_request_valid != expected.execution_request_valid;
+    mismatch[13] = actual.execution_target_bank != expected.execution_target_bank;
+    mismatch[14] = actual.frequency_current_q16 != expected.frequency_current_q16;
+    mismatch[15] = actual.global_coherence_q30 != expected.global_coherence_q30;
+    mismatch[16] = actual.invariant_flags != expected.invariant_flags;
+    mismatch[17] = actual.neutral_routed_cell_mask != expected.neutral_routed_cell_mask;
+    mismatch[18] = actual.neutral_routed_events != expected.neutral_routed_events;
+    mismatch[19] = actual.normalized_cycle_cost_q16 != expected.normalized_cycle_cost_q16;
+    mismatch[20] = actual.organization_dispersion_q30 != expected.organization_dispersion_q30;
+    mismatch[21] = actual.pair_coherence_q30 != expected.pair_coherence_q30;
+    mismatch[22] = actual.peak_temperature_proxy_q16 != expected.peak_temperature_proxy_q16;
+    mismatch[23] = actual.pending_route_out != expected.pending_route_out;
+    mismatch[24] = actual.phase_projection_q30 != expected.phase_projection_q30;
+    mismatch[25] = actual.phase_request_cell_index != expected.phase_request_cell_index;
+    mismatch[26] = actual.phase_request_target != expected.phase_request_target;
+    mismatch[27] = actual.phase_request_valid != expected.phase_request_valid;
+    mismatch[28] = actual.phase_target_domain_valid != expected.phase_target_domain_valid;
+    mismatch[29] = actual.phase_target_source != expected.phase_target_source;
+    mismatch[30] = actual.phase_word_q != expected.phase_word_q;
+    mismatch[31] = actual.pressure_q16 != expected.pressure_q16;
+    mismatch[32] = actual.prevented_direct_events != expected.prevented_direct_events;
+    mismatch[33] = actual.queue_overflow_events != expected.queue_overflow_events;
+    mismatch[34] = actual.registered_request_enable != expected.registered_request_enable;
+    mismatch[35] = actual.registered_target_domain_valid != expected.registered_target_domain_valid;
+    mismatch[36] = actual.registered_target_q != expected.registered_target_q;
+    mismatch[37] = actual.registered_target_valid_q != expected.registered_target_valid_q;
+    mismatch[38] = actual.rejected_target_capture_events_q != expected.rejected_target_capture_events_q;
+    mismatch[39] = actual.request_accept != expected.request_accept;
+    mismatch[40] = actual.request_reject != expected.request_reject;
+    mismatch[41] = actual.requested_direct_events != expected.requested_direct_events;
+    mismatch[42] = actual.reserved_state_events != expected.reserved_state_events;
+    mismatch[43] = actual.scheduler_count_balance_q != expected.scheduler_count_balance_q;
+    mismatch[44] = actual.scheduler_count_commit_q != expected.scheduler_count_commit_q;
+    mismatch[45] = actual.scheduler_count_excite_q != expected.scheduler_count_excite_q;
+    mismatch[46] = actual.scheduler_count_free_q != expected.scheduler_count_free_q;
+    mismatch[47] = actual.scheduler_count_neutralize_q != expected.scheduler_count_neutralize_q;
+    mismatch[48] = actual.scheduler_mode_q != expected.scheduler_mode_q;
+    mismatch[49] = actual.scheduler_state_q != expected.scheduler_state_q;
+    mismatch[50] = actual.stability_margin_q16 != expected.stability_margin_q16;
+    mismatch[51] = actual.stable != expected.stable;
+    mismatch[52] = actual.state_out != expected.state_out;
+    mismatch[53] = actual.switch_load_numerator != expected.switch_load_numerator;
+    mismatch[54] = actual.target_capture_accepted != expected.target_capture_accepted;
+    mismatch[55] = actual.target_capture_rejected != expected.target_capture_rejected;
+    mismatch[56] = actual.temperature_proxy_q16 != expected.temperature_proxy_q16;
+    mismatch[57] = actual.thermal_sample_count_q != expected.thermal_sample_count_q;
+    mismatch[58] = actual.ticks_recorded_q != expected.ticks_recorded_q;
+    if (history_valid) begin
+      a_accepted_cell_mask: assert (!mismatch[0]);
+      a_accepted_change_mask: assert (!mismatch[1]);
+      a_accepted_changes: assert (!mismatch[2]);
+      a_accepted_target_capture_events_q: assert (!mismatch[3]);
+      a_actual_direct_events: assert (!mismatch[4]);
+      a_capacity_exhausted: assert (!mismatch[5]);
+      a_capacity_remaining: assert (!mismatch[6]);
+      a_cluster_coherence_q30: assert (!mismatch[7]);
+      a_coherence_capacity_q16: assert (!mismatch[8]);
+      a_coupling_field_q16: assert (!mismatch[9]);
+      a_execution_request_cell_index: assert (!mismatch[10]);
+      a_execution_request_target: assert (!mismatch[11]);
+      a_execution_request_valid: assert (!mismatch[12]);
+      a_execution_target_bank: assert (!mismatch[13]);
+      a_frequency_current_q16: assert (!mismatch[14]);
+      a_global_coherence_q30: assert (!mismatch[15]);
+      a_invariant_flags: assert (!mismatch[16]);
+      a_neutral_routed_cell_mask: assert (!mismatch[17]);
+      a_neutral_routed_events: assert (!mismatch[18]);
+      a_normalized_cycle_cost_q16: assert (!mismatch[19]);
+      a_organization_dispersion_q30: assert (!mismatch[20]);
+      a_pair_coherence_q30: assert (!mismatch[21]);
+      a_peak_temperature_proxy_q16: assert (!mismatch[22]);
+      a_pending_route_out: assert (!mismatch[23]);
+      a_phase_projection_q30: assert (!mismatch[24]);
+      a_phase_request_cell_index: assert (!mismatch[25]);
+      a_phase_request_target: assert (!mismatch[26]);
+      a_phase_request_valid: assert (!mismatch[27]);
+      a_phase_target_domain_valid: assert (!mismatch[28]);
+      a_phase_target_source: assert (!mismatch[29]);
+      a_phase_word_q: assert (!mismatch[30]);
+      a_pressure_q16: assert (!mismatch[31]);
+      a_prevented_direct_events: assert (!mismatch[32]);
+      a_queue_overflow_events: assert (!mismatch[33]);
+      a_registered_request_enable: assert (!mismatch[34]);
+      a_registered_target_domain_valid: assert (!mismatch[35]);
+      a_registered_target_q: assert (!mismatch[36]);
+      a_registered_target_valid_q: assert (!mismatch[37]);
+      a_rejected_target_capture_events_q: assert (!mismatch[38]);
+      a_request_accept: assert (!mismatch[39]);
+      a_request_reject: assert (!mismatch[40]);
+      a_requested_direct_events: assert (!mismatch[41]);
+      a_reserved_state_events: assert (!mismatch[42]);
+      a_scheduler_count_balance_q: assert (!mismatch[43]);
+      a_scheduler_count_commit_q: assert (!mismatch[44]);
+      a_scheduler_count_excite_q: assert (!mismatch[45]);
+      a_scheduler_count_free_q: assert (!mismatch[46]);
+      a_scheduler_count_neutralize_q: assert (!mismatch[47]);
+      a_scheduler_mode_q: assert (!mismatch[48]);
+      a_scheduler_state_q: assert (!mismatch[49]);
+      a_stability_margin_q16: assert (!mismatch[50]);
+      a_stable: assert (!mismatch[51]);
+      a_state_out: assert (!mismatch[52]);
+      a_switch_load_numerator: assert (!mismatch[53]);
+      a_target_capture_accepted: assert (!mismatch[54]);
+      a_target_capture_rejected: assert (!mismatch[55]);
+      a_temperature_proxy_q16: assert (!mismatch[56]);
+      a_thermal_sample_count_q: assert (!mismatch[57]);
+      a_ticks_recorded_q: assert (!mismatch[58]);
+    end
+  end
+
+  // Observations of actual DUT behavior; none constrain the proof inputs.
+  logic previous_reset, previous_tick, previous_clear, previous_load, previous_auto;
+  logic [1:0] previous_mode, previous_input_mode;
+  logic [2:0] previous_schedule;
+  observation_t previous_actual;
+  logic [255:0] previous_phase_load, previous_frequency_load;
+  always @(posedge clk) begin
+    previous_reset <= rst_n; previous_tick <= tick_enable;
+    previous_clear <= clear_counters; previous_load <= phase_load_valid;
+    previous_auto <= auto_target_enable;
+    previous_mode <= actual.scheduler_mode_q; previous_input_mode <= scheduler_mode;
+    previous_schedule <= actual.scheduler_state_q;
+    previous_actual <= actual;
+    previous_phase_load <= phase_load;
+    previous_frequency_load <= frequency_load_q16;
+  end
+  wire live = history_valid && previous_reset && rst_n;
+  always_comb begin
+    reach = 0;
+    if (live) begin
+      reach[0] = !previous_tick && !previous_load && !previous_clear
+        && actual.state_out == previous_actual.state_out
+        && actual.phase_word_q == previous_actual.phase_word_q;
+      reach[1] = previous_load && !previous_tick
+        && actual.phase_word_q == previous_phase_load
+        && actual.frequency_current_q16 == previous_frequency_load
+        && actual.registered_target_q == previous_actual.registered_target_q;
+      reach[2] = previous_load && previous_tick
+        && actual.phase_word_q == previous_phase_load
+        && actual.registered_target_q == previous_actual.phase_target_source
+        && actual.phase_target_source != actual.registered_target_q;
+      reach[3] = previous_tick && previous_auto && !previous_load
+        && actual.phase_word_q != previous_actual.phase_word_q;
+      reach[4] = previous_tick && !previous_auto && !previous_load
+        && actual.state_out != previous_actual.state_out;
+      reach[5] = previous_tick && previous_clear && actual.ticks_recorded_q == 1
+        && actual.thermal_sample_count_q == 0 && actual.accepted_target_capture_events_q == 0;
+      reach[6] = !previous_tick && previous_clear && actual.ticks_recorded_q == 0
+        && actual.thermal_sample_count_q == 0 && actual.state_out == previous_actual.state_out;
+      for (int k = 0; k < 5; k++)
+        reach[7+k] = previous_tick && !previous_load && previous_schedule == 3'(k)
+          && actual.phase_word_q != previous_actual.phase_word_q;
+      for (int i = 0; i < 8; i++) begin
+        reach[12] |= previous_tick && previous_actual.neutral_routed_cell_mask[i]
+          && previous_actual.state_out[2*i +: 2] != 0 && actual.state_out[2*i +: 2] == 0
+          && actual.pending_route_out[2*i +: 2] != 0;
+        reach[13] |= previous_tick && previous_actual.pending_route_out[2*i +: 2] != 0
+          && actual.state_out[2*i +: 2] == previous_actual.pending_route_out[2*i +: 2]
+          && actual.pending_route_out[2*i +: 2] == 0;
+        reach[15] |= previous_tick && previous_actual.pending_route_out[2*i +: 2] != 0
+          && previous_actual.phase_target_source[2*i +: 2] != previous_actual.pending_route_out[2*i +: 2]
+          && actual.state_out[2*i +: 2] == previous_actual.pending_route_out[2*i +: 2]
+          && actual.pending_route_out[2*i +: 2] == 0;
+      end
+      reach[14] = !previous_tick && previous_actual.pending_route_out != 0
+        && actual.pending_route_out == previous_actual.pending_route_out;
+      reach[19] = previous_tick && !previous_load && previous_mode == 3
+        && actual.phase_word_q != previous_actual.phase_word_q
+        && actual.state_out == previous_actual.state_out;
+      reach[20] = !previous_tick && previous_mode != previous_input_mode
+        && actual.scheduler_mode_q == previous_input_mode
+        && actual.state_out == previous_actual.state_out;
+      reach[21] = previous_tick && !previous_clear
+        && $signed(actual.temperature_proxy_q16) > $signed(previous_actual.temperature_proxy_q16);
+      reach[22] = previous_tick && !previous_clear
+        && $signed(actual.temperature_proxy_q16) < $signed(previous_actual.temperature_proxy_q16);
+    end
+    if (history_valid && rst_n) begin
+      reach[16] = tick_enable && actual.capacity_exhausted && actual.accepted_changes == 2;
+      reach[17] = tick_enable && !auto_target_enable && external_request_valid == 3
+        && external_request_cell_index[2:0] == external_request_cell_index[5:3]
+        && actual.request_accept[0] && actual.request_reject[1];
+      reach[18] = tick_enable && !auto_target_enable && external_request_valid[0]
+        && external_request_target[1:0] == 2 && actual.request_reject[0]
+        && !actual.invariant_flags[0];
+    end
+    reach[23] = history_valid && previous_reset && !rst_n
+      && previous_actual.pending_route_out != 0 && actual.pending_route_out == 0;
+  end
+endmodule
+`endif
