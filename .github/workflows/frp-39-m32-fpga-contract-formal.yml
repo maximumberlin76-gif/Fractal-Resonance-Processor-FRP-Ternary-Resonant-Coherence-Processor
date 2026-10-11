@@ -1,0 +1,325 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# Proprietary workflow; dependency licenses remain unchanged.
+name: 39 - FRP M32 FPGA Reset and Interface Formal
+run-name: "39 - FRP M32 FPGA Formal @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-39-m32-fpga-contract-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Prepare evidence path
+        run: |
+          set -euo pipefail
+          printf '%s\n' "FRP39_EVIDENCE=$RUNNER_TEMP/frp-39-evidence" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install pinned verification tools
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python -m pip install --disable-pip-version-check --only-binary=:all: \
+            --timeout 30 --retries 3 yowasp-yosys==0.68.0.0.post1208 \
+            z3-solver==5.1.0.0 verilator==5.48.0
+      - name: Prove core and FPGA shell contracts
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          from pathlib import Path
+          import os, sys, json, re, hashlib, subprocess, time, textwrap, shutil
+
+          R = Path.cwd().resolve()
+          E = Path(os.environ['FRP39_EVIDENCE']).resolve()
+          TOP = 'frp_m32_fpga_top'
+          SOURCE = 'fpga/m32/' + TOP + '.sv'
+          PREVIOUS = '.github/workflows/frp-38-m32-core-contract-formal.yml'
+          PREVIOUS_SHA = '94014fe96e7449b9bb475bfad8a525741e6f11077a8306397b2843c305fc1892'
+          WRAPPER_SHA = '4893b157fba0ce090766d73429bce154a8b06dbb4118ec4a6dcb7e4a4c4a3348'
+          report = dict(status='FAIL', fpga_contract_proven=False, commands=[], proofs=[],
+                        witnesses=[], sensitivity=[], mutations=[], physical_timing=False,
+                        metastability_proven=False, python_v093_equivalence=False)
+
+          def sha(data):
+              return hashlib.sha256(data).hexdigest()
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          def run(label, script, cwd=R, negative=False):
+              require(not (E/(label+'.log')).exists(), 'Repeated command: '+label)
+              (E/(label+'.ys')).write_text(script+'\n')
+              start = time.monotonic()
+              with (E/(label+'.log')).open('w') as stream:
+                  p = subprocess.run(['yowasp-yosys','-Q','-T','-s',str(E/(label+'.ys'))],
+                                     cwd=cwd, stdout=stream, stderr=subprocess.STDOUT, timeout=180)
+              log = (E/(label+'.log')).read_text()
+              report['commands'].append(dict(label=label, returncode=p.returncode,
+                                             seconds=round(time.monotonic()-start,3)))
+              if negative:
+                  require(p.returncode != 0 and 'SAT proof finished - model found: FAIL!' in log,
+                          'Expected assertion counterexample: '+label+'\n'+log[-1500:])
+              else:
+                  require(p.returncode == 0, label+'\n'+log[-1500:])
+              return log
+
+          def decl(name, width):
+              return ('['+str(width-1)+':0] ' if width>1 else '')+name
+
+          try:
+              require(sys.flags.optimize == 0, 'Python assertions must remain enabled')
+              require(os.environ['GITHUB_EVENT_NAME']=='workflow_dispatch', 'Manual dispatch only')
+              require(os.environ['GITHUB_REF']=='refs/heads/main', 'main only')
+              require(subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()==os.environ['GITHUB_SHA'], 'Checkout mismatch')
+              require(not subprocess.check_output(['git','status','--porcelain'],text=True).strip(), 'Dirty checkout')
+              require(not E.exists(), 'Fresh evidence directory required')
+              E.mkdir(parents=True)
+              original = (R/SOURCE).read_text()
+              require(sha((R/SOURCE).read_bytes())==WRAPPER_SHA, 'FPGA source identity mismatch')
+              require(sha((R/PREVIOUS).read_bytes())==PREVIOUS_SHA, 'Workflow 38 identity mismatch')
+              report.update(commit=os.environ['GITHUB_SHA'], run_id=os.environ['GITHUB_RUN_ID'],
+                            run_attempt=os.environ['GITHUB_RUN_ATTEMPT'], wrapper_sha256=WRAPPER_SHA,
+                            prerequisite_workflow_sha256=PREVIOUS_SHA,
+                            scope='8 cells, 2 lanes, 32-bit counters; sampled two-state composition')
+              # Execute all M32 obligations anew, including its M31 prerequisites.
+              # No downloaded artifact or prior green status substitutes for this run.
+              os.environ['FRP38_EVIDENCE'] = str(E/'core-proof')
+              old = (R/PREVIOUS).read_text()
+              program = textwrap.dedent(old.split("          python - <<'PY'\n",1)[1].split('\n          PY',1)[0])
+              core_namespace = {'__name__':'__main__'}
+              exec(compile(program,PREVIOUS,'exec'),core_namespace)
+              core_report = core_namespace['report']
+              require(core_report['status']=='PASS' and core_report['full_m32_proof']
+                      and core_report['rtl_netlist_proven'], 'Core theorem is not closed')
+              require(core_report['commit']==report['commit'], 'Core theorem commit mismatch')
+              report['core_result_sha256'] = sha((E/'core-proof/result-38.json').read_bytes())
+
+              def frontend(label, source=SOURCE, directory=R, mapped=False):
+                  # Slang reads the REAL core declaration and parameter bindings.
+                  # Only its already-proven body is abstracted, with every output free.
+                  command = (f'read_slang -j 1 --std 1800-2017 --top {TOP} '
+                             f'--blackboxed-module frp_m32_core -Irtl/m31 -Irtl/m32 {source}; ')
+                  command += f'synth -top {TOP}; ' if mapped else 'proc; '
+                  command += (f'check -assert; write_json "{E}/{label}-before.json"; '
+                              f'write_verilog -noattr "{E}/{label}-before.v"; '
+                              f'expose -evert {TOP}/c:u_m32_core; '
+                              f'write_json "{E}/{label}-after.json"; '
+                              f'write_verilog -noattr "{E}/{label}.v";')
+                  run(label+'-front',command,directory)
+                  before=json.loads((E/(label+'-before.json')).read_text())['modules']
+                  after=json.loads((E/(label+'-after.json')).read_text())['modules'][TOP]
+                  shell=before[TOP]; instance=shell['cells']['u_m32_core']
+                  require(instance['type']=='frp_m32_core', 'Unexpected core instance')
+                  core=before['frp_m32_core']
+                  require(int(core['attributes']['blackbox'],2)==1, 'Missing explicit core abstraction')
+                  wanted=dict(CELLS=8,REQUEST_LANES=2,CELL_INDEX_BITS=3,COUNTER_BITS=32)
+                  require(all(int(instance['parameters'][n],2)==v for n,v in wanted.items()), 'Core parameter mismatch')
+                  require(instance['parameters']['SIN_LUT_FILE']=='rtl/m31/frp_m31_sin_q30.mem', 'ROM binding mismatch')
+                  require(set(instance['connections'])==set(core['ports']), 'Incomplete core port binding')
+                  # Eversion may expose connections, but must not alter any shell cell,
+                  # original port, or bit of any core connection.
+                  # JSON writers renumber internal bit IDs after ports are exposed.
+                  # Construct and check a bijection through every original named wire.
+                  bit_map={}; inverse={}
+                  for name,wire in shell['netnames'].items():
+                      require(name in after['netnames'], 'Original wire disappeared')
+                      target=after['netnames'][name]['bits']
+                      require(len(wire['bits'])==len(target), 'Original wire width changed')
+                      for old_bit,new_bit in zip(wire['bits'],target):
+                          if isinstance(old_bit,str):
+                              require(old_bit==new_bit, 'Constant changed')
+                          else:
+                              require(isinstance(new_bit,int), 'Signal replaced with constant')
+                              require(bit_map.setdefault(old_bit,new_bit)==new_bit, 'Inconsistent bit mapping')
+                              require(inverse.setdefault(new_bit,old_bit)==old_bit, 'Signals merged')
+                  def remap(bits):
+                      return [bit_map[b] if isinstance(b,int) else b for b in bits]
+                  remaining={n:dict(c,connections={p:remap(b) for p,b in c['connections'].items()})
+                             for n,c in shell['cells'].items() if n!='u_m32_core'}
+                  require(after['cells']==remaining, 'Eversion changed shell logic')
+                  for n,p in shell['ports'].items():
+                      require(after['ports'][n]==dict(p,bits=remap(p['bits'])), 'Eversion changed public port '+n)
+                  require(len(after['ports'])==len(shell['ports'])+len(core['ports']), 'Wrong cut inventory')
+                  for n,p in core['ports'].items():
+                      q=after['ports']['u_m32_core.'+n]
+                      require(q['bits']==remap(instance['connections'][n]), 'Cut connection mismatch '+n)
+                      require(q['direction']==('output' if p['direction']=='input' else 'input'), 'Cut direction mismatch')
+                      require(len(q['bits'])==len(p['bits']), 'Cut width mismatch')
+                  if mapped:
+                      require(all(c['type'].startswith('$_') for c in remaining.values()), 'Shell is not gate mapped')
+                  return shell['ports'],core['ports']
+
+              ports,core_ports=frontend('rtl')
+              inputs={n:len(p['bits']) for n,p in ports.items() if p['direction']=='input'}
+              outputs={n:len(p['bits']) for n,p in ports.items() if p['direction']=='output'}
+              ci={n:len(p['bits']) for n,p in core_ports.items() if p['direction']=='input'}
+              co={n:len(p['bits']) for n,p in core_ports.items() if p['direction']=='output'}
+              require(len(inputs)==15 and len(outputs)==60 and len(ci)==15 and len(co)==59, 'Interface inventory changed')
+              require(sum(co.values())==2075 and outputs==dict(core_ready=1,**co), 'Public output contract changed')
+              # Bind the abstract interface to the exact independent contract used by 38.
+              contract=(R/'formal/m32/frp_m32_core_contract_formal.sv').read_text()
+              fields=re.search(r'typedef struct packed \{([\s\S]*?)\} observation_t;',contract).group(1)
+              expected_fields={n:int(w)+1 if w else 1 for w,n in re.findall(r'logic\s+(?:\[(\d+):0\]\s+)?(\w+);',fields)}
+              header=contract[contract.index('module frp_m32_core_contract_formal'):contract.index('  import frp_m32_core_contract_pkg')]
+              expected_inputs={n:int(w)+1 if w else 1 for w,n in re.findall(r'input logic(?: \[(\d+):0\])? (\w+)',header)}
+              require(co==expected_fields and ci==expected_inputs, 'Core theorem interface mismatch')
+              require(inputs=={('rst_n_async' if n=='rst_n' else n):w for n,w in ci.items()}, 'Shell input contract mismatch')
+              checks=[('core_ready',1,'actual_core_ready','ready_ref')]
+              checks += [(n,w,'actual_'+n,'core_'+n) for n,w in co.items()]
+              for n,w in ci.items():
+                  expected=('ready_ref' if n=='rst_n' else
+                            f'({n} & {{{w}{{ready_ref}}}})' if n in
+                            ['tick_enable','clear_counters','phase_load_valid','auto_target_enable','external_request_valid'] else n)
+                  checks.append(('to_core_'+n,w,'to_core_'+n,expected))
+              require(len(checks)==75, 'Wrong property count')
+              harness='module shell_contract(\n'+',\n'.join('input wire '+decl(n,w) for n,w in inputs.items())+',\n'
+              harness+=',\n'.join('input wire '+decl('core_'+n,w) for n,w in co.items())
+              harness+=',\ninput wire [6:0] fault, output wire [74:0] mismatch, output wire [7:0] reach);\n'
+              # An independent saturating age model, not a copy of the reset shift register.
+              harness+='''reg [1:0] age;
+              always @(posedge clk or negedge rst_n_async)
+                if (!rst_n_async) age <= 0; else if (age < 2) age <= age + 1;
+              wire ready_ref = age == 2;
+              reg history = 0;
+              always @(posedge clk) history <= 1;
+              always @* if (!history) assume (!rst_n_async);
+              '''
+              harness+='\n'.join('wire '+decl('actual_'+n,w)+';' for n,w in outputs.items())+'\n'
+              harness+='\n'.join('wire '+decl('to_core_'+n,w)+';' for n,w in ci.items())+'\n'
+              connections=[f'.{n}({n})' for n in inputs]+[f'.{n}(actual_{n})' for n in outputs]
+              connections += [f'.\\u_m32_core.{n} (core_{n})' for n in co]
+              connections += [f'.\\u_m32_core.{n} (to_core_{n})' for n in ci]
+              harness+=TOP+' dut(\n'+',\n'.join(connections)+'\n);\n'
+              for i,(name,width,actual,expected) in enumerate(checks):
+                  harness+=f"assign mismatch[{i}] = ({actual} ^ (fault == 7'd{i+1} ? {width}'d1 : {width}'d0)) != {expected};\n"
+                  harness+=f'always @* if (history) a_{name}: assert (!mismatch[{i}]);\n'
+              harness+='''always @* if (history) a_age_domain: assert (age <= 2);
+              reg [1:0] old_age;
+              reg old_tick;
+              always @(posedge clk) begin old_age <= age; old_tick <= tick_enable; end
+              assign reach[0] = history && !rst_n_async && !actual_core_ready;
+              assign reach[1] = history && rst_n_async && age==1 && tick_enable && phase_load_valid && clear_counters && !to_core_tick_enable && !to_core_phase_load_valid && !to_core_clear_counters;
+              assign reach[2] = history && rst_n_async && age==2 && tick_enable && phase_load_valid && clear_counters && to_core_tick_enable && to_core_phase_load_valid && to_core_clear_counters;
+              assign reach[3] = history && old_age==2 && !rst_n_async && !actual_core_ready;
+              assign reach[4] = history && old_age==1 && age==2 && old_tick && !tick_enable && !to_core_tick_enable;
+              assign reach[5] = history && old_age==1 && age==2 && old_tick && tick_enable && to_core_tick_enable;
+              assign reach[6] = history && age==2 && scheduler_mode==3 && to_core_scheduler_mode==3;
+              assign reach[7] = history && age==2 && external_request_valid==3 && to_core_external_request_valid==3;
+              endmodule
+              '''
+              (E/'contract.sv').write_text(harness)
+              (E/'interface.json').write_text(json.dumps(dict(inputs=inputs,outputs=outputs,core_inputs=ci,core_outputs=co,checks=checks),indent=2)+'\n')
+              def prepare(label):
+                  script=(f'read_verilog "{E}/{label}.v"; read_verilog -formal -sv "{E}/contract.sv"; '
+                          f'proc; write_json "{E}/{label}-properties.json"; prep -top shell_contract -flatten; '
+                          f'async2sync; opt -full; check -assert; write_rtlil "{E}/{label}.il";')
+                  run(label+'-prepare',script)
+                  props=json.loads((E/(label+'-properties.json')).read_text())['modules']['shell_contract']['cells']
+                  require({n for n,c in props.items() if c['type']=='$check' and c['parameters']['FLAVOR']=='assert'}=={'a_'+n for n,w,a,e in checks}|{'a_age_domain'}, 'Missing original assertion')
+                  require(sum(c['type']=='$check' and c['parameters']['FLAVOR']=='assume' for c in props.values())==1, 'Unexpected environment assumption')
+              def sat(label, model, options, negative=False):
+                  return run(label,f'read_rtlil "{E}/{model}.il"; sat -set-assumes -timeout 60 '+options,negative=negative)
+              for variant in ['rtl','netlist']:
+                  if variant=='netlist':
+                      p,c=frontend(variant,mapped=True)
+                      require({n:(x['direction'],len(x['bits'])) for n,x in p.items()}==
+                              {n:(x['direction'],len(x['bits'])) for n,x in ports.items()}, 'Mapped interface changed')
+                  prepare(variant)
+                  log=sat(variant+'-induction',variant,'-seq 3 -tempinduct -maxsteps 6 -set fault 0 -prove-asserts -verify')
+                  require('Base case for induction length' in log and 'proven.' in log
+                          and 'Induction step proven: SUCCESS!' in log, 'Incomplete temporal induction')
+                  report['proofs'].append(dict(implementation=variant,result='PASS',assertions=76))
+                  for bit in range(8):
+                      label=f'{variant}-reach-{bit}'
+                      log=sat(label,variant,f'-seq 5 -set fault 0 -set-at 5 reach[{bit}] 1 -show-ports -dump_json "{E}/{label}.json"')
+                      require('SAT solving finished - model found:' in log, 'Unreachable witness '+label)
+                      report['witnesses'].append(dict(implementation=variant,bit=bit,result='SAT'))
+                  # Each observation channel must expose a one-bit corruption.
+                  # fault=0 is mandatory in every positive proof and source mutation.
+                  for fault in range(1,76):
+                      label=f'{variant}-sensitivity-{fault}'
+                      sat(label,variant,f'-seq 4 -set fault {fault} -prove-asserts -verify -show mismatch -dump_json "{E}/{label}.json"',negative=True)
+                      report['sensitivity'].append(dict(implementation=variant,field=checks[fault-1][0],result='COUNTEREXAMPLE'))
+              mutations=[
+                  ('reset-first-stage','assign rst_n_core = reset_sync_q[1];','assign rst_n_core = reset_sync_q[0];'),
+                  ('reset-one-cycle',"reset_sync_q <= {reset_sync_q[0], 1'b1};","reset_sync_q <= 2'b11;"),
+                  ('reset-not-cleared',"reset_sync_q <= 2'b00;","reset_sync_q <= 2'b11;"),
+                  ('tick-bypass','tick_enable && core_ready','tick_enable'),
+                  ('clear-bypass','clear_counters && core_ready','clear_counters'),
+                  ('load-bypass','phase_load_valid && core_ready','phase_load_valid'),
+                  ('auto-bypass','auto_target_enable && core_ready','auto_target_enable'),
+                  ('valid-bypass','external_request_valid & {REQUEST_LANES{core_ready}}','external_request_valid'),
+                  ('phase-frequency-crosswire','.phase_load(phase_load),','.phase_load(frequency_load_q16),')]
+              for name,before,after in mutations:
+                  require(original.count(before)==1, 'Mutation anchor changed: '+name)
+                  mutated=E/(name+'.sv');mutated.write_text(original.replace(before,after))
+                  for variant in ['rtl','netlist']:
+                      label=variant+'-'+name
+                      frontend(label,str(mutated),mapped=variant=='netlist');prepare(label)
+                      sat(label+'-counterexample',label,f'-seq 5 -set fault 0 -prove-asserts -verify -show-ports -dump_json "{E}/{label}-counterexample.json"',negative=True)
+                      report['mutations'].append(dict(implementation=variant,name=name,result='COUNTEREXAMPLE'))
+              require(len(report['proofs'])==2 and len(report['witnesses'])==16
+                      and len(report['sensitivity'])==150 and len(report['mutations'])==18, 'Incomplete qualification')
+              require(sha((R/SOURCE).read_bytes())==WRAPPER_SHA, 'Canonical wrapper changed')
+              require(sha((R/PREVIOUS).read_bytes())==PREVIOUS_SHA, 'Canonical prerequisite changed')
+              require(all(sha((R/p).read_bytes())==h for p,h in core_report['source_hashes'].items()), 'Canonical core changed')
+              require(not subprocess.check_output(['git','status','--porcelain'],text=True).strip(), 'Checkout modified')
+              report.update(status='PASS',fpga_contract_proven=True,core_public_bits=2075,
+                            shell_public_bits=2076,core_input_ports=15,core_output_ports=59)
+          finally:
+              E.mkdir(parents=True,exist_ok=True)
+              (E/'result-39.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+              summary='\n'.join([
+                  '# M32 FPGA compositional contract: '+report['status'], '',
+                  'Core prerequisite: fresh workflow 38, on this exact checkout.',
+                  'Shell: 75 interface relations plus one reference-state invariant,',
+                  'reset base and temporal induction on RTL and a gate-mapped shell.',
+                  'The real core interface is everted with exact connection checks.',
+                  'Every core output is universally free; no output value is assumed.',
+                  'The core body is covered by the separately closed workflow 38 theorem.',
+                  'Only startup reset is assumed; later resets and inputs remain unrestricted.',
+                  'Covers two-edge reset release, discarded early pulses, held controls,',
+                  'all control gates, all 15 core inputs and all 59 core outputs.',
+                  'Requires 16 SAT witnesses, 150 observation fault counterexamples,',
+                  'and 18 counterexamples to nine isolated source mutations.',
+                  'Scope: 8 cells, 2 lanes, 32-bit counters, sampled two-state semantics.',
+                  'Gate mapping applies to the shell; the core theorem uses the workflow 38 netlist.',
+                  'Does not establish physical timing, metastability, CDC/CSR contracts,',
+                  'other parameters, four-state behavior or Python v0.9.3 identity.', ''])
+              (E/'summary-39.md').write_text(summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream:
+                  stream.write(summary)
+          PY
+      - name: Retain complete proof evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-39-m32-fpga-contract-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.FRP39_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
