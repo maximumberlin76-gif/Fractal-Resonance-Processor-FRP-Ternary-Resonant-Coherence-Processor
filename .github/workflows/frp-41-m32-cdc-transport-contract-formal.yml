@@ -1,0 +1,899 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist).
+# This workflow is proprietary and is governed by the repository license.
+# Referenced dependencies retain their own licenses.
+name: 41 - FRP M32 CDC Transport Contract RTL and FPGA Formal
+run-name: "41 - FRP CDC Contract | 33 properties + reset recovery @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-41-cdc-contract-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  prove:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Prepare evidence location
+        run: |
+          set -euo pipefail
+          printf '%s\n' "FRP41_EVIDENCE=$RUNNER_TEMP/frp-41-evidence" >> "$GITHUB_ENV"
+      - name: Install pinned formal tools
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            yowasp-yosys==0.68.0.0.post1208 \
+            yowasp-runtime==1.96 wasmtime==47.0.1
+      - name: Prove transport on RTL and FPGA primitives
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import os, sys, json, re, hashlib, subprocess, time, copy, collections
+          import importlib.metadata as metadata
+
+          R = Path.cwd().resolve()
+          E = Path(os.environ['FRP41_EVIDENCE']).resolve()
+          PINS = {
+              'rtl/m23/frp_m23_csr_cdc_bridge.sv': 'f56e3d5c3d4c07ffb54bc0a4d2968be0bdb9fff37106826d854139da2f2f6078',
+              'rtl/m23/frp_m23_reset_release_sync.sv': 'bf55576554f8c42e55f0a835bc62ad56e43004b4b459a84ce6908372f882de85',
+              'fpga/m32_csr/frp_m32_csr_cdc_top.sv': '1bbd0b3303cf0d0e4720100cb98759f7beba53c9ebceec861d9d73692938d576',
+              'fpga/m32_csr/frp_m32_csr_top.sv': 'c3d5e9060f8142acfb39310f2e47cca5a3f38c786a9bfdbb6686b2c86ff60344',
+          }
+          BRIDGE, RESET, BINDING, TARGET = PINS
+          MONITOR = r'''
+          // Independent modulo-four transaction ledger, not the DUT toggle network.
+          reg [1:0] host_age, core_age;
+          always @(posedge host_clk or negedge rst_n_async)
+            if (!rst_n_async) host_age <= 0;
+            else if (host_age != 2) host_age <= host_age + 1'b1;
+          always @(posedge core_clk or negedge rst_n_async)
+            if (!rst_n_async) core_age <= 0;
+            else if (core_age != 2) core_age <= core_age + 1'b1;
+          wire hr = host_age == 2;
+          wire cr = core_age == 2;
+          reg [1:0] release_seen;
+          always @(posedge host_clk or negedge hr)
+            if (!hr) release_seen <= 0;
+            else release_seen <= {release_seen[0], cr};
+          wire permission = hr && release_seen[1];
+          reg [1:0] accepted, delivered, completed, returned;
+          reg [1:0] request_stage0, request_stage1, response_stage0, response_stage1;
+          reg [40:0] request_saved, request_presented;
+          reg [32:0] response_saved, response_returned;
+          reg valid_previous, response_pulse;
+          reg bad_early, bad_busy, bad_held;
+          wire occupied = accepted != returned;
+          wire active = delivered != completed;
+          wire admission = csr_valid && permission && !occupied && !valid_previous;
+          always @(posedge host_clk or negedge hr) begin
+            if (!hr) begin
+              accepted <= 0; returned <= 0;
+              response_stage0 <= 0; response_stage1 <= 0;
+              request_saved <= 0; response_returned <= 0;
+              valid_previous <= 0; response_pulse <= 0;
+              bad_early <= 0; bad_busy <= 0; bad_held <= 0;
+            end else begin
+              response_stage0 <= completed; response_stage1 <= response_stage0;
+              valid_previous <= csr_valid;
+              bad_early <= bad_early || (csr_valid && !permission);
+              bad_busy <= bad_busy || (csr_valid && permission && occupied);
+              bad_held <= bad_held || (csr_valid && valid_previous);
+              response_pulse <= response_stage1 != returned;
+              if (admission) begin
+                accepted <= accepted + 1'b1;
+                request_saved <= {csr_write, csr_addr, csr_wdata};
+              end
+              if (response_stage1 != returned) begin
+                returned <= returned + 1'b1;
+                response_returned <= response_saved;
+              end
+            end
+          end
+          always @(posedge core_clk or negedge cr) begin
+            if (!cr) begin
+              delivered <= 0; completed <= 0;
+              request_stage0 <= 0; request_stage1 <= 0;
+              request_presented <= 0; response_saved <= 0;
+            end else begin
+              request_stage0 <= accepted; request_stage1 <= request_stage0;
+              if (!active && request_stage1 != delivered) begin
+                delivered <= delivered + 1'b1;
+                request_presented <= request_saved;
+              end
+              if (active && target_ready) begin
+                completed <= completed + 1'b1;
+                response_saved <= {target_error, target_rdata};
+              end
+            end
+          end
+          wire [1:0] awaiting_delivery = accepted - delivered;
+          wire [1:0] awaiting_target = delivered - completed;
+          wire [1:0] awaiting_return = completed - returned;
+          wire [3:0] outstanding_sum = {2'b0, awaiting_delivery}
+            + {2'b0, awaiting_target} + {2'b0, awaiting_return};
+          wire [1:0] q0 = accepted - request_stage0;
+          wire [1:0] q1 = request_stage0 - request_stage1;
+          wire [1:0] q2 = request_stage1 - delivered;
+          wire [1:0] q3 = completed - response_stage0;
+          wire [1:0] q4 = response_stage0 - response_stage1;
+          wire [1:0] q5 = response_stage1 - returned;
+          wire [4:0] transport_sum = {3'b0,q0}+{3'b0,q1}+{3'b0,q2}
+            + {3'b0,awaiting_target}+{3'b0,q3}+{3'b0,q4}+{3'b0,q5};
+          always @* begin
+            assert(host_age <= 2 && core_age <= 2);
+            assert(obs_host_reset_sync_release_q == {hr,host_age != 0});
+            assert(obs_core_reset_sync_release_q == {cr,core_age != 0});
+            assert(obs_core_release_host_sync_q == release_seen);
+            assert(transport_sum <= 1);
+            assert(host_reset_released == hr);
+            assert(core_reset_released == cr);
+            assert(interface_ready == permission);
+            assert(interface_busy == occupied);
+            assert(csr_ready == response_pulse);
+            assert({csr_error,csr_rdata} == response_returned);
+            assert(invalid_before_ready == bad_early);
+            assert(invalid_while_busy == bad_busy);
+            assert(invalid_valid_held == bad_held);
+            assert(protocol_error == (bad_early || bad_busy || bad_held));
+            assert(obs_core_csr_valid == active);
+            assert({obs_core_csr_write,obs_core_csr_addr,obs_core_csr_wdata} == request_presented);
+            assert(obs_held_request_debug == request_saved);
+            assert(obs_held_response_debug == response_saved);
+            assert(obs_request_toggle_host_q == accepted[0]);
+            assert(obs_request_toggle_core_seen_q == delivered[0]);
+            assert(obs_response_toggle_core_q == completed[0]);
+            assert(obs_response_toggle_host_seen_q == returned[0]);
+            assert(obs_request_valid_previous_q == valid_previous);
+            assert(obs_request_toggle_core_sync_q == {request_stage1[0],request_stage0[0]});
+            assert(obs_response_toggle_host_sync_q == {response_stage1[0],response_stage0[0]});
+            assert(outstanding_sum <= 1);
+            assert(!csr_ready || (!interface_busy && interface_ready));
+            assert(!active || occupied);
+            assert(!occupied || permission);
+            assert(!release_seen[1] || release_seen[0]);
+            assert(!release_seen[0] || cr);
+            assert(!active || request_presented == request_saved);
+          end
+
+          // Reachability observers never drive the DUT or the reference ledger.
+          reg wrapped;
+          always @(posedge host_clk or negedge hr)
+            if (!hr) wrapped <= 0;
+            else if (admission && accepted == 3) wrapped <= 1;
+          reg last_host = 1, last_core = 1, was_busy = 0, abort_seen = 0;
+          reg [3:0] host_quiet = 0, core_quiet = 0;
+          always @($global_clock) begin
+            last_host <= host_clk; last_core <= core_clk;
+            was_busy <= interface_busy;
+            if (was_busy && !rst_n_async) abort_seen <= 1;
+            if (host_clk != last_host) host_quiet <= 0;
+            else if (host_quiet != 15) host_quiet <= host_quiet + 1'b1;
+            if (core_clk != last_core) core_quiet <= 0;
+            else if (core_quiet != 15) core_quiet <= core_quiet + 1'b1;
+          end
+          assign witness[0] = csr_ready && !request_saved[40] && !csr_error;
+          assign witness[1] = csr_ready && request_saved[40] && !csr_error;
+          assign witness[2] = csr_ready && csr_error;
+          assign witness[3] = csr_ready && request_saved == 0 && csr_rdata == 0;
+          assign witness[4] = csr_ready && (&request_saved) && (&csr_rdata);
+          assign witness[5] = invalid_before_ready;
+          assign witness[6] = invalid_while_busy;
+          assign witness[7] = invalid_valid_held;
+          assign witness[8] = invalid_before_ready && invalid_while_busy && invalid_valid_held
+            && !csr_valid && csr_ready;
+          assign witness[9] = obs_core_csr_valid && !target_ready;
+          assign witness[10] = host_reset_released && !core_reset_released;
+          assign witness[11] = core_reset_released && !host_reset_released;
+          assign witness[12] = active && core_quiet >= 4 && rst_n_async;
+          assign witness[13] = awaiting_return != 0 && host_quiet >= 4 && rst_n_async;
+          assign witness[14] = abort_seen && !interface_busy && !obs_core_csr_valid && !rst_n_async;
+          assign witness[15] = abort_seen && csr_ready;
+          assign witness[16] = wrapped && csr_ready && returned == 0;
+          '''
+          CASES = ['read-success','write-success','error-response','zero-payload',
+                   'ones-payload','early-rejected','busy-rejected','held-rejected',
+                   'sticky-flags','target-stalled','host-released-first',
+                   'core-released-first','core-clock-paused','host-clock-paused',
+                   'reset-abort','reset-recovery','four-transactions-wrap']
+          MUTATIONS = [
+              ('request-write', BRIDGE, 'request_write_hold_q <= host_csr_write;', 'request_write_hold_q <= ~host_csr_write;'),
+              ('request-address', BRIDGE, 'request_addr_hold_q <= host_csr_addr;', "request_addr_hold_q <= host_csr_addr ^ 8'd1;"),
+              ('request-data', BRIDGE, 'request_wdata_hold_q <= host_csr_wdata;', "request_wdata_hold_q <= host_csr_wdata ^ 32'd1;"),
+              ('request-lost', BRIDGE, 'request_toggle_host_q <= ~request_toggle_host_q;', 'request_toggle_host_q <= request_toggle_host_q;'),
+              ('busy-overwrite', BRIDGE, 'else if (host_busy)', "else if (1'b0)"),
+              ('held-reaccepted', BRIDGE, 'else if (!request_valid_previous_q)', "else if (1'b1)"),
+              ('request-repeated', BRIDGE, "response_toggle_core_q <= ~response_toggle_core_q;\n        core_csr_valid <= 1'b0;", "response_toggle_core_q <= ~response_toggle_core_q;\n        core_csr_valid <= 1'b1;"),
+              ('response-error', BRIDGE, 'response_error_hold_q <= core_csr_error;', 'response_error_hold_q <= ~core_csr_error;'),
+              ('response-data', BRIDGE, 'response_rdata_hold_q <= core_csr_rdata;', "response_rdata_hold_q <= core_csr_rdata ^ 32'd1;"),
+              ('response-lost', BRIDGE, 'response_toggle_core_q <= ~response_toggle_core_q;', 'response_toggle_core_q <= response_toggle_core_q;'),
+              ('early-flag', BRIDGE, "invalid_before_ready <= 1'b1;", "invalid_before_ready <= 1'b0;"),
+              ('busy-flag', BRIDGE, "invalid_while_busy <= 1'b1;", "invalid_while_busy <= 1'b0;"),
+              ('held-flag', BRIDGE, "invalid_valid_held <= 1'b1;", "invalid_valid_held <= 1'b0;"),
+              ('request-sync-bypass', BRIDGE, 'request_toggle_core_sync_q[0], request_toggle_host_q', 'request_toggle_host_q, request_toggle_host_q'),
+              ('response-sync-bypass', BRIDGE, 'response_toggle_host_sync_q[0], response_toggle_core_q', 'response_toggle_core_q, response_toggle_core_q'),
+              ('reset-release-bypass', RESET, "release_q <= {release_q[0], 1'b1};", "release_q <= 2'b11;"),
+          ]
+          report = dict(status='FAIL', commands=[], proofs={}, witnesses={}, mutations={},
+                        physical_measurements=False, csr_register_map_proven=False,
+                        complete_m32_proven=False, metastability_proven=False,
+                        cross_clock_timing_closed=False, unconditional_liveness=False)
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def sha(data):
+              return hashlib.sha256(data).hexdigest()
+
+          def write(name, value):
+              (E/name).write_text(value if isinstance(value,str) else json.dumps(value,indent=2)+'\n')
+
+          def read(name):
+              return json.loads((E/name).read_text())
+
+          def run(label, argv, negative=False):
+              require(not (E/(label+'.log')).exists(), 'Repeated command '+label)
+              start=time.monotonic()
+              with (E/(label+'.log')).open('w') as stream:
+                  p=subprocess.run(argv,cwd=R,stdout=stream,stderr=subprocess.STDOUT,timeout=300)
+              report['commands'].append(dict(label=label,argv=argv,returncode=p.returncode,
+                                            seconds=round(time.monotonic()-start,3)))
+              log=(E/(label+'.log')).read_text()
+              require(p.returncode==(1 if negative else 0), label+'\n'+log[-2000:])
+              return log
+
+          def yosys(label, script, negative=False):
+              write(label+'.ys',script+'\n')
+              return run(label,['yowasp-yosys','-Q','-T','-s',str(E/(label+'.ys'))],negative)
+
+          def wave(label):
+              d=read(label+'.json');names=[]
+              require(isinstance(d,dict) and isinstance(d.get('signal'),list) and d['signal'], label+' waveform')
+              for s in d['signal']:
+                  require(isinstance(s,dict) and isinstance(s.get('name'),str) and s['name']
+                          and isinstance(s.get('wave'),str) and s['wave'], label+' signal')
+                  require(not any(ord(c)<32 for c in s['name']), label+' signal name')
+                  require('data' not in s or (isinstance(s['data'],list)
+                          and all(isinstance(v,str) for v in s['data'])), label+' data')
+                  names.append(s['name'])
+              require(len(names)==len(set(names)), label+' duplicate signals')
+              require({'host_clk','core_clk','rst_n_async','witness'}<=set(names), label+' missing inputs')
+              return dict(signals=len(names),sha256=sha((E/(label+'.json')).read_bytes()))
+
+          def project(label, bridge, reset):
+              write(label+'-bridge.sv',bridge);write(label+'-reset.sv',reset)
+              yosys(label+'-extract', f'read_verilog -sv -D SYNTHESIS "{E}/{label}-reset.sv" "{E}/{label}-bridge.sv" "{E}/projection.sv"; hierarchy -check -top frp_m32_csr_cdc_top; proc; flatten; check -assert; write_json "{E}/{label}-raw.json"')
+              raw=read(label+'-raw.json')['modules']['frp_m32_csr_cdc_top']
+              m=copy.deepcopy(raw);target=m['cells'].pop('u_csr')
+              require(target['type']=='frp_m32_csr_top', 'Unexpected target')
+              binding={'clk':'core_clk','rst_n_async':'core_reset_released',
+                       'csr_valid':'core_csr_valid','csr_write':'core_csr_write',
+                       'csr_addr':'core_csr_addr','csr_wdata':'core_csr_wdata',
+                       'csr_ready':'core_csr_ready','csr_error':'core_csr_error','csr_rdata':'core_csr_rdata'}
+              require(set(target['connections'])==set(binding), 'Target port set')
+              for p,n in binding.items():
+                  require(target['connections'][p]==m['netnames'][n]['bits'], 'Target binding '+p)
+                  require(target['port_directions'][p]==('output' if p in ['csr_ready','csr_error','csr_rdata'] else 'input'), 'Target direction '+p)
+              # Only the target's three outputs become universally free primary inputs.
+              # All bridge/reset cells and all their connections remain unchanged.
+              for n in ['ready','error','rdata']:
+                  m['ports']['target_'+n]=dict(direction='input',bits=target['connections']['csr_'+n])
+              state_names=['request_toggle_host_q','request_valid_previous_q',
+                           'request_toggle_core_sync_q','request_toggle_core_seen_q',
+                           'response_toggle_core_q','response_toggle_host_sync_q','response_toggle_host_seen_q']
+              observed={'obs_'+n:'cdc_bridge.'+n for n in state_names}
+              for n in ['core_csr_valid','core_csr_write','core_csr_addr','core_csr_wdata',
+                        'held_request_debug','held_response_debug','host_reset_sync.release_q',
+                        'core_reset_sync.release_q','core_release_host_sync_q']:
+                  observed['obs_'+n.replace('.','_')]=n
+              for n,source in observed.items():
+                  m['ports'][n]=dict(direction='output',bits=list(m['netnames'][source]['bits']))
+              require(m['cells']=={n:c for n,c in raw['cells'].items() if n!='u_csr'}, 'Projection changed logic')
+              for n,p in raw['ports'].items():
+                  require(m['ports'][n]==p, 'Projection changed public port '+n)
+              q={b for c in m['cells'].values() if c['type']=='$adff' for b in c['connections']['Q']}
+              exposed={b for p in m['ports'].values() if p['direction']=='output' for b in p['bits']}
+              require(q<=exposed, 'Unobserved retained state')
+              if label=='rtl':
+                  require(len(q)==169, 'Unexpected state count')
+                  write('projection-audit.json',dict(retained_bits=len(q),target=target,observations=observed,
+                                                   public_ports=raw['ports'],projected_ports=m['ports']))
+              m['attributes'].pop('top',None)
+              write(label+'-dut.json',dict(modules={'dut':m}))
+              return m
+
+          def frontend(label, dut_json, gate=False):
+              library='read_verilog -defer -D ICE40_HX +/ice40/cells_sim.v; ' if gate else ''
+              yosys(label+'-frontend', f'{library}read_json "{E}/{dut_json}"; read_verilog -formal -sv "{E}/check.sv"; hierarchy -check -top check41; proc; flatten; opt_clean; clk2fflogic; opt_clean; check -assert; rename -enumerate -pattern frp41_trace_%; write_json "{E}/{label}-check.json"; write_rtlil "{E}/{label}.il"')
+              d=read(label+'-check.json');m=d['modules']['check41']
+              counts=collections.Counter(c['type'] for c in m['cells'].values())
+              require(counts['$assert']==33 and counts['$assume']==0, label+' property/assumption count')
+              require(not m['attributes'].get('blackbox') and not any(t.startswith('$abstract') or not t.startswith('$') for t in counts), label+' unresolved cell')
+              require(not any(counts[t] for t in ['$anyseq','$anyconst','$allseq','$allconst']), label+' hidden symbolic source')
+              require(all(re.fullmatch(r'[A-Za-z0-9_.$:\[\]-]+',n) for n in m['netnames']), label+' unsafe trace name')
+
+          require(not E.exists(), 'Fresh evidence directory required')
+          E.mkdir(parents=True)
+          try:
+              require(sys.flags.optimize==0, 'Python assertions disabled')
+              require(os.environ['GITHUB_EVENT_NAME']=='workflow_dispatch', 'Manual dispatch only')
+              require(os.environ['GITHUB_REF']=='refs/heads/main', 'main only')
+              commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+              require(commit==os.environ['GITHUB_SHA'], 'Checkout mismatch')
+              require(not subprocess.check_output(['git','status','--porcelain'],text=True).strip(), 'Dirty checkout')
+              workflow=R/'.github/workflows/frp-41-m32-cdc-transport-contract-formal.yml'
+              write('workflow-source.yml',workflow.read_text())
+              report.update(commit=commit,run_id=os.environ['GITHUB_RUN_ID'],
+                            run_attempt=os.environ['GITHUB_RUN_ATTEMPT'],source_hashes=PINS,
+                            scope='M32 CDC transport and actual reset-release shell; universally free CSR target responses')
+              for path,digest in PINS.items():
+                  data=(R/path).read_bytes();require(sha(data)==digest, 'Source identity '+path)
+                  out=E/'sources'/path;out.parent.mkdir(parents=True,exist_ok=True);out.write_bytes(data)
+              versions={p:metadata.version(p) for p in ['yowasp-yosys','yowasp-runtime','wasmtime']}
+              require(versions=={'yowasp-yosys':'0.68.0.0.post1208','yowasp-runtime':'1.96','wasmtime':'47.0.1'}, 'Tool versions')
+              write('tools.json',versions);run('yosys-version',['yowasp-yosys','-V'])
+              source={p:(R/p).read_text() for p in PINS}
+              # Extract the actual integration body and the exact CSR target signature.
+              # The sole syntax lowering removes a string parameter type, not its value.
+              binding=re.sub(r'^`include .*$', '',source[BINDING],flags=re.M)
+              header=source[TARGET][source[TARGET].index('module frp_m32_csr_top'):]
+              header=header[:header.index(');')+2]
+              require(binding.count('parameter string SIN_LUT_FILE')==1 and header.count('parameter string SIN_LUT_FILE')==1, 'Parameter signature changed')
+              projection='(* blackbox *) '+header+'\nendmodule\n'+binding
+              write('projection.sv',projection.replace('parameter string SIN_LUT_FILE','parameter SIN_LUT_FILE'))
+              m=project('rtl',source[BRIDGE],source[RESET]);ports=m['ports']
+              def declaration(n,p):
+                  width=len(p['bits'])
+                  return ('input wire ' if p['direction']=='input' else 'wire ')+(f'[{width-1}:0] ' if width>1 else '')+n
+              harness=['module check41 (',',\n'.join(declaration(n,p) for n,p in ports.items() if p['direction']=='input')+',\noutput wire [16:0] witness',');']
+              harness += [declaration(n,p)+';' for n,p in ports.items() if p['direction']=='output']
+              harness += ['dut u_dut ('+', '.join('.'+n+'('+n+')' for n in ports)+');',MONITOR,'endmodule']
+              write('check.sv','\n'.join(harness)+'\n')
+              frontend('rtl','rtl-dut.json')
+              yosys('synthesis', f'read_json "{E}/rtl-dut.json"; synth_ice40 -top dut -json "{E}/mapped.json"; write_verilog -noattr "{E}/mapped.v"')
+              mapped=read('mapped.json')['modules']['dut']
+              types=collections.Counter(c['type'] for c in mapped['cells'].values())
+              require(set(types)<={'SB_DFFER','SB_DFFR','SB_LUT4','$scopeinfo'} and types['SB_DFFER']+types['SB_DFFR']==169, 'Mapped state/primitives')
+              require({n:(p['direction'],len(p['bits'])) for n,p in mapped['ports'].items()}=={n:(p['direction'],len(p['bits'])) for n,p in ports.items()}, 'Mapped interface')
+              report['mapped_cells']=dict(types)
+              write('gate-dut.json',dict(modules={'dut':mapped}))
+              frontend('gate','gate-dut.json',True)
+              for kind in ['rtl','gate']:
+                  log=yosys(kind+'-induction', f'read_rtlil "{E}/{kind}.il"; sat -timeout 60 -seq 3 -set-at 1 rst_n_async 0 -tempinduct -maxsteps 8 -prove-asserts -verify -show-ports -dump_json "{E}/{kind}-induction-failure.json"')
+                  require(re.search(r'Base case for induction length \d+ proven\.',log) and 'Induction step proven: SUCCESS!' in log, kind+' induction incomplete')
+                  report['proofs'][kind]=dict(status='PASS',assertions=33,initial_common_reset_only=True,
+                                             independent_clocks=True,unbounded=True,target_response_bits=34)
+              for i,name in enumerate(CASES):
+                  depth=96 if i==16 else (48 if i in [8,15] else 32)
+                  clocks=[]
+                  for t in range(1,depth+1):
+                      h=c=t%2
+                      if i==10 or (i==12 and t>depth-6):c=0
+                      if i==11 or (i==13 and t>depth-6):h=0
+                      clocks.append(f'-set-at {t} host_clk {h} -set-at {t} core_clk {c}')
+                  label='reach-'+name
+                  log=yosys(label, f'read_rtlil "{E}/rtl.il"; sat -timeout 60 -seq {depth} -set-at 1 rst_n_async 0 -set-at {depth} witness[{i}] 1 '+ ' '.join(clocks)+f' -show-ports -dump_json "{E}/{label}.json"')
+                  require('SAT solving finished - model found:' in log, label+' unreachable or unknown')
+                  report['witnesses'][name]=dict(status='PASS',depth=depth,trace=wave(label))
+              for name,path,old,new in MUTATIONS:
+                  require(source[path].count(old)==1, 'Mutation anchor '+name)
+                  changed=dict(source);changed[path]=source[path].replace(old,new)
+                  label='fault-'+name
+                  project(label,changed[BRIDGE],changed[RESET]);frontend(label,label+'-dut.json')
+                  log=yosys(label+'-counterexample', f'read_rtlil "{E}/{label}.il"; sat -timeout 60 -seq 24 -set-at 1 rst_n_async 0 -prove-asserts -verify -show-all -dump_json "{E}/{label}-counterexample.json"',True)
+                  require('SAT proof finished - model found: FAIL!' in log, label+' missing counterexample')
+                  report['mutations'][name]=dict(status='DETECTED',path=path,old=old,new=new,
+                                               mutated_sha256=sha(changed[path].encode()),trace=wave(label+'-counterexample'))
+              require(len(report['proofs'])==2 and len(report['witnesses'])==17 and len(report['mutations'])==16, 'Incomplete campaign')
+              for path,digest in PINS.items():require(sha((R/path).read_bytes())==digest, 'Source modified '+path)
+              require(not subprocess.check_output(['git','status','--porcelain'],text=True).strip(), 'Checkout modified')
+              for p in E.rglob('*.json'):json.loads(p.read_text())
+              report['json_files_validated']=len(list(E.rglob('*.json')))
+              report['status']='PASS'
+          finally:
+              if E.exists():
+                  report['evidence_hashes']={str(p.relative_to(E)):sha(p.read_bytes()) for p in sorted(E.rglob('*')) if p.is_file() and p.name not in ['result-41.json','summary-41.md']}
+                  write('result-41.json',report)
+                  summary=f"""# M32 CDC transport contract: {report['status']}
+
+          Two unbounded proofs, 33 jointly inductive properties per implementation.
+          The actual M32 bridge and reset-release shell retain all 169 state bits.
+          The independent modulo-four ledger checks admission, one outstanding
+          transaction, request/response identity, exact transport sequencing,
+          retention, sticky errors and reset cancellation. Its state uses no DUT feedback.
+          Only the initial common reset is constrained; later reset and clock histories
+          are free, including stopped clocks. No fairness is assumed.
+          The CSR target's 34 response bits are universally free at its actual boundary.
+          RTL and freshly synthesized iCE40 primitive models must both pass.
+          17 reachable scenarios include reset recovery, paused clocks and ledger wrap.
+          Their clock fixtures constrain witnesses only, never the induction proofs.
+          16 real source mutations must each produce a bounded counterexample.
+          Raw WaveJSON must parse without repair. SAT, unknown, timeout or incomplete
+          proof output fails a positive proof; missing witnesses also fail the run.
+
+          This is sampled two-state digital transport verification, including the
+          clk2fflogic asynchronous hold convention. It does not prove the CSR register
+          map, complete M32 arithmetic, unconditional eventual completion, metastability,
+          physical CDC constraints, board timing, IO timing or hardware measurements.
+          """
+                  write('summary-41.md',summary)
+                  with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream:stream.write(summary)
+                  print(json.dumps({k:report[k] for k in ['status','proofs','json_files_validated'] if k in report},indent=2))
+          PY
+      - name: Upload complete evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-41-m32-cdc-contract-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-41-evidence
+          if-no-files-found: error
+          retention-days: 90# Copyright (c) 2026 Maksym Marnov (Alchimist).
+# This workflow is proprietary and is governed by the repository license.
+# Referenced dependencies retain their own licenses.
+name: 41 - FRP M32 CDC Transport Contract RTL and FPGA Formal
+run-name: "41 - FRP CDC Contract | 33 properties + reset recovery @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-41-cdc-contract-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  prove:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Prepare evidence location
+        run: |
+          set -euo pipefail
+          printf '%s\n' "FRP41_EVIDENCE=$RUNNER_TEMP/frp-41-evidence" >> "$GITHUB_ENV"
+      - name: Install pinned formal tools
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            yowasp-yosys==0.68.0.0.post1208 \
+            yowasp-runtime==1.96 wasmtime==47.0.1
+      - name: Prove transport on RTL and FPGA primitives
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import os, sys, json, re, hashlib, subprocess, time, copy, collections
+          import importlib.metadata as metadata
+
+          R = Path.cwd().resolve()
+          E = Path(os.environ['FRP41_EVIDENCE']).resolve()
+          PINS = {
+              'rtl/m23/frp_m23_csr_cdc_bridge.sv': 'f56e3d5c3d4c07ffb54bc0a4d2968be0bdb9fff37106826d854139da2f2f6078',
+              'rtl/m23/frp_m23_reset_release_sync.sv': 'bf55576554f8c42e55f0a835bc62ad56e43004b4b459a84ce6908372f882de85',
+              'fpga/m32_csr/frp_m32_csr_cdc_top.sv': '1bbd0b3303cf0d0e4720100cb98759f7beba53c9ebceec861d9d73692938d576',
+              'fpga/m32_csr/frp_m32_csr_top.sv': 'c3d5e9060f8142acfb39310f2e47cca5a3f38c786a9bfdbb6686b2c86ff60344',
+          }
+          BRIDGE, RESET, BINDING, TARGET = PINS
+          MONITOR = r'''
+          // Independent modulo-four transaction ledger, not the DUT toggle network.
+          reg [1:0] host_age, core_age;
+          always @(posedge host_clk or negedge rst_n_async)
+            if (!rst_n_async) host_age <= 0;
+            else if (host_age != 2) host_age <= host_age + 1'b1;
+          always @(posedge core_clk or negedge rst_n_async)
+            if (!rst_n_async) core_age <= 0;
+            else if (core_age != 2) core_age <= core_age + 1'b1;
+          wire hr = host_age == 2;
+          wire cr = core_age == 2;
+          reg [1:0] release_seen;
+          always @(posedge host_clk or negedge hr)
+            if (!hr) release_seen <= 0;
+            else release_seen <= {release_seen[0], cr};
+          wire permission = hr && release_seen[1];
+          reg [1:0] accepted, delivered, completed, returned;
+          reg [1:0] request_stage0, request_stage1, response_stage0, response_stage1;
+          reg [40:0] request_saved, request_presented;
+          reg [32:0] response_saved, response_returned;
+          reg valid_previous, response_pulse;
+          reg bad_early, bad_busy, bad_held;
+          wire occupied = accepted != returned;
+          wire active = delivered != completed;
+          wire admission = csr_valid && permission && !occupied && !valid_previous;
+          always @(posedge host_clk or negedge hr) begin
+            if (!hr) begin
+              accepted <= 0; returned <= 0;
+              response_stage0 <= 0; response_stage1 <= 0;
+              request_saved <= 0; response_returned <= 0;
+              valid_previous <= 0; response_pulse <= 0;
+              bad_early <= 0; bad_busy <= 0; bad_held <= 0;
+            end else begin
+              response_stage0 <= completed; response_stage1 <= response_stage0;
+              valid_previous <= csr_valid;
+              bad_early <= bad_early || (csr_valid && !permission);
+              bad_busy <= bad_busy || (csr_valid && permission && occupied);
+              bad_held <= bad_held || (csr_valid && valid_previous);
+              response_pulse <= response_stage1 != returned;
+              if (admission) begin
+                accepted <= accepted + 1'b1;
+                request_saved <= {csr_write, csr_addr, csr_wdata};
+              end
+              if (response_stage1 != returned) begin
+                returned <= returned + 1'b1;
+                response_returned <= response_saved;
+              end
+            end
+          end
+          always @(posedge core_clk or negedge cr) begin
+            if (!cr) begin
+              delivered <= 0; completed <= 0;
+              request_stage0 <= 0; request_stage1 <= 0;
+              request_presented <= 0; response_saved <= 0;
+            end else begin
+              request_stage0 <= accepted; request_stage1 <= request_stage0;
+              if (!active && request_stage1 != delivered) begin
+                delivered <= delivered + 1'b1;
+                request_presented <= request_saved;
+              end
+              if (active && target_ready) begin
+                completed <= completed + 1'b1;
+                response_saved <= {target_error, target_rdata};
+              end
+            end
+          end
+          wire [1:0] awaiting_delivery = accepted - delivered;
+          wire [1:0] awaiting_target = delivered - completed;
+          wire [1:0] awaiting_return = completed - returned;
+          wire [3:0] outstanding_sum = {2'b0, awaiting_delivery}
+            + {2'b0, awaiting_target} + {2'b0, awaiting_return};
+          wire [1:0] q0 = accepted - request_stage0;
+          wire [1:0] q1 = request_stage0 - request_stage1;
+          wire [1:0] q2 = request_stage1 - delivered;
+          wire [1:0] q3 = completed - response_stage0;
+          wire [1:0] q4 = response_stage0 - response_stage1;
+          wire [1:0] q5 = response_stage1 - returned;
+          wire [4:0] transport_sum = {3'b0,q0}+{3'b0,q1}+{3'b0,q2}
+            + {3'b0,awaiting_target}+{3'b0,q3}+{3'b0,q4}+{3'b0,q5};
+          always @* begin
+            assert(host_age <= 2 && core_age <= 2);
+            assert(obs_host_reset_sync_release_q == {hr,host_age != 0});
+            assert(obs_core_reset_sync_release_q == {cr,core_age != 0});
+            assert(obs_core_release_host_sync_q == release_seen);
+            assert(transport_sum <= 1);
+            assert(host_reset_released == hr);
+            assert(core_reset_released == cr);
+            assert(interface_ready == permission);
+            assert(interface_busy == occupied);
+            assert(csr_ready == response_pulse);
+            assert({csr_error,csr_rdata} == response_returned);
+            assert(invalid_before_ready == bad_early);
+            assert(invalid_while_busy == bad_busy);
+            assert(invalid_valid_held == bad_held);
+            assert(protocol_error == (bad_early || bad_busy || bad_held));
+            assert(obs_core_csr_valid == active);
+            assert({obs_core_csr_write,obs_core_csr_addr,obs_core_csr_wdata} == request_presented);
+            assert(obs_held_request_debug == request_saved);
+            assert(obs_held_response_debug == response_saved);
+            assert(obs_request_toggle_host_q == accepted[0]);
+            assert(obs_request_toggle_core_seen_q == delivered[0]);
+            assert(obs_response_toggle_core_q == completed[0]);
+            assert(obs_response_toggle_host_seen_q == returned[0]);
+            assert(obs_request_valid_previous_q == valid_previous);
+            assert(obs_request_toggle_core_sync_q == {request_stage1[0],request_stage0[0]});
+            assert(obs_response_toggle_host_sync_q == {response_stage1[0],response_stage0[0]});
+            assert(outstanding_sum <= 1);
+            assert(!csr_ready || (!interface_busy && interface_ready));
+            assert(!active || occupied);
+            assert(!occupied || permission);
+            assert(!release_seen[1] || release_seen[0]);
+            assert(!release_seen[0] || cr);
+            assert(!active || request_presented == request_saved);
+          end
+
+          // Reachability observers never drive the DUT or the reference ledger.
+          reg wrapped;
+          always @(posedge host_clk or negedge hr)
+            if (!hr) wrapped <= 0;
+            else if (admission && accepted == 3) wrapped <= 1;
+          reg last_host = 1, last_core = 1, was_busy = 0, abort_seen = 0;
+          reg [3:0] host_quiet = 0, core_quiet = 0;
+          always @($global_clock) begin
+            last_host <= host_clk; last_core <= core_clk;
+            was_busy <= interface_busy;
+            if (was_busy && !rst_n_async) abort_seen <= 1;
+            if (host_clk != last_host) host_quiet <= 0;
+            else if (host_quiet != 15) host_quiet <= host_quiet + 1'b1;
+            if (core_clk != last_core) core_quiet <= 0;
+            else if (core_quiet != 15) core_quiet <= core_quiet + 1'b1;
+          end
+          assign witness[0] = csr_ready && !request_saved[40] && !csr_error;
+          assign witness[1] = csr_ready && request_saved[40] && !csr_error;
+          assign witness[2] = csr_ready && csr_error;
+          assign witness[3] = csr_ready && request_saved == 0 && csr_rdata == 0;
+          assign witness[4] = csr_ready && (&request_saved) && (&csr_rdata);
+          assign witness[5] = invalid_before_ready;
+          assign witness[6] = invalid_while_busy;
+          assign witness[7] = invalid_valid_held;
+          assign witness[8] = invalid_before_ready && invalid_while_busy && invalid_valid_held
+            && !csr_valid && csr_ready;
+          assign witness[9] = obs_core_csr_valid && !target_ready;
+          assign witness[10] = host_reset_released && !core_reset_released;
+          assign witness[11] = core_reset_released && !host_reset_released;
+          assign witness[12] = active && core_quiet >= 4 && rst_n_async;
+          assign witness[13] = awaiting_return != 0 && host_quiet >= 4 && rst_n_async;
+          assign witness[14] = abort_seen && !interface_busy && !obs_core_csr_valid && !rst_n_async;
+          assign witness[15] = abort_seen && csr_ready;
+          assign witness[16] = wrapped && csr_ready && returned == 0;
+          '''
+          CASES = ['read-success','write-success','error-response','zero-payload',
+                   'ones-payload','early-rejected','busy-rejected','held-rejected',
+                   'sticky-flags','target-stalled','host-released-first',
+                   'core-released-first','core-clock-paused','host-clock-paused',
+                   'reset-abort','reset-recovery','four-transactions-wrap']
+          MUTATIONS = [
+              ('request-write', BRIDGE, 'request_write_hold_q <= host_csr_write;', 'request_write_hold_q <= ~host_csr_write;'),
+              ('request-address', BRIDGE, 'request_addr_hold_q <= host_csr_addr;', "request_addr_hold_q <= host_csr_addr ^ 8'd1;"),
+              ('request-data', BRIDGE, 'request_wdata_hold_q <= host_csr_wdata;', "request_wdata_hold_q <= host_csr_wdata ^ 32'd1;"),
+              ('request-lost', BRIDGE, 'request_toggle_host_q <= ~request_toggle_host_q;', 'request_toggle_host_q <= request_toggle_host_q;'),
+              ('busy-overwrite', BRIDGE, 'else if (host_busy)', "else if (1'b0)"),
+              ('held-reaccepted', BRIDGE, 'else if (!request_valid_previous_q)', "else if (1'b1)"),
+              ('request-repeated', BRIDGE, "response_toggle_core_q <= ~response_toggle_core_q;\n        core_csr_valid <= 1'b0;", "response_toggle_core_q <= ~response_toggle_core_q;\n        core_csr_valid <= 1'b1;"),
+              ('response-error', BRIDGE, 'response_error_hold_q <= core_csr_error;', 'response_error_hold_q <= ~core_csr_error;'),
+              ('response-data', BRIDGE, 'response_rdata_hold_q <= core_csr_rdata;', "response_rdata_hold_q <= core_csr_rdata ^ 32'd1;"),
+              ('response-lost', BRIDGE, 'response_toggle_core_q <= ~response_toggle_core_q;', 'response_toggle_core_q <= response_toggle_core_q;'),
+              ('early-flag', BRIDGE, "invalid_before_ready <= 1'b1;", "invalid_before_ready <= 1'b0;"),
+              ('busy-flag', BRIDGE, "invalid_while_busy <= 1'b1;", "invalid_while_busy <= 1'b0;"),
+              ('held-flag', BRIDGE, "invalid_valid_held <= 1'b1;", "invalid_valid_held <= 1'b0;"),
+              ('request-sync-bypass', BRIDGE, 'request_toggle_core_sync_q[0], request_toggle_host_q', 'request_toggle_host_q, request_toggle_host_q'),
+              ('response-sync-bypass', BRIDGE, 'response_toggle_host_sync_q[0], response_toggle_core_q', 'response_toggle_core_q, response_toggle_core_q'),
+              ('reset-release-bypass', RESET, "release_q <= {release_q[0], 1'b1};", "release_q <= 2'b11;"),
+          ]
+          report = dict(status='FAIL', commands=[], proofs={}, witnesses={}, mutations={},
+                        physical_measurements=False, csr_register_map_proven=False,
+                        complete_m32_proven=False, metastability_proven=False,
+                        cross_clock_timing_closed=False, unconditional_liveness=False)
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def sha(data):
+              return hashlib.sha256(data).hexdigest()
+
+          def write(name, value):
+              (E/name).write_text(value if isinstance(value,str) else json.dumps(value,indent=2)+'\n')
+
+          def read(name):
+              return json.loads((E/name).read_text())
+
+          def run(label, argv, negative=False):
+              require(not (E/(label+'.log')).exists(), 'Repeated command '+label)
+              start=time.monotonic()
+              with (E/(label+'.log')).open('w') as stream:
+                  p=subprocess.run(argv,cwd=R,stdout=stream,stderr=subprocess.STDOUT,timeout=300)
+              report['commands'].append(dict(label=label,argv=argv,returncode=p.returncode,
+                                            seconds=round(time.monotonic()-start,3)))
+              log=(E/(label+'.log')).read_text()
+              require(p.returncode==(1 if negative else 0), label+'\n'+log[-2000:])
+              return log
+
+          def yosys(label, script, negative=False):
+              write(label+'.ys',script+'\n')
+              return run(label,['yowasp-yosys','-Q','-T','-s',str(E/(label+'.ys'))],negative)
+
+          def wave(label):
+              d=read(label+'.json');names=[]
+              require(isinstance(d,dict) and isinstance(d.get('signal'),list) and d['signal'], label+' waveform')
+              for s in d['signal']:
+                  require(isinstance(s,dict) and isinstance(s.get('name'),str) and s['name']
+                          and isinstance(s.get('wave'),str) and s['wave'], label+' signal')
+                  require(not any(ord(c)<32 for c in s['name']), label+' signal name')
+                  require('data' not in s or (isinstance(s['data'],list)
+                          and all(isinstance(v,str) for v in s['data'])), label+' data')
+                  names.append(s['name'])
+              require(len(names)==len(set(names)), label+' duplicate signals')
+              require({'host_clk','core_clk','rst_n_async','witness'}<=set(names), label+' missing inputs')
+              return dict(signals=len(names),sha256=sha((E/(label+'.json')).read_bytes()))
+
+          def project(label, bridge, reset):
+              write(label+'-bridge.sv',bridge);write(label+'-reset.sv',reset)
+              yosys(label+'-extract', f'read_verilog -sv -D SYNTHESIS "{E}/{label}-reset.sv" "{E}/{label}-bridge.sv" "{E}/projection.sv"; hierarchy -check -top frp_m32_csr_cdc_top; proc; flatten; check -assert; write_json "{E}/{label}-raw.json"')
+              raw=read(label+'-raw.json')['modules']['frp_m32_csr_cdc_top']
+              m=copy.deepcopy(raw);target=m['cells'].pop('u_csr')
+              require(target['type']=='frp_m32_csr_top', 'Unexpected target')
+              binding={'clk':'core_clk','rst_n_async':'core_reset_released',
+                       'csr_valid':'core_csr_valid','csr_write':'core_csr_write',
+                       'csr_addr':'core_csr_addr','csr_wdata':'core_csr_wdata',
+                       'csr_ready':'core_csr_ready','csr_error':'core_csr_error','csr_rdata':'core_csr_rdata'}
+              require(set(target['connections'])==set(binding), 'Target port set')
+              for p,n in binding.items():
+                  require(target['connections'][p]==m['netnames'][n]['bits'], 'Target binding '+p)
+                  require(target['port_directions'][p]==('output' if p in ['csr_ready','csr_error','csr_rdata'] else 'input'), 'Target direction '+p)
+              # Only the target's three outputs become universally free primary inputs.
+              # All bridge/reset cells and all their connections remain unchanged.
+              for n in ['ready','error','rdata']:
+                  m['ports']['target_'+n]=dict(direction='input',bits=target['connections']['csr_'+n])
+              state_names=['request_toggle_host_q','request_valid_previous_q',
+                           'request_toggle_core_sync_q','request_toggle_core_seen_q',
+                           'response_toggle_core_q','response_toggle_host_sync_q','response_toggle_host_seen_q']
+              observed={'obs_'+n:'cdc_bridge.'+n for n in state_names}
+              for n in ['core_csr_valid','core_csr_write','core_csr_addr','core_csr_wdata',
+                        'held_request_debug','held_response_debug','host_reset_sync.release_q',
+                        'core_reset_sync.release_q','core_release_host_sync_q']:
+                  observed['obs_'+n.replace('.','_')]=n
+              for n,source in observed.items():
+                  m['ports'][n]=dict(direction='output',bits=list(m['netnames'][source]['bits']))
+              require(m['cells']=={n:c for n,c in raw['cells'].items() if n!='u_csr'}, 'Projection changed logic')
+              for n,p in raw['ports'].items():
+                  require(m['ports'][n]==p, 'Projection changed public port '+n)
+              q={b for c in m['cells'].values() if c['type']=='$adff' for b in c['connections']['Q']}
+              exposed={b for p in m['ports'].values() if p['direction']=='output' for b in p['bits']}
+              require(q<=exposed, 'Unobserved retained state')
+              if label=='rtl':
+                  require(len(q)==169, 'Unexpected state count')
+                  write('projection-audit.json',dict(retained_bits=len(q),target=target,observations=observed,
+                                                   public_ports=raw['ports'],projected_ports=m['ports']))
+              m['attributes'].pop('top',None)
+              write(label+'-dut.json',dict(modules={'dut':m}))
+              return m
+
+          def frontend(label, dut_json, gate=False):
+              library='read_verilog -defer -D ICE40_HX +/ice40/cells_sim.v; ' if gate else ''
+              yosys(label+'-frontend', f'{library}read_json "{E}/{dut_json}"; read_verilog -formal -sv "{E}/check.sv"; hierarchy -check -top check41; proc; flatten; opt_clean; clk2fflogic; opt_clean; check -assert; rename -enumerate -pattern frp41_trace_%; write_json "{E}/{label}-check.json"; write_rtlil "{E}/{label}.il"')
+              d=read(label+'-check.json');m=d['modules']['check41']
+              counts=collections.Counter(c['type'] for c in m['cells'].values())
+              require(counts['$assert']==33 and counts['$assume']==0, label+' property/assumption count')
+              require(not m['attributes'].get('blackbox') and not any(t.startswith('$abstract') or not t.startswith('$') for t in counts), label+' unresolved cell')
+              require(not any(counts[t] for t in ['$anyseq','$anyconst','$allseq','$allconst']), label+' hidden symbolic source')
+              require(all(re.fullmatch(r'[A-Za-z0-9_.$:\[\]-]+',n) for n in m['netnames']), label+' unsafe trace name')
+
+          require(not E.exists(), 'Fresh evidence directory required')
+          E.mkdir(parents=True)
+          try:
+              require(sys.flags.optimize==0, 'Python assertions disabled')
+              require(os.environ['GITHUB_EVENT_NAME']=='workflow_dispatch', 'Manual dispatch only')
+              require(os.environ['GITHUB_REF']=='refs/heads/main', 'main only')
+              commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+              require(commit==os.environ['GITHUB_SHA'], 'Checkout mismatch')
+              require(not subprocess.check_output(['git','status','--porcelain'],text=True).strip(), 'Dirty checkout')
+              workflow=R/'.github/workflows/frp-41-m32-cdc-transport-contract-formal.yml'
+              write('workflow-source.yml',workflow.read_text())
+              report.update(commit=commit,run_id=os.environ['GITHUB_RUN_ID'],
+                            run_attempt=os.environ['GITHUB_RUN_ATTEMPT'],source_hashes=PINS,
+                            scope='M32 CDC transport and actual reset-release shell; universally free CSR target responses')
+              for path,digest in PINS.items():
+                  data=(R/path).read_bytes();require(sha(data)==digest, 'Source identity '+path)
+                  out=E/'sources'/path;out.parent.mkdir(parents=True,exist_ok=True);out.write_bytes(data)
+              versions={p:metadata.version(p) for p in ['yowasp-yosys','yowasp-runtime','wasmtime']}
+              require(versions=={'yowasp-yosys':'0.68.0.0.post1208','yowasp-runtime':'1.96','wasmtime':'47.0.1'}, 'Tool versions')
+              write('tools.json',versions);run('yosys-version',['yowasp-yosys','-V'])
+              source={p:(R/p).read_text() for p in PINS}
+              # Extract the actual integration body and the exact CSR target signature.
+              # The sole syntax lowering removes a string parameter type, not its value.
+              binding=re.sub(r'^`include .*$', '',source[BINDING],flags=re.M)
+              header=source[TARGET][source[TARGET].index('module frp_m32_csr_top'):]
+              header=header[:header.index(');')+2]
+              require(binding.count('parameter string SIN_LUT_FILE')==1 and header.count('parameter string SIN_LUT_FILE')==1, 'Parameter signature changed')
+              projection='(* blackbox *) '+header+'\nendmodule\n'+binding
+              write('projection.sv',projection.replace('parameter string SIN_LUT_FILE','parameter SIN_LUT_FILE'))
+              m=project('rtl',source[BRIDGE],source[RESET]);ports=m['ports']
+              def declaration(n,p):
+                  width=len(p['bits'])
+                  return ('input wire ' if p['direction']=='input' else 'wire ')+(f'[{width-1}:0] ' if width>1 else '')+n
+              harness=['module check41 (',',\n'.join(declaration(n,p) for n,p in ports.items() if p['direction']=='input')+',\noutput wire [16:0] witness',');']
+              harness += [declaration(n,p)+';' for n,p in ports.items() if p['direction']=='output']
+              harness += ['dut u_dut ('+', '.join('.'+n+'('+n+')' for n in ports)+');',MONITOR,'endmodule']
+              write('check.sv','\n'.join(harness)+'\n')
+              frontend('rtl','rtl-dut.json')
+              yosys('synthesis', f'read_json "{E}/rtl-dut.json"; synth_ice40 -top dut -json "{E}/mapped.json"; write_verilog -noattr "{E}/mapped.v"')
+              mapped=read('mapped.json')['modules']['dut']
+              types=collections.Counter(c['type'] for c in mapped['cells'].values())
+              require(set(types)<={'SB_DFFER','SB_DFFR','SB_LUT4','$scopeinfo'} and types['SB_DFFER']+types['SB_DFFR']==169, 'Mapped state/primitives')
+              require({n:(p['direction'],len(p['bits'])) for n,p in mapped['ports'].items()}=={n:(p['direction'],len(p['bits'])) for n,p in ports.items()}, 'Mapped interface')
+              report['mapped_cells']=dict(types)
+              write('gate-dut.json',dict(modules={'dut':mapped}))
+              frontend('gate','gate-dut.json',True)
+              for kind in ['rtl','gate']:
+                  log=yosys(kind+'-induction', f'read_rtlil "{E}/{kind}.il"; sat -timeout 60 -seq 3 -set-at 1 rst_n_async 0 -tempinduct -maxsteps 8 -prove-asserts -verify -show-ports -dump_json "{E}/{kind}-induction-failure.json"')
+                  require(re.search(r'Base case for induction length \d+ proven\.',log) and 'Induction step proven: SUCCESS!' in log, kind+' induction incomplete')
+                  report['proofs'][kind]=dict(status='PASS',assertions=33,initial_common_reset_only=True,
+                                             independent_clocks=True,unbounded=True,target_response_bits=34)
+              for i,name in enumerate(CASES):
+                  depth=96 if i==16 else (48 if i in [8,15] else 32)
+                  clocks=[]
+                  for t in range(1,depth+1):
+                      h=c=t%2
+                      if i==10 or (i==12 and t>depth-6):c=0
+                      if i==11 or (i==13 and t>depth-6):h=0
+                      clocks.append(f'-set-at {t} host_clk {h} -set-at {t} core_clk {c}')
+                  label='reach-'+name
+                  log=yosys(label, f'read_rtlil "{E}/rtl.il"; sat -timeout 60 -seq {depth} -set-at 1 rst_n_async 0 -set-at {depth} witness[{i}] 1 '+ ' '.join(clocks)+f' -show-ports -dump_json "{E}/{label}.json"')
+                  require('SAT solving finished - model found:' in log, label+' unreachable or unknown')
+                  report['witnesses'][name]=dict(status='PASS',depth=depth,trace=wave(label))
+              for name,path,old,new in MUTATIONS:
+                  require(source[path].count(old)==1, 'Mutation anchor '+name)
+                  changed=dict(source);changed[path]=source[path].replace(old,new)
+                  label='fault-'+name
+                  project(label,changed[BRIDGE],changed[RESET]);frontend(label,label+'-dut.json')
+                  log=yosys(label+'-counterexample', f'read_rtlil "{E}/{label}.il"; sat -timeout 60 -seq 24 -set-at 1 rst_n_async 0 -prove-asserts -verify -show-all -dump_json "{E}/{label}-counterexample.json"',True)
+                  require('SAT proof finished - model found: FAIL!' in log, label+' missing counterexample')
+                  report['mutations'][name]=dict(status='DETECTED',path=path,old=old,new=new,
+                                               mutated_sha256=sha(changed[path].encode()),trace=wave(label+'-counterexample'))
+              require(len(report['proofs'])==2 and len(report['witnesses'])==17 and len(report['mutations'])==16, 'Incomplete campaign')
+              for path,digest in PINS.items():require(sha((R/path).read_bytes())==digest, 'Source modified '+path)
+              require(not subprocess.check_output(['git','status','--porcelain'],text=True).strip(), 'Checkout modified')
+              for p in E.rglob('*.json'):json.loads(p.read_text())
+              report['json_files_validated']=len(list(E.rglob('*.json')))
+              report['status']='PASS'
+          finally:
+              if E.exists():
+                  report['evidence_hashes']={str(p.relative_to(E)):sha(p.read_bytes()) for p in sorted(E.rglob('*')) if p.is_file() and p.name not in ['result-41.json','summary-41.md']}
+                  write('result-41.json',report)
+                  summary=f"""# M32 CDC transport contract: {report['status']}
+
+          Two unbounded proofs, 33 jointly inductive properties per implementation.
+          The actual M32 bridge and reset-release shell retain all 169 state bits.
+          The independent modulo-four ledger checks admission, one outstanding
+          transaction, request/response identity, exact transport sequencing,
+          retention, sticky errors and reset cancellation. Its state uses no DUT feedback.
+          Only the initial common reset is constrained; later reset and clock histories
+          are free, including stopped clocks. No fairness is assumed.
+          The CSR target's 34 response bits are universally free at its actual boundary.
+          RTL and freshly synthesized iCE40 primitive models must both pass.
+          17 reachable scenarios include reset recovery, paused clocks and ledger wrap.
+          Their clock fixtures constrain witnesses only, never the induction proofs.
+          16 real source mutations must each produce a bounded counterexample.
+          Raw WaveJSON must parse without repair. SAT, unknown, timeout or incomplete
+          proof output fails a positive proof; missing witnesses also fail the run.
+
+          This is sampled two-state digital transport verification, including the
+          clk2fflogic asynchronous hold convention. It does not prove the CSR register
+          map, complete M32 arithmetic, unconditional eventual completion, metastability,
+          physical CDC constraints, board timing, IO timing or hardware measurements.
+          """
+                  write('summary-41.md',summary)
+                  with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream:stream.write(summary)
+                  print(json.dumps({k:report[k] for k in ['status','proofs','json_files_validated'] if k in report},indent=2))
+          PY
+      - name: Upload complete evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-41-m32-cdc-contract-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-41-evidence
+          if-no-files-found: error
+          retention-days: 90
