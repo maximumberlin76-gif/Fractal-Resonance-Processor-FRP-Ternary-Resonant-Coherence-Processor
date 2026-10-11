@@ -1,0 +1,615 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# This workflow is proprietary and is not licensed under Apache-2.0.
+# Referenced dependencies retain their existing licenses.
+name: 38 - FRP M32 Full Core Contract RTL + Netlist Formal
+run-name: "38 - FRP M32 Full Formal | 59 assertions @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-38-m32-core-contract-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Prepare evidence
+        run: |
+          set -euo pipefail
+          printf '%s\n' "FRP38_EVIDENCE=$RUNNER_TEMP/frp-38-evidence" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install pinned verification tools
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python -m pip install --disable-pip-version-check --only-binary=:all: \
+            --timeout 30 --retries 3 yowasp-yosys==0.68.0.0.post1208 \
+            z3-solver==5.1.0.0 verilator==5.48.0
+      - name: Prove the complete M32 contract and challenge both implementations
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          from pathlib import Path
+          import os,json
+          E=Path(os.environ['FRP38_EVIDENCE']).resolve()
+          report=dict(status='FAIL',full_m32_proof=False,rtl_netlist_proven=False)
+          try:
+              SOURCES={
+                  "formal/m32/frp_m32_core_contract_formal.sv": "27a710cad922934bdd4496cbdbcc89bf011541fb08fdc2ff2e4ddbc85750fa4c",
+                  "rtl/m31/frp_m31_active_neutral.sv": "765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0",
+                  "rtl/m31/frp_m31_capacity_guard.sv": "d0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123",
+                  "rtl/m31/frp_m31_execution_core.sv": "e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92",
+                  "rtl/m31/frp_m31_fixed_point_pkg.sv": "6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24",
+                  "rtl/m31/frp_m31_pending_routes.sv": "18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411",
+                  "rtl/m31/frp_m31_phase_interference.sv": "d3ccabcd304c4ca66dcd31c75d233a16fe61c3181f797162e91674e1992d475d",
+                  "rtl/m31/frp_m31_phase_request_adapter.sv": "fa78bcfe965270cc74855908aa392989d857575a2097a126539aabb1aab8990d",
+                  "rtl/m31/frp_m31_pkg.sv": "762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94",
+                  "rtl/m31/frp_m31_request_lanes.sv": "32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109",
+                  "rtl/m31/frp_m31_scheduler.sv": "fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f",
+                  "rtl/m31/frp_m31_sin_q30.mem": "adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d",
+                  "rtl/m31/frp_m31_stability.sv": "69c06833e6dfbb28e25b74a5787dcd03756dddf0f66726de3ea47c1ad2931931",
+                  "rtl/m31/frp_m31_state_update.sv": "ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90",
+                  "rtl/m31/frp_m31_thermal_proxy.sv": "34df4ebfc5dfad8e3e5e454e560404585de5c881e6f75abaae367d3bd9fb11bd",
+                  "rtl/m32/frp_m32_closed_loop_tb.sv": "1d0e02b0d95fe02806eee79a21eeb9d341d7a1b4b760842c0f0b2702fb183528",
+                  "rtl/m32/frp_m32_core.sv": "925342326b7ad555a1382e8ee3bc5754ed3012ba60e0eabf512113731e0ee6c9",
+                  "rtl/m32/frp_m32_registered_target_boundary.sv": "9626474b49d32b411e107d7ccc8ee5aa7f42728e9a6f70d634d16d3f2a414c5e",
+                  "rtl/m32/frp_m32_registered_target_request_path.sv": "02250069a68737f055a419cd67bf2d439b3f63b3f6a7a245f40e9bf29d1958eb"
+              }
+              from pathlib import Path
+              import os, re, sys, json, hashlib, shutil, subprocess, textwrap, time
+              R=Path.cwd().resolve(); E=Path(os.environ['FRP38_EVIDENCE']).resolve(); P=E
+              report=dict(status='FAIL',full_m32_proof=False,rtl_netlist_proven=False,commands=[])
+              assert not E.exists(), 'Fresh evidence directory required'
+              E.mkdir(parents=True)
+              def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+              def run(label,args,cwd,timeout=900,negative=False):
+                  print('START',label,flush=True); log=E/(label+'.log'); assert not log.exists()
+                  entry=dict(label=label,argv=[str(x) for x in args]); report['commands'].append(entry)
+                  started=time.monotonic()
+                  with log.open('wb') as stream:
+                      result=subprocess.run(args,cwd=cwd,stdout=stream,stderr=subprocess.STDOUT,timeout=timeout)
+                  entry.update(returncode=result.returncode,seconds=round(time.monotonic()-started,3))
+                  assert negative or result.returncode==0, label+': '+log.read_text()[-2000:]
+                  return result.returncode,log
+              def yosys(label,script,view):
+                  p=E/(label+'.ys');p.write_text(script+'\n')
+                  run(label,['yowasp-yosys','-Q','-T','-s',str(p)],view)
+              C='frp_m32_core_contract_formal'; H='formal/m32/'+C+'.sv'
+              W='.github/workflows/frp-38-m32-core-contract-formal.yml'
+              B='.github/workflows/frp-37-m31-phase-interference-contract-formal.yml'
+              assert sys.flags.optimize==0
+              assert os.environ['GITHUB_EVENT_NAME']=='workflow_dispatch'
+              assert os.environ['GITHUB_REF']=='refs/heads/main'
+              assert subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()==os.environ['GITHUB_SHA']
+              assert not subprocess.check_output(['git','status','--porcelain'],text=True).strip()
+              assert sha(R/B)=='8c10dd998acf4b1d0e849467d6957214a42cd12666c6f9f58f395d68933f84c7'
+              assert all(sha(R/p)==v for p,v in SOURCES.items())
+              workflow_sha=sha(R/W)
+              report.update(commit=os.environ['GITHUB_SHA'],source_hashes=SOURCES,workflow_sha256=workflow_sha,
+                            scope='8 cells, 2 request lanes, 32-bit counters, sampled two-state semantics',
+                            physical_timing=False,python_v093_equivalence=False)
+              # Run the source-pinned predecessor here, on this checkout, with fresh evidence.
+              # Its complete arithmetic lemmas and ROM checks are prerequisites, not cached PASS files.
+              old=(R/B).read_text()
+              old=textwrap.dedent(old.split("          python - <<'PY'\n",1)[1].split('\n          PY',1)[0])
+              os.environ['FRP37_EVIDENCE']=str(E/'phase-lemmas')
+              base={'__name__':'__main__'};exec(compile(old,B,'exec'),base)
+              assert base['report']['status']=='PASS' and base['report']['contract_proven']
+              assert base['report']['rtl_netlist_proven']
+              Model,sexpr,fun=base['Model'],base['sexpr'],base['fun']
+              original=(R/H).read_text(); phase=(R/'formal/m31/frp_m31_phase_interference_contract_formal.sv').read_text()
+              for n in ['round_pow2','clip_s32','multiply_fixed','phase_increment','root_u64','topology','order_of_group']:
+                  assert fun(original,n)==fun(phase,n),n
+              V=E/'proof-inputs'
+              for rel in SOURCES:
+                  p=V/rel;p.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(R/rel,p)
+              p=V/'rtl/m31/frp_m31_phase_interference.sv'; core=p.read_text()
+              pattern=r'    if \(sin_lut[^\n]+\)\n      \$fatal\([^;\n]+\);\n'
+              removed=re.findall(pattern,core);assert len(removed)==4
+              core=re.sub(pattern,'',core)
+              assert hashlib.sha256(core.encode()).hexdigest()=='09302236b4a7734be9ac0890df4a7a577541a73c441ae7db3e70da8465f1c3ef'
+              p.write_text(core);(E/'removed-simulation-guards.txt').write_text(''.join(removed))
+              net=E/'frp_m32_core_netlist.v'
+              yosys('synthesis',f'read_slang -j 1 --std 1800-2017 --top frp_m32_core -Irtl/m31 -Irtl/m32 rtl/m32/frp_m32_core.sv; synth -top frp_m32_core -flatten -noshare -noalumacc -run begin:fine; check -assert; techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; select -assert-none t:$shiftx t:$connect; rename frp_m32_core frp_m32_core_netlist; write_verilog -noattr "{net}"; write_json "{E}/netlist.json";',V)
+              def front(variant):
+                  pre=f'read_verilog -icells "{net}"; ' if variant=='netlist' else ''
+                  macro='-D FRP_M32_CORE_CONTRACT_NETLIST ' if variant=='netlist' else ''
+                  return pre+f'read_slang -j 1 --std 1800-2017 --top {C} {macro}-Irtl/m31 -Irtl/m32 {H}; '
+              for variant in ('rtl','netlist'):
+                  out=E/(variant+'-original.json')
+                  yosys(variant+'-original',front(variant)+f'proc; opt_clean; write_json "{out}";',V)
+                  checks=[c['parameters']['FLAVOR'] for c in json.loads(out.read_text())['modules'][C]['cells'].values() if c['type']=='$check']
+                  assert checks.count('assert')==59 and checks.count('assume')==1 and len(checks)==60
+              # Prove the rounding lemma's domain on every ORIGINAL M32 call before lifting.
+              h=original;f=fun(h,'round_pow2')
+              monitor="      assert (value >= -64'sd4611686018427387904 && value <= 64'sd4611686018427387904);"
+              h=h.replace(f,f.replace('    begin\n','    begin\n'+monitor+'\n',1))
+              domain_line=h[:h.index(monitor)].count('\n')+1;(V/H).write_text(h)
+              passes='proc; memory_share; memory_collect; async2sync; opt -full; wreduce; opt_clean; '
+              yosys('original-domains',front('rtl')+passes+f'write_json "{E}/original-domains.json";',V)
+              design=json.loads((E/'original-domains.json').read_text());model=design['modules'][C];HARNESS=H
+              start=old.index("    cells=model['cells'];drivers={}");end=old.index('    # Congruence replacement',start)
+              domain_code=textwrap.dedent(old[start:end])
+              assert domain_code.count('assert len(remove)==161,len(remove)')==1
+              assert domain_code.count("==21\n")==1
+              domain_code=domain_code.replace('assert len(remove)==161,len(remove)','assert len(remove)==166,len(remove)').replace('==21\n','==58\n')
+              exec(compile(domain_code,'source-pinned-rounding-domain-engine','exec'),globals())
+              assert len(domain_report)==166
+              # Only closed helper equivalences change the isolated proof view.
+              # The committed independent contract and replay remain byte-for-byte original.
+              h=original
+              for name,args,typ,expr in [
+               ('round_pow2','input wide_t value, input int shift','wide_t','frp_m31_fixed_point_pkg::frp_m31_round_shift_s64(value, shift)'),
+               ('clip_s32','input wide_t value','logic signed [31:0]','frp_m31_fixed_point_pkg::frp_m31_sat_s32(value)'),
+               ('phase_increment','input logic signed [31:0] velocity','logic [31:0]','frp_m31_fixed_point_pkg::frp_m31_velocity_to_phase_word(velocity)')]:
+                  h=h.replace(fun(h,name),f'  function automatic {typ} {name}({args});\n    return {expr};\n  endfunction')
+              h=h.replace(fun(h,'root_u64'),fun(core,'isqrt_u64').replace('isqrt_u64','root_u64').replace('radicand','value'))
+              (V/H).write_text(h)
+              for variant in ('rtl','netlist'):
+                  name='model' if variant=='rtl' else 'netlist-model-v2'
+                  flatten=f'hierarchy -top {C}; flatten; ' if variant=='netlist' else ''
+                  yosys(name,front(variant)+flatten+passes+f'write_json "{E}/{name}.json"; dffunmap; check -assert; write_smt2 -wires "{E}/{name}.smt2";',V)
+                  model=json.loads((E/(name+'.json')).read_text())['modules'][C]
+                  assert sum(c['type']=='$assert' for c in model['cells'].values())==58
+              # Yosys merges one redundant assertion; the original inventories above retain 59.
+
+              def dependencies(self,expression):
+               need=set();todo=re.findall(r'\|([^|]+)\|',expression)
+               while todo:
+                n=todo.pop()
+                if n in need or n in self.constants:continue
+                assert n in self.defs,n
+                need.add(n);todo.extend(set(re.findall(r'\|([^|]+)\|',self.replace.get(n,self.defs[n])))-{n})
+               return need
+              def model_text(self,expression,constraints=(),timeout=60000):
+               assumptions=self.constraints+list(constraints);need=self.dependencies(expression+' '.join(assumptions));order=[];done=set();active=set()
+               def visit(n):
+                if n in done or n in self.constants:return
+                assert n not in active,n
+                active.add(n)
+                for dep in sorted(set(re.findall(r'\|([^|]+)\|',self.replace.get(n,self.defs[n])))-{n}):visit(dep)
+                active.remove(n);done.add(n);order.append(n)
+               for n in self.order:
+                if n in need:visit(n)
+               return f'(set-option :timeout {timeout})\n'+'\n'.join(f'(declare-fun |{n}| () {t})' for n,t in self.constants.items())+'\n'+'\n'.join(self.replace.get(n,self.defs[n]) for n in order)+f'\n(declare-fun s () |{self.top}_s|)\n(declare-fun t () |{self.top}_s|)\n'+'\n'.join('(assert '+c+')' for c in assumptions)+f'\n(assert {expression})\n(check-sat)\n'
+              Model.dependencies=dependencies;Model.text=model_text
+
+              def prove(variant):
+                  E=P/(variant+'-proof');E.mkdir()
+                  model_name='model' if variant=='rtl' else 'netlist-model-v2'
+                  m=Model(P/(model_name+'.smt2'),C,E,shutil.which('z3'))
+                  j=json.loads((P/(model_name+'.json')).read_text())['modules'][C];cells=j['cells']
+                  pairs=[('state_out','state_ref'),('pending_route_out','pending_ref'),('scheduler_mode_q','mode_ref'),('scheduler_state_q','phase_ref'),('u_execution.tick_index_q','index_ref'),('ticks_recorded_q','ticks_ref'),('phase_word_q','expected_phase_q'),('frequency_current_q16','expected_frequency_q'),('registered_target_q','target_ref'),('registered_target_valid_q','target_valid_ref'),('accepted_target_capture_events_q','captures_ref'),('temperature_proxy_q16','temperature_ref'),('peak_temperature_proxy_q16','peak_ref'),('thermal_sample_count_q','samples_ref')]
+                  def ext(x,hi,lo):return f'((_ extract {hi} {lo}) {x})'
+                  def state_eq(st):
+                   terms=[f'(= {m.n("dut."+a,st)} {m.n(b,st)})' for a,b in pairs]
+                   terms += [f'(= {m.n("dut.u_execution.period_index_q",st)} {ext(m.n("index_ref",st),2,0)})',f'(= {m.n("dut.rejected_target_capture_events_q",st)} #x00000000)']
+                   for k,n in enumerate(['free','balance','commit','excite','neutralize']):terms.append(f'(= {m.n("dut.scheduler_count_"+n+"_q",st)} {ext(m.n("counts_ref",st),32*k+31,32*k)})')
+                   return '(and '+' '.join(terms)+')'
+                  def canonical(st):
+                   terms=[]
+                   for i in range(8):
+                    a=ext(m.n('state_ref',st),2*i+1,2*i);p=ext(m.n('pending_ref',st),2*i+1,2*i);t=ext(m.n('target_ref',st),2*i+1,2*i)
+                    terms += [f'(not (= {x} #b10))' for x in [a,p,t]]
+                    terms.append(f'(or (= {p} #b00) (= {a} #b00))')
+                   return '(and '+' '.join(terms)+')'
+                  def inv(st):return '(and '+state_eq(st)+' '+canonical(st)+')'
+                  arrays=[n for n,d in m.defs.items() if d.startswith('(declare-fun') and '(Array (_ BitVec 12) (_ BitVec 32))' in d];assert len(arrays)==2
+                  mems=[c for c in cells.values() if c['type']=='$mem_v2' and int(c['parameters']['SIZE'],2)==4096 and int(c['parameters']['WIDTH'],2)==32];assert len(mems)==2
+                  words=[int(x,16) for x in (R/'rtl/m31/frp_m31_sin_q30.mem').read_text().split()]
+                  for mem in mems:
+                   p=mem['parameters'];assert int(p['WR_PORTS'],2)==0 and int(p['SIZE'],2)==4096 and int(p['WIDTH'],2)==32;assert [int(p['INIT'][-32*(i+1):131072-32*i],2) for i in range(4096)]==words
+                  for name,cell in cells.items():
+                   if cell['type']!='$mem_v2' or cell in mems:continue
+                   p=cell['parameters'];aw=int(p['ABITS'],2);w=int(p['WIDTH'],2);size=int(p['SIZE'],2)
+                   assert int(p['WR_PORTS'],2)==0 and int(p['RD_CLK_ENABLE'],2)==0 and size==1<<aw
+                   assert len(p['INIT'])==size*w and set(p['INIT'])<={'0','1'}
+                   hits=[n for n,d in m.defs.items() if d.startswith('(declare-fun') and '(Array' in d and d.endswith('; '+name)];assert len(hits)==1
+                   typ=f'(Array (_ BitVec {aw}) (_ BitVec {w}))';value=f'((as const {typ}) (_ bv0 {w}))'
+                   for i in range(size):
+                    word=int(p['INIT'][-w*(i+1):w*size-w*i],2)
+                    value=f'(store {value} (_ bv{i} {aw}) (_ bv{word} {w}))'
+                   raw=hits[0];m.replace[raw]=f'(define-fun |{raw}| ((state |{C}_s|)) {typ} {value})'
+                  m.constants['rom']='(Array (_ BitVec 12) (_ BitVec 32))'
+                  for n in arrays:m.replace[n]=f'(define-fun |{n}| ((state |{C}_s|)) (Array (_ BitVec 12) (_ BitVec 32)) |rom|)'
+                  def emit(node):return '('+' '.join(emit(x) for x in node)+')' if isinstance(node,list) else node
+                  def substitute(node,token,value):
+                   if isinstance(node,list):return [substitute(x,token,value) for x in node]
+                   return value if node==token else node
+                  expanded_cache={}
+                  def expand_original(node):
+                   if not isinstance(node,list):return node
+                   if len(node)==2 and isinstance(node[0],str) and node[0].startswith('|'):
+                    raw=node[0][1:-1];d=sexpr(m.defs[raw])
+                    if d[0]=='define-fun':
+                     key=(raw,node[1])
+                     if key not in expanded_cache:expanded_cache[key]=expand_original(substitute(d[4],'state',node[1]))
+                     return expanded_cache[key]
+                   return [expand_original(x) for x in node]
+                  # Preserve the invariant in terms of ORIGINAL state declarations, not aliases
+                  # that will be rewritten under that invariant. This prevents circular induction.
+                  frozen_invariants={st:emit(expand_original(sexpr(inv(st)))) for st in ['s','t']}
+                  def inv(st):return frozen_invariants[st]
+                  assert m.check('reset_base',f'(and (not {m.n("rst_n")}) (not {inv("s")}))')
+                  m.constraints=[inv('s')]
+                  def flatten(node):
+                   if node[0]=='concat':return flatten(node[2])+flatten(node[1])
+                   return [node]
+                  def emit(node):return '('+' '.join(emit(x) for x in node)+')' if isinstance(node,list) else node
+                  bits=flatten(sexpr(m.defs[C+'_n mismatch'])[4]);assert len(bits)==59
+                  def bit_bad(i):return '(= '+emit(bits[i]).replace('state','s')+' #b1)'
+
+                  def redirect(a,b):
+                   node=sexpr(m.defs[C+'_n '+a]);body=node[4];assert len(body)==2 and body[1]=='state',a
+                   raw=body[0][1:-1];assert raw not in m.replace
+                   value=sexpr(m.defs[C+'_n '+b])[4]
+                   assert raw not in m.dependencies(emit(value)),(a,b)
+                   m.replace[raw]=f'(define-fun |{raw}| ((state |{C}_s|)) '+emit(node[3])+' '+emit(value)+')'
+                  original_invariant_dependencies=m.dependencies(inv('s'))
+                  h=(R/'formal/m32/frp_m32_core_contract_formal.sv').read_text()
+                  struct=re.search(r'typedef struct packed \{([\s\S]*?)\} observation_t;',h).group(1)
+                  fields=[(n,int(w)+1 if w else 1) for w,n in re.findall(r'logic\s+(?:\[(\d+):0\]\s+)?(\w+);',struct)]
+                  assert len(fields)==59 and sum(w for n,w in fields)==2075
+                  def width(x):
+                   if isinstance(x,str):
+                    assert x.startswith('#b') or x.startswith('#x'),x
+                    return (len(x)-2)*(1 if x.startswith('#b') else 4)
+                   if isinstance(x[0],list):
+                    assert x[0][:2]==['_','extract'];return int(x[0][2])-int(x[0][3])+1
+                   if x[0]=='concat':return width(x[1])+width(x[2])
+                   if x[0]=='ite':return width(x[2])
+                   t=sexpr(m.defs[x[0][1:-1]])[3];assert t[:2]==['_','BitVec'],t
+                   return int(t[2])
+                  def slice_node(x,lo,w):
+                   total=width(x);assert 0<=lo and lo+w<=total
+                   if lo==0 and w==total:return x
+                   if isinstance(x,list) and x[0]=='concat':
+                    right=width(x[2])
+                    if lo>=right:return slice_node(x[1],lo-right,w)
+                    if lo+w<=right:return slice_node(x[2],lo,w)
+                    return ['concat',slice_node(x[1],0,lo+w-right),slice_node(x[2],lo,right-lo)]
+                   return [['_','extract',str(lo+w-1),str(lo)],x]
+                  expected_node=sexpr(m.defs[C+'_n expected'])[4]
+                  def field_reference(bit):
+                   n,w=fields[bit];offset=sum(x[1] for x in fields[bit+1:]);return slice_node(expected_node,offset,w)
+                  def redirect_field(bit):
+                   n,w=fields[bit];node=sexpr(m.defs[C+'_n dut.'+n]);body=node[4]
+                   if len(body)!=2 or body[1]!='state':return
+                   raw=body[0][1:-1]
+                   if raw in m.replace or raw in original_invariant_dependencies:return
+                   value=field_reference(bit)
+                   if node[3]=='Bool':value=['=',value,'#b1']
+                   if raw in m.dependencies(emit(value)):return
+                   m.replace[raw]=f'(define-fun |{raw}| ((state |{C}_s|)) '+emit(node[3])+' '+emit(value)+')'
+                   print('REWRITE PROVEN',n,flush=True)
+
+                  def redirect_state(a,value):
+                   node=sexpr(m.defs[C+'_n '+a])
+                   if node[3]=='Bool':return
+                   body=node[4];offset=0;segments={}
+                   for part in flatten(body):
+                    w=width(part);ref=slice_node(value,offset,w);offset+=w
+                    if isinstance(part,str):continue
+                    lo=0;call=part
+                    if isinstance(part[0],list):
+                     assert part[0][:2]==['_','extract'];lo=int(part[0][3]);call=part[1]
+                    assert len(call)==2 and call[1]=='state',a
+                    raw=call[0][1:-1]
+                    assert m.defs[raw].startswith('(define-fun'),(a,raw)
+                    assert raw not in original_invariant_dependencies,(a,raw)
+                    segments.setdefault(raw,[]).append((lo,w,ref))
+                   for raw,parts in segments.items():
+                    if raw in m.replace:continue
+                    parts.sort(key=lambda x:x[0]);total=int(sexpr(m.defs[raw])[3][2]);cursor=0;whole=None
+                    for lo,w,ref in parts:
+                     if lo!=cursor:break
+                     cursor+=w;whole=ref if whole is None else ['concat',ref,whole]
+                    if cursor!=total:continue
+                    assert raw not in m.dependencies(emit(whole)),(a,raw)
+                    m.replace[raw]=f'(define-fun |{raw}| ((state |{C}_s|)) (_ BitVec {total}) '+emit(whole)+')'
+                  for a,b in pairs:
+                   assert m.check('state_binding_'+a.replace('.','_'),f'(not (= {m.n("dut."+a)} {m.n(b)}))')
+                   redirect_state('dut.'+a,sexpr(m.defs[C+'_n '+b])[4])
+                  for k,n in enumerate(['free','balance','commit','excite','neutralize']):
+                   a='dut.scheduler_count_'+n+'_q';value=slice_node(sexpr(m.defs[C+'_n counts_ref'])[4],32*k,32)
+                   assert m.check('state_binding_count_'+n,'(not (= '+m.n(a)+' '+emit(value).replace('state','s')+'))')
+                   redirect_state(a,value)
+                  for a,value in [('dut.u_execution.period_index_q',slice_node(sexpr(m.defs[C+'_n index_ref'])[4],0,3)),('dut.rejected_target_capture_events_q','#x00000000')]:
+                   assert m.check('state_binding_'+a.replace('.','_'),'(not (= '+m.n(a)+' '+emit(value).replace('state','s')+'))')
+                   redirect_state(a,value)
+
+                  for bit,a,b in [(25,'phase_request_cell_index','auto_index'),(26,'phase_request_target','auto_target'),(27,'phase_request_valid','auto_valid'),(10,'execution_request_cell_index','selected_index'),(11,'execution_request_target','selected_target'),(12,'execution_request_valid','selected_valid'),(13,'execution_target_bank','selected_bank')]:
+                   assert m.check('field_'+str(bit),bit_bad(bit))
+                   redirect('dut.'+a,b)
+
+                  # Discharge the execution-feedback boundary before phase transition cuts.
+                  for bit in [0,1,2,5,6,17,18,23,28,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,52,53,54,55,58]:
+                   assert m.check('field_'+str(bit),bit_bad(bit)),bit
+                   redirect_field(bit)
+                  print('EXECUTION FIELDS PASS',flush=True)
+                  # Match seven independently computed mean-square radicands.
+                  selfmul={tuple(c['connections']['Y']):(n,c) for n,c in cells.items() if c['type']=='$mul' and c['connections']['A']==c['connections']['B']}
+                  sq=[n for n,c in cells.items() if c['type']=='$add' and tuple(c['connections']['A']) in selfmul and tuple(c['connections']['B']) in selfmul]
+                  assert len(sq)==14,len(sq)
+                  ref_squares=sorted([n for n in sq if cells[n]['attributes'].get('src','').startswith('formal/m32/')],key=lambda n:int(n[1:]))
+                  actual_squares=[n for n in sq if n not in ref_squares]
+                  actual_squares.sort(key=lambda n:int(n[1:]) if variant=='rtl' else int(re.search(r'\.v:(\d+)',cells[n]['attributes']['src'])[1]))
+                  assert len(ref_squares)==len(actual_squares)==7
+                  for i,(a,b) in enumerate(zip(actual_squares,ref_squares)):
+                   raws=[]
+                   for cell in (a,b):
+                    raw={n for n,d in m.defs.items() if d.endswith('; '+cell+'y')}
+                    for name,wire in j['netnames'].items():
+                     if wire['bits']!=cells[cell]['connections']['Y'] or C+'_n '+name not in m.defs:continue
+                     body=sexpr(m.defs[C+'_n '+name])[4]
+                     if isinstance(body,list) and len(body)==2 and body[1]=='state':raw.add(body[0][1:-1])
+                    assert len(raw)==1,(cell,raw);raws.append(raw.pop())
+                   def operands(raw):
+                    tree=sexpr(m.defs[raw]);assert tree[4][0]=='bvadd';return [x[0][1:-1] for x in tree[4][1:]]
+                   for k,(ma,mb) in enumerate(zip(operands(raws[0]),operands(raws[1]))):
+                    args=[]
+                    for name in (ma,mb):
+                     tree=sexpr(m.defs[name]);assert tree[4][0]=='bvmul' and tree[4][1]==tree[4][2];args.append(tree[4][1][0][1:-1])
+                    assert m.check(f'mean_{i}_{k}',f'(not (= {m.raw(args[0])} {m.raw(args[1])}))')
+                    for raw in args:m.abstract(raw,64,f'mean_{i}_{k}')
+                   assert m.check(f'radicand_{i}',f'(not (= {m.raw(raws[0])} {m.raw(raws[1])}))')
+                   for raw in raws:m.abstract(raw,64,f'radicand_{i}')
+                  for bit in [7,8,9,15,19,20,21,24,29,30,31,50,51]:
+                   assert m.check('field_'+str(bit),bit_bad(bit)),bit
+                   redirect_field(bit)
+                  print('COMBINATIONAL FIELDS PASS',flush=True)
+                  (E/'stage1-proofs.json').write_text(json.dumps(m.results,indent=2)+'\n')
+
+                  def chunks(node):
+                      if node[0]=='concat':return chunks(node[2])+chunks(node[1])
+                      assert len(node)==2 and node[1]=='state',node
+                      raw=node[0][1:-1];assert sexpr(m.defs[raw])[3]==['_','BitVec','32']
+                      return [raw]
+                  def ordered(name):
+                   bank=name.split('.')[-1].split('_')[0]
+                   q=j['netnames']['dut.u_phase_interference.'+bank+'_q']['bits']
+                   public=j['netnames']['dut.u_phase_interference.'+('phase_word_q' if bank=='phase' else 'frequency_current_q16')]['bits']
+                   q_words=[q[32*i:32*i+32] for i in range(8)]
+                   p_words=[public[32*i:32*i+32] for i in range(8)]
+                   d=chunks(sexpr(m.defs[C+'_n '+name])[4]);assert len(d)==8
+                   return [d[q_words.index(word)] for word in p_words]
+                  def concat(raws):
+                      x=m.raw(raws[0])
+                      for raw in raws[1:]:x=f'(concat {m.raw(raw)} {x})'
+                      return x
+                  def product_cuts(left,right,constant,prefix):
+                      scales={n for n,d in m.defs.items() if '(bvmul ' in d and any(int(v,2)==constant for v in re.findall(r'#b([01]+)',d))}
+                      used=set()
+                      for i,(a,b) in enumerate(zip(left,right)):
+                          chosen=[];args=[]
+                          for raw in (a,b):
+                              hits=m.dependencies(m.raw(raw)) & scales;assert len(hits)==1,(prefix,i,hits)
+                              product=hits.pop();chosen.append(product);used.add(product)
+                              refs=set(re.findall(r'\|([^|]+)\|',m.defs[product]))-{product,C+'_s'};assert len(refs)==1
+                              args.append(refs.pop())
+                          width=int(sexpr(m.defs[args[0]])[3][2]);assert sexpr(m.defs[args[1]])[3]==['_','BitVec',str(width)]
+                          assert m.check(f'{prefix}_argument_{i}',f'(not (= {m.raw(args[0])} {m.raw(args[1])}))')
+                          for raw in set(args):m.abstract(raw,width,f'{prefix}_argument_{i}')
+                          width=int(sexpr(m.defs[chosen[0]])[3][2]);assert sexpr(m.defs[chosen[1]])[3]==['_','BitVec',str(width)]
+                          assert m.check(f'{prefix}_product_{i}',f'(not (= {m.raw(chosen[0])} {m.raw(chosen[1])}))')
+                          for raw in set(chosen):m.abstract(raw,width,f'{prefix}_product_{i}')
+                      assert used==scales,(prefix,len(used),len(scales))
+                  product_cuts(ordered('dut.u_phase_interference.frequency_d'),chunks(sexpr(m.defs[C+'_n next_frequency'])[4]),19661,'frequency')
+                  assert m.check('next_frequency',f'(not (= {concat(ordered("dut.u_phase_interference.frequency_d"))} {m.n("next_frequency")}))')
+                  for i,(a,b) in enumerate(zip(ordered('dut.u_phase_interference.frequency_d'),chunks(sexpr(m.defs[C+'_n next_frequency'])[4]))):
+                      for raw in (a,b):m.abstract(raw,32,f'frequency_d_{i}')
+                  product_cuts(ordered('dut.u_phase_interference.phase_d'),chunks(sexpr(m.defs[C+'_n next_phase'])[4]),44798133900177,'phase')
+                  assert m.check('next_phase',f'(not (= {concat(ordered("dut.u_phase_interference.phase_d"))} {m.n("next_phase")}))')
+                  for i,(a,b) in enumerate(zip(ordered('dut.u_phase_interference.phase_d'),chunks(sexpr(m.defs[C+'_n next_phase'])[4]))):
+                      for raw in (a,b):m.abstract(raw,32,f'phase_d_{i}')
+
+                  assert m.check('state_induction',f'(not {inv("t")})',[f'(|{C}_t| s t)'],timeout=240000)
+                  for bit in range(59):
+                   if 'field_'+str(bit) not in m.results:
+                    if bit==16:
+                     actual_node=sexpr(m.defs[C+'_n dut.invariant_flags'])[4]
+                     reference_node=field_reference(16)
+                     flag_equalities=[]
+                     for flag in range(10):
+                      a=emit(slice_node(actual_node,flag,1)).replace('state','s');b=emit(slice_node(reference_node,flag,1)).replace('state','s')
+                      equality=f'(= {a} {b})'
+                      assert m.check('invariant_flag_'+str(flag),f'(not {equality})',timeout=240000),flag
+                      flag_equalities.append(equality)
+                     assert m.check('field_16',bit_bad(16),flag_equalities)
+                    else:assert m.check('field_'+str(bit),bit_bad(bit)),bit
+                  assert all(m.results.get('field_'+str(i),{}).get('result')=='unsat' for i in range(59))
+                  # Compose the 59 closed field theorems at their exact mismatch predicates.
+                  # This final propositional wiring proof has no state or input assumptions.
+                  # Do not make the solver rediscover the already discharged arithmetic cones.
+                  closure=Model(P/(model_name+'.smt2'),C,E,shutil.which('z3'))
+                  # Start from the original assertion wiring, without earlier substitutions.
+                  for bit in bits:
+                   if bit[0]=='ite':
+                    assert bit[2:]==['#b1','#b0'];call=bit[1];sort='Bool';zero='false'
+                   else:call=bit;sort='(_ BitVec 1)';zero='#b0'
+                   assert len(call)==2 and call[1]=='state';raw=call[0][1:-1]
+                   assert m.defs[raw].startswith('(define-fun')
+                   assert emit(sexpr(m.defs[raw])[3])==sort
+                   closure.replace[raw]=f'(define-fun |{raw}| ((state |{C}_s|)) {sort} {zero})'
+                   if sort=='(_ BitVec 1)':
+                    # Yosys may wire the assertion directly to the domain-valid bit.
+                    # The closed theorem (~domain)==0 is exactly domain==1.
+                    body=sexpr(m.defs[raw])[4];assert body[0]=='bvnot'
+                    call=body[1];assert len(call)==2 and call[1]=='state';base_raw=call[0][1:-1]
+                    assert sexpr(m.defs[base_raw])[3]==['_','BitVec','1']
+                    closure.replace[base_raw]=f'(define-fun |{base_raw}| ((state |{C}_s|)) (_ BitVec 1) #b1)'
+                  assert closure.check('all_source_assertions',f'(not (|{C}_a| s))')
+                  m.results.update(closure.results)
+                  for label,condition in [('reset_nonvacuity',f'(not {m.n("rst_n")})'),('live_nonvacuity',f'(and {m.n("rst_n")} {m.n("tick_enable")} (not (= {m.n("state_ref")} #x0000)))')]:
+                   query=E/(label+'.smt2');query.write_text(m.text(condition));result=subprocess.run([m.z3,str(query)],capture_output=True,text=True,timeout=80);(E/(label+'.log')).write_text(result.stdout+result.stderr);assert result.returncode==0 and result.stdout.strip()=='sat';m.results[label]={'result':'sat_expected'}
+                  (E/'proofs.json').write_text(json.dumps(m.results,indent=2)+'\n')
+                  print('M32 CONTRACT BASE, INDUCTION AND ALL 59 FIELDS PASS',variant,flush=True)
+                  return m.results
+
+              proof_results={variant:prove(variant) for variant in ('rtl','netlist')}
+              # Replay the unmodified reference arithmetic and the existing independent oracle.
+              S=E/'simulation'; S.mkdir()
+              for rel in SOURCES:
+                  p=S/rel;p.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(R/rel,p)
+              struct=re.search(r'typedef struct packed \{([\s\S]*?)\} observation_t;',original).group(1)
+              fields=[(n,int(w)+1 if w else 1) for w,n in re.findall(r'logic\s+(?:\[(\d+):0\]\s+)?(\w+);',struct)]
+              ports=original[original.index('module '+C):original.index('  import frp_m32_core_contract_pkg')]
+              inputs=[(n,int(w)+1 if w else 1) for w,n in re.findall(r'input logic(?: \[(\d+):0\])? (\w+)',ports)]
+              assert len(inputs)==15 and len(fields)==59 and sum(w for n,w in fields)==2075
+              def decl(n,w):return ('['+str(w-1)+':0] ' if w>1 else '')+n
+              wrapper='`include "frp_m32_core.sv"\nmodule frp_m32_core_netlist (\n'
+              wrapper+=',\n'.join('input wire '+decl(n,w) for n,w in inputs)+',\n'
+              wrapper+=',\n'.join('output wire '+decl(n,w) for n,w in fields)+');\n'
+              wrapper+='integer source_kind=0, fault=0;\ninitial begin\n'
+              wrapper+='if (!$value$plusargs("source=%d",source_kind)) source_kind=0;\n'
+              wrapper+='if (!$value$plusargs("fault=%d",fault)) fault=0;\nend\n'
+              overrides={'gamma_effective_word':"fault==60 ? 256'd0 : gamma_effective_word",
+               'thermal_node_factor_q30':"fault==61 ? 256'd0 : thermal_node_factor_q30",
+               'phase_load_valid':'phase_load_valid && !(fault==62 && tick_enable)',
+               'scheduler_mode':"frp_m31_pkg::frp_m31_scheduler_mode_e'(fault==63 ? 2'd0 : scheduler_mode)",
+               'auto_target_enable':'auto_target_enable && fault!=64',
+               'frequency_load_q16':"frequency_load_q16 ^ (fault==65 ? 256'd1 : 256'd0)",
+               'clear_counters':'clear_counters && fault!=66'}
+              for k,module in [(0,'frp_m32_core'),(1,'frp_m32_core_netlist_fresh')]:
+                  wrapper+='\n'.join('wire '+decl('s'+str(k)+'_'+n,w)+';' for n,w in fields)+'\n'
+                  wrapper+=module+' impl'+str(k)+' (\n'+',\n'.join('.'+n+'('+overrides.get(n,n)+')' for n,w in inputs)+',\n'
+                  wrapper+=',\n'.join('.'+n+'(s'+str(k)+'_'+n+')' for n,w in fields)+');\n'
+              for i,(n,w) in enumerate(fields):
+                  wrapper+=f"assign {n} = (source_kind==0 ? s0_{n} : s1_{n}) ^ (fault=={i+1} ? {w}'d1 : {w}'d0);\n"
+              wrapper+='endmodule\n';(S/'selected-dut.sv').write_text(wrapper)
+              nt=net.read_text();assert nt.count('module frp_m32_core_netlist(')==1
+              (S/'fresh-netlist.v').write_text(nt.replace('module frp_m32_core_netlist(','module frp_m32_core_netlist_fresh('))
+              tb=(R/'rtl/m32/frp_m32_closed_loop_tb.sv').read_text()
+              tb=tb.replace('`include "frp_m32_core.sv"','`include "frp_m32_core_contract_formal.sv"')
+              inst='''  wire [2074:0] contract_expected;
+                wire [58:0] contract_mismatch;
+                wire [23:0] contract_reach;
+                logic [23:0] reached_contract=0;
+                integer contract_checks=0;
+                frp_m32_core_contract_formal contract_dut (
+              '''+',\n'.join('    .'+n+'('+n+')' for n,w in inputs)+''',
+                  .observed_outputs(actual), .expected_outputs(contract_expected),
+                  .mismatch(contract_mismatch), .reach(contract_reach)
+                );
+                task automatic contract_check;
+                  contract_checks++;
+                  reached_contract |= contract_reach;
+                  if (contract_mismatch !== 59'd0 || actual !== contract_expected) begin
+                    $display("FRP38_CONTRACT_MISMATCH sample=%0d mask=%h",contract_checks,contract_mismatch);
+                    $fatal(1,"Independent full M32 contract mismatch");
+                  end
+                endtask
+                task automatic contract_cycle;
+                  clk=0; #1; contract_check();
+                  clk=1; #1; contract_check();
+                  clk=0; #1; contract_check();
+                endtask'''
+              tb,count=re.subn(r'  frp_m32_core #\(.*?\n  \);',lambda m:inst,tb,count=1,flags=re.S);assert count==1
+              assert tb.count('    observe(); checks++;')==1
+              tb=tb.replace('    observe(); checks++;','    observe(); checks++; contract_check();')
+              supplement='''    if (checks != 10030) $fatal(1,"Original replay sample count changed");
+                  clk=0; tick_enable=0; clear_counters=0; phase_load_valid=0;
+                  auto_target_enable=0; external_request_valid=0;
+                  external_request_cell_index=0; external_request_target=0; external_target_bank=0;
+                  scheduler_mode=frp_m31_scheduler_mode_e'(0);
+                  rst_n=0; #1; contract_check(); contract_cycle();
+                  rst_n=1; #1; contract_check();
+                  phase_load={8{32'h40000000}}; frequency_load_q16={8{32'h00010000}};
+                  phase_load_valid=1; tick_enable=1; contract_cycle();
+                  phase_load_valid=0; external_request_valid=1;
+                  external_request_target=2; external_target_bank=2; contract_cycle();
+                  scheduler_mode=frp_m31_scheduler_mode_e'(3); tick_enable=0; contract_cycle();
+                  external_request_valid=3; external_request_target=4'hd;
+                  external_target_bank=16'h000d; tick_enable=1; contract_cycle();
+                  scheduler_mode=frp_m31_scheduler_mode_e'(0); tick_enable=0; contract_cycle();
+                  tick_enable=1; contract_cycle();
+                  if (reached_contract !== 24'hffffff) $fatal(1,"Missing M32 witness: %h",reached_contract);
+                  $display("FRP38_CONTRACT_PASS samples=%0d outputs=59 bits=2075 reach=%h",contract_checks,reached_contract);
+                  $finish;'''
+              assert tb.count('    $finish;')==1;tb=tb.replace('    $finish;',supplement)
+              (S/'tb.sv').write_text(tb)
+              import yowasp_yosys
+              simlib=Path(yowasp_yosys.__file__).parent/'share/simlib.v';assert simlib.is_file()
+              exe=S/'obj/Vfrp_m32_closed_loop_tb'
+              run('compile',['verilator','--binary','--sv','--timing','--no-assert','-Wno-fatal',
+               '-CFLAGS','-std=c++20 -O0','--output-split','12000','-MAKEFLAGS','VK_PCH_I_FAST=',
+               '-MAKEFLAGS','VK_PCH_I_SLOW=','-j','2','-DFRP_M32_CORE_CONTRACT_NETLIST','-DSIMLIB_NOCONNECT',
+               '-Irtl/m31','-Irtl/m32','-Iformal/m32','--top-module','frp_m32_closed_loop_tb',
+               '--Mdir',str(S/'obj'),'-v',str(simlib),'fresh-netlist.v','selected-dut.sv','tb.sv'],S,timeout=1800)
+              replay={};baseline=None
+              for source in range(2):
+                  code,log=run('replay-'+str(source),[str(exe),f'+source={source}'],S)
+                  text=log.read_text();match=re.search(r'FRP38_CONTRACT_PASS samples=(\d+) outputs=59 bits=2075 reach=ffffff',text)
+                  assert match and int(match[1])>10030
+                  original_lines=[x for x in text.splitlines() if x.startswith('FRP_M32_CLOSED_LOOP_')]
+                  assert len(original_lines)==7 and 'profiles=6 steps=3262 checks=10030' in original_lines[-1]
+                  if baseline is None:baseline=original_lines
+                  else:assert original_lines==baseline,'RTL/netlist oracle replay divergence'
+                  replay['rtl' if source==0 else 'netlist']=dict(samples=int(match[1]),reach='ffffff',original_checks=10030)
+                  for fault in range(1,67):
+                      code,log=run(f'negative-{source}-{fault}',[str(exe),f'+source={source}',f'+fault={fault}'],S,negative=True)
+                      text=log.read_text();m=re.search(r'FRP38_CONTRACT_MISMATCH sample=(\d+) mask=([0-9a-f]+)',text)
+                      assert code!=0 and m and int(m[2],16)!=0 and 'FRP38_CONTRACT_PASS' not in text
+                      if fault<=59:assert int(m[2],16)&(1<<(fault-1))
+                      replay[f'fault_{source}_{fault}']=dict(result='REJECTED',sample=int(m[1]),mask=m[2])
+              (E/'replay-results.json').write_text(json.dumps(replay,indent=2)+'\n')
+              assert all(sha(R/p)==v for p,v in SOURCES.items()) and sha(R/W)==workflow_sha
+              assert not subprocess.check_output(['git','status','--porcelain'],text=True).strip()
+              report.update(status='PASS',full_m32_proof=True,rtl_netlist_proven=True,assertions=59,
+                            public_bits=2075,rounding_domains=166,replay=replay,formal=proof_results)
+
+          except Exception as error:
+              report.update(status='FAIL',full_m32_proof=False,rtl_netlist_proven=False,error=str(error))
+              raise
+          finally:
+              E.mkdir(parents=True,exist_ok=True)
+              (E/'result-38.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+              summary='\n'.join([
+                  '# M32 full functional contract: '+report['status'],
+                  '', 'Commit: `'+os.environ['GITHUB_SHA']+'`', '',
+                  'PASS requires fresh proofs on RTL and a newly synthesized full-core netlist:',
+                  'reset base, closed state induction, all 59 source assertions / 2075 public bits,',
+                  'source-bound arithmetic lemmas and 166 original-expression rounding domains.',
+                  'Every cut is preceded by an UNSAT equivalence obligation. The induction invariant',
+                  'is frozen on original state declarations before any conditional substitution.',
+                  'Both implementations satisfy the same independent contract for every input history',
+                  'after sampled reset. Induction has no bounded simulation depth.',
+                  'Replay additionally requires the existing six profiles / 10030 checks per implementation,',
+                  'all 24 witness bits and rejection of 66 injected faults per implementation.',
+                  'Unexpected SAT, UNKNOWN, errors, missing obligations and timeouts fail qualification.',
+                  'Expected SAT is used only for explicitly labelled nonvacuity / negative controls.',
+                  'Scope: 8 cells, 2 lanes, 32-bit counters; sampled two-state RTL semantics.',
+                  'No claim of physical timing, other parameters or Python v0.9.3 equivalence.', ''])
+              (E/'summary-38.md').write_text(summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream:stream.write(summary)
+          PY
+      - name: Retain all proof and replay evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-38-m32-core-contract-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.FRP38_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 90
