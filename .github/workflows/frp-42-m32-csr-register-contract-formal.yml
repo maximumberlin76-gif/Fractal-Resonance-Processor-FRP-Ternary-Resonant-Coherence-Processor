@@ -1,0 +1,469 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist).
+# This workflow is proprietary and is governed by the repository license.
+# Referenced dependencies retain their own licenses.
+name: 42 - FRP M32 CSR Register Contract RTL and FPGA Formal
+run-name: "42 - FRP CSR Contract | 31 clauses + full register map @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-42-csr-contract-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  prove:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Prepare evidence location
+        run: |
+          set -euo pipefail
+          printf '%s\n' "FRP42_EVIDENCE=$RUNNER_TEMP/frp-42-evidence" >> "$GITHUB_ENV"
+      - name: Install pinned formal tools
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            yowasp-yosys==0.68.0.0.post1208 \
+            yowasp-runtime==1.96 wasmtime==47.0.1
+      - name: Prove CSR map on RTL and FPGA primitives
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import os, sys, json, re, hashlib, subprocess, time, copy, collections
+          import importlib.metadata as metadata
+          R=Path.cwd().resolve()
+          E=Path(os.environ['FRP42_EVIDENCE']).resolve()
+          SOURCE='fpga/m32_csr/frp_m32_csr_top.sv'
+          WRAPPER='fpga/m32/frp_m32_fpga_top.sv'
+          INCLUDES=['rtl/m22','rtl/m31','rtl/m32','fpga/m32']
+          PINS={
+              'fpga/m32_csr/frp_m32_csr_top.sv': 'c3d5e9060f8142acfb39310f2e47cca5a3f38c786a9bfdbb6686b2c86ff60344',
+              'rtl/m22/frp_m22_csr_pkg.sv': '0f3de8054e3704548088b035c43e993d194d5182a2ac1bc32cdad92663a11206',
+              'fpga/m32/frp_m32_fpga_top.sv': '4893b157fba0ce090766d73429bce154a8b06dbb4118ec4a6dcb7e4a4c4a3348',
+              'rtl/m32/frp_m32_core.sv': '925342326b7ad555a1382e8ee3bc5754ed3012ba60e0eabf512113731e0ee6c9',
+              'rtl/m31/frp_m31_execution_core.sv': 'e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92',
+              'rtl/m31/frp_m31_pkg.sv': '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94',
+              'rtl/m31/frp_m31_scheduler.sv': 'fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f',
+              'rtl/m31/frp_m31_request_lanes.sv': '32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109',
+              'rtl/m31/frp_m31_pending_routes.sv': '18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411',
+              'rtl/m31/frp_m31_active_neutral.sv': '765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0',
+              'rtl/m31/frp_m31_capacity_guard.sv': 'd0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123',
+              'rtl/m31/frp_m31_state_update.sv': 'ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90',
+              'rtl/m31/frp_m31_phase_interference.sv': 'd3ccabcd304c4ca66dcd31c75d233a16fe61c3181f797162e91674e1992d475d',
+              'rtl/m31/frp_m31_fixed_point_pkg.sv': '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24',
+              'rtl/m32/frp_m32_registered_target_request_path.sv': '02250069a68737f055a419cd67bf2d439b3f63b3f6a7a245f40e9bf29d1958eb',
+              'rtl/m32/frp_m32_registered_target_boundary.sv': '9626474b49d32b411e107d7ccc8ee5aa7f42728e9a6f70d634d16d3f2a414c5e',
+              'rtl/m31/frp_m31_phase_request_adapter.sv': 'fa78bcfe965270cc74855908aa392989d857575a2097a126539aabb1aab8990d',
+              'rtl/m31/frp_m31_thermal_proxy.sv': '34df4ebfc5dfad8e3e5e454e560404585de5c881e6f75abaae367d3bd9fb11bd',
+              'rtl/m31/frp_m31_stability.sv': '69c06833e6dfbb28e25b74a5787dcd03756dddf0f66726de3ea47c1ad2931931',
+          }
+          CASES={
+              'tick': 'tick',
+              'clear-results': 'clear',
+              'clear-requests': 'discard',
+              'load-phases': 'load_phases',
+              'mode-7-1': "store && csr_addr==4 && csr_wdata==32'd1",
+              'mode-1-7': "store && csr_addr==4 && csr_wdata==32'd2",
+              'lane-one': "store && csr_addr==8 && csr_wdata==32'd1",
+              'cell-seven': "store && csr_addr==24 && csr_wdata==32'd7",
+              'request-cell-seven': "store && csr_addr==12 && csr_wdata==32'd7",
+              'request-minus-one': "store && csr_addr==16 && csr_wdata==32'd3",
+              'request-valid': "store && csr_addr==20 && csr_wdata==32'd1",
+              'automatic': "store && csr_addr==104 && csr_wdata==32'd1",
+              'phase-word': "store && csr_addr==108 && csr_wdata==32'd4294967295",
+              'frequency-word': "store && csr_addr==112 && csr_wdata==32'd4294967295",
+              'gamma-word': "store && csr_addr==116 && csr_wdata==32'd4294967295",
+              'thermal-word': "store && csr_addr==120 && csr_wdata==32'd4294967295",
+              'first-read': 'transfer && !csr_write && !error && csr_addr==4',
+              'identity-read': 'transfer && !csr_write && !error && csr_addr==252',
+              'control-read-error': 'error && !csr_write && csr_addr==0',
+              'unaligned-error': 'error && csr_addr==5',
+              'readonly-write-error': 'error && csr_write && csr_addr==252',
+              'reserved-target-error': 'error && csr_write && csr_addr==16 && csr_wdata==2',
+          }
+          MUTATIONS=[
+              ('identity', 'fpga/m32_csr/frp_m32_csr_top.sv', "8'hFC: csr_rdata = 32'h46523201;", "8'hFC: csr_rdata = 32'h46523200;", 3),
+              ('mode-domain', 'fpga/m32_csr/frp_m32_csr_top.sv', "payload_valid = (csr_wdata <= 32'd2);", "payload_valid = (csr_wdata <= 32'd3);", 2),
+              ('ternary-domain', 'fpga/m32_csr/frp_m32_csr_top.sv', "|| (csr_wdata == 32'd3);", "|| (csr_wdata == 32'd2);", 2),
+              ('alignment', 'fpga/m32_csr/frp_m32_csr_top.sv', 'if (!frp_m22_is_word_aligned(csr_addr))', "if (1'b0)", 2),
+              ('error-side-effect', 'fpga/m32_csr/frp_m32_csr_top.sv', 'csr_ready && csr_write && !csr_error;', 'csr_ready && csr_write;', 18),
+              ('idle-data', 'fpga/m32_csr/frp_m32_csr_top.sv', "    csr_rdata = '0;\n    if (csr_ready", "    csr_rdata = '1;\n    if (csr_ready", 3),
+              ('tick-consumption', 'fpga/m32_csr/frp_m32_csr_top.sv', "last_tick_q <= tick_result;\n        request_valid_q <= '0;", 'last_tick_q <= tick_result;\n        request_valid_q <= request_valid_q;', 24),
+              ('phase-selector', 'fpga/m32_csr/frp_m32_csr_top.sv', "phase_load_q[int'(cell_select_q)*32 +: 32] <= csr_wdata;", 'phase_load_q[0 +: 32] <= csr_wdata;', 25),
+              ('thermal-reset', 'fpga/m32_csr/frp_m32_csr_top.sv', "thermal_factor_q <= {8{32'h40000000}};", "thermal_factor_q <= '0;", 28),
+              ('snapshot-live', 'fpga/m32_csr/frp_m32_csr_top.sv', 'csr_rdata = last_tick_q.accepted_changes;', 'csr_rdata = tick_result.accepted_changes;', 3),
+              ('snapshot-capture', 'fpga/m32_csr/frp_m32_csr_top.sv', 'last_tick_q <= tick_result;', "last_tick_q <= '0;", 29),
+              ('load-command', 'fpga/m32_csr/frp_m32_csr_top.sv', '&& (csr_wdata == COMMAND_LOAD);', '&& (csr_wdata == FRP_M22_CONTROL_TICK);', 8),
+              ('request-selector', 'fpga/m32_csr/frp_m32_csr_top.sv', "request_cells_q[int'(lane_select_q)*3 +: 3] <= csr_wdata[2:0];", 'request_cells_q[0 +: 3] <= csr_wdata[2:0];', 22),
+              ('gamma-data', 'fpga/m32_csr/frp_m32_csr_top.sv', "gamma_q[int'(cell_select_q)*32 +: 32] <= csr_wdata;", "gamma_q[int'(cell_select_q)*32 +: 32] <= ~csr_wdata;", 27),
+              ('reset-release', 'fpga/m32/frp_m32_fpga_top.sv', "reset_sync_q <= {reset_sync_q[0], 1'b1};", "reset_sync_q <= 2'b11;", 30),
+              ('clear-results', 'fpga/m32_csr/frp_m32_csr_top.sv', 'if (clear_pulse) begin', "if (1'b0) begin", 29),
+          ]
+          report=dict(status='FAIL',commands=[],proofs={},witnesses={},mutations={},
+           physical_measurements=False,metastability_proven=False,complete_m32_proven=False,
+           physical_timing_closed=False,csr_register_map_proven=False)
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+          
+          def sha(data):
+              return hashlib.sha256(data).hexdigest()
+          
+          def write(name, value):
+              (E/name).write_text(value if isinstance(value,str) else json.dumps(value,indent=2)+'\n')
+          
+          def read(name):
+              return json.loads((E/name).read_text())
+          
+          def run(label, argv, negative=False):
+              require(not (E/(label+'.log')).exists(), 'Repeated command '+label)
+              start=time.monotonic()
+              with (E/(label+'.log')).open('w') as stream:
+                  p=subprocess.run(argv,cwd=R,stdout=stream,stderr=subprocess.STDOUT,timeout=900)
+              report['commands'].append(dict(label=label,argv=argv,returncode=p.returncode,
+                                            seconds=round(time.monotonic()-start,3)))
+              log=(E/(label+'.log')).read_text()
+              require(p.returncode==(1 if negative else 0), label+'\n'+log[-2000:])
+              return log
+          
+          def yosys(label, script, negative=False):
+              write(label+'.ys',script+'\n')
+              return run(label,['yowasp-yosys','-Q','-T','-s',str(E/(label+'.ys'))],negative)
+          
+          def wave(label, witness=None, negative=False, fault_bit=None):
+              d=read(label+'.json');names=[]
+              require(isinstance(d,dict) and isinstance(d.get('signal'),list) and d['signal'], label+' waveform')
+              for s in d['signal']:
+                  require(isinstance(s,dict) and isinstance(s.get('name'),str) and s['name']
+                          and isinstance(s.get('wave'),str) and s['wave'], label+' signal')
+                  require(not any(ord(c)<32 for c in s['name']), label+' signal name')
+                  require('data' not in s or (isinstance(s['data'],list)
+                          and all(isinstance(v,str) for v in s['data'])), label+' data')
+                  names.append(s['name'])
+              require(len(names)==len(set(names)), label+' duplicate signals')
+              require({'clk','rst_n_async','witness','obligation'}<=set(names), label+' missing inputs')
+              values={s['name']:[v for v in s.get('data',[]) if v] for s in d['signal']}
+              obligations=values['obligation']
+              require(obligations and all(re.fullmatch('[01]{31}',v) for v in obligations), label+' unknown obligation')
+              require(any('0' in v for v in obligations) if negative else all(v=='1'*31 for v in obligations), label+' property witness')
+              if negative:require(fault_bit is not None and any(v[-1-fault_bit]=='0' for v in obligations), label+' targeted counterexample')
+              if witness is not None:
+                  bits=values['witness'][-1]
+                  require(re.fullmatch('[01]{22}',bits) and bits[-1-witness]=='1', label+' final witness')
+              return dict(signals=len(names),sha256=sha((E/(label+'.json')).read_bytes()))
+          
+          # Snapshot fields have independently specified widths, sources and reset values.
+          SNAP=[
+           ('accept',2,'core_request_accept'),('reject',2,'core_request_reject'),
+           ('accepted_cells',8,'core_accepted_cell_mask'),('neutral_cells',8,'core_neutral_routed_cell_mask'),
+           ('changed_cells',8,'core_accepted_change_mask'),('changes',32,'core_accepted_changes'),
+           ('capacity',32,'core_capacity_remaining'),('exhausted',1,'core_capacity_exhausted'),
+           ('load',32,'core_switch_load_numerator'),('requested',32,'core_requested_direct_events'),
+           ('prevented',32,'core_prevented_direct_events'),('neutral',32,'core_neutral_routed_events'),
+           ('direct',32,'core_actual_direct_events'),('reserved',32,'core_reserved_state_events'),
+           ('overflow',32,'core_queue_overflow_events'),('invariants',10,'core_invariant_flags'),
+           ('capture_ok',1,'core_target_capture_accepted'),('capture_bad',1,'core_target_capture_rejected'),
+           ('cost',32,'core_normalized_cycle_cost_q16'),
+           ('phase_requests',12,'{core_phase_request_target,core_phase_request_cell_index,core_phase_request_valid}'),
+           ('execution_requests',12,'{core_execution_request_target,core_execution_request_cell_index,core_execution_request_valid}'),
+           ('bank',16,'core_execution_target_bank')]
+          READ={
+           0x04:'mode',0x08:'lane',0x0c:'cells[lane*3+:3]',0x10:'targets[lane*2+:2]',
+           0x14:'valids[lane]',0x18:'cell_index',
+           0x1c:"{23'd0,|s_overflow,|s_reserved,|s_direct,!(&s_invariants),|core_pending_route_out,|s_reject,|s_accept,s_exhausted,ready}",
+           0x20:'core_scheduler_mode_q',0x24:'core_scheduler_state_q',0x28:'core_ticks_recorded_q',
+           0x2c:'s_accept',0x30:'s_reject',0x34:'core_state_out[cell_index*2+:2]',
+           0x38:'core_pending_route_out[cell_index*2+:2]',0x3c:'s_changes',0x40:'s_capacity',
+           0x44:'s_exhausted',0x48:'s_load',0x4c:'s_invariants',0x50:'s_requested',
+           0x54:'s_prevented',0x58:'s_neutral',0x5c:'s_direct',0x60:'s_reserved',0x64:'s_overflow',
+           0x68:'automatic_targets',0x6c:'phases[cell_index*32+:32]',0x70:'frequencies[cell_index*32+:32]',
+           0x74:'gammas[cell_index*32+:32]',0x78:'thermal[cell_index*32+:32]',
+           0x7c:'core_phase_word_q[cell_index*32+:32]',0x80:'core_frequency_current_q16[cell_index*32+:32]',
+           0x84:'core_coupling_field_q16[cell_index*32+:32]',0x88:'core_phase_projection_q30[cell_index*32+:32]',
+           0x8c:'core_phase_target_source[cell_index*2+:2]',0x90:'core_registered_target_q[cell_index*2+:2]',
+           0x94:"{26'd0,s_capture_bad,s_capture_ok,core_registered_request_enable,core_registered_target_domain_valid,core_phase_target_domain_valid,core_registered_target_valid_q}",
+           0x98:'core_accepted_target_capture_events_q',0x9c:'core_rejected_target_capture_events_q',
+           0xa0:'core_scheduler_count_free_q',0xa4:'core_scheduler_count_balance_q',
+           0xa8:'core_scheduler_count_commit_q',0xac:'core_scheduler_count_excite_q',0xb0:'core_scheduler_count_neutralize_q',
+           0xb4:'core_pair_coherence_q30',0xb8:'core_cluster_coherence_q30',0xbc:'core_global_coherence_q30',
+           0xc0:'core_organization_dispersion_q30',0xc4:'s_cost',0xc8:'core_temperature_proxy_q16',
+           0xcc:'core_peak_temperature_proxy_q16',0xd0:'core_thermal_sample_count_q',0xd4:'core_coherence_capacity_q16',
+           0xd8:'core_pressure_q16',0xdc:'core_stability_margin_q16',0xe0:'core_stable',
+           0xe4:'s_accepted_cells',0xe8:'s_neutral_cells',0xec:'s_changed_cells',
+           0xf0:'s_phase_requests',0xf4:'s_execution_requests',0xf8:'s_bank',0xfc:"32'h46523201"}
+          WRITE={0:"csr_wdata==1 || csr_wdata==2 || csr_wdata==4 || csr_wdata==8",
+                 4:'csr_wdata<3',8:'csr_wdata<2',12:'csr_wdata<8',16:'csr_wdata<4 && csr_wdata!=2',
+                 20:'csr_wdata<2',24:'csr_wdata<8',104:'csr_wdata<2',108:"1'b1",112:"1'b1",116:"1'b1",120:"1'b1"}
+          STATE={'mode_control_q':'mode','lane_select_q':'lane','cell_select_q':'cell_index',
+                 'auto_enable_q':'automatic_targets','request_cells_q':'cells','request_targets_q':'targets',
+                 'request_valid_q':'valids','phase_load_q':'phases','frequency_load_q':'frequencies',
+                 'gamma_q':'gammas','thermal_factor_q':'thermal',
+                 'last_tick_q':'{'+','.join('s_'+n for n,_,_ in SNAP)+'}',
+                 'u_fpga.reset_sync_q':'{ready,age!=0}'}
+          TO={'rst_n':'ready','tick_enable':'tick','clear_counters':'clear',
+              'scheduler_mode':'mode','phase_load_valid':'load_phases','phase_load':'phases',
+              'frequency_load_q16':'frequencies','gamma_effective_word':'gammas','thermal_node_factor_q30':'thermal',
+              'auto_target_enable':'automatic_targets && ready','external_request_valid':'valids & {2{ready}}',
+              'external_request_cell_index':'cells','external_request_target':'targets','external_target_bank':'bank'}
+          
+          def project(raw):
+           m=copy.deepcopy(raw);c=m['cells'].pop('u_fpga.u_m32_core')
+           for n,d in c['port_directions'].items():
+            m['ports'][('core_' if d=='output' else 'to_')+n]={'direction':'input' if d=='output' else 'output','bits':c['connections'][n]}
+           for i,n in enumerate(STATE):m['ports']['obs_'+str(i)]={'direction':'output','bits':m['netnames'][n]['bits']}
+           m['attributes'].pop('top',None)
+           return m
+          
+          def harness(m):
+           ports=m['ports']
+           def decl(n,p):
+            w=len(p['bits']);return (f'[{w-1}:0] ' if w>1 else '')+n
+           h=['module check42 (',',\n'.join('input wire '+decl(n,p) for n,p in ports.items() if p['direction']=='input')+',\noutput wire [30:0] obligation,\noutput wire ['+str(len(CASES)-1)+':0] witness',');']
+           h+=['wire '+decl(n,p)+';' for n,p in ports.items() if p['direction']=='output']
+           h+=['dut u_dut ('+', '.join('.'+n+'('+n+')' for n in ports)+');']
+           h+=['''reg [1:0] age;
+          always @(posedge clk or negedge rst_n_async)
+            if (!rst_n_async) age<=0; else if (age<2) age<=age+1'b1;
+          wire ready=age==2;
+          wire transfer=rst_n_async && ready && csr_valid;
+          reg legal_write;
+          always @* begin
+            legal_write=0;
+            case (csr_addr)''']
+           h += [f"    8'h{a:02x}: legal_write=({v});" for a,v in WRITE.items()]
+           h += ['''    default: legal_write=0;
+            endcase
+          end
+          wire error=transfer && (csr_addr[1:0]!=0 || (csr_write ? !legal_write : csr_addr==0));
+          wire store=transfer && csr_write && !error;
+          wire tick=store && csr_addr==0 && csr_wdata==1;
+          wire clear=store && csr_addr==0 && csr_wdata==2;
+          wire discard=store && csr_addr==0 && csr_wdata==4;
+          wire load_phases=store && csr_addr==0 && csr_wdata==8;
+          reg [1:0] mode,valids;
+          reg lane,automatic_targets;
+          reg [2:0] cell_index;
+          reg [5:0] cells;
+          reg [3:0] targets;
+          reg [255:0] phases,frequencies,gammas,thermal;
+          always @(posedge clk or negedge ready) begin
+            if (!ready) begin
+              mode<=0; valids<=0; lane<=0; automatic_targets<=0;
+              cell_index<=0; cells<=0; targets<=0;
+              phases<=0; frequencies<=0; gammas<=0; thermal<={8{32'h40000000}};
+            end else begin
+              if(tick || discard) valids<=0;
+              if(store) begin
+                if(csr_addr==4) mode<=csr_wdata[1:0];
+                if(csr_addr==8) lane<=csr_wdata[0];
+                if(csr_addr==24) cell_index<=csr_wdata[2:0];
+                if(csr_addr==104) automatic_targets<=csr_wdata[0];
+                for(integer i=0;i<2;i=i+1) if(lane==i) begin
+                  if(csr_addr==12) cells[3*i+:3]<=csr_wdata[2:0];
+                  if(csr_addr==16) targets[2*i+:2]<=csr_wdata[1:0];
+                  if(csr_addr==20) valids[i]<=csr_wdata[0];
+                end
+                for(integer i=0;i<8;i=i+1) if(cell_index==i) begin
+                  if(csr_addr==108) phases[32*i+:32]<=csr_wdata;
+                  if(csr_addr==112) frequencies[32*i+:32]<=csr_wdata;
+                  if(csr_addr==116) gammas[32*i+:32]<=csr_wdata;
+                  if(csr_addr==120) thermal[32*i+:32]<=csr_wdata;
+                end
+              end
+            end
+          end
+          reg [15:0] bank;
+          always @* begin
+            bank=0;
+            for(integer c=0;c<8;c=c+1) begin
+              if(valids[0] && cells[2:0]==c) bank[c*2+:2]=targets[1:0];
+              if(valids[1] && cells[5:3]==c) bank[c*2+:2]=targets[3:2];
+            end
+          end''']
+           for n,w,value in SNAP:
+            reset="10'h3ff" if n=='invariants' else "'0"
+            h += [f'''reg [{w-1}:0] s_{n};
+          always @(posedge clk or negedge ready)
+            if(!ready) s_{n}<={reset};
+            else if(clear) s_{n}<={reset};
+            else if(tick) s_{n}<={value};''']
+           h += ['reg [31:0] rdata;','always @* begin',"  rdata=0;",'  if(transfer && !csr_write && !error) case(csr_addr)']
+           h += [f"    8'h{a:02x}: rdata={v};" for a,v in READ.items()]
+           h += ['    default:rdata=0;','  endcase','end','always @* begin','  assert(age<=2);',
+                 '  assert(csr_ready==transfer);','  assert(csr_error==error);','  assert(csr_rdata==rdata);']
+           h += [f'  assert(to_{n}==({v}));' for n,v in TO.items()]
+           h += [f'  assert(obs_{i}==({v}));' for i,v in enumerate(STATE.values())]
+           h += ['end']
+           expressions=['age<=2','csr_ready==transfer','csr_error==error','csr_rdata==rdata']
+           expressions += ['to_'+n+'==('+v+')' for n,v in TO.items()]
+           expressions += ['obs_'+str(i)+'==('+v+')' for i,v in enumerate(STATE.values())]
+           require(len(expressions)==31, 'Contract size')
+           h += ['assign obligation['+str(i)+']=('+v+');' for i,v in enumerate(expressions)]
+           h += ['assign witness['+str(i)+']=('+v+');' for i,v in enumerate(CASES.values())]
+           h += ['endmodule']
+           return '\n'.join(h)+'\n'
+          
+          def extract(label, directory):
+              includes=' '.join('-I'+str(directory/p) for p in INCLUDES)
+              yosys(label+'-extract', f'read_slang -j 1 --std 1800-2017 --top frp_m32_csr_top --blackboxed-module frp_m32_core {includes} {directory/SOURCE}; proc; flatten; opt -full; wreduce; opt_clean; check -assert; write_json "{E}/{label}-raw.json"')
+              raw=read(label+'-raw.json')['modules'];shell=raw['frp_m32_csr_top']
+              core=raw['frp_m32_core'];c=shell['cells']['u_fpga.u_m32_core']
+              require(c['type']=='frp_m32_core' and int(core['attributes']['blackbox'],2)==1,'Core boundary')
+              require(set(c['connections'])==set(core['ports']), 'Core port set')
+              require(set(c['parameters'])=={'CELLS','REQUEST_LANES','CELL_INDEX_BITS','COUNTER_BITS','SIN_LUT_FILE'}, 'Parameter set')
+              for n,v in dict(CELLS=8,REQUEST_LANES=2,CELL_INDEX_BITS=3,COUNTER_BITS=32).items():
+                  require(int(c['parameters'][n],2)==v,'Parameter '+n)
+              require(c['parameters']['SIN_LUT_FILE']=='rtl/m31/frp_m31_sin_q30.mem','ROM parameter')
+              for n,p in core['ports'].items():
+                  require(c['port_directions'][n]==p['direction'] and len(c['connections'][n])==len(p['bits']), 'Core binding '+n)
+              require(c['connections']['clk']==shell['ports']['clk']['bits'], 'Core clock binding')
+              require({n for n,d in c['port_directions'].items() if d=='input'}==set(TO)|{'clk'},'Core inputs')
+              outputs=[n for n,d in c['port_directions'].items() if d=='output']
+              require(len(outputs)==59 and sum(len(c['connections'][n]) for n in outputs)==2075,'Core telemetry width')
+              bits=[b for n in outputs for b in c['connections'][n]]
+              require(len(set(bits))==2075 and all(type(b)==int for b in bits),'Independent telemetry bits')
+              m=project(shell)
+              require(m['cells']=={n:v for n,v in shell['cells'].items() if n!='u_fpga.u_m32_core'}, 'Projection changed logic')
+              require(all(m['ports'][n]==p for n,p in shell['ports'].items()), 'Projection changed public ports')
+              q={b for cell in m['cells'].values() if cell['type'] in ['$adff','$adffe'] for b in cell['connections']['Q']}
+              exposed={b for n,p in m['ports'].items() if n.startswith('obs_') for b in p['bits']}
+              require(q<=exposed, 'Unobserved retained state')
+              if label=='rtl':
+                  require(len(q)==1446,'Retained state count')
+                  write('projection-audit.json',dict(core_instance=c,state_bits=len(q),state_relations=STATE,
+                        public_ports=shell['ports'],projected_ports=m['ports'],unchanged_cells=len(m['cells'])))
+              write(label+'-dut.json',dict(modules={'dut':m}))
+              return m
+          
+          def frontend(label, gate=False):
+              library='read_verilog -defer -D ICE40_HX +/ice40/cells_sim.v; ' if gate else ''
+              yosys(label+'-frontend', f'{library}read_json "{E}/{label}-dut.json"; read_verilog -formal -sv "{E}/check.sv"; hierarchy -check -top check42; proc; flatten; opt -full; wreduce; opt_clean; clk2fflogic; opt_clean; check -assert; rename -enumerate -pattern frp42_trace_%; write_json "{E}/{label}-check.json"; write_rtlil "{E}/{label}.il"')
+              m=read(label+'-check.json')['modules']['check42']
+              counts=collections.Counter(c['type'] for c in m['cells'].values())
+              require(0<counts['$assert']<=31 and counts['$assume']==0, 'Assertions/assumptions '+label)
+              require(all(c['connections']['EN']==['1'] for c in m['cells'].values() if c['type']=='$assert'), 'Disabled assertion')
+              if label in ['rtl','gate']:require(counts['$assert']==31,'Incomplete contract')
+              require(len(m['ports']['obligation']['bits'])==31, 'Property vector')
+              require(not m['attributes'].get('blackbox') and all(t.startswith('$') for t in counts), 'Unresolved cell '+label)
+              require(not any(counts[t] for t in ['$anyseq','$anyconst','$allseq','$allconst']), 'Hidden symbolic input')
+              require(all(re.fullmatch(r'[A-Za-z0-9_.$:\[\]-]+',n) for n in m['netnames']), 'Unsafe waveform name')
+              return dict(counts)
+          
+          require(not E.exists(), 'Fresh evidence directory required')
+          E.mkdir(parents=True)
+          try:
+              require(sys.flags.optimize==0,'Python optimization disabled')
+              require(os.environ['GITHUB_EVENT_NAME']=='workflow_dispatch','Manual dispatch only')
+              require(os.environ['GITHUB_REF']=='refs/heads/main','main only')
+              commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+              require(commit==os.environ['GITHUB_SHA'],'Checkout mismatch')
+              require(not subprocess.check_output(['git','status','--porcelain'],text=True).strip(),'Dirty checkout')
+              workflow='.github/workflows/frp-42-m32-csr-register-contract-formal.yml'
+              write('workflow-source.yml',(R/workflow).read_text())
+              report.update(commit=commit,run_id=os.environ['GITHUB_RUN_ID'],run_attempt=os.environ['GITHUB_RUN_ATTEMPT'],
+                  source_hashes=PINS,scope='Fixed 8-cell, 2-lane M32 CSR map and FPGA reset shell; core telemetry universally free')
+              sources=E/'sources'
+              for path,digest in PINS.items():
+                  data=(R/path).read_bytes();require(sha(data)==digest,'Source identity '+path)
+                  out=sources/path;out.parent.mkdir(parents=True,exist_ok=True);out.write_bytes(data)
+              versions={p:metadata.version(p) for p in ['yowasp-yosys','yowasp-runtime','wasmtime']}
+              require(versions=={'yowasp-yosys':'0.68.0.0.post1208','yowasp-runtime':'1.96','wasmtime':'47.0.1'},'Tool versions')
+              write('tools.json',versions);run('yosys-version',['yowasp-yosys','-V'])
+              require(set(READ)==set(range(4,256,4)) and len(WRITE)==12,'Register table coverage')
+              write('register-contract.json',dict(read=READ,write=WRITE,snapshot=SNAP,core_inputs=TO,witnesses=CASES))
+              m=extract('rtl',sources);write('check.sv',harness(m))
+              require((E/'check.sv').read_text().count('assert(')==31,'Source property count')
+              frontend('rtl')
+              yosys('synthesis', f'read_json "{E}/rtl-dut.json"; synth_ice40 -top dut -json "{E}/mapped.json"; write_verilog -noattr "{E}/mapped.v"')
+              mapped=read('mapped.json')['modules']['dut']
+              counts=collections.Counter(c['type'] for c in mapped['cells'].values())
+              require(set(counts)<={'SB_DFFER','SB_DFFR','SB_DFFES','SB_DFFS','SB_LUT4','SB_CARRY','$scopeinfo'},'Mapped primitives')
+              require(sum(v for n,v in counts.items() if n.startswith('SB_DFF'))==1446,'Mapped state count')
+              shape=lambda m:{n:(p['direction'],len(p['bits'])) for n,p in m['ports'].items()}
+              require(shape(mapped)==shape(m),'Mapped interface')
+              report['mapped_cells']=dict(counts);write('gate-dut.json',dict(modules={'dut':mapped}))
+              frontend('gate',True)
+              for kind in ['rtl','gate']:
+                  log=yosys(kind+'-induction', f'read_rtlil "{E}/{kind}.il"; sat -timeout 120 -seq 3 -set-at 1 rst_n_async 0 -tempinduct -maxsteps 8 -prove obligation 2147483647 -prove-asserts -verify -show-ports -dump_json "{E}/{kind}-induction-failure.json"')
+                  require(re.search(r'Base case for induction length \d+ proven\.',log) and 'Induction step proven: SUCCESS!' in log,kind+' induction incomplete')
+                  report['proofs'][kind]=dict(status='PASS',contract_clauses=31,unbounded=True,initial_reset_only=True,core_telemetry_bits=2075)
+              for i,name in enumerate(CASES):
+                  label='reach-'+name;depth=9
+                  clocks=' '.join(f'-set-at {t} clk {t%2}' for t in range(1,depth+1))
+                  log=yosys(label, f'read_rtlil "{E}/rtl.il"; sat -timeout 120 -seq {depth} -set-at 1 rst_n_async 0 -set-at {depth} witness[{i}] 1 {clocks} -show-ports -dump_json "{E}/{label}.json"')
+                  require('SAT solving finished - model found:' in log,'Unreachable or unknown '+name)
+                  report['witnesses'][name]=dict(status='PASS',depth=depth,trace=wave(label,witness=i))
+              for name,path,old,new,bit in MUTATIONS:
+                  label='fault-'+name;directory=E/label;directory.mkdir()
+                  for p in PINS:
+                      data=(sources/p).read_text()
+                      if p==path:
+                          require(data.count(old)==1,'Mutation anchor '+name);data=data.replace(old,new)
+                      dest=directory/p;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_text(data)
+                  extract(label,directory);frontend(label)
+                  fixture=' '.join(f'-set-at {t} clk {t%2} -set-at {t} rst_n_async {int(t>1)}' for t in range(1,13))
+                  log=yosys(label+'-counterexample', f'read_rtlil "{E}/{label}.il"; sat -timeout 120 -seq 12 {fixture} -prove obligation[{bit}] 1 -verify -show-ports -dump_json "{E}/{label}-counterexample.json"',True)
+                  require('SAT proof finished - model found: FAIL!' in log,'Missing counterexample '+name)
+                  report['mutations'][name]=dict(status='DETECTED',path=path,old=old,new=new,contract_bit=bit,
+                      mutated_sha256=sha((directory/path).read_bytes()),trace=wave(label+'-counterexample',negative=True,fault_bit=bit))
+              require(len(report['proofs'])==2 and len(report['witnesses'])==22 and len(report['mutations'])==16,'Incomplete campaign')
+              for p,digest in PINS.items():require(sha((R/p).read_bytes())==digest,'Source modified '+p)
+              require(not subprocess.check_output(['git','status','--porcelain'],text=True).strip(),'Checkout modified')
+              for p in E.rglob('*.json'):json.loads(p.read_text())
+              report['json_files_validated']=len(list(E.rglob('*.json')))
+              report['csr_register_map_proven']=True;report['status']='PASS'
+          finally:
+              report['evidence_hashes']={str(p.relative_to(E)):sha(p.read_bytes()) for p in sorted(E.rglob('*')) if p.is_file() and p.name not in ['result-42.json','summary-42.md']}
+              write('result-42.json',report)
+              summary=f"""# M32 CSR register contract: {report['status']}
+          
+          Required: unbounded RTL and freshly mapped iCE40 proofs of 31 contract clauses,
+          including all 63 readable addresses, 12 writable addresses, exact command and
+          payload domains, zero-extension, errors without side effects, lane/cell indexing,
+          staged phase/frequency banks, live gamma/thermal inputs, snapshots, request
+          consumption, target-bank priority and the actual two-stage reset-release shell.
+          All 1446 retained state bits are observed. The reference model has no DUT feedback.
+          Core outputs (59 fields, 2075 bits) are universally free at the actual instance.
+          Only initial reset is constrained; later clock, reset, bus and telemetry are free.
+          Optimizations may merge duplicate assertions; all 31 named vector bits are proved.
+          22 SAT witnesses and 16 real source mutations are mandatory sensitivity controls.
+          Their clock/reset fixtures restrict counterexample searches only, never induction.
+          Raw WaveJSON must parse without repair; unknown, timeout or missing evidence fails.
+          
+          Scope: sampled two-state digital CSR interface, fixed 8 cells and 2 lanes.
+          This run does not re-prove core arithmetic, CDC transport, analog metastability,
+          physical timing, FPGA board fit/pinout or measured hardware behavior.
+          Completed proofs: {len(report['proofs'])}/2; witnesses: {len(report['witnesses'])}/22;
+          detected mutations: {len(report['mutations'])}/16. Commit: {report.get('commit','unknown')}.
+          """
+              write('summary-42.md',summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream:stream.write(summary)
+              print(json.dumps({k:report[k] for k in ['status','proofs','mapped_cells'] if k in report},indent=2))
+          PY
+      - name: Upload complete evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-42-m32-csr-contract-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-42-evidence
+          if-no-files-found: error
+          retention-days: 90
