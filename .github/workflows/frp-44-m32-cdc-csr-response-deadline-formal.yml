@@ -1,0 +1,323 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist).
+# This workflow is proprietary and is governed by the repository license.
+# Referenced dependencies retain their own licenses.
+name: 44 - FRP M32 CDC CSR Response Deadline RTL and FPGA Formal
+run-name: "44 - FRP CDC Response | 48 sampled steps @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-44-cdc-csr-response-deadline-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  prove:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Prepare evidence location
+        run: |
+          set -euo pipefail
+          printf '%s\n' "FRP44_EVIDENCE=$RUNNER_TEMP/frp-44-evidence" >> "$GITHUB_ENV"
+      - name: Install pinned formal tools
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            yowasp-yosys==0.68.0.0.post1208 \
+            yowasp-runtime==1.96 wasmtime==47.0.1
+      - name: Prove conditional response deadline and challenge progress
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import ast, textwrap, os, sys, json, re, hashlib, subprocess, time, copy, collections
+          import importlib.metadata as metadata
+          R=Path.cwd().resolve();E=Path(os.environ['FRP44_EVIDENCE']).resolve()
+          ALL_ONES="2'b11"
+          WORKFLOW='.github/workflows/frp-44-m32-cdc-csr-response-deadline-formal.yml'
+          DEPENDENCIES={
+           '.github/workflows/frp-43-m32-cdc-csr-composition-formal.yml':'30325d7c7f56603e851e67f122e794d8d3912d2466e33261f30021e98c109197',
+           '.github/workflows/frp-41-m32-cdc-transport-contract-formal.yml':'1f3677d2a7140aca90d976b0086af867f09560dda238cd4f2e14d87abda1cb63',
+           '.github/workflows/frp-42-m32-csr-register-contract-formal.yml':'cfb9eb884853aa1055b4f213158fa649f91ae286cfc8b87017e1ce5402c4c3f0'}
+          report=dict(status='FAIL',commands=[],proofs={},witnesses={},mutations={},clock_challenges={},
+           unconditional_liveness=False,complete_m32_proven=False,physical_timing_closed=False,
+           metastability_proven=False,physical_measurements=False)
+          def require(ok,message):
+           if not ok:raise RuntimeError(message)
+          def sha(b):return hashlib.sha256(b).hexdigest()
+          def write(n,v):(E/n).write_text(v if isinstance(v,str) else json.dumps(v,indent=2)+'\n')
+          def read(n):return json.loads((E/n).read_text())
+          def yosys(label,script):
+           require(not (E/(label+'.log')).exists(),'Repeated command '+label)
+           write(label+'.ys',script+'\n');t=time.monotonic()
+           try:
+            p=subprocess.run(['yowasp-yosys','-Q','-T','-s',str(E/(label+'.ys'))],cwd=R,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=900)
+           except subprocess.TimeoutExpired as error:
+            output=error.output or b'';write(label+'.log',output.decode(errors='replace') if isinstance(output,bytes) else output)
+            raise RuntimeError('Tool timeout '+label) from error
+           log=p.stdout;write(label+'.log',log)
+           report['commands'].append(dict(label=label,returncode=p.returncode,seconds=round(time.monotonic()-t,3)))
+           require(p.returncode==0,label+'\n'+log[-2000:])
+           return log
+
+          MONITOR='''// Deadline counts sampled global steps, not nanoseconds or FPGA cycles.
+          // gap is the number of consecutive preceding samples without a rising edge.
+          // Both gap<4 assumptions apply throughout the trace, including reset and idle.
+          reg previous_host_clk=0,previous_core_clk=0,previous_request=0;
+          reg [2:0] host_gap=0,core_gap=0;
+          wire host_rise=host_clk && !previous_host_clk;
+          wire core_rise=core_clk && !previous_core_clk;
+          wire accepted=obs_request_toggle_host_q != previous_request;
+          reg pending=0;
+          reg [6:0] age=0;
+          reg host_pause=0,core_pause=0;
+          reg success_seen=0,error_seen=0,aborted=0,paused_completion=0,recovered=0;
+          always @($global_clock) begin
+           previous_host_clk<=host_clk;previous_core_clk<=core_clk;
+           previous_request<=obs_request_toggle_host_q;
+           if(host_rise) host_gap<=0;else if(host_gap!=7) host_gap<=host_gap+1;
+           if(core_rise) core_gap<=0;else if(core_gap!=7) core_gap<=core_gap+1;
+           if(!rst_n_async) begin
+            if(pending) aborted<=1;
+            pending<=0;age<=0;host_pause<=0;core_pause<=0;
+           end else if(accepted) begin
+            pending<=1;age<=0;host_pause<=0;core_pause<=0;
+           end else if(csr_ready) begin
+            if(pending) begin
+             if(csr_error) error_seen<=1;else success_seen<=1;
+             if(host_pause && core_pause) paused_completion<=1;
+             if(aborted) recovered<=1;
+            end
+            pending<=0;age<=0;
+           end else if(pending) begin
+            if(age!=127) age<=age+1;
+            if(host_gap==3) host_pause<=1;
+            if(core_gap==3) core_pause<=1;
+           end
+          end
+          assign obligation[0]=!pending || age<48;
+          assign obligation[1]=!rst_n_async || !pending || !accepted;
+          assign witness={recovered,aborted,paused_completion,error_seen,success_seen};
+          assign tracked_pending=pending;
+          assign request_age=age;
+          assign host_gap_count=host_gap;
+          assign core_gap_count=core_gap;
+          assign request_captured=accepted;
+          assign response_seen=csr_ready;
+          assign response_error=csr_error;
+          always @* begin
+           assume(host_gap<4);
+           assume(core_gap<4);
+           assert(obligation[0]);
+           assert(obligation[1]);
+          end
+          '''
+          SHOW='-show '+','.join(['host_clk','core_clk','rst_n_async','csr_valid','csr_write','csr_addr','csr_wdata','obligation','witness','tracked_pending','request_age','host_gap_count','core_gap_count','request_captured','response_seen','response_error'])
+          CASES=['success-response','error-response','paused-response','reset-abort','reset-recovery']
+          def harness(m):
+           p=m['ports'];h=['module check44 (',',\n'.join('input wire '+decl(n,v) for n,v in p.items() if v['direction']=='input')+',\noutput wire [1:0] obligation,\noutput wire [4:0] witness,\noutput wire tracked_pending,request_captured,response_seen,response_error,\noutput wire [6:0] request_age,\noutput wire [2:0] host_gap_count,core_gap_count',');']
+           h+=['wire '+decl(n,v)+';' for n,v in p.items() if v['direction']=='output']
+           h+=['dut u_dut ('+', '.join('.'+n+'('+n+')' for n in p)+');',MONITOR,'endmodule']
+           return '\n'.join(h)+'\n'
+          def frontend(label,gate=False):
+           lib='read_verilog -defer -D ICE40_HX +/ice40/cells_sim.v; ' if gate else ''
+           yosys(label+'-frontend',lib+f'read_json "{E}/{label}-dut.json"; read_verilog -formal -sv "{E}/check.sv"; hierarchy -check -top check44; proc; flatten; opt -full; wreduce; opt_clean; clk2fflogic; opt -full; opt_clean -purge; check -assert; rename -enumerate -pattern frp44_trace_%; write_json "{E}/{label}-check.json"; write_rtlil "{E}/{label}.il"')
+           m=read(label+'-check.json')['modules']['check44'];cs=list(m['cells'].values());counts=collections.Counter(c['type'] for c in cs)
+           require(counts['$assert']==2 and counts['$assume']==2,'Formal property inventory')
+           require(all(c['connections']['EN']==['1'] for c in cs if c['type'] in ['$assert','$assume']),'Disabled property')
+           require(all(t.startswith('$') for t in counts) and not m['attributes'].get('blackbox'),'Unresolved cell')
+           require(not any(counts[t] for t in ['$anyseq','$anyconst','$allseq','$allconst']),'Hidden symbolic input')
+           require(len(m['ports']['obligation']['bits'])==2 and len(m['ports']['witness']['bits'])==5,'Output width')
+           return dict(counts)
+          def waveform(label,depth,witness=None,negative=False,stopped=None):
+           d=read(label+'.json');signals=d.get('signal');require(isinstance(signals,list) and signals,'Waveform missing')
+           names=[s['name'] for s in signals];require(len(names)==len(set(names)),'Duplicate trace signal')
+           values={}
+           for s in signals:
+            require(re.fullmatch(r'[A-Za-z0-9_.$:\[\]-]+',s['name']) and isinstance(s.get('wave'),str),'Invalid raw WaveJSON')
+            data=iter(s.get('data',[]));series=[];previous=None
+            for token in s['wave']:
+             if token in '23456789=':previous=next(data,None)
+             elif token in '01xz':previous=token
+             elif token not in '.|':raise RuntimeError('Unsupported wave token '+token)
+             if token!='|':series.append(previous)
+            require(next(data,None) is None,'Unused waveform data')
+            values[s['name']]=series
+           required=['host_clk','core_clk','rst_n_async','obligation','witness','tracked_pending','request_age','host_gap_count','core_gap_count','request_captured','response_seen','response_error']
+           require(set(required)<=set(values),'Missing trace observation')
+           # SAT traces include an initial separator sample; validate precisely the last depth samples.
+           v={n:values[n][-depth:] for n in required}
+           require(all(len(x)==depth and all(isinstance(b,str) and re.fullmatch('[01]+',b) for b in x) for x in v.values()),'Unknown trace value')
+           ob=[int(x,2) for x in v['obligation']]
+           require(any((x&1)==0 for x in ob) if negative else all(x==3 for x in ob),'Deadline evidence')
+           if witness is not None:require(int(v['witness'][-1],2)&(1<<witness),'Missing final witness')
+           for clock in ['host','core']:
+            gaps=[int(x,2) for x in v[clock+'_gap_count']]
+            require(any(x>=4 for x in gaps) if stopped==clock else all(x<4 for x in gaps),'Clock progress evidence '+clock)
+           if negative:
+            require(any((ob[i]&1)==0 and v['tracked_pending'][i]=='1' and int(v['request_age'][i],2)>=48 for i in range(depth)),'No overdue transaction')
+           require(v['rst_n_async'][0]=='0','Initial reset missing')
+           for clock in ['host','core']:
+            last=0;gap=0
+            for i,b in enumerate(v[clock+'_clk']):
+             require(int(v[clock+'_gap_count'][i],2)==gap,'Clock-gap replay')
+             now=int(b,2);gap=0 if now and not last else min(7,gap+1);last=now
+           start=None;completions=[];aborts=[];overdue=[];max_h=max_c=0
+           for i in range(depth):
+            if not (ob[i]&1):
+             require(start is not None and i-start>=49,'Overdue event replay');overdue.append(i)
+            if v['rst_n_async'][i]=='0':
+             if start is not None:aborts.append(i)
+             start=None
+            elif v['request_captured'][i]=='1':
+             require(start is None,'Overwritten pending transaction')
+             start=i;max_h=max_c=0
+            elif start is not None:
+             if v['response_seen'][i]=='1':
+              completions.append(dict(step=i,latency=i-start,error=int(v['response_error'][i],2),host_pause=max_h>=3,core_pause=max_c>=3))
+              start=None
+             else:
+              max_h=max(max_h,int(v['host_gap_count'][i],2));max_c=max(max_c,int(v['core_gap_count'][i],2))
+           if not negative:require(all(x['latency']<=48 for x in completions),'Response latency replay')
+           if witness is not None:
+            reached=[any(not x['error'] for x in completions),any(x['error'] for x in completions),any(x['host_pause'] and x['core_pause'] for x in completions),bool(aborts),any(a<x['step'] for a in aborts for x in completions)]
+            require(reached[witness],'Witness event replay')
+           if negative:require(overdue,'Missing overdue request')
+           return dict(sha256=sha((E/(label+'.json')).read_bytes()),signals=len(signals),depth=depth,completions=completions,aborts=aborts,overdue=overdue)
+
+          require(not E.exists(),'Fresh evidence directory required');E.mkdir(parents=True)
+          try:
+           require(sys.flags.optimize==0,'Python optimization disabled')
+           require(os.environ['GITHUB_EVENT_NAME']=='workflow_dispatch' and os.environ['GITHUB_REF']=='refs/heads/main','Manual main only')
+           commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+           require(commit==os.environ['GITHUB_SHA'],'Checkout identity')
+           require(not subprocess.check_output(['git','status','--porcelain'],text=True).strip(),'Dirty checkout')
+           report.update(commit=commit,run_id=os.environ['GITHUB_RUN_ID'],run_attempt=os.environ['GITHUB_RUN_ATTEMPT'],dependency_hashes=DEPENDENCIES,
+            deadline_steps=48,clock_gap_limit=4,reset_aborts=True,scope='Conditional sampled CDC/CSR response deadline; arbitrary core telemetry')
+           write('workflow-source.yml',(R/WORKFLOW).read_text())
+           # Import only the audited elaboration/projection helpers, never a predecessor PASS.
+           path,digest=next(iter(DEPENDENCIES.items()));data=(R/path).read_bytes();require(sha(data)==digest,'Projection helper identity')
+           text=data.decode();marker="          python - <<'PY'\n";require(text.count(marker)==1 and text.count('\n          PY')==1,'Helper block')
+           code=textwrap.dedent(text.split(marker)[1].split('\n          PY')[0]);tree=ast.parse(code)
+           nodes=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name in ['definitions','extract','decl']]
+           require({n.name for n in nodes}=={'definitions','extract','decl'} and len(nodes)==3,'Helper set')
+           exec(compile(ast.Module(body=nodes,type_ignores=[]),path,'exec'),globals());write('dependency-'+Path(path).name,text)
+           deps=list(DEPENDENCIES.items())
+           T=definitions(*deps[1],['PINS'])
+           C=definitions(*deps[2],['PINS','SNAP','STATE','TO'])
+           PINS=dict(T['PINS'])
+           for p,h in C['PINS'].items():require(p not in PINS or PINS[p]==h,'Conflicting source pin');PINS[p]=h
+           BRIDGE,RESET,BINDING,TARGET=T['PINS'];INCLUDES=['rtl/m22','rtl/m23','rtl/m31','rtl/m32','fpga/m32','fpga/m32_csr']
+           sources=E/'sources';report['source_hashes']=PINS
+           for p,h in PINS.items():
+            b=(R/p).read_bytes();require(sha(b)==h,'Source identity '+p)
+            out=sources/p;out.parent.mkdir(parents=True,exist_ok=True);out.write_bytes(b)
+           versions={p:metadata.version(p) for p in ['yowasp-yosys','yowasp-runtime','wasmtime']}
+           require(versions=={'yowasp-yosys':'0.68.0.0.post1208','yowasp-runtime':'1.96','wasmtime':'47.0.1'},'Tool versions');write('tools.json',versions)
+           m=extract('rtl',sources);write('check.sv',harness(m));frontend('rtl')
+           yosys('synthesis',f'read_json "{E}/rtl-dut.json"; synth_ice40 -top dut -json "{E}/mapped.json"; write_verilog -noattr "{E}/mapped.v"')
+           mapped=read('mapped.json')['modules']['dut'];counts=dict(collections.Counter(c['type'] for c in mapped['cells'].values()))
+           require(counts=={'SB_DFFER':1579,'SB_LUT4':3342,'SB_DFFR':18,'SB_DFFES':18,'SB_CARRY':38},'Mapped full-shell inventory')
+           require({n:(p['direction'],len(p['bits'])) for n,p in mapped['ports'].items()}=={n:(p['direction'],len(p['bits'])) for n,p in m['ports'].items()},'Mapped port shape')
+           report['mapped_cells']=counts;write('gate-dut.json',dict(modules={'dut':mapped}));frontend('gate',True)
+           for kind in ['rtl','gate']:
+            label=kind+'-induction'
+            log=yosys(label,f'read_rtlil "{E}/{kind}.il"; sat -timeout 120 -seq 2 -set-at 1 rst_n_async 0 -set-assumes -tempinduct -maxsteps 80 -prove obligation {ALL_ONES} -prove-asserts -verify -show obligation')
+            bases=re.findall(r'Base case for induction length (\d+) proven\.',log)
+            require(bases and 'Induction step proven: SUCCESS!' in log,'Incomplete induction '+kind)
+            require("Final proof equation: \\obligation = 2'11" in log,'Proof equation')
+            report['proofs'][kind]=dict(status='PASS',unbounded=True,induction_length=int(bases[-1]),clock_assumptions=2,deadline_steps=48)
+            for i,name in enumerate(CASES):
+             depth=96 if i==4 else 72;label=kind+'-reach-'+name
+             log=yosys(label,f'read_rtlil "{E}/{kind}.il"; sat -timeout 120 -seq {depth} -set-at 1 rst_n_async 0 -set-assumes -set-at {depth} witness[{i}] 1 {SHOW} -dump_json "{E}/{label}.json"')
+             require('SAT solving finished - model found:' in log,'Unreachable '+label)
+             report['witnesses'][label]=dict(status='PASS',trace=waveform(label,depth,witness=i))
+           mutations=[
+            ('write-request-stall',BRIDGE,"core_csr_valid <= 1'b1;","core_csr_valid <= !request_write_hold_q;"),
+            ('write-response-stall',BRIDGE,'response_toggle_core_q <= ~response_toggle_core_q;','if (!core_csr_write) response_toggle_core_q <= ~response_toggle_core_q;'),
+            ('csr-write-stall',TARGET,'csr_ready = rst_n_async && core_ready && csr_valid;','csr_ready = rst_n_async && core_ready && csr_valid && !csr_write;')]
+           for name,path,old,new in mutations:
+            label='fault-'+name;directory=E/label
+            for p in PINS:
+             b=(sources/p).read_text()
+             if p==path:require(b.count(old)==1,'Mutation anchor '+name);b=b.replace(old,new)
+             out=directory/p;out.parent.mkdir(parents=True,exist_ok=True);out.write_text(b)
+            extract(label,directory);frontend(label);trace=label+'-counterexample';depth=80
+            log=yosys(trace,f'read_rtlil "{E}/{label}.il"; sat -timeout 120 -seq {depth} -set-at 1 rst_n_async 0 -set-assumes -prove obligation[0] 1 {SHOW} -dump_json "{E}/{trace}.json"')
+            require('SAT proof finished - model found: FAIL!' in log,'Missing source counterexample')
+            report['mutations'][name]=dict(status='DETECTED',path=path,old=old,new=new,mutated_sha256=sha((directory/path).read_bytes()),trace=waveform(trace,depth,negative=True))
+           for stopped in ['host','core']:
+            label='stopped-'+stopped;depth=80;fixture=[]
+            for t in range(1,depth+1):
+             h=c=t%2
+             if stopped=='host' and t>22:h=0
+             if stopped=='core' and t>16:c=0
+             fixture.append(f'-set-at {t} host_clk {h} -set-at {t} core_clk {c} -set-at {t} rst_n_async {int(t>1)} -set-at {t} csr_valid {int(t in (20,21))}')
+            log=yosys(label,f'read_rtlil "{E}/rtl.il"; chformal -assume -remove; sat -timeout 120 -seq {depth} '+ ' '.join(fixture)+f' -prove obligation[0] 1 {SHOW} -dump_json "{E}/{label}.json"')
+            require('SAT proof finished - model found: FAIL!' in log,'Missing clock-progress counterexample')
+            report['clock_challenges'][stopped]=dict(status='COUNTEREXAMPLE',assumptions_removed=True,trace=waveform(label,depth,negative=True,stopped=stopped))
+           require(len(report['proofs'])==2 and len(report['witnesses'])==10 and len(report['mutations'])==3 and len(report['clock_challenges'])==2,'Incomplete campaign')
+           for p,h in {**PINS,**DEPENDENCIES}.items():require(sha((R/p).read_bytes())==h,'Source modified '+p)
+           require(not subprocess.check_output(['git','status','--porcelain'],text=True).strip(),'Checkout modified')
+           for p in E.rglob('*.json'):json.loads(p.read_text())
+           report['status']='PASS'
+          finally:
+           report['evidence_hashes']={str(p.relative_to(E)):sha(p.read_bytes()) for p in sorted(E.rglob('*')) if p.is_file() and p.name not in ['result-44.json','summary-44.md']}
+           write('result-44.json',report)
+           summary=f'''# M32 CDC/CSR response deadline: {report['status']}
+
+          An observed request-toggle transition must receive a host response within 48
+          sampled global steps unless common reset aborts the transaction.
+          Each clock must have a rising edge at least once per four sampled steps;
+          the two explicit gap assumptions apply during reset, idle and transactions.
+          Later reset and all request/data inputs remain unconstrained. Error responses
+          also terminate requests. This is a conditional digital liveness theorem.
+          The age counter saturates; overflow cannot hide an overdue request.
+          A second assertion prevents a new capture from replacing a pending request.
+
+          The real CDC/CSR/reset integration is elaborated from pinned sources; 1615
+          retained state bits are preserved before the ordinary proof-cone reduction.
+          Only the actual M32 core's 59 output fields (2075 bits) are universally free.
+          Both RTL and a freshly synthesized iCE40 primitive model require induction.
+          The 10 witnesses are bounded existence checks, not universal timing proofs.
+          Three source stalls must violate the deadline with clock assumptions active.
+          Two stopped-clock counterexamples demonstrate why unconditional liveness
+          is not claimed; these remove assumptions only in isolated negative queries.
+
+          Completed inductions: {len(report['proofs'])}/2; witnesses: {len(report['witnesses'])}/10;
+          source faults: {len(report['mutations'])}/3; clock challenges: {len(report['clock_challenges'])}/2.
+          Commit: {report.get('commit','unknown')}.
+
+          Scope excludes core arithmetic, physical timing, metastability, board fit,
+          pinout and measured hardware behavior; no frequency or nanosecond claim.
+          '''
+           write('summary-44.md',summary)
+           with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write(summary)
+           print(json.dumps({k:report[k] for k in ['status','proofs','mapped_cells'] if k in report},indent=2))
+          PY
+      - name: Upload proof evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-44-m32-cdc-csr-response-deadline-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.FRP44_EVIDENCE }}
+          if-no-files-found: error
+          retention-days: 30
