@@ -1,0 +1,308 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# Dependencies retain their own licenses.
+name: 47 - FRP M32 Thermal Phase Integration
+run-name: "47 - FRP Thermal Phase | RTL and 80 obligations @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-47-thermal-phase-integration-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Prepare evidence and pinned tools
+        run: |
+          set -euo pipefail
+          export FRP47_EVIDENCE="$RUNNER_TEMP/frp-47-evidence"
+          mkdir -p "$FRP47_EVIDENCE"
+          printf '%s\n' "FRP47_EVIDENCE=$FRP47_EVIDENCE" >> "$GITHUB_ENV"
+          python -m pip install --disable-pip-version-check \
+            verilator==5.48.0 yowasp-yosys==0.68.0.0.post1208 \
+            yowasp-runtime==1.96 wasmtime==47.0.1 z3-solver==4.15.4.0 \
+            2>&1 | tee "$FRP47_EVIDENCE/install.log"
+          python -m pip freeze > "$FRP47_EVIDENCE/packages.txt"
+      - name: Record exact sources and tool versions
+        run: |
+          set -euo pipefail
+          python - <<'PY' 2>&1 | tee "$FRP47_EVIDENCE/step-0.log"
+          from pathlib import Path
+          import os,hashlib,json,subprocess
+          R=Path.cwd();E=Path(os.environ['FRP47_EVIDENCE'])
+          sha=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
+          ref=R/'frp_prototype_v1_7_0.py'
+          assert sha(ref)=='9de085915aa0fb8a73705c0927cc875b106480ef8a75a76f599be04440c0f099','Reference source changed'
+          files=[ref]+sorted((R/'rtl/m31').glob('*.sv'))+sorted((R/'rtl/m32').glob('*.sv'))
+          files += [R/'artifacts/m18/m15_vectors/frp_m15_trig_lut_q30.vec',R/'rtl/m31/frp_m31_sin_q30.mem',R/'.github/workflows/frp-47-m32-thermal-phase-integration.yml']
+          manifest={'commit':os.environ.get('GITHUB_SHA','local'),'files':{str(p.relative_to(R)):sha(p) for p in files}}
+          (E/'sources.json').write_text(json.dumps(manifest,indent=2))
+          for tool in ['verilator-cli','yowasp-yosys']:
+           p=subprocess.run([tool,'--version'],capture_output=True,text=True,check=True)
+           (E/(tool+'-version.txt')).write_text(p.stdout+p.stderr)
+          PY
+      - name: Replay M32 thermal gamma attenuation and phase
+        run: |
+          set -euo pipefail
+          python - <<'PY' 2>&1 | tee "$FRP47_EVIDENCE/step-1.log"
+          import os
+          from pathlib import Path
+          import subprocess,json,importlib.util,copy,hashlib
+          E=Path(os.environ['FRP47_EVIDENCE'])/'core';E.mkdir(parents=True,exist_ok=True);R=Path.cwd()
+          pre=['phase_word_q','frequency_current_q16','phase_load','frequency_load_q16','gamma_targets_q16','gamma_effective_word','thermal_node_factor_q30','local_frequency_lag_q16','local_next_overload_q16','local_next_gamma_effective_word','phase_gamma_effective_word','coupling_field_q16','local_next_thermal_node_factor_q30','phase_thermal_node_factor_q30']
+          thermal=['local_heat_q16','local_heat_peak_q16','local_generated_power_q16','local_thermal_dissipation_q16','local_thermal_diffusion_q16','local_thermal_overload_q16'];gamma=['local_gamma_noise_target_q16','local_gamma_noise_state_q16','local_gamma_drift_word','local_gamma_effective_word'];post=['frequency_current_q16','phase_word_q']+thermal+gamma+['local_thermal_node_factor_q30']
+          cpp='''#include "Vfrp_m32_core.h"
+          #include "verilated.h"
+          #include <fstream>
+          #include <cstdint>
+          int main(int argc,char**argv){
+           Verilated::commandArgs(argc,argv);Vfrp_m32_core d;std::ofstream out(argv[1]);
+           uint32_t rng=50;auto rnd=[&](){rng^=rng<<13;rng^=rng>>17;rng^=rng<<5;return rng;};
+           d.clk=0;d.rst_n=1;d.eval();
+           for(unsigned c=0;c<12000;c++){
+            d.clk=0;d.rst_n=!(c==0||c==4001||c==8103||c==9999);
+            d.tick_enable=(c%13<10);d.phase_load_valid=(c%37==0||c<8);
+            d.clear_counters=(c%71==0);d.scheduler_mode=(c/1000)%3;
+            d.auto_target_enable=(c/500)%2;d.external_request_valid=rnd()&3;
+            d.external_request_cell_index=rnd()&63;d.external_request_target=rnd()&15;
+            d.external_target_bank=rnd()&65535;d.local_gamma_enable=((c/200)%3!=0);
+            d.local_thermal_enable=(c/137)%2;
+            d.gamma_update_valid=(c<6000)?(c%8==0):(rnd()&1);
+            for(int i=0;i<8;i++){
+             d.phase_load[i]=rnd();d.frequency_load_q16[i]=rnd();
+             if(c%4001<1000)d.frequency_load_q16[i]=60000u+rnd()%20001;
+             if(c<8)d.frequency_load_q16[i]=(c&1)?0x80000000u:0x7fffffffu;
+             d.gamma_targets_q16[i]=(c<6000)?uint32_t(int(rnd()%131073)-65536):rnd();
+             d.gamma_effective_word[i]=rnd();d.thermal_node_factor_q30[i]=(c%3)?1073741824u:(rnd()&0x3fffffffu);
+            }
+            d.eval();out<<std::hex<<c<<" "<<unsigned(d.rst_n)<<" "<<unsigned(d.tick_enable)<<" "<<unsigned(d.phase_load_valid)<<" "<<unsigned(d.clear_counters)<<" "<<unsigned(d.scheduler_mode)<<" "<<unsigned(d.scheduler_state_q)<<" "<<d.state_out<<" "<<unsigned(d.accepted_change_mask)<<" "<<unsigned(d.local_gamma_enable)<<" "<<unsigned(d.gamma_update_valid)<<" "<<unsigned(d.local_thermal_enable);
+          '''
+          for f in pre:cpp+=f'  for(int i=0;i<8;i++)out<<" "<<d.{f}[i];\n'
+          cpp+='d.clk=1;d.eval();\n'
+          for f in post:cpp+=f'  for(int i=0;i<8;i++)out<<" "<<d.{f}[i];\n'
+          cpp+=''' out<<" "<<d.local_mean_heat_q16<<" "<<d.local_mean_heat_peak_q16<<" "<<d.local_maximum_heat_peak_q16<<"\\n";
+           }
+          }
+          ''';(E/'sim.cpp').write_text(cpp)
+          args=['verilator-cli','--cc','--exe','--build','-Wno-fatal','-j','2','-MAKEFLAGS','VK_PCH_I_FAST=','-MAKEFLAGS','VK_PCH_I_SLOW=','--top-module','frp_m32_core','--Mdir',str(E/'obj'),'-Irtl/m31','-Irtl/m32','rtl/m32/frp_m32_core.sv',str(E/'sim.cpp')]
+          p=subprocess.run(args,cwd=R,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=1200);(E/'build.log').write_text(p.stdout);assert p.returncode==0,p.stdout[-4000:];print('build complete',flush=True)
+          p=subprocess.run([str(E/'obj/Vfrp_m32_core'),str(E/'trace.txt')],cwd=R,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=90);(E/'run.log').write_text(p.stdout);assert p.returncode==0,p.stdout
+          spec=importlib.util.spec_from_file_location('frp',R/'frp_prototype_v1_7_0.py');ref=importlib.util.module_from_spec(spec);spec.loader.exec_module(ref)
+          p=ref.QuantizedReferenceShadowProcessor(cells=8);tn=[n.removeprefix('local_') if n!='local_heat_peak_q16' else n for n in thermal];gn=[n.removeprefix('local_') for n in gamma];names=tn+gn;peak=3277;factors_q=[1073741824]*8;checks=0;thermal_cov={k:0 for k in ['local_ticks','external_ticks','effect','load_tick','hold','clear_tick','reset']};combinations=set();cov=dict(resets=0,holds=0,local_ticks=0,external_ticks=0,mode_changes=0,target_updates=0,overload=0,gamma_changed=0,phase_effect=0,loads_with_tick=0)
+          s32=lambda x:(x&0xffffffff) if (x&0xffffffff)<0x80000000 else (x&0xffffffff)-0x100000000
+          mask=lambda x:x&0xffffffff
+          weights={1:516461574,2:158959695,3:59840215};previous_mode=0
+
+          def check(label,actual,expected):
+           global checks
+           expected=[mask(x) for x in expected]
+           assert actual==expected,(c,label,[(i,x,y) for i,(x,y) in enumerate(zip(actual,expected)) if x!=y]);checks+=len(expected)
+          def coupling(phases,gammas,factors):
+           result=[]
+           for i in range(8):
+            total=0
+            for j in range(8):
+             if i==j:continue
+             pair=ref.mul_q30(factors[i],factors[j]);weighted=ref.mul_q30(weights[(i^j).bit_length()],pair)
+             total+=ref.mul_q30(weighted,ref.sin_phase_q30(phases[j]-phases[i]-gammas[i]))
+            result.append(ref.mul_q16(18350,ref.q30_to_q16(ref.sat_s32(total))))
+           return result
+          rows=(E/'trace.txt').read_text().splitlines();assert len(rows)==12000
+          for line in rows:
+           a=[int(x,16) for x in line.split()];c,rst,tick,load,clear,mode,sched,state,sw,local,valid,local_thermal=a[:12];pos=12;before={};after={}
+           for n in pre:before[n]=a[pos:pos+8];pos+=8
+           for n in post:after[n]=a[pos:pos+8];pos+=8
+           actual_aggregate=a[pos:];assert len(actual_aggregate)==3
+           if not rst:
+            for n in names:setattr(p,n,[3277 if n in tn[:2] else 644245094 if n=='gamma_effective_word' else 0]*8)
+            peak=3277;factors_q=[1073741824]*8;cov['resets']+=1
+           p.states=[-1 if ((state>>(2*i))&3)==3 else 1 if ((state>>(2*i))&3)==1 else 0 for i in range(8)];p.cell_switch_activity=[(sw>>i)&1 for i in range(8)];p.frequency_current_q16=list(map(s32,before['frequency_current_q16']));p.update_delay_dynamics();selected=list(map(s32,before['frequency_load_q16'])) if load else p.frequency_current_q16
+           p.frequency_lag_q16=[abs(t-f) for t,f in zip(p.frequency_target_q16,selected)];check('lag',before['local_frequency_lag_q16'],p.frequency_lag_q16)
+           nxt=copy.copy(p)
+           for n in names:setattr(nxt,n,getattr(p,n).copy())
+           nxt.update_local_thermal_field();nxt.update_local_gamma_drift(valid,list(map(s32,before['gamma_targets_q16'])))
+           nxt.update_thermal_node_factors()
+           check('next thermal factors',before['local_next_thermal_node_factor_q30'],nxt.thermal_node_factor_q30)
+           chosen_factors=nxt.thermal_node_factor_q30 if local_thermal else list(map(s32,before['thermal_node_factor_q30']))
+           check('thermal selection',before['phase_thermal_node_factor_q30'],chosen_factors)
+           if not rst: thermal_cov['reset']+=1
+           if rst and tick:
+            factors_q=nxt.thermal_node_factor_q30.copy();thermal_cov['local_ticks' if local_thermal else 'external_ticks']+=1;combinations.add((local,local_thermal))
+            if local_thermal: thermal_cov['load_tick']+=load;thermal_cov['clear_tick']+=clear
+           if rst and not tick and local_thermal:thermal_cov['hold']+=1
+           check('thermal factor commit',after['local_thermal_node_factor_q30'],factors_q)
+           check('next overload',before['local_next_overload_q16'],nxt.thermal_overload_q16);check('next gamma',before['local_next_gamma_effective_word'],nxt.gamma_effective_word)
+           chosen=nxt.gamma_effective_word if local else list(map(s32,before['gamma_effective_word']));check('gamma selection',before['phase_gamma_effective_word'],chosen)
+           phases=before['phase_word_q'];factors=chosen_factors;field=coupling(phases,chosen,factors);check('coupling',before['coupling_field_q16'],field)
+           if rst and tick and not load and local_thermal:
+            external_field=coupling(phases,chosen,list(map(s32,before['thermal_node_factor_q30'])));thermal_cov['effect']+=sum(x!=y for x,y in zip(field,external_field))
+           push={0:197,1:197,2:655,3:393,4:197}.get(sched,197)
+           computed=[mask(phases[i]+ref.round_shift_away_from_zero(s32(ref.mul_q16(3932,p.frequency_current_q16[i])+push+field[i])*ref.PHASE_PER_RAD_Q16,32)) for i in range(8)]
+           expected_freq=[65536]*8 if not rst else selected if (load or tick) else list(map(s32,before['frequency_current_q16']))
+           expected_phase=[i*0x20000000 for i in range(8)] if not rst else before['phase_load'] if load else computed if tick else phases
+           check('frequency commit',after['frequency_current_q16'],expected_freq);check('phase commit',after['phase_word_q'],expected_phase)
+           if rst and tick:
+            p=nxt;peak=max(peak,ref.round_div_away_from_zero(sum(p.heat_q16),8));cov['local_ticks' if local else 'external_ticks']+=1;cov['target_updates']+=valid
+           elif rst:cov['holds']+=1
+           for port,n in zip(thermal+gamma,names):check(port,after[port],getattr(p,n))
+           check('aggregates',actual_aggregate,[ref.round_div_away_from_zero(sum(p.heat_q16),8),peak,max(p.local_heat_peak_q16)])
+           cov['mode_changes']+=local!=previous_mode;previous_mode=local;cov['overload']+=sum(x>0 for x in p.thermal_overload_q16);cov['gamma_changed']+=sum(x!=644245094 for x in nxt.gamma_effective_word);cov['loads_with_tick']+=bool(rst and load and tick)
+           if local and rst and tick and not load:
+            other_field=coupling(phases,list(map(s32,before['gamma_effective_word'])),factors);cov['phase_effect']+=sum(x!=y for x,y in zip(field,other_field))
+          assert all(cov[n]>0 for n in cov),cov
+          print('PASS',checks,cov,flush=True);(E/'validation.json').write_text(json.dumps({'cycles':12000,'checks':checks,'coverage':cov,'core_sha256':hashlib.sha256((R/'rtl/m32/frp_m32_core.sv').read_bytes()).hexdigest()},indent=2))
+
+          assert checks==1956000
+          assert combinations=={(0,0),(0,1),(1,0),(1,1)},combinations
+          assert all(thermal_cov.values()),thermal_cov
+          print('THERMAL COVERAGE',thermal_cov,sorted(combinations),flush=True)
+          (E/'thermal-coverage.json').write_text(json.dumps(thermal_cov,indent=2))
+          PY
+      - name: Check ternary transitions in the integration trace
+        run: |
+          set -euo pipefail
+          python - <<'PY' 2>&1 | tee "$FRP47_EVIDENCE/step-2.log"
+          from pathlib import Path
+          import os,json
+          E=Path(os.environ['FRP47_EVIDENCE'])
+          rows=[[int(x,16) for x in line.split()] for line in (E/'core/trace.txt').read_text().splitlines()]
+          assert len(rows)==12000
+          counts={-1:0,0:0,1:0};edges=0;through_zero=0
+          for row in rows:
+           for i in range(8):
+            state=(row[7]>>(i*2))&3
+            assert state!=2,(row[0],i,state)
+            counts[-1 if state==3 else state]+=1
+          for a,b in zip(rows,rows[1:]):
+           if not a[1] or not b[1]:continue
+           for i in range(8):
+            old=(a[7]>>(i*2))&3;new=(b[7]>>(i*2))&3
+            assert (old,new) not in [(1,3),(3,1)],(a[0],i,old,new)
+            edges+=1;through_zero+=int(old!=new and (old==0 or new==0))
+          assert edges==95936 and through_zero>0 and all(counts.values())
+          report={'sampled_states':counts,'adjacent_lane_transitions':edges,'transitions_through_zero':through_zero}
+          (E/'ternary-trace.json').write_text(json.dumps(report,indent=2));print(json.dumps(report,indent=2))
+          PY
+      - name: Regress active zero and all scheduler profiles
+        run: |
+          set -euo pipefail
+          python - <<'PY' 2>&1 | tee "$FRP47_EVIDENCE/step-3.log"
+          import os
+          from pathlib import Path
+          import subprocess,re,json
+          E=Path(os.environ['FRP47_EVIDENCE'])/'regression';E.mkdir(parents=True,exist_ok=True);R=Path.cwd();top='frp_m32_closed_loop_tb'
+          a=['verilator-cli','--binary','--timing','--assert','-Wno-fatal','-j','2','-MAKEFLAGS','VK_PCH_I_FAST=','-MAKEFLAGS','VK_PCH_I_SLOW=','--top-module',top,'--Mdir',str(E/'regression'),'-Irtl/m31','-Irtl/m32','rtl/m32/'+top+'.sv']
+          p=subprocess.run(a,cwd=R,capture_output=True,text=True,timeout=1200);(E/'regression-build.log').write_text(p.stdout+p.stderr);assert p.returncode==0,p.stderr[-2000:]
+          p=subprocess.run([str(E/'regression'/('V'+top))],cwd=R,capture_output=True,text=True,timeout=120);(E/'regression-run.log').write_text(p.stdout+p.stderr);assert p.returncode==0,p.stdout+p.stderr;print(p.stdout,flush=True)
+
+          profiles=set(re.findall(r'PROFILE: PASS workload=(\d) mode=(free|7/1|1/7)',p.stdout))
+          assert profiles=={(str(w),m) for w in range(2) for m in ['free','7/1','1/7']}
+          assert 'FRP_M32_CLOSED_LOOP_TB: PASS profiles=6 steps=3262 checks=10030' in p.stdout
+          (E/'validation.json').write_text(json.dumps({'profiles':6,'steps':3262,'checks':10030},indent=2))
+          PY
+      - name: Prove gamma and thermal selection reset hold and commit
+        run: |
+          set -euo pipefail
+          python - <<'PY' 2>&1 | tee "$FRP47_EVIDENCE/step-4.log"
+          import os
+          from pathlib import Path
+          import subprocess,re,json,z3,time
+          E=Path(os.environ['FRP47_EVIDENCE'])/'core';E.mkdir(parents=True,exist_ok=True);R=Path.cwd();T='frp_m32_core'
+          s=(R/'rtl/m31/frp_m31_phase_interference.sv').read_text();pat=r'    if \(sin_lut[^\n]+\)\n      \$fatal\([^;\n]+\);\n';assert len(re.findall(pat,s))==4;(E/'phase.sv').write_text(re.sub(pat,'',s))
+          s=(R/'rtl/m32/frp_m32_core.sv').read_text().replace('`include "frp_m31_phase_interference.sv"',f'`include "{E}/phase.sv"');(E/'formal_core.sv').write_text(s)
+          ys=f'read_slang -j 1 --std 1800-2017 --top {T} -Irtl/m31 -Irtl/m32 {E}/formal_core.sv; proc; flatten; opt -full; check -assert; write_json {E}/core.json; async2sync; dffunmap; write_smt2 -wires {E}/core.smt2;'
+          (E/'formal.ys').write_text(ys);p=subprocess.run(['yowasp-yosys','-Q','-T','-s',str(E/'formal.ys')],cwd=R,capture_output=True,text=True,timeout=600);(E/'formal-export.log').write_text(p.stdout+p.stderr);assert p.returncode==0,(p.stdout+p.stderr)[-3000:];print('export complete',flush=True)
+          m=json.loads((E/'core.json').read_text())['modules'][T];nets=m['netnames']
+          connections=[('local_next_overload_q16','u_local_gamma_drift.thermal_overload_q16'),('phase_gamma_effective_word','u_phase_interference.gamma_effective_word'),('tick_enable','u_local_gamma_drift.tick_enable'),('rst_n','u_local_gamma_drift.rst_n'),('gamma_targets_q16','u_local_gamma_drift.gamma_targets_q16'),('gamma_update_valid','u_local_gamma_drift.gamma_update_valid')]
+          connections += [('local_next_overload_q16','u_local_thermal_attenuation.thermal_overload_q16'),('phase_thermal_node_factor_q30','u_phase_interference.thermal_node_factor_q30'),('tick_enable','u_local_thermal_attenuation.tick_enable'),('rst_n','u_local_thermal_attenuation.rst_n'),('local_next_thermal_node_factor_q30','u_local_thermal_attenuation.next_thermal_node_factor_q30'),('local_thermal_node_factor_q30','u_local_thermal_attenuation.thermal_node_factor_q30')]
+          for a,b in connections:assert nets[a]['bits']==nets[b]['bits'],(a,b)
+          (E/'connections.json').write_text(json.dumps(connections,indent=2));print('Twelve full signal connections verified',flush=True)
+          variables={};bindings=[]
+          def sig(name,width,state=0,bool_=False):
+           key=f'v{len(variables)}';v=z3.Bool(key) if bool_ else z3.BitVec(key,width);variables[key]=v;bindings.append(f'(assert (= (|{T}_n {name}| s{state}) {key}))');return v
+          names=['local_gamma_noise_target_q16','local_gamma_noise_state_q16','local_gamma_drift_word','local_gamma_effective_word'];a={n:sig(n,256) for n in names};b={n:sig(n,256,1) for n in names};selected=sig('phase_gamma_effective_word',256);external=sig('gamma_effective_word',256);candidate=sig('local_next_gamma_effective_word',256);enable=sig('local_gamma_enable',1,bool_=True);tick=sig('tick_enable',1,bool_=True);rst=sig('rst_n',1,bool_=True);rst1=sig('rst_n',1,1,True)
+          d=[{n:sig(f'u_local_gamma_drift.g_cell[{i}].{n}',32) for n in ['target_d','noise_d','drift_d','effective_d']} for i in range(8)]
+          thermal_q=sig('local_thermal_node_factor_q30',256);thermal_q1=sig('local_thermal_node_factor_q30',256,1);thermal_d=sig('local_next_thermal_node_factor_q30',256);thermal_selected=sig('phase_thermal_node_factor_q30',256);thermal_external=sig('thermal_node_factor_q30',256);thermal_enable=sig('local_thermal_enable',1,bool_=True)
+          text=(E/'core.smt2').read_text()+f'\n(declare-fun s0 () |{T}_s|)\n(declare-fun s1 () |{T}_s|)\n'+'\n'.join(bindings);base=z3.parse_smt2_string(text,decls=variables);trans=z3.parse_smt2_string(text+f'\n(assert (|{T}_t| s0 s1))',decls=variables);replacements=[(v.arg(1),v.arg(0)) for v in base];expand=lambda x:z3.substitute(x,*replacements);results={}
+          def prove(name,pre,goal,seq=False):
+           goal=expand(goal);pre=[expand(v) for v in pre]
+           if seq:
+            pairs=[(eq.arg(1),eq.arg(0)) for eq in trans[-1].children()];assert all(str(right.arg(0))=='s1' for right,left in pairs);goal=z3.substitute(goal,*pairs);pre=[z3.substitute(v,*pairs) for v in pre]
+           solver=z3.Solver();solver.set(timeout=12000);solver.add(*pre,z3.Not(goal));t=time.monotonic();result=solver.check();results[name]={'result':str(result),'seconds':time.monotonic()-t};print(name,result,flush=True);(E/(name+'.smt2')).write_text(solver.to_smt2());(E/'formal-results.json').write_text(json.dumps(results,indent=2));assert result==z3.unsat,(name,result)
+          lane=lambda bank,i:z3.Extract(32*i+31,32*i,bank)
+          for i in range(8):
+           prove(f'local-selection-{i}',[enable],lane(selected,i)==lane(candidate,i));prove(f'external-selection-{i}',[z3.Not(enable)],lane(selected,i)==lane(external,i))
+           reset=[];hold=[];commit=[]
+           for n,field in zip(names,['target_d','noise_d','drift_d','effective_d']):
+            reset.append(lane(a[n],i)==(644245094 if n=='local_gamma_effective_word' else 0));hold.append(lane(b[n],i)==lane(a[n],i));commit.append(lane(b[n],i)==d[i][field])
+           prove(f'reset-{i}',[z3.Not(rst)],z3.And(*reset));prove(f'hold-{i}',[rst,rst1,z3.Not(tick)],z3.And(*hold),True);prove(f'commit-{i}',[rst,rst1,tick],z3.And(*commit),True)
+          for i in range(8):
+           prove(f'thermal-local-selection-{i}',[thermal_enable],lane(thermal_selected,i)==lane(thermal_d,i))
+           prove(f'thermal-external-selection-{i}',[z3.Not(thermal_enable)],lane(thermal_selected,i)==lane(thermal_external,i))
+           prove(f'thermal-reset-{i}',[z3.Not(rst)],lane(thermal_q,i)==1073741824)
+           prove(f'thermal-hold-{i}',[rst,rst1,z3.Not(tick)],lane(thermal_q1,i)==lane(thermal_q,i),True)
+           prove(f'thermal-commit-{i}',[rst,rst1,tick],lane(thermal_q1,i)==lane(thermal_d,i),True)
+          print('PROVEN',len(results),'properties',flush=True)
+
+          assert len(results)==80
+          PY
+      - name: Require all results and write summary
+        run: |
+          set -euo pipefail
+          python - <<'PY' 2>&1 | tee "$FRP47_EVIDENCE/step-5.log"
+          from pathlib import Path
+          import os,json,hashlib
+          E=Path(os.environ['FRP47_EVIDENCE']);R=Path.cwd()
+          read=lambda name:json.loads((E/name).read_text())
+          manifest=read('sources.json');core=read('core/validation.json');thermal=read('core/thermal-coverage.json');reg=read('regression/validation.json');ternary=read('ternary-trace.json');proof=read('core/formal-results.json');connections=read('core/connections.json')
+          assert len(proof)==80 and all(v['result']=='unsat' for v in proof.values())
+          assert len(connections)==12
+          assert core['cycles']==12000 and core['checks']==1956000
+          assert all(core['coverage'].values()) and all(thermal.values())
+          assert thermal['local_ticks']+thermal['external_ticks']==9228
+          assert reg=={'profiles':6,'steps':3262,'checks':10030}
+          assert ternary['adjacent_lane_transitions']==95936 and ternary['transitions_through_zero']>0
+          for path,expected in manifest['files'].items():
+           assert hashlib.sha256((R/path).read_bytes()).hexdigest()==expected,path
+          assert core['core_sha256']==manifest['files']['rtl/m32/frp_m32_core.sv']
+          report={'status':'PASS','commit':manifest['commit'],'core':core,'thermal_coverage':thermal,'regression':reg,'ternary_trace':ternary,'formal_unsat':80,'signal_connections':12,'formal_scope':'Per-lane gamma and thermal selectors; reset, hold and commit of four gamma banks and one attenuation bank','formal_semantics':'Sampled two-state RTL; async2sync transition model','reference_scope':'M15 integer thermal, gamma and attenuation methods; M31 integer coupling and phase update contract'}
+          (E/'result.json').write_text(json.dumps(report,indent=2))
+          lines=['## FRP 47: PASS','',f"Commit: `{report['commit']}`",'','- M32 replay: 12,000 cycles; 1,956,000 word comparisons.','- Gamma and attenuation: all four source-mode combinations.','- Ternary trace: 95,936 adjacent lane transitions outside reset.','- Legacy M32 regression: six profiles; 10,030 checks; free, 7/1, 1/7.','- Formal: 80 UNSAT counterexample queries; 12 exact signal connections.','- Formal scope: gamma and attenuation selection, reset, hold and commit.','- Semantics: sampled two-state RTL with async2sync.']
+          if 'GITHUB_STEP_SUMMARY' in os.environ:
+           with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write('\n'.join(lines)+'\n')
+          print(json.dumps(report,indent=2))
+          PY
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-47-thermal-phase-integration-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/frp-47-evidence/**/*.json
+            ${{ runner.temp }}/frp-47-evidence/**/*.log
+            ${{ runner.temp }}/frp-47-evidence/**/*.smt2
+            ${{ runner.temp }}/frp-47-evidence/**/*.ys
+            ${{ runner.temp }}/frp-47-evidence/**/*.sv
+            ${{ runner.temp }}/frp-47-evidence/**/*.cpp
+            ${{ runner.temp }}/frp-47-evidence/**/*.txt
+          if-no-files-found: error
+          retention-days: 30
