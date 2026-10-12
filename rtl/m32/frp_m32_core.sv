@@ -11,6 +11,7 @@
 `include "frp_m32_registered_target_request_path.sv"
 `include "frp_m31_thermal_proxy.sv"
 `include "frp_m31_local_thermal_field.sv"
+`include "frp_m31_local_gamma_drift.sv"
 `include "frp_m31_stability.sv"
 
 module frp_m32_core #(
@@ -143,7 +144,18 @@ module frp_m32_core #(
   output logic [255:0] local_frequency_lag_q16,
   output wire signed [31:0] local_mean_heat_q16,
   output wire signed [31:0] local_mean_heat_peak_q16,
-  output wire signed [31:0] local_maximum_heat_peak_q16
+  output wire signed [31:0] local_maximum_heat_peak_q16,
+
+  input logic local_gamma_enable = 1'b0,
+  input logic gamma_update_valid = 1'b0,
+  input logic [(CELLS*32)-1:0] gamma_targets_q16 = '0,
+  output wire [(CELLS*32)-1:0] local_gamma_noise_target_q16,
+  output wire [(CELLS*32)-1:0] local_gamma_noise_state_q16,
+  output wire [(CELLS*32)-1:0] local_gamma_drift_word,
+  output wire [(CELLS*32)-1:0] local_gamma_effective_word,
+  output wire [(CELLS*32)-1:0] local_next_gamma_drift_word,
+  output wire [(CELLS*32)-1:0] local_next_gamma_effective_word,
+  output wire [(CELLS*32)-1:0] phase_gamma_effective_word
 );
 
   logic [63:0] normalized_cycle_cost_wide;
@@ -213,6 +225,30 @@ module frp_m32_core #(
     .mean_heat_peak_q16(local_mean_heat_peak_q16),
     .maximum_local_heat_q16(local_maximum_heat_peak_q16)
   );
+
+  // Thermal and gamma candidates feed the same enabled phase update.
+  // Both local histories advance on tick_enable in either source mode.
+  // Omitted local_gamma_enable selects the external gamma interface.
+  // gamma_update_valid is sampled with tick_enable; targets are signed Q16.16.
+  frp_m31_local_gamma_drift #(
+    .CELLS(CELLS)
+  ) u_local_gamma_drift (
+    .clk(clk),
+    .rst_n(rst_n),
+    .tick_enable(tick_enable),
+    .gamma_update_valid(gamma_update_valid),
+    .gamma_targets_q16(gamma_targets_q16),
+    .thermal_overload_q16(local_next_overload_q16),
+    .gamma_noise_target_q16(local_gamma_noise_target_q16),
+    .gamma_noise_state_q16(local_gamma_noise_state_q16),
+    .gamma_drift_word(local_gamma_drift_word),
+    .gamma_effective_word(local_gamma_effective_word),
+    .next_gamma_drift_word(local_next_gamma_drift_word),
+    .next_gamma_effective_word(local_next_gamma_effective_word)
+  );
+
+  assign phase_gamma_effective_word = local_gamma_enable
+    ? local_next_gamma_effective_word : gamma_effective_word;
 
   frp_m32_registered_target_request_path #(
     .CELLS(CELLS),
@@ -317,7 +353,7 @@ module frp_m32_core #(
     .load_valid(phase_load_valid),
     .phase_load(phase_load),
     .frequency_load_q16(frequency_load_q16),
-    .gamma_effective_word(gamma_effective_word),
+    .gamma_effective_word(phase_gamma_effective_word),
     .thermal_node_factor_q30(thermal_node_factor_q30),
     .retained_state(state_out),
     .switch_activity(accepted_change_mask),
