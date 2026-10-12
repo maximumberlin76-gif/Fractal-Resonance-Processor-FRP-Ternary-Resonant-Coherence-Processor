@@ -1,0 +1,326 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist).
+# This workflow is proprietary and is governed by the repository license.
+# Referenced dependencies retain their own licenses.
+name: 43 - FRP M32 CDC CSR Composition RTL and FPGA Formal
+run-name: "43 - FRP CDC CSR Composition | 64 clauses @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-43-cdc-csr-composition-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  prove:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Prepare evidence location
+        run: |
+          set -euo pipefail
+          printf '%s\n' "FRP43_EVIDENCE=$RUNNER_TEMP/frp-43-evidence" >> "$GITHUB_ENV"
+      - name: Install pinned formal tools
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            yowasp-yosys==0.68.0.0.post1208 \
+            yowasp-runtime==1.96 wasmtime==47.0.1
+      - name: Prove composed CDC and CSR on RTL and FPGA primitives
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import ast, textwrap, os, sys, json, re, hashlib, subprocess, time, copy, collections
+          import importlib.metadata as metadata
+          R=Path.cwd().resolve()
+          E=Path(os.environ['FRP43_EVIDENCE']).resolve()
+          ALL_ONES="64'hffffffffffffffff"
+          WORKFLOW='.github/workflows/frp-43-m32-cdc-csr-composition-formal.yml'
+          DEPENDENCIES={
+           '.github/workflows/frp-41-m32-cdc-transport-contract-formal.yml':'1f3677d2a7140aca90d976b0086af867f09560dda238cd4f2e14d87abda1cb63',
+           '.github/workflows/frp-42-m32-csr-register-contract-formal.yml':'cfb9eb884853aa1055b4f213158fa649f91ae286cfc8b87017e1ce5402c4c3f0'}
+          report=dict(status='FAIL',commands=[],proofs={},witnesses={},mutations={},
+           complete_m32_proven=False,physical_measurements=False,metastability_proven=False,
+           physical_timing_closed=False,unconditional_liveness=False)
+          def require(ok,message):
+           if not ok: raise RuntimeError(message)
+          def sha(data): return hashlib.sha256(data).hexdigest()
+          def write(name,value):
+           (E/name).write_text(value if isinstance(value,str) else json.dumps(value,indent=2)+'\n')
+          def read(name): return json.loads((E/name).read_text())
+          def yosys(label,script,negative=False):
+           require(not (E/(label+'.log')).exists(),'Repeated command '+label)
+           write(label+'.ys',script+'\n');start=time.monotonic()
+           with (E/(label+'.log')).open('w') as f:
+            p=subprocess.run(['yowasp-yosys','-Q','-T','-s',str(E/(label+'.ys'))],cwd=R,stdout=f,stderr=subprocess.STDOUT,timeout=900)
+           report['commands'].append(dict(label=label,returncode=p.returncode,seconds=round(time.monotonic()-start,3)))
+           log=(E/(label+'.log')).read_text()
+           require(p.returncode==(1 if negative else 0),label+'\n'+log[-2000:])
+           return log
+          
+          def definitions(path,digest,names):
+           data=(R/path).read_bytes();require(sha(data)==digest,'Dependency identity '+path)
+           text=data.decode();marker="          python - <<'PY'\n"
+           require(text.count(marker)==1 and text.count('\n          PY')==1,'Python block '+path)
+           code=textwrap.dedent(text.split(marker)[1].split('\n          PY')[0])
+           tree=ast.parse(code);selected=[];found=[]
+           for node in tree.body:
+            name=node.name if isinstance(node,ast.FunctionDef) else (node.targets[0].id if isinstance(node,ast.Assign) and len(node.targets)==1 and isinstance(node.targets[0],ast.Name) else None)
+            if name in names: selected.append(node);found.append(name)
+           require(set(found)==set(names) and len(found)==len(names),'Definition set '+path)
+           scope={'require':require,'BRIDGE':'rtl/m23/frp_m23_csr_cdc_bridge.sv','RESET':'rtl/m23/frp_m23_reset_release_sync.sv'};exec(compile(ast.Module(body=selected,type_ignores=[]),path,'exec'),scope)
+           write('dependency-'+Path(path).name,text)
+           return scope
+          
+          def extract(label,directory):
+           includes=' '.join('-I'+str(directory/p) for p in INCLUDES)
+           yosys(label+'-extract',f'read_slang -j 1 --std 1800-2017 -D SYNTHESIS --top frp_m32_csr_cdc_top --blackboxed-module frp_m32_core {includes} {directory/BINDING}; proc; flatten; opt -full; wreduce; opt_clean; check -assert; write_json "{E}/{label}-raw.json"')
+           modules=read(label+'-raw.json')['modules'];raw=modules['frp_m32_csr_cdc_top']
+           m=copy.deepcopy(raw);c=m['cells'].pop('u_csr.u_fpga.u_m32_core');core=modules['frp_m32_core']
+           require(c['type']=='frp_m32_core' and int(core['attributes']['blackbox'],2)==1,'Core boundary')
+           require(set(c['connections'])==set(core['ports']),'Core port set')
+           require(set(c['parameters'])=={'CELLS','REQUEST_LANES','CELL_INDEX_BITS','COUNTER_BITS','SIN_LUT_FILE'},'Core parameters')
+           for n,v in dict(CELLS=8,REQUEST_LANES=2,CELL_INDEX_BITS=3,COUNTER_BITS=32).items():require(int(c['parameters'][n],2)==v,'Parameter '+n)
+           require(c['parameters']['SIN_LUT_FILE']=='rtl/m31/frp_m31_sin_q30.mem','ROM parameter')
+           for n,p in core['ports'].items():
+            require(c['port_directions'][n]==p['direction'] and len(c['connections'][n])==len(p['bits']),'Core shape '+n)
+            m['ports'][('core_' if p['direction']=='output' else 'to_')+n]=dict(direction='input' if p['direction']=='output' else 'output',bits=c['connections'][n])
+           require(c['connections']['clk']==raw['ports']['core_clk']['bits'],'Core clock')
+           require({n for n,d in c['port_directions'].items() if d=='input'}==set(C['TO'])|{'clk'},'Core inputs')
+           outputs=[n for n,d in c['port_directions'].items() if d=='output'];bits=[b for n in outputs for b in c['connections'][n]]
+           require(len(outputs)==59 and len(bits)==2075 and len(set(bits))==2075 and all(type(b)==int for b in bits),'Free core telemetry')
+           observed={'obs_'+n:'cdc_bridge.'+n for n in ['request_toggle_host_q','request_valid_previous_q','request_toggle_core_sync_q','request_toggle_core_seen_q','response_toggle_core_q','response_toggle_host_sync_q','response_toggle_host_seen_q']}
+           for n in ['core_csr_valid','core_csr_write','core_csr_addr','core_csr_wdata','core_csr_ready','core_csr_error','core_csr_rdata','held_request_debug','held_response_debug','host_reset_sync.release_q','core_reset_sync.release_q','core_release_host_sync_q']:
+            observed['obs_'+n.replace('.','_')]=n
+           observed.update({'csr_obs_'+str(i):'u_csr.'+n for i,n in enumerate(C['STATE'])})
+           for n,source in observed.items():m['ports'][n]=dict(direction='output',bits=raw['netnames'][source]['bits'])
+           require(m['cells']=={n:v for n,v in raw['cells'].items() if n!='u_csr.u_fpga.u_m32_core'},'Projection changed logic')
+           require(all(m['ports'][n]==p for n,p in raw['ports'].items()),'Projection changed public ports')
+           q={b for cell in m['cells'].values() if cell['type'] in ['$adff','$adffe'] for b in cell['connections']['Q']}
+           exposed={b for p in m['ports'].values() if p['direction']=='output' for b in p['bits']}
+           require(q<=exposed,'Unobserved state')
+           if label=='rtl':
+            require(len(q)==1615,'Retained state count')
+            write('projection-audit.json',dict(core_instance=c,state_bits=len(q),observations=observed,public_ports=raw['ports'],projected_ports=m['ports'],unchanged_cells=len(m['cells'])))
+           m['attributes'].pop('top',None);write(label+'-dut.json',dict(modules={'dut':m}));return m
+          
+          def decl(n,p):
+           w=len(p['bits']);return (f'[{w-1}:0] ' if w>1 else '')+n
+          
+          def harness(m):
+           ports=m['ports'];cp={}
+           for n,w in dict(clk=1,rst_n_async=1,csr_valid=1,csr_write=1,csr_addr=8,csr_wdata=32,csr_ready=1,csr_error=1,csr_rdata=32).items():
+            cp[n]=dict(direction='output' if n in ['csr_ready','csr_error','csr_rdata'] else 'input',bits=list(range(w)))
+           cp.update({n:p for n,p in ports.items() if n.startswith('to_') or n.startswith('core_') and p['direction']=='input'})
+           cp.update({n.removeprefix('csr_'):p for n,p in ports.items() if n.startswith('csr_obs_')})
+           original=C['harness']({'ports':cp});start=original.index('reg [1:0] age;')
+           body=original[start:];require(body.endswith('endmodule\n'),'CSR model boundary')
+           ref=['module csr_reference (',',\n'.join('input wire '+decl(n,p) for n,p in cp.items())+',\noutput wire [30:0] obligation,\noutput wire [21:0] witness,\noutput wire target_ready,target_error,\noutput wire [31:0] target_rdata',');',
+                'assign target_ready=transfer; assign target_error=error; assign target_rdata=rdata;',body]
+           h=['module check43 (',',\n'.join('input wire '+decl(n,p) for n,p in ports.items() if p['direction']=='input')+',\noutput wire [63:0] obligation,\noutput wire [30:0] witness',');']
+           h+=['wire '+decl(n,p)+';' for n,p in ports.items() if p['direction']=='output']
+           h+=['dut u_dut ('+', '.join('.'+n+'('+n+')' for n in ports)+');',
+               'wire target_ready,target_error; wire [31:0] target_rdata; wire [21:0] csr_witness;']
+           monitor=T['MONITOR'];expressions=re.findall(r'assert\(([^;]+)\);',monitor)
+           require(len(expressions)==33,'Transport properties')
+           # Retain the original ledger; only its target now comes from the CSR reference.
+           monitor=monitor[:monitor.index('assign witness[0]')]
+           h+=[monitor]+[f'assign obligation[{i}]=({v});' for i,v in enumerate(expressions)]
+           wiring=dict(clk='core_clk',rst_n_async='cr',csr_valid='active',csr_write='request_presented[40]',csr_addr='request_presented[39:32]',csr_wdata='request_presented[31:0]',csr_ready='obs_core_csr_ready',csr_error='obs_core_csr_error',csr_rdata='obs_core_csr_rdata')
+           for n in cp:
+            if n not in wiring:wiring[n]='csr_'+n if n.startswith('obs_') else n
+           wiring.update(obligation='obligation[63:33]',witness='csr_witness',target_ready='target_ready',target_error='target_error',target_rdata='target_rdata')
+           h+=['csr_reference reference_csr ('+', '.join('.'+n+'('+v+')' for n,v in wiring.items())+');',
+           '''reg [21:0] tag_core,tag_host;
+           always @(posedge core_clk or negedge cr)
+             if(!cr) tag_core<=0; else if(active && target_ready) tag_core<=csr_witness;
+           always @(posedge host_clk or negedge hr)
+             if(!hr) tag_host<=0; else if(response_stage1!=returned) tag_host<=tag_core;
+           assign witness[21:0]=tag_host & {22{csr_ready}};
+           assign witness[22]=invalid_before_ready;
+           assign witness[23]=invalid_while_busy;
+           assign witness[24]=invalid_valid_held;
+           assign witness[25]=abort_seen && csr_ready;
+           assign witness[26]=active && core_quiet>=4 && rst_n_async;
+           assign witness[27]=awaiting_return!=0 && host_quiet>=4 && rst_n_async;
+           assign witness[28]=host_reset_released && !core_reset_released;
+           assign witness[29]=core_reset_released && !host_reset_released;
+           assign witness[30]=abort_seen && !interface_busy && !obs_core_csr_valid && !rst_n_async;
+           endmodule''']
+           write('contract.json',dict(transport=expressions,csr_read=C['READ'],csr_write=C['WRITE'],csr_core_inputs=C['TO'],csr_state=C['STATE'],witnesses=CASES,reference_inputs=wiring))
+           return '\n'.join(ref+h)+'\n'
+          
+          def frontend(label,gate=False):
+           library='read_verilog -defer -D ICE40_HX +/ice40/cells_sim.v; ' if gate else ''
+           yosys(label+'-frontend',f'{library}read_json "{E}/{label}-dut.json"; read_verilog -formal -sv "{E}/check.sv"; hierarchy -check -top check43; proc; flatten; opt -full; wreduce; opt_clean; clk2fflogic; opt_clean; check -assert; rename -enumerate -pattern frp43_trace_%; write_json "{E}/{label}-check.json"; write_rtlil "{E}/{label}.il"')
+           m=read(label+'-check.json')['modules']['check43'];counts=collections.Counter(c['type'] for c in m['cells'].values())
+           require(0<counts['$assert']<=64 and counts['$assume']==0,'Property count')
+           require(all(c['connections']['EN']==['1'] for c in m['cells'].values() if c['type']=='$assert'),'Disabled assertion')
+           require(len(m['ports']['obligation']['bits'])==64,'Contract vector')
+           require(not m['attributes'].get('blackbox') and all(t.startswith('$') for t in counts),'Unresolved cell')
+           require(not any(counts[t] for t in ['$anyseq','$anyconst','$allseq','$allconst']),'Hidden symbolic input')
+           require(all(re.fullmatch(r'[A-Za-z0-9_.$:\[\]-]+',n) for n in m['netnames']),'Unsafe trace name')
+           return dict(counts)
+          
+          def recovery_model():
+           ports=read('rtl-check.json')['modules']['check43']['ports']
+           free={'host_clk','core_clk','rst_n_async','csr_valid'}
+           require(free<=set(ports),'Recovery clock/control ports')
+           wiring={};fixture={}
+           for n,p in ports.items():
+            if n in free or p['direction']=='output':wiring[n]=n
+            else:
+             value=252 if n=='csr_addr' else 0
+             wiring[n]=str(len(p['bits']))+"'d"+str(value)
+             fixture[n]=dict(width=len(p['bits']),value=value)
+           require({n for n,p in ports.items() if p['direction']=='output'}=={'obligation','witness'},'Recovery outputs')
+           write('recovery-inputs.json',fixture)
+           write('recovery-wrapper.sv','module check43 (input wire host_clk, core_clk, rst_n_async, csr_valid, output wire [63:0] obligation, output wire [30:0] witness);\nfull43 u ('+', '.join('.'+n+'('+v+')' for n,v in wiring.items())+');\nendmodule\n')
+           yosys('recovery-frontend',f'read_rtlil "{E}/rtl.il"; rename check43 full43; read_verilog -sv "{E}/recovery-wrapper.sv"; hierarchy -check -top check43; flatten; opt -full; wreduce; opt_clean; check -assert; rename -enumerate -pattern frp43_recovery_%; write_json "{E}/recovery-check.json"; write_rtlil "{E}/recovery.il"')
+           m=read('recovery-check.json')['modules']['check43']
+           require(len(m['ports']['obligation']['bits'])==64 and not any(c['type']=='$assume' for c in m['cells'].values()),'Recovery contract')
+          
+          def wave(label,witness=None,fault=None):
+           d=read(label+'.json');signals=d.get('signal');require(isinstance(signals,list) and signals,'Waveform')
+           names=[]
+           for s in signals:
+            require(isinstance(s,dict) and isinstance(s.get('name'),str) and s['name'] and isinstance(s.get('wave'),str) and s['wave'],'Signal')
+            require(not any(ord(c)<32 for c in s['name']),'Signal name')
+            require('data' not in s or isinstance(s['data'],list) and all(isinstance(v,str) for v in s['data']),'Signal data')
+            names.append(s['name'])
+           require(len(names)==len(set(names)) and {'host_clk','core_clk','rst_n_async','obligation','witness'}<=set(names),'Trace ports')
+           values={s['name']:[v for v in s.get('data',[]) if v] for s in signals};ob=values['obligation']
+           require(ob and all(re.fullmatch('[01]{64}',v) for v in ob),'Unknown contract')
+           require(all(v=='1'*64 for v in ob) if fault is None else any(v[-1-fault]=='0' for v in ob),'Contract evidence')
+           if witness is not None:
+            bits=values['witness'][-1];require(re.fullmatch('[01]{31}',bits) and bits[-1-witness]=='1','Final witness')
+           return dict(signals=len(names),sha256=sha((E/(label+'.json')).read_bytes()))
+          
+          require(not E.exists(),'Fresh evidence directory required');E.mkdir(parents=True)
+          try:
+           require(sys.flags.optimize==0,'Python optimization disabled')
+           require(os.environ['GITHUB_EVENT_NAME']=='workflow_dispatch' and os.environ['GITHUB_REF']=='refs/heads/main','Manual main only')
+           commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+           require(commit==os.environ['GITHUB_SHA'],'Checkout identity')
+           require(not subprocess.check_output(['git','status','--porcelain'],text=True).strip(),'Dirty checkout')
+           write('workflow-source.yml',(R/WORKFLOW).read_text())
+           report.update(commit=commit,run_id=os.environ['GITHUB_RUN_ID'],run_attempt=os.environ['GITHUB_RUN_ATTEMPT'],dependency_hashes=DEPENDENCIES,scope='Composed CDC, CSR and M32 FPGA input/reset shell; free core telemetry only')
+           dep=list(DEPENDENCIES.items())
+           T=definitions(*dep[0],['PINS','MONITOR','MUTATIONS'])
+           C=definitions(*dep[1],['PINS','CASES','SNAP','READ','WRITE','STATE','TO','MUTATIONS','harness'])
+           PINS=dict(T['PINS'])
+           for p,d in C['PINS'].items():require(p not in PINS or PINS[p]==d,'Conflicting pin');PINS[p]=d
+           BRIDGE,RESET,BINDING,TARGET=T['PINS']
+           INCLUDES=['rtl/m22','rtl/m23','rtl/m31','rtl/m32','fpga/m32','fpga/m32_csr']
+           CASES=list(C['CASES'])+['early-rejected','busy-rejected','held-rejected','reset-recovery','core-clock-paused','host-clock-paused','host-released-first','core-released-first','reset-abort']
+           report['source_hashes']=PINS;sources=E/'sources'
+           for p,d in PINS.items():
+            data=(R/p).read_bytes();require(sha(data)==d,'Source identity '+p)
+            out=sources/p;out.parent.mkdir(parents=True,exist_ok=True);out.write_bytes(data)
+           versions={p:metadata.version(p) for p in ['yowasp-yosys','yowasp-runtime','wasmtime']}
+           require(versions=={'yowasp-yosys':'0.68.0.0.post1208','yowasp-runtime':'1.96','wasmtime':'47.0.1'},'Tool versions');write('tools.json',versions)
+           yosys('tool-help','help read_slang')
+           m=extract('rtl',sources);write('check.sv',harness(m))
+           require((E/'check.sv').read_text().count('assert(')==64,'Source assertions')
+           frontend('rtl')
+           yosys('synthesis',f'read_json "{E}/rtl-dut.json"; synth_ice40 -top dut -json "{E}/mapped.json"; write_verilog -noattr "{E}/mapped.v"')
+           mapped=read('mapped.json')['modules']['dut'];counts=collections.Counter(c['type'] for c in mapped['cells'].values())
+           require(set(counts)<={'SB_DFFER','SB_DFFR','SB_DFFES','SB_DFFS','SB_LUT4','SB_CARRY','$scopeinfo'},'Mapped primitives')
+           require(sum(v for n,v in counts.items() if n.startswith('SB_DFF'))==1615,'Mapped state count')
+           shape=lambda m:{n:(p['direction'],len(p['bits'])) for n,p in m['ports'].items()}
+           require(shape(mapped)==shape(m),'Mapped interface');report['mapped_cells']=dict(counts)
+           write('gate-dut.json',dict(modules={'dut':mapped}));frontend('gate',True)
+           for kind in ['rtl','gate']:
+            log=yosys(kind+'-induction',f'read_rtlil "{E}/{kind}.il"; sat -timeout 180 -seq 3 -set-at 1 rst_n_async 0 -tempinduct -maxsteps 8 -prove obligation {ALL_ONES} -prove-asserts -verify -show-ports -dump_json "{E}/{kind}-induction-failure.json"')
+            require(re.search(r'Base case for induction length \d+ proven\.',log) and 'Induction step proven: SUCCESS!' in log,'Incomplete induction '+kind)
+            require("Final proof equation: \\obligation = 64'"+'1'*64 in log,'Proof literal width')
+            report['proofs'][kind]=dict(status='PASS',contract_clauses=64,unbounded=True,initial_reset_only=True,independent_clocks=True,core_telemetry_bits=2075)
+           for i,name in enumerate(CASES):
+            label='reach-'+name;depth=26 if i<22 else (40 if i==25 else 32);clocks=[]
+            for t in range(1,depth+1):
+             h=c=t%2
+             if i==28 or i==26 and t>depth-6:c=0
+             if i==29 or i==27 and t>depth-6:h=0
+             clocks.append(f'-set-at {t} host_clk {h} -set-at {t} core_clk {c}')
+             if i<22:clocks.append(f'-set-at {t} rst_n_async {int(t>1)} -set-at {t} csr_valid {int(t in (10,11))}')
+            if i==25:recovery_model()
+            model='recovery' if i==25 else 'rtl'
+            log=yosys(label,f'read_rtlil "{E}/{model}.il"; sat -timeout 180 -seq {depth} -set-at 1 rst_n_async 0 -set-at {depth} witness[{i}] 1 '+ ' '.join(clocks)+f' -show-ports -dump_json "{E}/{label}.json"')
+            require('SAT solving finished - model found:' in log,'Unreachable or unknown '+name)
+            report['witnesses'][name]=dict(status='PASS',depth=depth,trace=wave(label,witness=i),input_fixture='recovery-inputs.json' if i==25 else None)
+           mutations=[(*T['MUTATIONS'][i],bit) for i,bit in [(0,16),(2,16),(6,15),(7,10),(8,10),(13,24)]]
+           mutations += [(n,p,o,v,33+b) for n,p,o,v,b in C['MUTATIONS'] if n in ['identity','mode-domain','tick-consumption','snapshot-capture','reset-release','load-command']]
+           mutations += [('binding-data',BINDING,'.csr_wdata(core_csr_wdata)',".csr_wdata(core_csr_wdata ^ 32'd1)",35),('binding-reset',BINDING,'.rst_n_async(core_reset_released)','.rst_n_async(rst_n_async)',63)]
+           for name,path,old,new,bit in mutations:
+            label='fault-'+name;directory=E/label
+            for p in PINS:
+             data=(sources/p).read_text()
+             if p==path:require(data.count(old)==1,'Mutation anchor '+name);data=data.replace(old,new)
+             out=directory/p;out.parent.mkdir(parents=True,exist_ok=True);out.write_text(data)
+            extract(label,directory);frontend(label)
+            depth=36 if name=='tick-consumption' else 28
+            fixture=' '.join(f'-set-at {t} host_clk {t%2} -set-at {t} core_clk {t%2} -set-at {t} rst_n_async {int(t>1)} -set-at {t} csr_valid {int(t in (10,11,26,27))}' for t in range(1,depth+1))
+            log=yosys(label+'-counterexample',f'read_rtlil "{E}/{label}.il"; sat -timeout 180 -seq {depth} {fixture} -prove obligation[{bit}] 1 -verify -show-ports -dump_json "{E}/{label}-counterexample.json"',True)
+            require('SAT proof finished - model found: FAIL!' in log,'Missing counterexample '+name)
+            report['mutations'][name]=dict(status='DETECTED',path=path,old=old,new=new,contract_bit=bit,mutated_sha256=sha((directory/path).read_bytes()),trace=wave(label+'-counterexample',fault=bit))
+           require(len(report['proofs'])==2 and len(report['witnesses'])==31 and len(report['mutations'])==14,'Incomplete campaign')
+           for p,d in {**PINS,**DEPENDENCIES}.items():require(sha((R/p).read_bytes())==d,'Source modified '+p)
+           require(not subprocess.check_output(['git','status','--porcelain'],text=True).strip(),'Checkout modified')
+           for p in E.rglob('*.json'):json.loads(p.read_text())
+           report['json_files_validated']=len(list(E.rglob('*.json')));report['status']='PASS'
+          finally:
+           report['evidence_hashes']={str(p.relative_to(E)):sha(p.read_bytes()) for p in sorted(E.rglob('*')) if p.is_file() and p.name not in ['result-43.json','summary-43.md']}
+           write('result-43.json',report)
+           summary=f"""# M32 CDC + CSR composition: {report['status']}
+          
+          Required: 64 jointly proved clauses on RTL and fresh iCE40 primitive models.
+          The actual integration retains 1615 state bits; only the M32 core's 59 output
+          fields (2075 bits) are universally free. CSR responses are computed by real RTL.
+          The independent ledger drives the independent CSR reference; neither reference
+          uses DUT feedback for state evolution. Source-hashed contracts 41 and 42 supply
+          unchanged reference semantics. No historical PASS substitutes for a new proof.
+          Initial common reset only; subsequent reset and both clocks are unconstrained.
+          The clk2fflogic previous-sample convention applies; witness inputs span edges.
+          The 22 CSR scenarios must reach host completion; 9 transport/reset witnesses and
+          14 real RTL mutations are also required. Fixtures restrict witness searches only.
+          Recovery uses fixed read-ID inputs and zero telemetry to bound solver memory;
+          its 64 property checks remain active. This fixture never enters induction.
+          All 64 obligation bits are proved even if optimization merges assertions.
+          Timeout, unknown, missing induction, invalid JSON or absent counterexamples fails.
+          
+          Scope: sampled two-state digital CDC/CSR/core-interface composition, 8 cells,
+          2 lanes. Core arithmetic, unconditional liveness, analog metastability, board
+          fit/pinout, physical timing and measured hardware behavior are not established.
+          Completed proofs: {len(report['proofs'])}/2; witnesses: {len(report['witnesses'])}/31;
+          detected mutations: {len(report['mutations'])}/14. Commit: {report.get('commit','unknown')}.
+          """
+           write('summary-43.md',summary)
+           with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write(summary)
+           print(json.dumps({k:report[k] for k in ['status','proofs','mapped_cells'] if k in report},indent=2))
+          PY
+      - name: Upload complete evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-43-m32-cdc-csr-composition-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-43-evidence
+          if-no-files-found: error
+          retention-days: 90
