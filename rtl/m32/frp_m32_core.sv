@@ -10,6 +10,7 @@
 `include "frp_m31_phase_interference.sv"
 `include "frp_m32_registered_target_request_path.sv"
 `include "frp_m31_thermal_proxy.sv"
+`include "frp_m31_local_thermal_field.sv"
 `include "frp_m31_stability.sv"
 
 module frp_m32_core #(
@@ -129,10 +130,89 @@ module frp_m32_core #(
   output logic signed [31:0] coherence_capacity_q16,
   output logic signed [31:0] pressure_q16,
   output logic signed [31:0] stability_margin_q16,
-  output logic stable
+  output logic stable,
+
+  output wire [255:0] local_heat_q16,
+  output wire [255:0] local_heat_peak_q16,
+  output wire [255:0] local_generated_power_q16,
+  output wire [255:0] local_thermal_dissipation_q16,
+  output wire [255:0] local_thermal_diffusion_q16,
+  output wire [255:0] local_thermal_overload_q16,
+  output wire [255:0] local_next_heat_q16,
+  output wire [255:0] local_next_overload_q16,
+  output logic [255:0] local_frequency_lag_q16,
+  output wire signed [31:0] local_mean_heat_q16,
+  output wire signed [31:0] local_mean_heat_peak_q16,
+  output wire signed [31:0] local_maximum_heat_peak_q16
 );
 
   logic [63:0] normalized_cycle_cost_wide;
+
+  import frp_m31_fixed_point_pkg::*;
+
+  // The local thermal field uses the frequency selected for this edge.
+  // A phase load selects frequency_load_q16; otherwise the phase engine's
+  // rounded delay update is used. Both paths use the retained ternary state
+  // and accepted changes visible before the edge, as in the M32 phase path.
+  // A disabled tick holds thermal history; clear_counters does not clear it.
+  for (genvar lane = 0; lane < 8; lane = lane + 1) begin : g_local_frequency_lag
+    logic signed [31:0] selected_frequency_q16;
+    logic signed [31:0] target_frequency_q16;
+    logic signed [31:0] current_frequency_q16;
+    logic signed [31:0] correction_q16;
+    logic signed [31:0] state_gain_q16;
+    logic signed [31:0] switch_gain_q16;
+    logic signed [63:0] difference_q16;
+    logic signed [63:0] residual_q16;
+    logic [1:0] cell_state;
+
+    always_comb begin
+      cell_state = state_out[lane*2 +: 2];
+      current_frequency_q16 = frequency_current_q16[lane*32 +: 32];
+      state_gain_q16 = ((cell_state == frp_m31_pkg::FRP_STATE_NEG) ||
+                        (cell_state == frp_m31_pkg::FRP_STATE_POS))
+        ? FRP_M31_STATE_FREQUENCY_GAIN_Q16 : FRP_M31_Q16_ZERO;
+      switch_gain_q16 = accepted_change_mask[lane]
+        ? FRP_M31_SWITCH_FREQUENCY_GAIN_Q16 : FRP_M31_Q16_ZERO;
+      target_frequency_q16 = FRP_M31_BASE_FREQUENCY_Q16
+        + state_gain_q16 + switch_gain_q16;
+      difference_q16 = {{32{target_frequency_q16[31]}}, target_frequency_q16}
+        - {{32{current_frequency_q16[31]}}, current_frequency_q16};
+      correction_q16 = frp_m31_sat_s32(frp_m31_round_shift_s64(
+        difference_q16 * FRP_M31_DELAY_ALPHA_Q16, FRP_M31_Q16_FRACTION_BITS
+      ));
+      selected_frequency_q16 = frp_m31_sat_s32(
+        {{32{current_frequency_q16[31]}}, current_frequency_q16}
+        + {{32{correction_q16[31]}}, correction_q16}
+      );
+      if (phase_load_valid)
+        selected_frequency_q16 = frequency_load_q16[lane*32 +: 32];
+      residual_q16 = {{32{target_frequency_q16[31]}}, target_frequency_q16}
+        - {{32{selected_frequency_q16[31]}}, selected_frequency_q16};
+      if (residual_q16 < 0)
+        residual_q16 = -residual_q16;
+      local_frequency_lag_q16[lane*32 +: 32] = residual_q16[31:0];
+    end
+  end
+
+  frp_m31_local_thermal_field u_local_thermal_field (
+    .clk(clk),
+    .rst_n(rst_n),
+    .tick_enable(tick_enable),
+    .switch_activity(accepted_change_mask),
+    .frequency_lag_q16(local_frequency_lag_q16),
+    .heat_q16(local_heat_q16),
+    .local_heat_peak_q16(local_heat_peak_q16),
+    .generated_power_q16(local_generated_power_q16),
+    .thermal_dissipation_q16(local_thermal_dissipation_q16),
+    .thermal_diffusion_q16(local_thermal_diffusion_q16),
+    .thermal_overload_q16(local_thermal_overload_q16),
+    .next_heat_q16(local_next_heat_q16),
+    .next_overload_q16(local_next_overload_q16),
+    .mean_heat_q16(local_mean_heat_q16),
+    .mean_heat_peak_q16(local_mean_heat_peak_q16),
+    .maximum_local_heat_q16(local_maximum_heat_peak_q16)
+  );
 
   frp_m32_registered_target_request_path #(
     .CELLS(CELLS),
