@@ -18,6 +18,17 @@
 //
 // All inputs other than rst_n_async must be synchronous to clk. core_ready
 // reports reset release, not phase-load completion or request acceptance.
+// Local gamma and thermal selectors are independent synchronous controls.
+// Omitted selectors choose the external gamma and thermal data inputs.
+// gamma_update_valid is qualified by core_ready and is accepted only on an
+// enabled tick; gamma_targets_q16 carries eight signed Q16.16 target words.
+// A target-update pulse during reset release is discarded. A held request
+// becomes visible after release and is sampled on the next enabled tick.
+// Local thermal, gamma, and attenuation histories advance with enabled ticks
+// in either source mode. Counter clear retains all three local histories.
+// Retained values, next-update candidates, and selected phase inputs are
+// forwarded separately, without an additional cycle of latency.
+//
 // Data buses and combinational status outputs retain the core's semantics
 // during reset. SIN_LUT_FILE is passed directly to the phase engine.
 
@@ -146,7 +157,36 @@ module frp_m32_fpga_top #(
   output logic signed [31:0] coherence_capacity_q16,
   output logic signed [31:0] pressure_q16,
   output logic signed [31:0] stability_margin_q16,
-  output logic stable
+  output logic stable,
+
+  output wire [255:0] local_heat_q16,
+  output wire [255:0] local_heat_peak_q16,
+  output wire [255:0] local_generated_power_q16,
+  output wire [255:0] local_thermal_dissipation_q16,
+  output wire [255:0] local_thermal_diffusion_q16,
+  output wire [255:0] local_thermal_overload_q16,
+  output wire [255:0] local_next_heat_q16,
+  output wire [255:0] local_next_overload_q16,
+  output logic [255:0] local_frequency_lag_q16,
+  output wire signed [31:0] local_mean_heat_q16,
+  output wire signed [31:0] local_mean_heat_peak_q16,
+  output wire signed [31:0] local_maximum_heat_peak_q16,
+
+  input logic local_gamma_enable = 1'b0,
+  input logic gamma_update_valid = 1'b0,
+  input logic [(CELLS*32)-1:0] gamma_targets_q16 = '0,
+  output wire [(CELLS*32)-1:0] local_gamma_noise_target_q16,
+  output wire [(CELLS*32)-1:0] local_gamma_noise_state_q16,
+  output wire [(CELLS*32)-1:0] local_gamma_drift_word,
+  output wire [(CELLS*32)-1:0] local_gamma_effective_word,
+  output wire [(CELLS*32)-1:0] local_next_gamma_drift_word,
+  output wire [(CELLS*32)-1:0] local_next_gamma_effective_word,
+  output wire [(CELLS*32)-1:0] phase_gamma_effective_word,
+
+  input logic local_thermal_enable = 1'b0,
+  output wire [(CELLS*32)-1:0] local_thermal_node_factor_q30,
+  output wire [(CELLS*32)-1:0] local_next_thermal_node_factor_q30,
+  output wire [(CELLS*32)-1:0] phase_thermal_node_factor_q30
 );
 
   logic [1:0] reset_sync_q;
@@ -155,6 +195,7 @@ module frp_m32_fpga_top #(
   logic clear_counters_core;
   logic phase_load_valid_core;
   logic auto_target_enable_core;
+  logic gamma_update_valid_core;
   logic [REQUEST_LANES-1:0] external_request_valid_core;
 
 `ifndef SYNTHESIS
@@ -186,6 +227,7 @@ module frp_m32_fpga_top #(
   assign clear_counters_core = clear_counters && core_ready;
   assign phase_load_valid_core = phase_load_valid && core_ready;
   assign auto_target_enable_core = auto_target_enable && core_ready;
+  assign gamma_update_valid_core = gamma_update_valid && core_ready;
   assign external_request_valid_core =
     external_request_valid & {REQUEST_LANES{core_ready}};
 
@@ -270,7 +312,33 @@ module frp_m32_fpga_top #(
     .coherence_capacity_q16(coherence_capacity_q16),
     .pressure_q16(pressure_q16),
     .stability_margin_q16(stability_margin_q16),
-    .stable(stable)
+    .stable(stable),
+    .local_heat_q16(local_heat_q16),
+    .local_heat_peak_q16(local_heat_peak_q16),
+    .local_generated_power_q16(local_generated_power_q16),
+    .local_thermal_dissipation_q16(local_thermal_dissipation_q16),
+    .local_thermal_diffusion_q16(local_thermal_diffusion_q16),
+    .local_thermal_overload_q16(local_thermal_overload_q16),
+    .local_next_heat_q16(local_next_heat_q16),
+    .local_next_overload_q16(local_next_overload_q16),
+    .local_frequency_lag_q16(local_frequency_lag_q16),
+    .local_mean_heat_q16(local_mean_heat_q16),
+    .local_mean_heat_peak_q16(local_mean_heat_peak_q16),
+    .local_maximum_heat_peak_q16(local_maximum_heat_peak_q16),
+    .local_gamma_noise_target_q16(local_gamma_noise_target_q16),
+    .local_gamma_noise_state_q16(local_gamma_noise_state_q16),
+    .local_gamma_drift_word(local_gamma_drift_word),
+    .local_gamma_effective_word(local_gamma_effective_word),
+    .local_next_gamma_drift_word(local_next_gamma_drift_word),
+    .local_next_gamma_effective_word(local_next_gamma_effective_word),
+    .phase_gamma_effective_word(phase_gamma_effective_word),
+    .local_thermal_node_factor_q30(local_thermal_node_factor_q30),
+    .local_next_thermal_node_factor_q30(local_next_thermal_node_factor_q30),
+    .phase_thermal_node_factor_q30(phase_thermal_node_factor_q30),
+    .local_gamma_enable(local_gamma_enable),
+    .gamma_update_valid(gamma_update_valid_core),
+    .gamma_targets_q16(gamma_targets_q16),
+    .local_thermal_enable(local_thermal_enable)
   );
 
 endmodule : frp_m32_fpga_top
