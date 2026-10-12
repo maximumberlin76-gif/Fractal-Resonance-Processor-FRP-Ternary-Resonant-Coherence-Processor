@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: Apache-2.0
-// FRP M31 retained relative-phase interference and resonance-selection path.
+ // SPDX-License-Identifier: Apache-2.0
+ // FRP M31 retained relative-phase interference and resonance-selection path.
 
 `ifndef FRP_M31_PHASE_INTERFERENCE_SV
 `define FRP_M31_PHASE_INTERFERENCE_SV
@@ -8,6 +8,7 @@
 
 `include "frp_m31_pkg.sv"
 `include "frp_m31_fixed_point_pkg.sv"
+`include "frp_m31_isqrt_u64.sv"
 
 module frp_m31_phase_interference #(
   parameter int CELLS = 8,
@@ -51,6 +52,29 @@ module frp_m31_phase_interference #(
   logic signed [31:0] coupling_q16 [0:CELLS-1];
   logic signed [31:0] pair_group_q30 [0:3];
   logic signed [31:0] cluster_group_q30 [0:1];
+  logic [63:0] coherence_square_q60 [0:6];
+  wire [31:0] coherence_magnitude_q30 [0:6];
+  wire signed [31:0] coherence_value_q30 [0:6];
+
+  // Four pairs, two clusters and one global population.
+  for (genvar group_index = 0; group_index < 7; group_index = group_index + 1) begin : g_coherence
+    frp_m31_isqrt_u64 magnitude (
+      .radicand(coherence_square_q60[group_index]),
+      .root(coherence_magnitude_q30[group_index]),
+      .remainder()
+    );
+    assign coherence_value_q30[group_index] =
+      (coherence_magnitude_q30[group_index] > 32'd1073741824)
+      ? FRP_M31_Q30_ONE : $signed(coherence_magnitude_q30[group_index]);
+  end
+
+  for (genvar pair_index = 0; pair_index < 4; pair_index = pair_index + 1) begin : g_pair_coherence
+    assign pair_group_q30[pair_index] = coherence_value_q30[pair_index];
+  end
+
+  for (genvar cluster_index = 0; cluster_index < 2; cluster_index = cluster_index + 1) begin : g_cluster_coherence
+    assign cluster_group_q30[cluster_index] = coherence_value_q30[4+cluster_index];
+  end
 
   function automatic logic signed [31:0] sin_phase_q30(
     input logic [31:0] phase_word
@@ -87,45 +111,19 @@ module frp_m31_phase_interference #(
     end
   endfunction
 
-  function automatic logic [31:0] isqrt_u64(
-    input logic [63:0] radicand
-  );
-    logic [31:0] root;
-    logic [31:0] trial;
-    logic [63:0] square;
-    integer bit_index;
-    begin
-      root = 32'd0;
-      for (bit_index = 31; bit_index >= 0; bit_index = bit_index - 1) begin
-        trial = root | (32'd1 << bit_index);
-        square = trial * trial;
-        if (square <= radicand)
-          root = trial;
-      end
-      isqrt_u64 = root;
-    end
-  endfunction
-
-  function automatic logic signed [31:0] coherence_from_sums(
+  function automatic logic [63:0] coherence_square_from_sums(
     input logic signed [63:0] sum_cos_q30,
     input logic signed [63:0] sum_sin_q30,
     input int unsigned population
   );
     logic signed [63:0] mean_cos_q30;
     logic signed [63:0] mean_sin_q30;
-    logic [63:0] magnitude_square_q60;
-    logic [31:0] magnitude_q30;
     begin
       mean_cos_q30 = round_div_s64(sum_cos_q30, population);
       mean_sin_q30 = round_div_s64(sum_sin_q30, population);
-      magnitude_square_q60 =
+      coherence_square_from_sums =
         (mean_cos_q30 * mean_cos_q30) +
         (mean_sin_q30 * mean_sin_q30);
-      magnitude_q30 = isqrt_u64(magnitude_square_q60);
-      if (magnitude_q30 > 32'd1073741824)
-        coherence_from_sums = FRP_M31_Q30_ONE;
-      else
-        coherence_from_sums = magnitude_q30;
     end
   endfunction
 
@@ -163,8 +161,6 @@ module frp_m31_phase_interference #(
     logic [1:0] state_value;
     logic signed [63:0] sum_cos_q30;
     logic signed [63:0] sum_sin_q30;
-    logic signed [63:0] group_sum_q30;
-    logic signed [63:0] cluster_difference_q30;
 
     phase_word_q = '0;
     frequency_current_q16 = '0;
@@ -257,7 +253,7 @@ module frp_m31_phase_interference #(
     for (int group = 0; group < 4; group = group + 1) begin
       sum_cos_q30 = cosine_q30[group*2] + cosine_q30[group*2+1];
       sum_sin_q30 = sine_q30[group*2] + sine_q30[group*2+1];
-      pair_group_q30[group] = coherence_from_sums(sum_cos_q30, sum_sin_q30, 2);
+      coherence_square_q60[group] = coherence_square_from_sums(sum_cos_q30, sum_sin_q30, 2);
     end
 
     for (int group = 0; group < 2; group = group + 1) begin
@@ -267,16 +263,23 @@ module frp_m31_phase_interference #(
         sum_cos_q30 = sum_cos_q30 + cosine_q30[group*4+member];
         sum_sin_q30 = sum_sin_q30 + sine_q30[group*4+member];
       end
-      cluster_group_q30[group] = coherence_from_sums(sum_cos_q30, sum_sin_q30, 4);
+      coherence_square_q60[4+group] = coherence_square_from_sums(sum_cos_q30, sum_sin_q30, 4);
     end
 
     sum_cos_q30 = 64'sd0;
     sum_sin_q30 = 64'sd0;
-    group_sum_q30 = 64'sd0;
     for (int cell_index = 0; cell_index < CELLS; cell_index = cell_index + 1) begin
       sum_cos_q30 = sum_cos_q30 + cosine_q30[cell_index];
       sum_sin_q30 = sum_sin_q30 + sine_q30[cell_index];
     end
+    coherence_square_q60[6] = coherence_square_from_sums(sum_cos_q30, sum_sin_q30, CELLS);
+  end
+
+  always_comb begin : coherence_combinational
+    logic signed [63:0] group_sum_q30;
+    logic signed [63:0] cluster_difference_q30;
+
+    group_sum_q30 = 64'sd0;
     for (int group = 0; group < 4; group = group + 1)
       group_sum_q30 = group_sum_q30 + pair_group_q30[group];
     pair_coherence_q30 = round_div_s64(group_sum_q30, 4);
@@ -284,7 +287,7 @@ module frp_m31_phase_interference #(
       cluster_group_q30[0] + cluster_group_q30[1],
       2
     );
-    global_coherence_q30 = coherence_from_sums(sum_cos_q30, sum_sin_q30, CELLS);
+    global_coherence_q30 = coherence_value_q30[6];
 
     cluster_difference_q30 = cluster_group_q30[0] - cluster_group_q30[1];
     if (cluster_difference_q30 < 0)
