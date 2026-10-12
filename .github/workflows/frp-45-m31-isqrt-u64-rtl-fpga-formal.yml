@@ -1,0 +1,363 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist).
+# This workflow is proprietary and is governed by the repository license.
+# Referenced dependencies retain their own licenses.
+name: 45 - FRP M31 Integer Square Root RTL and FPGA Formal
+run-name: "45 - FRP isqrt | arithmetic + 32 mapped stages @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-45-isqrt-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  prove:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Prepare evidence
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/frp-45-evidence"
+          printf '%s\n' 'Proof has not completed.' > "$RUNNER_TEMP/frp-45-evidence/started.txt"
+          printf '%s\n' "FRP45_EVIDENCE=$RUNNER_TEMP/frp-45-evidence" >> "$GITHUB_ENV"
+      - name: Install pinned tools
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            yowasp-yosys==0.68.0.0.post1208 yowasp-runtime==1.96 \
+            wasmtime==47.0.1 z3-solver==5.1.0.0 verilator==5.48.0
+      - name: Prove arithmetic and actual FPGA mapping
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import os, sys, json, re, hashlib, subprocess, time, copy, collections, math, random
+          import importlib.metadata as metadata
+          import z3
+          R=Path.cwd().resolve(); E=Path(os.environ['FRP45_EVIDENCE']).resolve()
+          TOP='frp_m31_isqrt_u64'
+          SV='rtl/m31/frp_m31_isqrt_u64.sv'
+          OLD='rtl/m31/frp_m31_phase_interference.sv'
+          WORKFLOW='.github/workflows/frp-45-m31-isqrt-u64-rtl-fpga-formal.yml'
+          PINS={SV:'cbb5a531283164d1d54d59ec748b97bf84e172704854bf5eb7c6bda2c502f7c7',
+           OLD:'d3ccabcd304c4ca66dcd31c75d233a16fe61c3181f797162e91674e1992d475d'}
+          PACKAGES={'yowasp-yosys':'0.68.0.0.post1208','yowasp-runtime':'1.96',
+           'wasmtime':'47.0.1','z3-solver':'5.1.0.0','verilator':'5.48.0'}
+          report=dict(status='FAIL',commands=[],proofs={},stages={},witnesses={},faults={},
+           integrated_into_core=False,physical_timing_closed=False,board_fit_proven=False,
+           physical_measurements=False,prior_abc9_mapping_proven=False)
+          def require(ok,message):
+           if not ok: raise RuntimeError(message)
+          def sha(b): return hashlib.sha256(b).hexdigest()
+          def write(n,v): (E/n).write_text(v if isinstance(v,str) else json.dumps(v,indent=2)+'\n')
+          def read(n): return json.loads((E/n).read_text())
+          def command(label,args,timeout=180):
+           require(not (E/(label+'.log')).exists(),'Duplicate command '+label)
+           started=time.monotonic()
+           try: p=subprocess.run(args,cwd=R,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=timeout)
+           except subprocess.TimeoutExpired as error:
+            output=error.output or b''
+            write(label+'.log',output.decode(errors='replace') if isinstance(output,bytes) else output)
+            raise RuntimeError('Timeout: '+label) from error
+           write(label+'.log',p.stdout)
+           report['commands'].append(dict(label=label,argv=args,returncode=p.returncode,seconds=round(time.monotonic()-started,3)))
+           require(p.returncode==0,label+'\n'+p.stdout[-2000:]); return p.stdout
+
+          def yosys(label,script):
+           write(label+'.ys',script+'\n')
+           return command(label,['yowasp-yosys','-Q','-T','-s',str(E/(label+'.ys'))])
+
+          def proof(name,assumptions,goal,expect=z3.unsat):
+           s=z3.Solver(); s.set(timeout=30000); s.add(*assumptions,z3.Not(goal))
+           write(name+'.smt2',s.to_smt2()); start=time.monotonic(); answer=s.check()
+           write(name+'.log',str(answer)+'\n'+(str(s.model()) if answer==z3.sat else s.reason_unknown() if answer==z3.unknown else ''))
+           require(answer==expect,f'{name}: {answer}')
+           record=dict(result=str(answer),seconds=round(time.monotonic()-start,3))
+           report['proofs' if expect==z3.unsat else 'faults'][name]=record
+
+          # Extract the literal recurrence, including its finite-width slices.
+          # The pinned source and elaborated wiring bind the step proof to every stage.
+          def step(source,label):
+           body=source.split('begin : g_digit\n',1)[1].split('\n  end\n',1)[0]
+           for a,b in [('root_stage[stage+1]','next_root'),('remainder_stage[stage+1]','remainder_out'),
+            ('root_stage[stage]','prior_root'),('remainder_stage[stage]','prior_remainder'),
+            ('radicand[63 - 2*stage -: 2]','digit')]: body=body.replace(a,b)
+           require('stage' not in re.sub(r'//[^\n]*','',body),'Unresolved stage')
+           write(label+'.sv','module step(input wire [31:0] prior_root,input wire [32:0] prior_remainder,input wire [1:0] digit,output wire [31:0] next_root,output wire [32:0] remainder_out,output wire [34:0] wide_remainder);\n'+body+'\nassign wide_remainder=next_remainder;\nendmodule\n')
+           yosys(label,f'read_slang -j 1 --std 1800-2017 --top step {E}/{label}.sv; proc; opt -full; wreduce; opt_clean; check -assert; write_smt2 -wires {E}/{label}.smt2;')
+
+          def widths(label,fault=False):
+           qv=z3.BitVec('qv',32); rv=z3.BitVec('rv',33); dv=z3.BitVec('dv',2)
+           qo=z3.BitVec('qo',32); ro=z3.BitVec('ro',33); rw=z3.BitVec('rw',35)
+           bind='\n(declare-fun s () step_s)\n'+''.join(f'(assert (= (|step_n {n}| s) {v}))\n' for n,v in [('prior_root','qv'),('prior_remainder','rv'),('digit','dv'),('next_root','qo'),('remainder_out','ro'),('wide_remainder','rw')])
+           base=z3.parse_smt2_string((E/(label+'.smt2')).read_text()+bind,decls={str(v):v for v in [qv,rv,dv,qo,ro,rw]})
+           q=z3.ZeroExt(34,qv); r=z3.ZeroExt(33,rv); d=z3.ZeroExt(64,dv)
+           x=4*r+d; t=4*q+1; chosen=z3.UGE(x,t)
+           qq=2*q+z3.If(chosen,z3.BitVecVal(1,66),z3.BitVecVal(0,66)); rr=z3.If(chosen,x-t,x)
+           assumptions=list(base)+[z3.ULT(qv,1<<31),z3.ULE(r,2*q)]
+           if fault: assumptions += [qv==0,rv==0,dv==1]
+           proof(label+'-widths',assumptions,z3.And(z3.ZeroExt(34,qo)==qq,z3.ZeroExt(33,ro)==rr,z3.ZeroExt(31,rw)==rr),z3.sat if fault else z3.unsat)
+
+          # Extract actual driver cones. Stop only at the previously proved state
+          # and current input digit. Reject undriven nets and invalid multioutput cuts.
+          def slice_stage(m,k):
+           n=m['netnames']; bits=lambda name:n[name]['bits']
+           q=bits('root_stage')[(32-k)*32:(33-k)*32]
+           r=bits('remainder_stage')[(32-k)*33:(33-k)*33]
+           digit=bits('radicand')[62-2*k:64-2*k]
+           take=bits(f'g_digit[{k}].take_bit'); after=bits(f'g_digit[{k}].next_remainder')[:33]
+           require(bits('root_stage')[(31-k)*32:(32-k)*32]==take+q[:31],'Root wiring')
+           require(bits('remainder_stage')[(31-k)*33:(32-k)*33]==after,'Remainder wiring')
+           if k==0: require(q==['0']*32 and r==['0']*33,'Zero base')
+           require(bits('root_stage')[:32]==m['ports']['root']['bits'],'Root output')
+           require(bits('remainder_stage')[:33]==m['ports']['remainder']['bits'],'Remainder output')
+           require(bits('radicand')==m['ports']['radicand']['bits'],'Input binding')
+           frontier={b for b in q+r+digit if isinstance(b,int)}; drivers={}
+           for name,c in m['cells'].items():
+            for p,bs in c['connections'].items():
+             if c['port_directions'][p]=='output':
+              for b in bs:
+               if isinstance(b,int):
+                require(b not in drivers or drivers[b]==name,'Multiple drivers'); drivers[b]=name
+           need=set(); todo=take+after
+           while todo:
+            b=todo.pop()
+            if isinstance(b,str): require(b in ['0','1'],'Unknown constant'); continue
+            if b in frontier: continue
+            require(b in drivers,f'Undriven or uncovered input: stage {k}, net {b}')
+            name=drivers[b]
+            if name in need: continue
+            need.add(name); c=m['cells'][name]
+            for p,bs in c['connections'].items():
+             if c['port_directions'][p]=='input': todo+=bs
+             else: require(not frontier.intersection(bs),'Invalid multioutput cut')
+           cells={n:copy.deepcopy(m['cells'][n]) for n in sorted(need)}
+           ports={'front':dict(direction='input',bits=sorted(frontier))}
+           for name,bs in [('q',q),('r',r),('digit',digit),('take',take),('after',after)]: ports[name]=dict(direction='output',bits=bs)
+           return dict(attributes={},ports=ports,cells=cells,netnames={}),len(frontier)
+
+          def wave(label,expected):
+           signals=read(label+'.json')['signal']; values={}
+           for s in signals:
+            name=s['name'].lstrip('\\')
+            if name not in expected: continue
+            data=s.get('data',[])
+            if data: value=str(data[0])
+            else: value=s['wave'][0]
+            require(value in ['0','1'],'Nonbinary witness '+label); values[name]=int(value)
+           require(values==expected,'Missing or incorrect witness '+label)
+           report['witnesses' if 'witness' in label else 'faults'][label]=values
+
+          def main():
+           require(sys.version_info[:2]==(3,12),'Python version')
+           require(os.environ.get('GITHUB_REF')=='refs/heads/main','main only')
+           commit=command('git-head',['git','rev-parse','HEAD']).strip()
+           require(commit==os.environ['GITHUB_SHA'],'Checkout SHA mismatch')
+           require(not command('git-status',['git','status','--porcelain']).strip(),'Dirty checkout')
+           report.update(commit=commit,run_id=os.environ['GITHUB_RUN_ID'],run_attempt=os.environ['GITHUB_RUN_ATTEMPT'])
+           report['packages']={p:metadata.version(p) for p in PACKAGES}
+           require(report['packages']==PACKAGES,'Tool version mismatch')
+           for name,digest in PINS.items():
+            data=(R/name).read_bytes(); require(sha(data)==digest,'Source hash mismatch: '+name)
+            write(Path(name).name,data.decode())
+           write('workflow.yml',(R/WORKFLOW).read_text()); report['sources']=PINS
+           source=(R/SV).read_text()
+           step(source,'step'); widths('step')
+           q,r,d,lo=z3.Ints('q r d low')
+           for k in range(32):
+            bound=2**k; factor=4**(31-k)
+            pre=[q>=0,q<bound,r>=0,r<=2*q,d>=0,d<4,lo>=0,lo<factor]
+            expanded=4*r+d;trial=4*q+1;take=expanded>=trial
+            goals=[expanded>=0,expanded<2**35,trial>=0,trial<2**35,q<2**31]
+            # The previous source's trial-square test has exactly the same decision.
+            # The old partial root equals q * 2**(32-k).
+            n=(4*(q*q+r)+d)*factor+lo
+            square=((2*q+1)*2**(31-k))**2
+            delta=z3.simplify(n-square,som=True)
+            goals += [(delta>=0)==take, (2*q+1)*2**(31-k) >= 0, (2*q+1)*2**(31-k) < 2**32]
+            for bit in [0,1]:
+             qq=2*q+bit;rr=expanded-bit*trial
+             identity=z3.simplify(4*(q*q+r)+d-(qq*qq+rr),som=True)
+             goals.append(z3.Implies(take if bit else z3.Not(take),z3.And(identity==0,qq>=0,qq<2**(k+1),rr>=0,rr<=2*qq,rr<2**33)))
+            proof(f'math-digit-{k:02d}',pre,z3.And(*goals))
+            # Structural OR in the original loop must be exact addition, not assumed.
+            b=z3.BitVec('prefix',32);shift=31-k
+            proof(f'old-or-{k:02d}',[z3.ULT(b,z3.BitVecVal(bound,32))],((b << (shift+1)) | (1<<shift)) == ((b << (shift+1))+(1<<shift)))
+           proof('math-final',[q>=0,q<2**32,r>=0,r<=2*q],z3.And(z3.simplify((q*q+r)-q*q,som=True)>=0,z3.simplify((q+1)**2-(q*q+r),som=True)>0))
+
+           yosys('rtl',f'read_slang -j 1 --std 1800-2017 --top {TOP} {R/SV}; proc; opt -full; wreduce; opt_clean; check -assert; write_json {E}/rtl.json;')
+           rtl=read('rtl.json')['modules'][TOP]; n=rtl['netnames']; bits=lambda key:n[key]['bits']
+           for k in range(32):
+            q=bits('root_stage')[(32-k)*32:(33-k)*32]; r=bits('remainder_stage')[(32-k)*33:(33-k)*33]
+            require(bits(f'g_digit[{k}].expanded_remainder')==bits('radicand')[62-2*k:64-2*k]+r,'Expanded remainder binding')
+            require(bits(f'g_digit[{k}].trial')==['1','0']+q+['0'],'Trial binding')
+           require(collections.Counter(c['type'] for c in rtl['cells'].values())=={'$sub':32,'$mux':32,'$ge':31,'$reduce_or':1},'RTL cell inventory')
+           require(all(not int(c['parameters'].get('A_SIGNED','0'),2) and not int(c['parameters'].get('B_SIGNED','0'),2) for c in rtl['cells'].values()),'Unsigned arithmetic')
+           yosys('map',f'read_json {E}/rtl.json; synth_ice40 -noabc9 -noabc -top {TOP} -json {E}/mapped.json; check -assert;')
+           gate=read('mapped.json')['modules'][TOP]
+           counts=dict(collections.Counter(c['type'] for c in gate['cells'].values()))
+           require(counts=={'SB_LUT4':1944,'SB_CARRY':2016},'Mapped cell inventory changed')
+           report['mapped_cells']=counts; write('mapped-dut.json',{'modules':{TOP:gate}})
+           for k in range(32):
+            widths_={}
+            for kind,m in [('gold',rtl),('gate',gate)]:
+             part,widths_[kind]=slice_stage(m,k); write(f'{kind}-{k}.json',{'modules':{kind:part}})
+            write(f'check-{k}.sv',f"""module check(input wire [{widths_['gold']-1}:0] gold_in,input wire [{widths_['gate']-1}:0] gate_in,output wire allowed,same,take);
+          wire [31:0] gq,tq; wire [32:0] gr,tr,ga,ta; wire [1:0] gd,td; wire gb,tb;
+          gold u_gold(.front(gold_in),.q(gq),.r(gr),.digit(gd),.take(gb),.after(ga));
+          gate u_gate(.front(gate_in),.q(tq),.r(tr),.digit(td),.take(tb),.after(ta));
+          assign allowed=(gq==tq)&&(gr==tr)&&(gd==td)&&({{1'b0,gq}} < (33'd1 << {k}))&&(gr<={{gq,1'b0}});
+          assign same=(gb==tb)&&(ga==ta); assign take=gb;
+          endmodule
+          """)
+            def load(gatefile):
+             return f'read_json {E}/gold-{k}.json; read_verilog -defer -D ICE40_HX +/ice40/cells_sim.v; read_json {E}/{gatefile}; read_verilog {E}/check-{k}.sv; hierarchy -check -top check; proc; flatten; opt -full; memory_map; opt_clean; check -assert; '
+            script=load(f'gate-{k}.json')
+            log=yosys(f'equivalence-{k:02d}',script+'sat -timeout 20 -set allowed 1 -prove same 1 -verify;')
+            require('SAT proof finished - no model found: SUCCESS!' in log,'Missing UNSAT proof')
+            report['stages'][str(k)]='UNSAT'
+            for bit in [0,1]:
+             label=f'witness-{k:02d}-{bit}'
+             log=yosys(label,script+f'sat -timeout 20 -set allowed 1 -set take {bit} -show allowed -show take -dump_json {E}/{label}.json;')
+             require('SAT solving finished - model found:' in log,'Missing SAT witness')
+             wave(label,{'allowed':1,'take':bit})
+            # Both public output cones must detect an actual primitive output inversion.
+            if k==31:
+             for port in ['take','after']:
+              broken=copy.deepcopy(read(f'gate-{k}.json')); part=broken['modules']['gate']
+              used=[b for c in part['cells'].values() for bs in c['connections'].values() for b in bs if isinstance(b,int)]
+              fresh=max(used)+1; before=part['ports'][port]['bits'][0]
+              part['ports'][port]['bits'][0]=fresh
+              part['cells']['injected_fault']=dict(type='SB_LUT4',parameters={'LUT_INIT':format(0x5555,'016b')},attributes={},port_directions={'I0':'input','I1':'input','I2':'input','I3':'input','O':'output'},connections={'I0':[before],'I1':['0'],'I2':['0'],'I3':['0'],'O':[fresh]})
+              label='mapped-fault-'+port; write(label+'.json',broken)
+              log=yosys(label,load(label+'.json')+f'sat -timeout 20 -set allowed 1 -prove same 1 -falsify -show allowed -show same -dump_json {E}/{label}-cex.json;')
+              require('SAT proof finished - model found: FAIL!' in log,'Fault not detected')
+              wave(label+'-cex',{'allowed':1,'same':0})
+            print('Proved mapped stage',k,flush=True)
+           for label,a,b in [('strict-test','expanded_remainder >= trial','expanded_remainder > trial'),('wrong-trial',"root_stage[stage], 2'b01","root_stage[stage], 2'b11")]:
+            require(source.count(a)==1,'Mutation site mismatch')
+            mutant=source.replace(a,b); write(label+'-source.sv',mutant); step(mutant,label); widths(label,True)
+
+           old=(R/'rtl/m31/frp_m31_phase_interference.sv').read_text();functions=re.findall(r'  function automatic\b[\s\S]*?  endfunction',old);f=[x for x in functions if ' isqrt_u64(' in x.split(';',1)[0]];assert len(f)==1
+           (E/'old.sv').write_text('`timescale 1ns / 1ps\nmodule old(input wire [63:0] radicand, output wire [31:0] root);\n'+f[0]+'\nassign root=isqrt_u64(radicand);\nendmodule\n')
+           (E/'compare.sv').write_text('`timescale 1ns / 1ps\nmodule compare(input wire [63:0] radicand, output wire [31:0] root,old_root, output wire [32:0] remainder);\nfrp_m31_isqrt_u64 dut(.radicand(radicand),.root(root),.remainder(remainder));\nold reference_impl(.radicand(radicand),.root(old_root));\nendmodule\n')
+           values=set(range(65536));mx=2**64-1
+           for k in range(65):
+            for delta in [-1,0,1]:
+             n=2**k+delta
+             if 0<=n<=mx:values.add(n)
+           roots={0,1,2,3,2**32-1}
+           for k in range(33):
+            for delta in [-1,0,1]:
+             q=2**k+delta
+             if 0<=q<2**32:roots.add(q)
+           rng=random.Random(0x46525045);roots.update(rng.getrandbits(32) for _ in range(4096))
+           for q in roots:
+            for n in [q*q-1,q*q,q*q+1,(q+1)**2-1]:
+             if 0<=n<=mx:values.add(n)
+           values.update(rng.getrandbits(64) for _ in range(32768))
+           with (E/'vectors.txt').open('w') as out:
+            for n in sorted(values):
+             q=math.isqrt(n);out.write(f'{n:016x} {q:08x} {n-q*q:09x}\n')
+           (E/'sim.cpp').write_text('''#include "Vcompare.h"
+           #include "verilated.h"
+           #include <fstream>
+           #include <iostream>
+           #include <cstdint>
+           int main(int argc,char **argv) {
+             Verilated::commandArgs(argc,argv); Vcompare dut;
+             std::ifstream in(argv[1]); uint64_t n,q,r; size_t count=0;
+             if (!in) return 2;
+             while (in >> std::hex >> n >> q >> r) {
+               dut.radicand=n; dut.eval();
+               if (dut.root!=q || dut.remainder!=r || dut.old_root!=q) {
+                 std::cerr << "FAIL n=" << std::hex << n << " root=" << dut.root
+                           << " remainder=" << dut.remainder << " old=" << dut.old_root << "\\n";
+                 return 1;
+               }
+               count++;
+             }
+             if (!in.eof() || count==0) return 3;
+             dut.final(); std::cout << "PASS vectors=" << std::dec << count
+                                    << " checks=" << count*3 << "\\n";
+           }
+           ''')
+           identity={'source_sha256':hashlib.sha256((R/'rtl/m31/frp_m31_isqrt_u64.sv').read_bytes()).hexdigest(),'old_source_sha256':hashlib.sha256(old.encode()).hexdigest(),'old_function_sha256':hashlib.sha256(f[0].encode()).hexdigest(),'vectors':len(values),'seed':0x46525045}
+           (E/'identity.json').write_text(json.dumps(identity,indent=2)+'\n');print(identity)
+
+           require(report['sources'][OLD]==sha(old.encode()),'Old source binding')
+           require(sha(f[0].encode())=='c11c9765e6cbbc74014d9144dd9ec3baf2cc535e5ea108d500d629f46b5e0e73','Old function binding')
+           require(len(values)==115000,'Vector count')
+           command('lint',['verilator-cli','--lint-only','--top-module',TOP,str(R/SV)])
+           command('compile',['verilator-cli','--cc','--exe','--build','-j','2','--top-module','compare','--Mdir',str(E/'obj'),str(E/'compare.sv'),str(R/SV),str(E/'old.sv'),str(E/'sim.cpp')],600)
+           log=command('simulation',[str(E/'obj/Vcompare'),str(E/'vectors.txt')])
+           require(log.strip()=='PASS vectors=115000 checks=345000','Simulation result')
+           report['simulation']=dict(vectors=115000,comparisons=345000,oracle='Python math.isqrt + original SV function')
+           require(len(report['proofs'])==66 and len(report['stages'])==32 and len(report['witnesses'])==64 and len(report['faults'])==4,'Incomplete evidence')
+           require(not command('git-final-status',['git','status','--porcelain']).strip(),'Checkout changed')
+           report['status']='PASS'
+
+          E.mkdir(parents=True,exist_ok=True)
+          try: main()
+          except Exception as error:
+           report['error']=str(error); raise
+          finally:
+           write('result.json',report)
+           summary=f"""# M31 isqrt RTL + direct iCE40 mapping: {report['status']}
+
+          Commit: {report.get('commit','unknown')}.
+
+          Contract: for every binary 64-bit n, root=floor(sqrt(n)),
+          n=root*root+remainder, 0<=remainder<=2*root (mathematical integers).
+          All 32 root bits and 33 remainder bits are covered.
+
+          Universal SMT obligations: {len(report['proofs'])}/66.
+          Actual mapped stage equivalence proofs: {len(report['stages'])}/32.
+          Branch existence witnesses: {len(report['witnesses'])}/64.
+          Detected source/primitive faults: {len(report['faults'])}/4.
+          Simulation: {report.get('simulation','not completed')}.
+
+          The proof composes literal finite-width RTL recurrence, mathematical induction,
+          checked stage wiring and actual driver-cone equivalence. Each cut uses only
+          previously proved state equality and arithmetic bounds. Witnesses establish
+          existence; simulation is supplemental, not universal proof.
+
+          Mapping: synth_ice40 -noabc9 -noabc; {report.get('mapped_cells',{})}.
+          This direct mapping preserves proof boundaries and uses more cells than ABC9.
+          The earlier ABC9 mapping is not certified by this run.
+          No core integration, device fit, pin constraints, place/route, timing closure,
+          X/Z arithmetic, metastability or hardware measurement is claimed.
+          """
+           write('summary-45.md',summary)
+           with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as out: out.write(summary)
+           manifest={str(p.relative_to(E)):sha(p.read_bytes()) for p in sorted(E.rglob('*')) if p.is_file() and p.name!='manifest.json'}
+           write('manifest.json',manifest)
+           print(report['status'],flush=True)
+          PY
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-45-m31-isqrt-u64-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.FRP45_EVIDENCE }}
+          if-no-files-found: error
+          retention-days: 30
