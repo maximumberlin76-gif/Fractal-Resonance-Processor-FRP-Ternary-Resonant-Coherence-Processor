@@ -12,6 +12,7 @@
 `include "frp_m31_thermal_proxy.sv"
 `include "frp_m31_local_thermal_field.sv"
 `include "frp_m31_local_gamma_drift.sv"
+`include "frp_m31_local_thermal_attenuation.sv"
 `include "frp_m31_stability.sv"
 
 module frp_m32_core #(
@@ -155,7 +156,12 @@ module frp_m32_core #(
   output wire [(CELLS*32)-1:0] local_gamma_effective_word,
   output wire [(CELLS*32)-1:0] local_next_gamma_drift_word,
   output wire [(CELLS*32)-1:0] local_next_gamma_effective_word,
-  output wire [(CELLS*32)-1:0] phase_gamma_effective_word
+  output wire [(CELLS*32)-1:0] phase_gamma_effective_word,
+
+  input logic local_thermal_enable = 1'b0,
+  output wire [(CELLS*32)-1:0] local_thermal_node_factor_q30,
+  output wire [(CELLS*32)-1:0] local_next_thermal_node_factor_q30,
+  output wire [(CELLS*32)-1:0] phase_thermal_node_factor_q30
 );
 
   logic [63:0] normalized_cycle_cost_wide;
@@ -249,6 +255,23 @@ module frp_m32_core #(
 
   assign phase_gamma_effective_word = local_gamma_enable
     ? local_next_gamma_effective_word : gamma_effective_word;
+
+  // The next local overload supplies attenuation for the same phase edge.
+  // Attenuation history advances on tick_enable in either source mode.
+  // Omitted local_thermal_enable selects the external thermal interface.
+  frp_m31_local_thermal_attenuation #(
+    .CELLS(CELLS)
+  ) u_local_thermal_attenuation (
+    .clk(clk),
+    .rst_n(rst_n),
+    .tick_enable(tick_enable),
+    .thermal_overload_q16(local_next_overload_q16),
+    .thermal_node_factor_q30(local_thermal_node_factor_q30),
+    .next_thermal_node_factor_q30(local_next_thermal_node_factor_q30)
+  );
+
+  assign phase_thermal_node_factor_q30 = local_thermal_enable
+    ? local_next_thermal_node_factor_q30 : thermal_node_factor_q30;
 
   frp_m32_registered_target_request_path #(
     .CELLS(CELLS),
@@ -354,7 +377,7 @@ module frp_m32_core #(
     .phase_load(phase_load),
     .frequency_load_q16(frequency_load_q16),
     .gamma_effective_word(phase_gamma_effective_word),
-    .thermal_node_factor_q30(thermal_node_factor_q30),
+    .thermal_node_factor_q30(phase_thermal_node_factor_q30),
     .retained_state(state_out),
     .switch_activity(accepted_change_mask),
     .scheduler_state(scheduler_state_q),
