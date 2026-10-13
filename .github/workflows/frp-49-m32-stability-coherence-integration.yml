@@ -1,0 +1,418 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# Dependencies retain their own licenses.
+name: 49 - FRP M32 Stability Coherence Integration
+run-name: "49 - FRP Stability Coherence | FPGA 8/16/32 and CSR @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-49-stability-coherence-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Prepare evidence and pinned simulator
+        run: |
+          set -euo pipefail
+          export FRP49_EVIDENCE="$RUNNER_TEMP/frp-49-evidence"
+          mkdir -p "$FRP49_EVIDENCE"
+          printf '%s\n' "FRP49_EVIDENCE=$FRP49_EVIDENCE" >> "$GITHUB_ENV"
+          python -m pip install --disable-pip-version-check \
+            verilator==5.48.0 systemc==3.0.2.1 click==8.5.0 platformdirs==4.13.0 \
+            2>&1 | tee "$FRP49_EVIDENCE/install.log"
+          python -m pip freeze > "$FRP49_EVIDENCE/packages.txt"
+      - name: Record source identities and tools
+        run: |
+          set -euo pipefail
+          cat > "$FRP49_EVIDENCE/common.py" <<'FRP49_EOF'
+          from pathlib import Path
+          import os,re,json,hashlib,subprocess,shutil
+          R=Path.cwd();B=Path(os.environ['FRP49_EVIDENCE'])
+          def save(name,value): (B/name).write_text(json.dumps(value,indent=2)+'\n')
+          def run(args,name,timeout=600):
+           print('RUN',name,flush=True)
+           path=B/(name+'.log')
+           with path.open('w') as log:
+            result=subprocess.run(args,cwd=R,stdout=log,stderr=subprocess.STDOUT,text=True,timeout=timeout)
+           text=path.read_text()
+           if result.returncode:
+            print(text[-12000:],flush=True)
+            raise RuntimeError((name,result.returncode))
+           print(text[-1200:],flush=True)
+           return text
+          FLAGS=['-Wno-fatal','-j','2','-MAKEFLAGS','VK_PCH_I_FAST=',
+                 '-MAKEFLAGS','VK_PCH_I_SLOW=','-MAKEFLAGS','OPT_FAST=-O0']
+          INCLUDES=['-I'+p for p in ['rtl/m22','rtl/m31','rtl/m32','fpga/m32','fpga/m32_csr']]
+          def timed(top,source,name):
+           obj=B/(name+'-obj')
+           run(['verilator-cli','--binary','--timing','--assert',*FLAGS,
+                '--top-module',top,'--Mdir',str(obj),*INCLUDES,str(source)],name+'-build')
+           text=run([str(obj/('V'+top))],name+'-run',300)
+           shutil.rmtree(obj)
+           return text
+          FRP49_EOF
+          cat > "$FRP49_EVIDENCE/manifest.py" <<'FRP49_EOF'
+          from common import *
+          import importlib.metadata as md
+          files=sorted({p for folder in ['rtl/m22','rtl/m31','rtl/m32','fpga/m32','fpga/m32_csr'] for p in (R/folder).glob('*.sv')})
+          files += [R/'rtl/m31/frp_m31_sin_q30.mem',R/'.github/workflows/frp-49-m32-stability-coherence-integration.yml']
+          assert all(p.is_file() for p in files)
+          save('sources.json',{'commit':os.environ['GITHUB_SHA'],'files':{str(p.relative_to(R)):hashlib.sha256(p.read_bytes()).hexdigest() for p in files}})
+          save('versions.json',{n:md.version(n) for n in ['verilator','systemc']})
+          run(['verilator-cli','--version'],'verilator-version')
+          FRP49_EOF
+          python "$FRP49_EVIDENCE/manifest.py" 2>&1 | tee "$FRP49_EVIDENCE/manifest.py.log"
+      - name: Compare FPGA and core for 8 16 and 32 cells
+        run: |
+          set -euo pipefail
+          cat > "$FRP49_EVIDENCE/sim.cpp" <<'FRP49_EOF'
+          #include "Vtop.h"
+          #include "verilated.h"
+          #include <iostream>
+          #include <cstdint>
+          #include <cstdlib>
+          static uint32_t seed=0x53a187bdu;
+          static uint32_t rnd(){seed^=seed<<13;seed^=seed>>17;seed^=seed<<5;return seed;}
+          int main(int argc,char**argv){
+           Verilated::commandArgs(argc,argv);Vtop d;unsigned release=0,count=0,checks=0,ready_ticks=0,drains=0;
+           bool pending=false;d.clk=0;d.rst_n_async=1;d.ref_ready=0;d.eval();
+           auto check=[&](int p,int c,int side){
+            if(d.mismatch || bool(d.core_ready)!=bool(d.ref_ready)){
+             std::cerr<<"MISMATCH profile="<<p<<" cycle="<<c<<" side="<<side<<"\n";std::exit(2);
+            }++checks;
+           };
+           for(int profile=0;profile<24;profile++)for(int c=0;c<256;c++){
+            d.clk=0;d.rst_n_async=(c!=0 && c!=131);if(!d.rst_n_async)release=0;
+            d.ref_ready=release>=2;d.tick_enable=(c%13!=7 && c%13!=8);d.clear_counters=c==192;
+            d.scheduler_mode=profile/8;d.local_gamma_enable=(profile/2)&1;d.local_thermal_enable=(profile/4)&1;d.auto_target_enable=profile&1;
+            d.phase_load_valid=c<=3 || c%67==0;d.gamma_update_valid=c%5==0;
+            uint64_t targets=0,indices=0,requests=0;
+            for(int i=0;i<FRP_N;i++){
+             uint32_t t=((c/16+i)%3==0)?0:((c/16+i)%3==1?1:3);targets|=uint64_t(t)<<(2*i);
+             d.phase_load[i]=rnd();d.frequency_load_q16[i]=(c<64)?65536:rnd();
+             d.gamma_effective_word[i]=rnd();d.thermal_node_factor_q30[i]=(c%3)?0x40000000u:(rnd()&0x3fffffffu);
+             d.gamma_targets_q16[i]=(c%64==0)?rnd():((i+c)%2?65536u:uint32_t(-65536));
+            }
+            for(int l=0;l<FRP_N/4;l++){
+             int i=(c+l*4)%FRP_N;indices|=uint64_t(i)<<(l*FRP_D);requests|=((targets>>(2*i))&3)<<(l*2);
+            }
+            d.external_target_bank=targets;d.external_request_valid=(1u<<(FRP_N/4))-1;d.external_request_cell_index=indices;d.external_request_target=requests;
+            d.eval();check(profile,c,0);
+            bool valid=false;
+            if(!d.ref_ready){count=0;pending=false;}
+            else{valid=pending;if(pending){++count;if(!d.tick_enable)++drains;}pending=d.tick_enable;if(d.tick_enable)++ready_ticks;}
+            d.clk=1;d.eval();
+            if(d.rst_n_async && release<2)++release;
+            d.ref_ready=release>=2;d.eval();check(profile,c,1);
+            if(d.local_stability_valid_q!=valid || d.local_stability_sample_count_q!=count){std::cerr<<"SAMPLE cycle="<<c;return 3;}
+            if(d.actual_direct_events || d.reserved_state_events){std::cerr<<"INVARIANT";return 4;}
+           }
+           std::cout<<"PASS cells="<<FRP_N<<" profiles=24 cycles=6144 output_bank_comparisons="<<(checks*FRP_OUTPUTS)
+                    <<" ready_ticks="<<ready_ticks<<" drain_on_hold="<<drains<<"\n";d.final();
+          }
+          FRP49_EOF
+          cat > "$FRP49_EVIDENCE/fpga.py" <<'FRP49_EOF'
+          from common import *
+          s=(R/'fpga/m32/frp_m32_fpga_top.sv').read_text()
+          head=s[s.index('module frp_m32_fpga_top #('):s.index('\n  logic [1:0] reset_sync_q;')]
+          start=head.index(') (')+3;end=head.rindex(');');ports=head[start:end].strip().lstrip('(').strip()
+          entries=[]
+          for decl in ports.split(','):
+           decl=decl.strip();name=re.search(r'(\w+)\s*(?:=[^,]*)?$',decl).group(1);entries.append((decl,name,decl.startswith('input')))
+          head=head.replace('module frp_m32_fpga_top #(','module top #(').replace('  input logic clk,','  input logic ref_ready,\n  output wire mismatch,\n  input logic clk,')
+          top='`include "frp_m32_fpga_top.sv"\n'+head+'\n  frp_m32_fpga_top #(.CELLS(CELLS)) dut (.*);\n'
+          outs=[];connections=[]
+          qualified={'tick_enable','clear_counters','phase_load_valid','auto_target_enable','gamma_update_valid'}
+          for decl,name,inp in entries:
+           if name=='core_ready':continue
+           if inp:
+            value='ref_ready' if name=='rst_n_async' else f'({name} && ref_ready)' if name in qualified else f'({name} & {{REQUEST_LANES{{ref_ready}}}})' if name=='external_request_valid' else name
+            connections.append(f'.{"rst_n" if name=="rst_n_async" else name}({value})')
+           else:
+            top+='  '+re.sub(r'^output\s+','',decl).replace(name,'ref_'+name)+';\n';connections.append(f'.{name}(ref_{name})');outs.append(name)
+          top+='  frp_m32_core #(.CELLS(CELLS)) reference_core (\n    '+',\n    '.join(connections)+'\n  );\n'
+          top+='  assign mismatch =\n    '+' |\n    '.join(f'({n} !== ref_{n})' for n in outs)+';\nendmodule\n'
+          assert len(outs)==103, ('FPGA output count',len(outs))
+          core_text=(R/'rtl/m32/frp_m32_core.sv').read_text()
+          core_header=core_text.split(') (',1)[1].split('\n);',1)[0]
+          core_outputs=re.findall(r'\boutput\s+[^,]+?\b(\w+)\s*(?:,|$)',core_header,re.S)
+          assert set(outs)==set(core_outputs), ('Core/FPGA interface mismatch',outs,core_outputs)
+          (B/'top.sv').write_text(top)
+          save('interface.json', {'core_outputs':outs,'count':len(outs)})
+
+          results={}
+          for n in (8,16,32):
+           obj=B/f'fpga-{n}-obj'
+           run(['verilator-cli','--cc','--exe','--build',*FLAGS,'--top-module','top',
+                '--Mdir',str(obj),f'-GCELLS={n}','-CFLAGS',
+                f'-DFRP_N={n} -DFRP_D={n.bit_length()-1} -DFRP_OUTPUTS={len(outs)}',
+                *INCLUDES,str(B/'top.sv'),str(B/'sim.cpp')],f'fpga-{n}-build')
+           text=run([str(obj/'Vtop')],f'fpga-{n}-run',300)
+           expected=f'PASS cells={n} profiles=24 cycles=6144 output_bank_comparisons=1265664 ready_ticks=5040 drain_on_hold=480'
+           assert expected in text, text
+           results[str(n)]={'profiles':24,'cycles':6144,'output_bank_comparisons':1265664,'ready_ticks':5040,'drain_on_hold':480}
+           save('fpga-results.json',results)
+           shutil.rmtree(obj)
+          FRP49_EOF
+          python "$FRP49_EVIDENCE/fpga.py" 2>&1 | tee "$FRP49_EVIDENCE/fpga.py.log"
+      - name: Exercise stability CSR and existing integration tests
+        run: |
+          set -euo pipefail
+          cat > "$FRP49_EVIDENCE/csr_stability_tb.sv" <<'FRP49_EOF'
+          `timescale 1ns/1ps
+          `include "frp_m32_csr_top.sv"
+          module csr_stability_tb;
+           logic clk=0; always #5 clk=~clk;
+           logic rst_n_async=1,csr_valid=0,csr_write=0;
+           logic [7:0] csr_addr=0;
+           logic [31:0] csr_wdata=0,csr_rdata;
+           logic csr_ready,csr_error;
+           frp_m32_csr_top dut(.*);
+           int reads=0,errors=0,ticks=0,commits=0,profiles=0,checks=0;
+           int count_model=0;
+           bit pending=0, valid_model=0;
+           logic [1:0] reset_model=0;
+           always @(posedge clk or negedge rst_n_async) begin
+             if (!rst_n_async) reset_model <= 0;
+             else reset_model <= {reset_model[0],1'b1};
+           end
+           always @(posedge clk) begin
+             if (!reset_model[1]) begin count_model=0;pending=0;valid_model=0;end
+             else begin
+               valid_model=pending;
+               if(pending) begin count_model++;commits++;end
+               pending=csr_valid && csr_write && csr_addr==0 && (csr_wdata==1 || csr_wdata==512);
+             end
+             #1;
+             if(dut.local_stability_sample_count_q!==32'(count_model))
+               $fatal(1,"count got=%0d exp=%0d",dut.local_stability_sample_count_q,count_model);
+             if(dut.u_fpga.actual_direct_events!=0 || dut.u_fpga.reserved_state_events!=0)
+               $fatal(1,"state invariant");
+             if(dut.local_stability_valid_q !== valid_model) $fatal(1,"sample-valid timing");
+             if(dut.local_page_q && dut.stability_page_q) $fatal(1,"page exclusivity");
+             checks++;
+           end
+           task automatic transfer(input bit w,input int a,input logic[31:0] data,input bit err);
+             @(negedge clk);csr_valid=1;csr_write=w;csr_addr=8'(a);csr_wdata=data;
+             #1;
+             if(!csr_ready || csr_error!==err) $fatal(1,"bus a=%h w=%b err=%b expected=%b",a,w,csr_error,err);
+             if((w||err) && csr_rdata!==0) $fatal(1,"nonzero error/write data");
+             if(err) errors++;
+             @(posedge clk);#2;
+             csr_valid=0;
+           endtask
+           task automatic wr(input int a,input logic[31:0] d);transfer(1,a,d,0);endtask
+           task automatic rd(input int a,input logic[31:0] expected);
+             @(negedge clk);csr_valid=1;csr_write=0;csr_addr=8'(a);csr_wdata=0;#1;
+             if(!csr_ready || csr_error || csr_rdata!==expected)
+               $fatal(1,"read a=%h got=%h expected=%h error=%b",a,csr_rdata,expected,csr_error);
+             reads++;@(posedge clk);#2;csr_valid=0;
+           endtask
+           function automatic logic[31:0] expected(input int a);
+             case(a)
+                'h68: expected=32'(dut.u_fpga.u_m32_core.local_coherence_compression_q30);
+                'h6c: expected=32'(dut.u_fpga.u_m32_core.local_effective_coherence_q30);
+                'h70: expected=32'(dut.u_fpga.u_m32_core.local_coherence_capacity_q16);
+                'h74: expected=32'(dut.u_fpga.u_m32_core.local_pressure_q16);
+                'h78: expected=32'(dut.u_fpga.u_m32_core.local_stability_margin_q16);
+                'h7c: expected=32'(dut.u_fpga.u_m32_core.local_stable);
+                'h80: expected=32'(dut.u_fpga.u_m32_core.local_previous_margin_q16);
+                'h84: expected=32'(dut.u_fpga.u_m32_core.local_stability_valid_q);
+                'h88: expected=32'(dut.u_fpga.u_m32_core.local_stability_sample_count_q);
+                'h8c: expected=32'(dut.u_fpga.u_m32_core.local_stability_raw_coherence_q30);
+                'h90: expected=32'(dut.u_fpga.u_m32_core.local_stability_cluster_coherence_q30);
+                'h94: expected=32'(dut.u_fpga.u_m32_core.local_stability_mean_heat_q16);
+                'h98: expected=32'(dut.u_fpga.u_m32_core.local_stability_mean_overload_q16);
+                'h9c: expected=32'(dut.u_fpga.u_m32_core.local_stability_mean_lag_q16);
+                'ha0: expected=32'(dut.u_fpga.u_m32_core.local_stability_neutral_fraction_q30);
+                'ha4: expected=32'(dut.u_fpga.u_m32_core.local_stability_compression_arg_q16);
+                'ha8: expected=32'(dut.u_fpga.u_m32_core.local_stability_switch_load_q16);
+                'hac: expected=dut.u_fpga.u_m32_core.group_coherence_q30[0 +: 32];
+                'hb0: expected=dut.u_fpga.u_m32_core.group_coherence_q30[32 +: 32];
+                'hb4: expected=dut.u_fpga.u_m32_core.group_coherence_q30[64 +: 32];
+                'hb8: expected=dut.u_fpga.u_m32_core.group_coherence_q30[96 +: 32];
+                'hbc: expected=dut.u_fpga.u_m32_core.group_coherence_q30[128 +: 32];
+                'hc0: expected=dut.u_fpga.u_m32_core.group_coherence_q30[160 +: 32];
+                'hc4: expected=dut.u_fpga.u_m32_core.group_coherence_q30[192 +: 32];
+                'hc8: expected=dut.u_fpga.u_m32_core.level_mean_coherence_q30[0 +: 32];
+                'hcc: expected=dut.u_fpga.u_m32_core.level_mean_coherence_q30[32 +: 32];
+                'hd0: expected=dut.u_fpga.u_m32_core.level_mean_coherence_q30[64 +: 32];
+                'hd4: expected=dut.u_fpga.u_m32_core.level_min_coherence_q30[0 +: 32];
+                'hd8: expected=dut.u_fpga.u_m32_core.level_min_coherence_q30[32 +: 32];
+                'hdc: expected=dut.u_fpga.u_m32_core.level_min_coherence_q30[64 +: 32];
+                'he0: expected=dut.u_fpga.u_m32_core.level_max_coherence_q30[0 +: 32];
+                'he4: expected=dut.u_fpga.u_m32_core.level_max_coherence_q30[32 +: 32];
+                'he8: expected=dut.u_fpga.u_m32_core.level_max_coherence_q30[64 +: 32];
+                'hec: expected=dut.u_fpga.u_m32_core.level_dispersion_q30[0 +: 32];
+                'hf0: expected=dut.u_fpga.u_m32_core.level_dispersion_q30[32 +: 32];
+                'hf4: expected=dut.u_fpga.u_m32_core.level_dispersion_q30[64 +: 32];
+
+                'hfc:expected='h46523203;
+                default:expected=0;
+             endcase
+           endfunction
+           task automatic scan;
+             wr(0,258);
+             for(int a='h68;a<='hf4;a+=4) rd(a,expected(a));
+             rd('hfc,'h46523203);
+           endtask
+           task automatic reset;
+             @(negedge clk);rst_n_async=0;csr_valid=1;csr_write=1;csr_addr=0;csr_wdata=1;
+             #1;if(csr_ready || csr_error || csr_rdata!=0) $fatal(1,"reset bus");
+             @(negedge clk);rst_n_async=1;
+             #1;if(csr_ready) $fatal(1,"early release");
+             @(negedge clk);csr_valid=0;
+             repeat(3) @(negedge clk);
+             rd('hfc,'h46523201);
+           endtask
+           logic [511:0] retained;
+           logic [31:0] margin_saved,count_saved;
+           initial begin
+             reset();
+             for(int page=0;page<3;page++) begin
+               wr(0,256+page);
+               rd('hfc,'h46523201+page);
+               for(int a=0;a<256;a++) begin
+                 if(a%4!=0) begin transfer(0,a,0,1);transfer(1,a,'hdeadbeef,1);end
+                 else if(a>=104) begin
+                   if(page==2 || (page==1 && a>=112) || (page==0 && a>=124))
+                     transfer(1,a,'hdeadbeef,1);
+                   if((page==1 && a>=200 && a<252) || (page==2 && a==248))
+                     transfer(0,a,0,1);
+                 end
+               end
+               transfer(0,0,0,1);
+               transfer(1,0,259,1);
+               transfer(1,0,'h80000102,1);
+               transfer(1,0,3,1);
+             end
+             for(int mode=0;mode<3;mode++)
+             for(int sources=0;sources<4;sources++)
+             for(int auto_mode=0;auto_mode<2;auto_mode++) begin
+               reset();profiles++;
+               wr(4,32'(mode));
+               wr('h68,32'(auto_mode));
+               for(int c=0;c<8;c++) begin
+                 wr('h18,32'(c));
+                 wr('h6c,32'(c)*32'h20000000+32'(sources)*32'h073abcd1);
+                 wr('h70,65536+32'(c*1000-3500));
+                 wr('h74,32'h26666666+32'(c*12345));
+                 wr('h78,32'h40000000-32'(c*65536));
+               end
+               wr(0,8);wr(0,257);wr('h68,32'(sources));
+               for(int c=0;c<8;c++) begin wr('h18,32'(c));wr('h6c,32'(c*1333-5000));end
+               wr(0,258);
+               rd('h88,0);
+               for(int t=0;t<96;t++) begin
+                 for(int lane=0;lane<2;lane++) begin
+                   wr(8,32'(lane));wr(12,32'((t+lane*3)%8));
+                   wr(16,(t%3==0)?0:((t%3==1)?1:3));wr(20,1);
+                 end
+                 wr(0,(t%7==0)?512:1);ticks++;
+                 if(t%8==0) begin
+                   // A held-valid burst causes one accepted tick per rising edge.
+                   @(negedge clk);csr_valid=1;csr_write=1;csr_addr=0;csr_wdata=1;
+                   repeat(3) begin @(posedge clk);#2;ticks++;end
+                   csr_valid=0;
+                 end
+                 repeat(2) @(negedge clk);
+                 if(t%8==0) scan();
+                 if(t%13==0) begin
+                   margin_saved=dut.local_previous_margin_q16;
+                   count_saved=dut.local_stability_sample_count_q;
+                   wr(0,2);rd('h88,count_saved);rd('h80,margin_saved);
+                   wr(0,4);rd('h88,count_saved);
+                 end
+               end
+               scan();
+               count_saved=dut.local_stability_sample_count_q;
+               margin_saved=dut.local_previous_margin_q16;
+               retained={dut.gamma_targets_q,dut.phase_load_q};
+               for(int a=104;a<256;a+=4) transfer(1,a,32'(a),1);
+               if(retained!=={dut.gamma_targets_q,dut.phase_load_q}) $fatal(1,"RO write mutated staging");
+               rd('h88,count_saved);rd('h80,margin_saved);
+               wr(0,257);rd('h68,32'(sources));rd('hfc,'h46523202);
+               wr(0,256);rd('h68,32'(auto_mode));rd('hfc,'h46523201);
+               wr(0,258);rd('h88,count_saved);
+               wr(0,8);repeat(2) @(negedge clk);rd('h88,count_saved);
+             end
+             reset();scan();rd('h88,0);
+             if(ticks!=commits) $fatal(1,"tick/commit mismatch %0d/%0d",ticks,commits);
+             $display("PASS CSR stability profiles=%0d ticks=%0d commits=%0d reads=%0d rejected=%0d cycles=%0d",profiles,ticks,commits,reads,errors,checks);
+             $finish;
+           end
+           initial begin #10000000;$fatal(1,"timeout");end
+          endmodule
+          FRP49_EOF
+          cat > "$FRP49_EVIDENCE/simulate.py" <<'FRP49_EOF'
+          from common import *
+          log=timed('csr_stability_tb',B/'csr_stability_tb.sv','csr-stability')
+          expected='PASS CSR stability profiles=24 ticks=3168 commits=3168 reads=12403 rejected=2197 cycles=43297'
+          assert expected in log,log
+          save('csr-results.json',{'profiles':24,'ticks':3168,'commits':3168,'reads':12403,'rejected':2197,'cycles':43297})
+          log=timed('frp_m32_csr_tb',R/'fpga/m32_csr/frp_m32_csr_tb.sv','csr-legacy')
+          assert 'PASS checks=6905 ticks=306 rejected_transfers=449 core_outputs=59' in log,log
+          log=timed('frp_m32_fpga_tb',R/'fpga/m32/frp_m32_fpga_tb.sv','fpga-legacy')
+          assert 'FRP M32 FPGA integration testbench PASS' in log,log
+          save('legacy-results.json',{'csr':'PASS','fpga':'PASS'})
+          FRP49_EOF
+          python "$FRP49_EVIDENCE/simulate.py" 2>&1 | tee "$FRP49_EVIDENCE/simulate.py.log"
+      - name: Require all results and unchanged sources
+        run: |
+          set -euo pipefail
+          cat > "$FRP49_EVIDENCE/summary.py" <<'FRP49_EOF'
+          from common import *
+          read=lambda n:json.loads((B/n).read_text())
+          manifest=read('sources.json')
+          for p,h in manifest['files'].items(): assert hashlib.sha256((R/p).read_bytes()).hexdigest()==h,p
+          fpga=read('fpga-results.json');csr=read('csr-results.json');legacy=read('legacy-results.json')
+          assert set(fpga)=={'8','16','32'} and all(v['profiles']==24 for v in fpga.values())
+          assert csr['ticks']==csr['commits']==3168 and legacy=={'csr':'PASS','fpga':'PASS'}
+          assert read('interface.json')['count']==103
+          save('result.json',{'result':'PASS','commit':manifest['commit'],'fpga':fpga,'csr':csr,'legacy':legacy})
+          text='\n'.join(['## FRP M32 integration: PASS','',
+           'Commit: `'+manifest['commit']+'`','',
+           '| Check | Result |','|---|---|',
+           '| FPGA 8/16/32 | 72 profiles; 18432 cycles; 3796992 output-bank comparisons |',
+           '| CSR 8 cells, pages 0/1/2 | 24 profiles; 3168 ticks and commits; 12403 reads |',
+           '| Rejected CSR transactions | 2197 |',
+           '| Existing CSR and FPGA testbenches | PASS |','',
+           'Source hashes, generated harnesses, tool versions and logs are attached.',''])
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write(text)
+          print(text)
+          FRP49_EOF
+          python "$FRP49_EVIDENCE/summary.py" 2>&1 | tee "$FRP49_EVIDENCE/summary.py.log"
+      - name: Upload logs and reproducibility records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-49-stability-coherence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/frp-49-evidence/*.log
+            ${{ runner.temp }}/frp-49-evidence/*.json
+            ${{ runner.temp }}/frp-49-evidence/*.txt
+            ${{ runner.temp }}/frp-49-evidence/*.py
+            ${{ runner.temp }}/frp-49-evidence/*.sv
+            ${{ runner.temp }}/frp-49-evidence/*.cpp
+          if-no-files-found: error
+          retention-days: 30
