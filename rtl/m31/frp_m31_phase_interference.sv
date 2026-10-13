@@ -1,5 +1,9 @@
  // SPDX-License-Identifier: Apache-2.0
- // FRP M31 retained relative-phase interference and resonance-selection path.
+ // FRP M31 retained relative-phase interference for 8, 16 and 32 cells.
+ // Q30 shell weights: frp_prototype_v1_7_0.py, quantized_level_weights(N, 0.70).
+ // Groups are packed by ascending dyadic level, then ascending cell range.
+ // Level statistics use rounded means and integer RMS deviations.
+ // The eight-cell organization output retains its existing rounded half-gap.
 
 `ifndef FRP_M31_PHASE_INTERFERENCE_SV
 `define FRP_M31_PHASE_INTERFERENCE_SV
@@ -35,7 +39,12 @@ module frp_m31_phase_interference #(
   output logic signed [31:0] pair_coherence_q30,
   output logic signed [31:0] cluster_coherence_q30,
   output logic signed [31:0] global_coherence_q30,
-  output logic signed [31:0] organization_dispersion_q30
+  output logic signed [31:0] organization_dispersion_q30,
+  output wire [((CELLS-1)*32)-1:0] group_coherence_q30,
+  output logic [($clog2(CELLS)*32)-1:0] level_mean_coherence_q30,
+  output logic [($clog2(CELLS)*32)-1:0] level_min_coherence_q30,
+  output logic [($clog2(CELLS)*32)-1:0] level_max_coherence_q30,
+  output wire [($clog2(CELLS)*32)-1:0] level_dispersion_q30
 );
 
   import frp_m31_pkg::*;
@@ -50,31 +59,69 @@ module frp_m31_phase_interference #(
   logic signed [31:0] sine_q30 [0:CELLS-1];
   logic signed [31:0] cosine_q30 [0:CELLS-1];
   logic signed [31:0] coupling_q16 [0:CELLS-1];
-  logic signed [31:0] pair_group_q30 [0:3];
-  logic signed [31:0] cluster_group_q30 [0:1];
-  logic [63:0] coherence_square_q60 [0:6];
-  wire [31:0] coherence_magnitude_q30 [0:6];
-  wire signed [31:0] coherence_value_q30 [0:6];
+  localparam int DEPTH = $clog2(CELLS);
+  localparam int GROUPS = CELLS - 1;
+  localparam int PAIRS = CELLS / 2;
+  localparam int CLUSTERS = CELLS / 4;
+  localparam logic [31:0] RESET_PHASE_STEP = 32'(64'h100000000 / CELLS);
 
-  // Four pairs, two clusters and one global population.
-  for (genvar group_index = 0; group_index < 7; group_index = group_index + 1) begin : g_coherence
+  logic [63:0] coherence_square_q60 [0:GROUPS-1];
+  wire [31:0] coherence_magnitude_q30 [0:GROUPS-1];
+  wire signed [31:0] coherence_value_q30 [0:GROUPS-1];
+  logic [63:0] level_variance_q60 [0:DEPTH-1];
+  wire [31:0] level_deviation_q30 [0:DEPTH-1];
+
+  for (genvar group_index = 0; group_index < GROUPS; group_index++) begin : g_coherence
     frp_m31_isqrt_u64 magnitude (
       .radicand(coherence_square_q60[group_index]),
-      .root(coherence_magnitude_q30[group_index]),
-      .remainder()
+      .root(coherence_magnitude_q30[group_index]), .remainder()
     );
     assign coherence_value_q30[group_index] =
       (coherence_magnitude_q30[group_index] > 32'd1073741824)
       ? FRP_M31_Q30_ONE : $signed(coherence_magnitude_q30[group_index]);
+    assign group_coherence_q30[group_index*32 +: 32] = coherence_value_q30[group_index];
   end
 
-  for (genvar pair_index = 0; pair_index < 4; pair_index = pair_index + 1) begin : g_pair_coherence
-    assign pair_group_q30[pair_index] = coherence_value_q30[pair_index];
+  for (genvar level_index = 0; level_index < DEPTH; level_index++) begin : g_dispersion
+    frp_m31_isqrt_u64 deviation (
+      .radicand(level_variance_q60[level_index]),
+      .root(level_deviation_q30[level_index]), .remainder()
+    );
+    assign level_dispersion_q30[level_index*32 +: 32] = level_deviation_q30[level_index];
   end
 
-  for (genvar cluster_index = 0; cluster_index < 2; cluster_index = cluster_index + 1) begin : g_cluster_coherence
-    assign cluster_group_q30[cluster_index] = coherence_value_q30[4+cluster_index];
-  end
+  function automatic logic signed [31:0] phase_weight_q30(
+    input int unsigned left_index, right_index
+  );
+    int unsigned differing;
+    begin
+      differing = left_index ^ right_index;
+      phase_weight_q30 = 32'sd0;
+      if (differing != 0) begin
+        case (CELLS)
+          8: begin
+            if (differing < 2) phase_weight_q30 = 32'sd516461574;
+            else if (differing < 4) phase_weight_q30 = 32'sd158959695;
+            else phase_weight_q30 = 32'sd59840215;
+          end
+          16: begin
+            if (differing < 2) phase_weight_q30 = 32'sd436841896;
+            else if (differing < 4) phase_weight_q30 = 32'sd134453864;
+            else if (differing < 8) phase_weight_q30 = 32'sd50615020;
+            else phase_weight_q30 = 32'sd20691515;
+          end
+          32: begin
+            if (differing < 2) phase_weight_q30 = 32'sd385947114;
+            else if (differing < 4) phase_weight_q30 = 32'sd118789159;
+            else if (differing < 8) phase_weight_q30 = 32'sd44718058;
+            else if (differing < 16) phase_weight_q30 = 32'sd18280826;
+            else phase_weight_q30 = 32'sd7818597;
+          end
+          default: phase_weight_q30 = 32'sd0;
+        endcase
+      end
+    end
+  endfunction
 
   function automatic logic signed [31:0] sin_phase_q30(
     input logic [31:0] phase_word
@@ -128,8 +175,8 @@ module frp_m31_phase_interference #(
   endfunction
 
   initial begin
-    if (CELLS != 8)
-      $fatal(1, "FRP M31 phase engine currently qualifies exactly eight cells");
+    if ((CELLS != 8) && (CELLS != 16) && (CELLS != 32))
+      $fatal(1, "FRP M31 phase engine requires 8, 16 or 32 cells");
     $readmemh(SIN_LUT_FILE, sin_lut);
     if (sin_lut[0] !== 32'sd0)
       $fatal(1, "FRP M31 sine LUT zero-point mismatch");
@@ -141,7 +188,8 @@ module frp_m31_phase_interference #(
       $fatal(1, "FRP M31 sine LUT three-quarter-cycle mismatch");
   end
 
-  always_comb begin : phase_combinational
+  for (genvar cell_index = 0; cell_index < CELLS; cell_index++) begin : g_phase_cell
+    always_comb begin : update_cell
     logic signed [63:0] total_q30;
     logic signed [31:0] pair_factor_q30;
     logic signed [31:0] weighted_factor_q30;
@@ -159,16 +207,7 @@ module frp_m31_phase_interference #(
     logic signed [31:0] thermal_j_q30;
     logic signed [31:0] topology_weight_q30;
     logic [1:0] state_value;
-    logic signed [63:0] sum_cos_q30;
-    logic signed [63:0] sum_sin_q30;
 
-    phase_word_q = '0;
-    frequency_current_q16 = '0;
-    coupling_field_q16 = '0;
-    phase_projection_q30 = '0;
-    phase_target = '0;
-
-    for (int cell_index = 0; cell_index < CELLS; cell_index = cell_index + 1) begin
       sine_q30[cell_index] = sin_phase_q30(phase_q[cell_index]);
       cosine_q30[cell_index] = cos_phase_q30(phase_q[cell_index]);
       phase_word_q[(cell_index*32) +: 32] = phase_q[cell_index];
@@ -181,9 +220,6 @@ module frp_m31_phase_interference #(
         phase_target[(cell_index*2) +: 2] = FRP_STATE_NEG;
       else
         phase_target[(cell_index*2) +: 2] = FRP_ACTIVE_NEUTRAL;
-    end
-
-    for (int cell_index = 0; cell_index < CELLS; cell_index = cell_index + 1) begin
       total_q30 = 64'sd0;
       thermal_i_q30 = thermal_node_factor_q30[(cell_index*32) +: 32];
       phase_plus_gamma = phase_q[cell_index] + gamma_effective_word[(cell_index*32) +: 32];
@@ -191,7 +227,7 @@ module frp_m31_phase_interference #(
       for (int other = 0; other < CELLS; other = other + 1) begin
         if (other != cell_index) begin
           thermal_j_q30 = thermal_node_factor_q30[(other*32) +: 32];
-          topology_weight_q30 = frp_m31_topology_weight_q30(cell_index, other);
+          topology_weight_q30 = phase_weight_q30(cell_index, other);
           pair_factor_q30 = frp_m31_mul_q30(thermal_i_q30, thermal_j_q30);
           weighted_factor_q30 = frp_m31_mul_q30(
             topology_weight_q30,
@@ -249,56 +285,76 @@ module frp_m31_phase_interference #(
       phase_step = frp_m31_velocity_to_phase_word(velocity_q16);
       phase_d[cell_index] = phase_q[cell_index] + phase_step;
     end
+  end
 
-    for (int group = 0; group < 4; group = group + 1) begin
-      sum_cos_q30 = cosine_q30[group*2] + cosine_q30[group*2+1];
-      sum_sin_q30 = sine_q30[group*2] + sine_q30[group*2+1];
-      coherence_square_q60[group] = coherence_square_from_sums(sum_cos_q30, sum_sin_q30, 2);
-    end
-
-    for (int group = 0; group < 2; group = group + 1) begin
-      sum_cos_q30 = 64'sd0;
-      sum_sin_q30 = 64'sd0;
-      for (int member = 0; member < 4; member = member + 1) begin
-        sum_cos_q30 = sum_cos_q30 + cosine_q30[group*4+member];
-        sum_sin_q30 = sum_sin_q30 + sine_q30[group*4+member];
+  for (genvar level = 1; level <= DEPTH; level++) begin : g_level
+    for (genvar group = 0; group < (CELLS >> level); group++) begin : g_group
+      localparam int INDEX = CELLS - (CELLS >> (level-1)) + group;
+      logic signed [63:0] sum_cos_q30;
+      logic signed [63:0] sum_sin_q30;
+      always_comb begin
+        sum_cos_q30 = 64'sd0;
+        sum_sin_q30 = 64'sd0;
+        for (int member = 0; member < (1 << level); member++) begin
+          sum_cos_q30 += 64'(cosine_q30[(group << level)+member]);
+          sum_sin_q30 += 64'(sine_q30[(group << level)+member]);
+        end
+        coherence_square_q60[INDEX] =
+          coherence_square_from_sums(sum_cos_q30, sum_sin_q30, 1 << level);
       end
-      coherence_square_q60[4+group] = coherence_square_from_sums(sum_cos_q30, sum_sin_q30, 4);
     end
-
-    sum_cos_q30 = 64'sd0;
-    sum_sin_q30 = 64'sd0;
-    for (int cell_index = 0; cell_index < CELLS; cell_index = cell_index + 1) begin
-      sum_cos_q30 = sum_cos_q30 + cosine_q30[cell_index];
-      sum_sin_q30 = sum_sin_q30 + sine_q30[cell_index];
-    end
-    coherence_square_q60[6] = coherence_square_from_sums(sum_cos_q30, sum_sin_q30, CELLS);
   end
 
   always_comb begin : coherence_combinational
     logic signed [63:0] group_sum_q30;
+    logic signed [63:0] mean_q30;
+    logic signed [63:0] deviation_q30;
+    logic [63:0] square_sum_q60;
+    logic signed [31:0] minimum_q30;
+    logic signed [31:0] maximum_q30;
     logic signed [63:0] cluster_difference_q30;
 
-    group_sum_q30 = 64'sd0;
-    for (int group = 0; group < 4; group = group + 1)
-      group_sum_q30 = group_sum_q30 + pair_group_q30[group];
-    pair_coherence_q30 = round_div_s64(group_sum_q30, 4);
-    cluster_coherence_q30 = round_div_s64(
-      cluster_group_q30[0] + cluster_group_q30[1],
-      2
-    );
-    global_coherence_q30 = coherence_value_q30[6];
-
-    cluster_difference_q30 = cluster_group_q30[0] - cluster_group_q30[1];
-    if (cluster_difference_q30 < 0)
-      cluster_difference_q30 = -cluster_difference_q30;
-    organization_dispersion_q30 = round_div_s64(cluster_difference_q30, 2);
+    level_mean_coherence_q30 = '0;
+    level_min_coherence_q30 = '0;
+    level_max_coherence_q30 = '0;
+    for (int level = 1; level <= DEPTH; level++) begin
+      group_sum_q30 = 64'sd0;
+      minimum_q30 = FRP_M31_Q30_ONE;
+      maximum_q30 = 32'sd0;
+      for (int group = 0; group < (CELLS >> level); group++) begin
+        group_sum_q30 += 64'(coherence_value_q30[CELLS-(CELLS >> (level-1))+group]);
+        if (coherence_value_q30[CELLS-(CELLS >> (level-1))+group] < minimum_q30)
+          minimum_q30 = coherence_value_q30[CELLS-(CELLS >> (level-1))+group];
+        if (coherence_value_q30[CELLS-(CELLS >> (level-1))+group] > maximum_q30)
+          maximum_q30 = coherence_value_q30[CELLS-(CELLS >> (level-1))+group];
+      end
+      mean_q30 = round_div_s64(group_sum_q30, CELLS >> level);
+      square_sum_q60 = 64'd0;
+      for (int group = 0; group < (CELLS >> level); group++) begin
+        deviation_q30 = 64'(coherence_value_q30[CELLS-(CELLS >> (level-1))+group]) - mean_q30;
+        square_sum_q60 += 64'(deviation_q30 * deviation_q30);
+      end
+      level_variance_q60[level-1] = square_sum_q60 / 64'(CELLS >> level);
+      level_mean_coherence_q30[(level-1)*32 +: 32] = 32'(mean_q30);
+      level_min_coherence_q30[(level-1)*32 +: 32] = minimum_q30;
+      level_max_coherence_q30[(level-1)*32 +: 32] = maximum_q30;
+    end
+    pair_coherence_q30 = level_mean_coherence_q30[0 +: 32];
+    cluster_coherence_q30 = level_mean_coherence_q30[32 +: 32];
+    global_coherence_q30 = coherence_value_q30[GROUPS-1];
+    cluster_difference_q30 = 64'(coherence_value_q30[PAIRS]) -
+                             64'(coherence_value_q30[PAIRS+1]);
+    if (cluster_difference_q30 < 0) cluster_difference_q30 = -cluster_difference_q30;
+    if (CELLS == 8)
+      organization_dispersion_q30 = 32'(round_div_s64(cluster_difference_q30, 2));
+    else
+      organization_dispersion_q30 = $signed(level_dispersion_q30[32 +: 32]);
   end
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       for (int cell_index = 0; cell_index < CELLS; cell_index = cell_index + 1) begin
-        phase_q[cell_index] <= cell_index * 32'h20000000;
+        phase_q[cell_index] <= 32'(cell_index) * RESET_PHASE_STEP;
         frequency_q[cell_index] <= FRP_M31_BASE_FREQUENCY_Q16;
       end
     end else if (load_valid) begin
