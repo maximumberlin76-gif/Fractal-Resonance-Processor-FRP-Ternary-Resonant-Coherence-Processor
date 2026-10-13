@@ -14,6 +14,7 @@
 `include "frp_m31_local_gamma_drift.sv"
 `include "frp_m31_local_thermal_attenuation.sv"
 `include "frp_m31_stability.sv"
+`include "frp_m31_global_stability.sv"
 
 module frp_m32_core #(
   parameter int CELLS = 8,
@@ -167,7 +168,25 @@ module frp_m32_core #(
   output wire [($clog2(CELLS)*32)-1:0] level_mean_coherence_q30,
   output wire [($clog2(CELLS)*32)-1:0] level_min_coherence_q30,
   output wire [($clog2(CELLS)*32)-1:0] level_max_coherence_q30,
-  output wire [($clog2(CELLS)*32)-1:0] level_dispersion_q30
+  output wire [($clog2(CELLS)*32)-1:0] level_dispersion_q30,
+
+  output wire signed [31:0] local_coherence_compression_q30,
+  output wire signed [31:0] local_effective_coherence_q30,
+  output wire signed [31:0] local_coherence_capacity_q16,
+  output wire signed [31:0] local_pressure_q16,
+  output wire signed [31:0] local_stability_margin_q16,
+  output wire local_stable,
+  output wire signed [31:0] local_previous_margin_q16,
+  output logic local_stability_valid_q,
+  output logic [31:0] local_stability_sample_count_q,
+  output logic signed [31:0] local_stability_raw_coherence_q30,
+  output logic signed [31:0] local_stability_cluster_coherence_q30,
+  output logic signed [31:0] local_stability_mean_heat_q16,
+  output logic signed [31:0] local_stability_mean_overload_q16,
+  output logic signed [31:0] local_stability_mean_lag_q16,
+  output logic signed [31:0] local_stability_neutral_fraction_q30,
+  output logic signed [31:0] local_stability_compression_arg_q16,
+  output logic signed [31:0] local_stability_switch_load_q16
 );
 
   logic [63:0] normalized_cycle_cost_wide;
@@ -433,6 +452,90 @@ module frp_m32_core #(
     .pressure_q16(pressure_q16),
     .stability_margin_q16(stability_margin_q16),
     .stable(stable)
+  );
+
+  // Local stability consumes the completed snapshot from the preceding edge.
+  // Phase, retained state and local heat are registered by their source blocks.
+  // Capture the pre-edge lag and switch load that produced that thermal sample.
+  // A pending snapshot commits on the following edge even if tick_enable is low.
+  // A phase-only load creates no sample; clear_counters leaves this history intact.
+  // local_stability_valid_q identifies each result; the sample count wraps at 2^32.
+  logic local_stability_pending_q;
+  logic [(CELLS*32)-1:0] local_stability_lag_snapshot_q16;
+  logic signed [31:0] local_stability_switch_snapshot_q16;
+  wire signed [31:0] stability_mean_heat_d;
+  wire signed [31:0] stability_mean_overload_d;
+  wire signed [31:0] stability_mean_lag_d;
+  wire signed [31:0] stability_neutral_fraction_d;
+  wire signed [31:0] stability_compression_arg_d;
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      local_stability_pending_q <= 1'b0;
+      local_stability_lag_snapshot_q16 <= '0;
+      local_stability_switch_snapshot_q16 <= 32'sd0;
+      local_stability_valid_q <= 1'b0;
+      local_stability_sample_count_q <= 32'd0;
+      local_stability_raw_coherence_q30 <= 32'sd0;
+      local_stability_cluster_coherence_q30 <= 32'sd0;
+      local_stability_mean_heat_q16 <= 32'sd3277;
+      local_stability_mean_overload_q16 <= 32'sd0;
+      local_stability_mean_lag_q16 <= 32'sd0;
+      local_stability_neutral_fraction_q30 <= 32'sd1073741824;
+      local_stability_compression_arg_q16 <= 32'sd0;
+      local_stability_switch_load_q16 <= 32'sd0;
+    end else begin
+      local_stability_pending_q <= tick_enable;
+      local_stability_valid_q <= local_stability_pending_q;
+      if (tick_enable) begin
+        local_stability_lag_snapshot_q16 <= local_frequency_lag_q16;
+        local_stability_switch_snapshot_q16 <= normalized_cycle_cost_q16;
+      end
+      if (local_stability_pending_q) begin
+        local_stability_sample_count_q <= local_stability_sample_count_q + 32'd1;
+        local_stability_raw_coherence_q30 <= global_coherence_q30;
+        local_stability_cluster_coherence_q30 <= cluster_coherence_q30;
+        local_stability_mean_heat_q16 <= stability_mean_heat_d;
+        local_stability_mean_overload_q16 <= stability_mean_overload_d;
+        local_stability_mean_lag_q16 <= stability_mean_lag_d;
+        local_stability_neutral_fraction_q30 <= stability_neutral_fraction_d;
+        local_stability_compression_arg_q16 <= stability_compression_arg_d;
+        local_stability_switch_load_q16 <= local_stability_switch_snapshot_q16;
+      end
+    end
+  end
+
+  frp_m31_global_stability #(
+    .CELLS(CELLS)
+  ) u_local_global_stability (
+    .clk(clk),
+    .rst_n(rst_n),
+    .tick_enable(local_stability_pending_q),
+    .retained_state(state_out),
+    .raw_phase_coherence_q30(global_coherence_q30),
+    .cluster_coherence_q30(cluster_coherence_q30),
+    .heat_q16(local_heat_q16),
+    .thermal_overload_q16(local_thermal_overload_q16),
+    .frequency_lag_q16(local_stability_lag_snapshot_q16),
+    .switch_load_q16(local_stability_switch_snapshot_q16),
+    .mean_heat_q16(stability_mean_heat_d),
+    .mean_thermal_overload_q16(stability_mean_overload_d),
+    .mean_frequency_lag_q16(stability_mean_lag_d),
+    .neutral_fraction_q30(stability_neutral_fraction_d),
+    .compression_arg_q16(stability_compression_arg_d),
+    .next_coherence_compression_q30(),
+    .next_effective_coherence_q30(),
+    .next_coherence_capacity_q16(),
+    .next_pressure_q16(),
+    .next_stability_margin_q16(),
+    .next_stable(),
+    .coherence_compression_q30(local_coherence_compression_q30),
+    .effective_coherence_q30(local_effective_coherence_q30),
+    .coherence_capacity_q16(local_coherence_capacity_q16),
+    .pressure_q16(local_pressure_q16),
+    .stability_margin_q16(local_stability_margin_q16),
+    .stable(local_stable),
+    .previous_margin_q16(local_previous_margin_q16)
   );
 
 endmodule
