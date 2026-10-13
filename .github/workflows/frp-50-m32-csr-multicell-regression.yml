@@ -1,0 +1,477 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# Dependencies retain their own licenses.
+name: 50 - FRP M32 CSR Multicell Regression
+run-name: "50 - FRP CSR | 8/16/32 cells and 72 profiles @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-50-csr-multicell-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Prepare evidence and pinned simulator
+        run: |
+          set -euo pipefail
+          export FRP50_EVIDENCE="$RUNNER_TEMP/frp-50-evidence"
+          mkdir -p "$FRP50_EVIDENCE"
+          printf '%s\n' "FRP50_EVIDENCE=$FRP50_EVIDENCE" >> "$GITHUB_ENV"
+          python -m pip install --disable-pip-version-check \
+            verilator==5.48.0 systemc==3.0.2.1 click==8.5.0 platformdirs==4.13.0 \
+            2>&1 | tee "$FRP50_EVIDENCE/install.log"
+          python -m pip freeze > "$FRP50_EVIDENCE/packages.txt"
+      - name: Record source identities and tools
+        run: |
+          set -euo pipefail
+          cat > "$FRP50_EVIDENCE/common.py" <<'FRP50_EOF'
+          from pathlib import Path
+          import os,re,json,hashlib,subprocess,shutil
+          R=Path.cwd();B=Path(os.environ['FRP50_EVIDENCE'])
+          def save(name,value):
+           (B/name).write_text(json.dumps(value,indent=2)+'\n')
+          def run(args,name,timeout=900):
+           print('RUN',name,flush=True)
+           path=B/(name+'.log')
+           with path.open('w') as log:
+            try:
+             result=subprocess.run(args,cwd=R,stdout=log,stderr=subprocess.STDOUT,text=True,timeout=timeout)
+            except subprocess.TimeoutExpired:
+             log.write('\nTIMEOUT\n');raise
+           text=path.read_text()
+           if result.returncode:
+            print(text[-12000:],flush=True)
+            raise RuntimeError((name,result.returncode))
+           print(text[-1200:],flush=True)
+           return text
+          FLAGS=['-Wno-fatal','-j','2','-MAKEFLAGS','VK_PCH_I_FAST=',
+                 '-MAKEFLAGS','VK_PCH_I_SLOW=','-MAKEFLAGS','OPT_FAST=-O1']
+          INCLUDES=['-I'+p for p in ['rtl/m22','rtl/m31','rtl/m32','fpga/m32','fpga/m32_csr']]
+          def timed(top,source,name,cells=None):
+           obj=B/(name+'-obj')
+           parameters=[] if cells is None else [f'-GCELLS={cells}']
+           run(['verilator-cli','--binary','--timing','--assert',*FLAGS,
+                '--top-module',top,'--Mdir',str(obj),*parameters,*INCLUDES,str(source)],name+'-build')
+           text=run([str(obj/('V'+top))],name+'-run')
+           shutil.rmtree(obj)
+           return text
+          FRP50_EOF
+          cat > "$FRP50_EVIDENCE/manifest.py" <<'FRP50_EOF'
+          from common import *
+          import importlib.metadata as md
+          files=sorted({p for folder in ['rtl/m22','rtl/m31','rtl/m32','fpga/m32','fpga/m32_csr']
+                        for p in (R/folder).glob('*.sv')})
+          files += [R/'rtl/m31/frp_m31_sin_q30.mem',
+                    R/'.github/workflows/frp-50-m32-csr-multicell-regression.yml']
+          assert all(p.is_file() for p in files)
+          save('sources.json',{'commit':os.environ['GITHUB_SHA'],
+           'files':{str(p.relative_to(R)):hashlib.sha256(p.read_bytes()).hexdigest() for p in files}})
+          save('versions.json',{n:md.version(n) for n in ['verilator','systemc']})
+          run(['verilator-cli','--version'],'verilator-version')
+          run(['c++','--version'],'compiler-version')
+          FRP50_EOF
+          python "$FRP50_EVIDENCE/manifest.py" 2>&1 | tee "$FRP50_EVIDENCE/manifest.py.log"
+      - name: Run CSR profiles for 8 16 and 32 cells
+        run: |
+          set -euo pipefail
+          cat > "$FRP50_EVIDENCE/csr_stability_tb.sv" <<'FRP50_EOF'
+          `timescale 1ns/1ps
+          `include "frp_m32_csr_top.sv"
+          module csr_stability_tb #(parameter int CELLS=8);
+           localparam int LANES=CELLS/4, IDX=$clog2(CELLS), LEVELS=$clog2(CELLS), WORDS=(CELLS*2+31)/32;
+           logic [63:0] saved_phase=0,saved_exec=0,saved_target=0;
+           int scale_reads=0, cell_reads=0, route_samples=0;
+           logic clk=0; always #5 clk=~clk;
+           logic rst_n_async=1,csr_valid=0,csr_write=0;
+           logic [7:0] csr_addr=0;
+           logic [31:0] csr_wdata=0,csr_rdata;
+           logic csr_ready,csr_error;
+           frp_m32_csr_top #(.CELLS(CELLS)) dut(.*);
+           int reads=0,errors=0,ticks=0,commits=0,profiles=0,checks=0;
+           int count_model=0;
+           bit pending=0, valid_model=0;
+           logic [1:0] reset_model=0;
+           always @(posedge clk or negedge rst_n_async) begin
+             if (!rst_n_async) reset_model <= 0;
+             else reset_model <= {reset_model[0],1'b1};
+           end
+           always @(posedge clk) begin
+             if (!reset_model[1]) begin count_model=0;pending=0;valid_model=0;end
+             else begin
+               valid_model=pending;
+               if(pending) begin count_model++;commits++;end
+               pending=csr_valid && csr_write && csr_addr==0 && (csr_wdata==1 || csr_wdata==512);
+             end
+             if(!reset_model[1] || (csr_valid && csr_write && csr_addr==0 && csr_wdata==2)) begin
+               saved_phase=0;saved_exec=0;saved_target=0;
+             end else if(pending) begin
+               saved_phase=64'({dut.u_fpga.u_m32_core.phase_request_target,dut.u_fpga.u_m32_core.phase_request_cell_index,dut.u_fpga.u_m32_core.phase_request_valid});
+               saved_exec=64'({dut.u_fpga.u_m32_core.execution_request_target,dut.u_fpga.u_m32_core.execution_request_cell_index,dut.u_fpga.u_m32_core.execution_request_valid});
+               saved_target=64'(dut.u_fpga.u_m32_core.execution_target_bank);
+             end
+             #1;
+             if(dut.local_stability_sample_count_q!==32'(count_model))
+               $fatal(1,"count got=%0d exp=%0d",dut.local_stability_sample_count_q,count_model);
+             if(dut.u_fpga.actual_direct_events!=0 || dut.u_fpga.reserved_state_events!=0)
+               $fatal(1,"state invariant");
+             if(dut.local_stability_valid_q !== valid_model) $fatal(1,"sample-valid timing");
+             if((dut.local_page_q && dut.stability_page_q) || (dut.scale_page_q && (dut.local_page_q || dut.stability_page_q))) $fatal(1,"page exclusivity");
+             checks++;
+           end
+           task automatic transfer(input bit w,input int a,input logic[31:0] data,input bit err);
+             @(negedge clk);csr_valid=1;csr_write=w;csr_addr=8'(a);csr_wdata=data;
+             #1;
+             if(!csr_ready || csr_error!==err) $fatal(1,"bus a=%h w=%b err=%b expected=%b",a,w,csr_error,err);
+             if((w||err) && csr_rdata!==0) $fatal(1,"nonzero error/write data");
+             if(err) errors++;
+             @(posedge clk);#2;
+             csr_valid=0;
+           endtask
+           task automatic wr(input int a,input logic[31:0] d);transfer(1,a,d,0);endtask
+           task automatic rd(input int a,input logic[31:0] expected);
+             @(negedge clk);csr_valid=1;csr_write=0;csr_addr=8'(a);csr_wdata=0;#1;
+             if(!csr_ready || csr_error || csr_rdata!==expected)
+               $fatal(1,"read a=%h got=%h expected=%h error=%b",a,csr_rdata,expected,csr_error);
+             reads++;@(posedge clk);#2;csr_valid=0;
+           endtask
+           function automatic logic[31:0] expected(input int a);
+             case(a)
+                'h68: expected=32'(dut.u_fpga.u_m32_core.local_coherence_compression_q30);
+                'h6c: expected=32'(dut.u_fpga.u_m32_core.local_effective_coherence_q30);
+                'h70: expected=32'(dut.u_fpga.u_m32_core.local_coherence_capacity_q16);
+                'h74: expected=32'(dut.u_fpga.u_m32_core.local_pressure_q16);
+                'h78: expected=32'(dut.u_fpga.u_m32_core.local_stability_margin_q16);
+                'h7c: expected=32'(dut.u_fpga.u_m32_core.local_stable);
+                'h80: expected=32'(dut.u_fpga.u_m32_core.local_previous_margin_q16);
+                'h84: expected=32'(dut.u_fpga.u_m32_core.local_stability_valid_q);
+                'h88: expected=32'(dut.u_fpga.u_m32_core.local_stability_sample_count_q);
+                'h8c: expected=32'(dut.u_fpga.u_m32_core.local_stability_raw_coherence_q30);
+                'h90: expected=32'(dut.u_fpga.u_m32_core.local_stability_cluster_coherence_q30);
+                'h94: expected=32'(dut.u_fpga.u_m32_core.local_stability_mean_heat_q16);
+                'h98: expected=32'(dut.u_fpga.u_m32_core.local_stability_mean_overload_q16);
+                'h9c: expected=32'(dut.u_fpga.u_m32_core.local_stability_mean_lag_q16);
+                'ha0: expected=32'(dut.u_fpga.u_m32_core.local_stability_neutral_fraction_q30);
+                'ha4: expected=32'(dut.u_fpga.u_m32_core.local_stability_compression_arg_q16);
+                'ha8: expected=32'(dut.u_fpga.u_m32_core.local_stability_switch_load_q16);
+                'hac: expected=dut.u_fpga.u_m32_core.group_coherence_q30[0 +: 32];
+                'hb0: expected=dut.u_fpga.u_m32_core.group_coherence_q30[32 +: 32];
+                'hb4: expected=dut.u_fpga.u_m32_core.group_coherence_q30[64 +: 32];
+                'hb8: expected=dut.u_fpga.u_m32_core.group_coherence_q30[96 +: 32];
+                'hbc: expected=dut.u_fpga.u_m32_core.group_coherence_q30[128 +: 32];
+                'hc0: expected=dut.u_fpga.u_m32_core.group_coherence_q30[160 +: 32];
+                'hc4: expected=dut.u_fpga.u_m32_core.group_coherence_q30[192 +: 32];
+                'hc8: expected=dut.u_fpga.u_m32_core.level_mean_coherence_q30[0 +: 32];
+                'hcc: expected=dut.u_fpga.u_m32_core.level_mean_coherence_q30[32 +: 32];
+                'hd0: expected=dut.u_fpga.u_m32_core.level_mean_coherence_q30[64 +: 32];
+                'hd4: expected=dut.u_fpga.u_m32_core.level_min_coherence_q30[0 +: 32];
+                'hd8: expected=dut.u_fpga.u_m32_core.level_min_coherence_q30[32 +: 32];
+                'hdc: expected=dut.u_fpga.u_m32_core.level_min_coherence_q30[64 +: 32];
+                'he0: expected=dut.u_fpga.u_m32_core.level_max_coherence_q30[0 +: 32];
+                'he4: expected=dut.u_fpga.u_m32_core.level_max_coherence_q30[32 +: 32];
+                'he8: expected=dut.u_fpga.u_m32_core.level_max_coherence_q30[64 +: 32];
+                'hec: expected=dut.u_fpga.u_m32_core.level_dispersion_q30[0 +: 32];
+                'hf0: expected=dut.u_fpga.u_m32_core.level_dispersion_q30[32 +: 32];
+                'hf4: expected=dut.u_fpga.u_m32_core.level_dispersion_q30[64 +: 32];
+
+                'hfc:expected='h46523203;
+                default:expected=0;
+             endcase
+           endfunction
+           task automatic inspect_scale;
+             logic[63:0] full;
+             logic[31:0] old_ticks;
+             old_ticks=dut.ticks_recorded_q;
+             wr(0,260);rd('hfc,'h46523204);
+             rd('h68,32'(CELLS));rd('h6c,32'(LANES));rd('h70,32'(IDX));rd('h74,32);
+             rd('h78,32'(LEVELS));rd('h7c,32'(CELLS-1));rd('ha4,32'(LANES*(IDX+3)));rd('ha8,32'(CELLS*2));
+             for(int g=0;g<CELLS-1;g++) begin
+               wr('h84,32'(g));rd('h84,32'(g));rd('h88,dut.u_fpga.u_m32_core.group_coherence_q30[g*32 +:32]);scale_reads++;
+             end
+             for(int l=0;l<LEVELS;l++) begin
+               wr('h8c,32'(l));rd('h8c,32'(l));rd('ha0,32'(2<<l));
+               rd('h90,dut.u_fpga.u_m32_core.level_mean_coherence_q30[l*32 +:32]);
+               rd('h94,dut.u_fpga.u_m32_core.level_min_coherence_q30[l*32 +:32]);
+               rd('h98,dut.u_fpga.u_m32_core.level_max_coherence_q30[l*32 +:32]);
+               rd('h9c,dut.u_fpga.u_m32_core.level_dispersion_q30[l*32 +:32]);scale_reads+=4;
+             end
+             for(int w=0;w<WORDS;w++) begin
+               wr('h80,32'(w));rd('h80,32'(w));
+               full=64'(dut.u_fpga.u_m32_core.state_out);rd('hb0,full[w*32+:32]);
+               full=64'(dut.u_fpga.u_m32_core.pending_route_out);rd('hb4,full[w*32+:32]);
+               full=64'(dut.u_fpga.u_m32_core.registered_target_q);rd('hb8,full[w*32+:32]);
+               full=64'(dut.u_fpga.u_m32_core.phase_target_source);rd('hbc,full[w*32+:32]);
+               rd('hac,saved_target[w*32+:32]);rd('hc0,saved_phase[w*32+:32]);rd('hc4,saved_exec[w*32+:32]);scale_reads+=7;
+               wr(0,256);rd('hf0,saved_phase[w*32+:32]);rd('hf4,saved_exec[w*32+:32]);rd('hf8,saved_target[w*32+:32]);
+               wr(0,260);
+             end
+             transfer(1,'h80,32'(WORDS),1);rd('h80,32'(WORDS-1));
+             transfer(1,'h84,32'(CELLS-1),1);rd('h84,32'(CELLS-2));
+             transfer(1,'h8c,32'(LEVELS),1);rd('h8c,32'(LEVELS-1));
+             wr('h80,0);rd('h28,old_ticks);
+             wr(0,258);
+           endtask
+           task automatic routes;
+             reset();
+             for(int batch=0;batch<4;batch++) begin
+               for(int step_index=0;step_index<5;step_index++) begin
+                 for(int lane=0;lane<LANES;lane++) begin
+                   wr(8,32'(lane));wr(12,32'(batch*LANES+lane));wr(16,(step_index<1 || step_index>2)?1:3);wr(20,1);
+                   rd(8,32'(lane));rd(12,32'(batch*LANES+lane));
+                 end
+                 wr(0,1);ticks++;
+                 repeat(2) @(negedge clk);
+                 for(int lane=0;lane<LANES;lane++) begin
+                   wr('h18,32'(batch*LANES+lane));
+                   rd('h34,(step_index==0 || step_index==4)?1:((step_index==2)?3:0));
+                   rd('h38,(step_index==1)?3:((step_index==3)?1:0));route_samples++;
+                 end
+                 inspect_scale();
+                 wr(0,256);
+               end
+             end
+           endtask
+
+           task automatic inspect_cells;
+             for(int c=0;c<CELLS;c++) begin
+               wr(0,256);wr(24,32'(c));
+               rd('h7c,dut.u_fpga.u_m32_core.phase_word_q[c*32+:32]);
+               rd('h80,dut.u_fpga.u_m32_core.frequency_current_q16[c*32+:32]);
+               rd('h84,dut.u_fpga.u_m32_core.coupling_field_q16[c*32+:32]);
+               rd('h88,dut.u_fpga.u_m32_core.phase_projection_q30[c*32+:32]);
+               rd('h8c,32'(dut.u_fpga.u_m32_core.phase_target_source[c*2+:2]));
+               rd('h90,32'(dut.u_fpga.u_m32_core.registered_target_q[c*2+:2]));
+               wr(0,257);
+               rd('h6c,32'(c*1333-5000));rd('h70,32'(c*1333-5000));
+               rd('h70,dut.u_fpga.u_m32_core.local_gamma_noise_target_q16[c*32+:32]);
+               rd('h74,dut.u_fpga.u_m32_core.local_gamma_noise_state_q16[c*32+:32]);
+               rd('h78,dut.u_fpga.u_m32_core.local_gamma_drift_word[c*32+:32]);
+               rd('h7c,dut.u_fpga.u_m32_core.local_gamma_effective_word[c*32+:32]);
+               rd('h80,dut.u_fpga.u_m32_core.phase_gamma_effective_word[c*32+:32]);
+               rd('h84,dut.u_fpga.u_m32_core.local_heat_q16[c*32+:32]);
+               rd('h88,dut.u_fpga.u_m32_core.local_heat_peak_q16[c*32+:32]);
+               rd('h8c,dut.u_fpga.u_m32_core.local_generated_power_q16[c*32+:32]);
+               rd('h90,dut.u_fpga.u_m32_core.local_thermal_dissipation_q16[c*32+:32]);
+               rd('h94,dut.u_fpga.u_m32_core.local_thermal_diffusion_q16[c*32+:32]);
+               rd('h98,dut.u_fpga.u_m32_core.local_thermal_overload_q16[c*32+:32]);
+               rd('h9c,dut.u_fpga.u_m32_core.local_thermal_node_factor_q30[c*32+:32]);
+               rd('ha0,dut.u_fpga.u_m32_core.local_frequency_lag_q16[c*32+:32]);
+               rd('hb0,dut.u_fpga.u_m32_core.local_next_heat_q16[c*32+:32]);
+               rd('hb4,dut.u_fpga.u_m32_core.local_next_overload_q16[c*32+:32]);
+               rd('hb8,dut.u_fpga.u_m32_core.local_next_gamma_drift_word[c*32+:32]);
+               rd('hbc,dut.u_fpga.u_m32_core.local_next_gamma_effective_word[c*32+:32]);
+               rd('hc0,dut.u_fpga.u_m32_core.local_next_thermal_node_factor_q30[c*32+:32]);
+               rd('hc4,dut.u_fpga.u_m32_core.phase_thermal_node_factor_q30[c*32+:32]);
+               cell_reads+=27;
+             end
+             wr(0,258);
+           endtask
+           task automatic scan;
+             inspect_scale();
+             wr(0,258);
+             for(int a='h68;a<='hf4;a+=4) rd(a,expected(a));
+             rd('hfc,'h46523203);
+           endtask
+           task automatic reset;
+             @(negedge clk);rst_n_async=0;csr_valid=1;csr_write=1;csr_addr=0;csr_wdata=1;
+             #1;if(csr_ready || csr_error || csr_rdata!=0) $fatal(1,"reset bus");
+             @(negedge clk);rst_n_async=1;
+             #1;if(csr_ready) $fatal(1,"early release");
+             @(negedge clk);csr_valid=0;
+             repeat(3) @(negedge clk);
+             rd('hfc,'h46523201);
+           endtask
+           logic [(CELLS*64)-1:0] retained;
+           logic [31:0] margin_saved,count_saved;
+           initial begin
+             routes();reset();
+             wr(0,260);
+             for(int a=0;a<256;a++) begin
+               if(a%4!=0) begin transfer(0,a,0,1);transfer(1,a,0,1);end
+               else if(a>=104) begin
+                 if(a!='h80 && a!='h84 && a!='h8c) transfer(1,a,0,1);
+                 if(a>='hd0 && a<'hfc) transfer(0,a,0,1);
+               end
+             end
+             transfer(1,8,32'(LANES),1);transfer(1,12,32'(CELLS),1);transfer(1,24,32'(CELLS),1);
+             transfer(1,'h80,'hffffffff,1);transfer(1,'h84,'hffffffff,1);transfer(1,'h8c,'hffffffff,1);
+             for(int page=0;page<3;page++) begin
+               wr(0,256+page);
+               rd('hfc,'h46523201+page);
+               for(int a=0;a<256;a++) begin
+                 if(a%4!=0) begin transfer(0,a,0,1);transfer(1,a,'hdeadbeef,1);end
+                 else if(a>=104) begin
+                   if(page==2 || (page==1 && a>=112) || (page==0 && a>=124))
+                     transfer(1,a,'hdeadbeef,1);
+                   if((page==1 && a>=200 && a<252) || (page==2 && a==248))
+                     transfer(0,a,0,1);
+                 end
+               end
+               transfer(0,0,0,1);
+               transfer(1,0,259,1);
+               transfer(1,0,'h80000102,1);
+               transfer(1,0,3,1);
+             end
+             for(int mode=0;mode<3;mode++)
+             for(int sources=0;sources<4;sources++)
+             for(int auto_mode=0;auto_mode<2;auto_mode++) begin
+               reset();profiles++;
+               wr(4,32'(mode));
+               wr('h68,32'(auto_mode));
+               for(int c=0;c<CELLS;c++) begin
+                 wr('h18,32'(c));
+                 wr('h6c,32'(c)*32'h20000000+32'(sources)*32'h073abcd1);
+                 wr('h70,65536+32'(c*1000-3500));
+                 wr('h74,32'h26666666+32'(c*12345));
+                 wr('h78,32'h40000000-32'(c*65536));
+                 rd('h6c,32'(c)*32'h20000000+32'(sources)*32'h073abcd1);
+                 rd('h70,65536+32'(c*1000-3500));
+                 rd('h74,32'h26666666+32'(c*12345));
+                 rd('h78,32'h40000000-32'(c*65536));
+               end
+               wr(0,8);
+               for(int c=0;c<CELLS;c++) begin
+                 wr('h18,32'(c));
+                 rd('h7c,32'(c)*32'h20000000+32'(sources)*32'h073abcd1);
+                 rd('h80,65536+32'(c*1000-3500));
+               end
+               wr(0,257);wr('h68,32'(sources));
+               for(int c=0;c<CELLS;c++) begin wr('h18,32'(c));wr('h6c,32'(c*1333-5000));end
+               wr(0,258);
+               rd('h88,0);
+               for(int t=0;t<96;t++) begin
+                 for(int lane=0;lane<LANES;lane++) begin
+                   wr(8,32'(lane));wr(12,32'((t+lane*3)%CELLS));
+                   wr(16,(t%3==0)?0:((t%3==1)?1:3));wr(20,1);
+                 end
+                 wr(0,(t%7==0)?512:1);ticks++;
+                 if(t%8==0) begin
+                   // A held-valid burst causes one accepted tick per rising edge.
+                   @(negedge clk);csr_valid=1;csr_write=1;csr_addr=0;csr_wdata=1;
+                   repeat(3) begin @(posedge clk);#2;ticks++;end
+                   csr_valid=0;
+                 end
+                 repeat(2) @(negedge clk);
+                 if(t%8==0) scan();
+                 if(t%13==0) begin
+                   margin_saved=dut.local_previous_margin_q16;
+                   count_saved=dut.local_stability_sample_count_q;
+                   wr(0,2);rd('h88,count_saved);rd('h80,margin_saved);
+                   wr(0,4);rd('h88,count_saved);
+                 end
+               end
+               scan();inspect_cells();
+               count_saved=dut.local_stability_sample_count_q;
+               margin_saved=dut.local_previous_margin_q16;
+               retained={dut.gamma_targets_q,dut.phase_load_q};
+               for(int a=104;a<256;a+=4) transfer(1,a,32'(a),1);
+               if(retained!=={dut.gamma_targets_q,dut.phase_load_q}) $fatal(1,"RO write mutated staging");
+               rd('h88,count_saved);rd('h80,margin_saved);
+               wr(0,257);rd('h68,32'(sources));rd('hfc,'h46523202);
+               wr(0,256);rd('h68,32'(auto_mode));rd('hfc,'h46523201);
+               wr(0,258);rd('h88,count_saved);
+               wr(0,8);repeat(2) @(negedge clk);rd('h88,count_saved);
+             end
+             reset();
+             wr(0,260);rd('h80,0);rd('h84,0);rd('h8c,0);
+             scan();rd('h88,0);
+             if(ticks!=commits) $fatal(1,"tick/commit mismatch %0d/%0d",ticks,commits);
+             if(route_samples!=CELLS*5 || cell_reads!=CELLS*24*27) $fatal(1,"coverage count");
+             $display("PASS CSR cells=%0d profiles=%0d ticks=%0d commits=%0d reads=%0d scale_reads=%0d rejected=%0d cycles=%0d cell_reads=%0d route_samples=%0d",CELLS,profiles,ticks,commits,reads,scale_reads,errors,checks,cell_reads,route_samples);
+             $finish;
+           end
+           initial begin #10000000;$fatal(1,"timeout");end
+          endmodule
+          FRP50_EOF
+          cat > "$FRP50_EVIDENCE/simulate.py" <<'FRP50_EOF'
+          from common import *
+          results={}
+          pattern=(r'PASS CSR cells=(\d+) profiles=(\d+) ticks=(\d+) commits=(\d+) '
+           r'reads=(\d+) scale_reads=(\d+) rejected=(\d+) cycles=(\d+) '
+           r'cell_reads=(\d+) route_samples=(\d+)')
+          keys=['cells','profiles','ticks','commits','reads','scale_reads','rejected',
+                'cycles','cell_reads','route_samples']
+          for n in (8,16,32):
+           log=timed('csr_stability_tb',B/'csr_stability_tb.sv',f'csr-{n}',n)
+           matches=re.findall(pattern,log)
+           assert len(matches)==1,log
+           result=dict(zip(keys,map(int,matches[0])))
+           assert result['cells']==n and result['profiles']==24,result
+           assert result['ticks']==result['commits']==3188,result
+           assert result['route_samples']==n*5,result
+           assert result['cell_reads']==n*24*27,result
+           assert result['scale_reads']>=8658 and result['rejected']>=3632,result
+           assert result['reads']>result['cell_reads']+result['scale_reads'],result
+           results[str(n)]=result
+           save('csr-results.json',results)
+          log=timed('frp_m32_csr_tb',R/'fpga/m32_csr/frp_m32_csr_tb.sv','csr-legacy')
+          assert 'PASS checks=6905 ticks=306 rejected_transfers=449 core_outputs=59' in log,log
+          save('legacy-results.json',{'csr':'PASS','checks':6905,'ticks':306,'rejected':449})
+          FRP50_EOF
+          python "$FRP50_EVIDENCE/simulate.py" 2>&1 | tee "$FRP50_EVIDENCE/simulate.py.log"
+      - name: Require complete results and unchanged sources
+        run: |
+          set -euo pipefail
+          cat > "$FRP50_EVIDENCE/summary.py" <<'FRP50_EOF'
+          from common import *
+          read=lambda n:json.loads((B/n).read_text())
+          manifest=read('sources.json')
+          for p,h in manifest['files'].items():
+           assert hashlib.sha256((R/p).read_bytes()).hexdigest()==h,p
+          csr=read('csr-results.json');legacy=read('legacy-results.json')
+          assert set(csr)=={'8','16','32'} and legacy['csr']=='PASS'
+          assert all(v['profiles']==24 and v['ticks']==v['commits']==3188 for v in csr.values())
+          for n in (8,16,32):
+           assert csr[str(n)]['cell_reads']==n*24*27 and csr[str(n)]['route_samples']==n*5
+          names=['profiles','ticks','commits','reads','scale_reads','rejected','cycles','cell_reads','route_samples']
+          totals={k:sum(v[k] for v in csr.values()) for k in names}
+          save('result.json',{'result':'PASS','commit':manifest['commit'],'csr':csr,'totals':totals,'legacy':legacy})
+          lines=['## FRP M32 CSR multicell regression: PASS','',
+           'Commit: `'+manifest['commit']+'`','',
+           '| Cells | Profiles | Ticks / commits | Reads | Cell telemetry reads | Route samples | Rejected |',
+           '|---|---|---|---|---|---|---|']
+          for n in ('8','16','32'):
+           v=csr[n]
+           lines.append(f"| {n} | {v['profiles']} | {v['ticks']} / {v['commits']} | {v['reads']} | {v['cell_reads']} | {v['route_samples']} | {v['rejected']} |")
+          lines += ['', 'Schedulers: free, 7/1, 1/7; four gamma/thermal source selections; manual/automatic targets.',
+           'Checks include every cell and request lane, active-zero routes, all dyadic groups and levels,',
+           'both words of 64-bit banks, staged loads, reset, held-valid ticks, and rejected transactions.',
+           'Existing CSR testbench: PASS (6905 checks).',
+           'Source hashes, generated testbench, tool versions and logs are attached.','']
+          text='\n'.join(lines)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write(text)
+          print(text)
+          FRP50_EOF
+          python "$FRP50_EVIDENCE/summary.py" 2>&1 | tee "$FRP50_EVIDENCE/summary.py.log"
+      - name: Upload logs and reproducibility records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-50-csr-multicell-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/frp-50-evidence/*.log
+            ${{ runner.temp }}/frp-50-evidence/*.json
+            ${{ runner.temp }}/frp-50-evidence/*.txt
+            ${{ runner.temp }}/frp-50-evidence/*.py
+            ${{ runner.temp }}/frp-50-evidence/*.sv
+          if-no-files-found: error
+          retention-days: 30
