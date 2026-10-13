@@ -1,0 +1,185 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# Dependencies retain their own licenses.
+name: 51 - FRP M32 CSR Register Model Regression
+run-name: "51 - FRP CSR | 8/16/32 cells and register model @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-51-csr-multicell-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Prepare evidence and pinned simulator
+        run: |
+          set -euo pipefail
+          export FRP51_EVIDENCE="$RUNNER_TEMP/frp-51-evidence"
+          mkdir -p "$FRP51_EVIDENCE"
+          printf '%s\n' "FRP51_EVIDENCE=$FRP51_EVIDENCE" >> "$GITHUB_ENV"
+          python -m pip install --disable-pip-version-check \
+            verilator==5.48.0 systemc==3.0.2.1 click==8.5.0 platformdirs==4.13.0 \
+            2>&1 | tee "$FRP51_EVIDENCE/install.log"
+          python -m pip freeze > "$FRP51_EVIDENCE/packages.txt"
+      - name: Record source identities and tools
+        run: |
+          set -euo pipefail
+          cat > "$FRP51_EVIDENCE/common.py" <<'FRP51_EOF'
+          from pathlib import Path
+          import os,re,json,hashlib,subprocess,shutil
+          R=Path.cwd();B=Path(os.environ['FRP51_EVIDENCE'])
+          def save(name,value):
+           (B/name).write_text(json.dumps(value,indent=2)+'\n')
+          def run(args,name,timeout=900):
+           print('RUN',name,flush=True)
+           path=B/(name+'.log')
+           with path.open('w') as log:
+            try:
+             result=subprocess.run(args,cwd=R,stdout=log,stderr=subprocess.STDOUT,text=True,timeout=timeout)
+            except subprocess.TimeoutExpired:
+             log.write('\nTIMEOUT\n');raise
+           text=path.read_text()
+           if result.returncode:
+            print(text[-12000:],flush=True)
+            raise RuntimeError((name,result.returncode))
+           print(text[-1200:],flush=True)
+           return text
+          FLAGS=['-Wno-fatal','-j','2','-MAKEFLAGS','VK_PCH_I_FAST=',
+                 '-MAKEFLAGS','VK_PCH_I_SLOW=','-MAKEFLAGS','OPT_FAST=-O1']
+          INCLUDES=['-I'+p for p in ['rtl/m22','rtl/m31','rtl/m32','fpga/m32','fpga/m32_csr']]
+          def timed(top,source,name,cells=None):
+           obj=B/(name+'-obj')
+           parameters=[] if cells is None else [f'-GCELLS={cells}']
+           run(['verilator-cli','--binary','--timing','--assert',*FLAGS,
+                '--top-module',top,'--Mdir',str(obj),*parameters,*INCLUDES,str(source)],name+'-build')
+           text=run([str(obj/('V'+top))],name+'-run')
+           shutil.rmtree(obj)
+           return text
+          FRP51_EOF
+          cat > "$FRP51_EVIDENCE/manifest.py" <<'FRP51_EOF'
+          from common import *
+          import importlib.metadata as md
+          files=sorted({p for folder in ['rtl/m22','rtl/m31','rtl/m32','fpga/m32','fpga/m32_csr']
+                        for p in (R/folder).glob('*.sv')})
+          files += [R/'rtl/m31/frp_m31_sin_q30.mem',
+                    R/'.github/workflows/frp-51-m32-csr-register-model-regression.yml']
+          assert all(p.is_file() for p in files)
+          save('sources.json',{'commit':os.environ['GITHUB_SHA'],
+           'files':{str(p.relative_to(R)):hashlib.sha256(p.read_bytes()).hexdigest() for p in files}})
+          save('versions.json',{n:md.version(n) for n in ['verilator','systemc']})
+          run(['verilator-cli','--version'],'verilator-version')
+          run(['c++','--version'],'compiler-version')
+          FRP51_EOF
+          python "$FRP51_EVIDENCE/manifest.py" 2>&1 | tee "$FRP51_EVIDENCE/manifest.py.log"
+      - name: Run repository SystemVerilog testbench for 8 16 and 32 cells
+        run: |
+          set -euo pipefail
+          cat > "$FRP51_EVIDENCE/simulate.py" <<'FRP51_EOF'
+          from common import *
+          source=R/'fpga/m32_csr/frp_m32_csr_multicell_tb.sv'
+          assert source.is_file(),source
+          shutil.copy2(source,B/source.name)
+          keys=['cells','profiles','ticks','commits','reads','scale_reads','rejected',
+                'cycles','cell_reads','route_samples','random_writes','random_ticks',
+                'model_writes','model_reads','model_rejected','model_audits']
+          pattern=r'^PASS CSR '+r' '.join(k+r'=(\d+)' for k in keys)+r'$'
+          results={}
+          for n in (8,16,32):
+           log=timed('frp_m32_csr_multicell_tb',source,f'csr-{n}',n)
+           matches=re.findall(pattern,log,re.MULTILINE)
+           assert len(matches)==1,log
+           v=dict(zip(keys,map(int,matches[0])))
+           assert v['cells']==n and v['profiles']==24,v
+           assert v['ticks']==v['commits']==3222,v
+           assert v['cell_reads']==n*24*27 and v['route_samples']==n*5,v
+           assert v['random_writes']==2048 and v['random_ticks']==34,v
+           assert v['model_audits']==68,v
+           assert v['model_writes']>=3785 and v['model_reads']>=3876,v
+           assert v['model_rejected']>=1340 and v['rejected']>=4972,v
+           assert v['scale_reads']>=8658 and v['cycles']>=83963,v
+           assert v['reads']>=v['cell_reads']+v['scale_reads']+v['model_reads'],v
+           results[str(n)]=v
+           save('csr-results.json',results)
+          log=timed('frp_m32_csr_tb',R/'fpga/m32_csr/frp_m32_csr_tb.sv','csr-legacy')
+          signature='PASS checks=6905 ticks=306 rejected_transfers=449 core_outputs=59'
+          assert signature in log,log
+          save('legacy-results.json',{'result':'PASS','checks':6905,'ticks':306,'rejected':449})
+          FRP51_EOF
+          python "$FRP51_EVIDENCE/simulate.py" 2>&1 | tee "$FRP51_EVIDENCE/simulate.py.log"
+      - name: Require complete results and unchanged sources
+        run: |
+          set -euo pipefail
+          cat > "$FRP51_EVIDENCE/summary.py" <<'FRP51_EOF'
+          from common import *
+          read=lambda n:json.loads((B/n).read_text())
+          manifest=read('sources.json')
+          for p,h in manifest['files'].items():
+           assert hashlib.sha256((R/p).read_bytes()).hexdigest()==h,p
+          csr=read('csr-results.json');legacy=read('legacy-results.json')
+          assert set(csr)=={'8','16','32'} and legacy['result']=='PASS'
+          for n in (8,16,32):
+           v=csr[str(n)]
+           assert v['cells']==n and v['profiles']==24
+           assert v['ticks']==v['commits']==3222
+           assert v['random_writes']==2048 and v['model_audits']==68
+           assert v['cell_reads']==n*24*27 and v['route_samples']==n*5
+          names=[k for k in csr['8'] if k!='cells']
+          totals={k:sum(v[k] for v in csr.values()) for k in names}
+          assert totals['profiles']==72 and totals['random_writes']==6144
+          assert totals['ticks']==totals['commits']==9666
+          assert totals['model_audits']==204 and totals['route_samples']==280
+          save('result.json',{'result':'PASS','commit':manifest['commit'],
+                             'csr':csr,'totals':totals,'legacy':legacy})
+          lines=['## FRP M32 CSR register model regression: PASS','',
+           'Commit: `'+manifest['commit']+'`','',
+           '| Cells | Profiles | Ticks / commits | Reads | Random writes | Model audits |',
+           '|---|---|---|---|---|---|']
+          for n in ('8','16','32'):
+           v=csr[n]
+           lines.append(f"| {n} | {v['profiles']} | {v['ticks']} / {v['commits']} | {v['reads']} | {v['random_writes']} | {v['model_audits']} |")
+          lines += ['',
+           'Schedulers: free, 7/1, 1/7; four thermal/gamma source selections; manual/automatic targets.',
+           'Directed checks: active-zero routes, every cell and lane, dyadic groups and levels,',
+           'packed windows, staged loads, reset timing, held-valid ticks and rejected transactions.',
+           'The register model tracks accepted CSR writes in its own arrays and audits readback.',
+           'Telemetry checks compare CSR words with the corresponding core outputs.',
+           'Existing CSR testbench: PASS (6905 checks).',
+           'RTL simulation; source hashes, tool versions, testbench and logs are attached.','']
+          text='\n'.join(lines)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write(text)
+          print(text)
+          FRP51_EOF
+          python "$FRP51_EVIDENCE/summary.py" 2>&1 | tee "$FRP51_EVIDENCE/summary.py.log"
+      - name: Upload logs and reproducibility records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-51-csr-register-model-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/frp-51-evidence/*.log
+            ${{ runner.temp }}/frp-51-evidence/*.json
+            ${{ runner.temp }}/frp-51-evidence/*.txt
+            ${{ runner.temp }}/frp-51-evidence/*.py
+            ${{ runner.temp }}/frp-51-evidence/*.sv
+          if-no-files-found: error
+          retention-days: 30
