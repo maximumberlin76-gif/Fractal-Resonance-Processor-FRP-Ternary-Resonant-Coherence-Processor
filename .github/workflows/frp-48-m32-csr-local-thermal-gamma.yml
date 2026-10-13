@@ -1,0 +1,313 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# Dependencies retain their own licenses.
+name: 48 - FRP M32 CSR Local Thermal Gamma
+run-name: "48 - FRP CSR Thermal Gamma | RTL and 115 obligations @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-48-csr-local-thermal-gamma-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Prepare evidence and pinned tools
+        run: |
+          set -euo pipefail
+          export FRP48_EVIDENCE="$RUNNER_TEMP/frp-48-evidence"
+          mkdir -p "$FRP48_EVIDENCE"
+          printf '%s\n' "FRP48_EVIDENCE=$FRP48_EVIDENCE" >> "$GITHUB_ENV"
+          python -m pip install --disable-pip-version-check \
+            verilator==5.48.0 yowasp-yosys==0.68.0.0.post1208 \
+            yowasp-runtime==1.96 wasmtime==47.0.1 z3-solver==4.15.4.0 \
+            systemc==3.0.2.1 click==8.5.0 platformdirs==4.13.0 \
+            2>&1 | tee "$FRP48_EVIDENCE/install.log"
+          python -m pip freeze > "$FRP48_EVIDENCE/packages.txt"
+      - name: Record source identities and tools
+        run: |
+          set -euo pipefail
+          cat > "$FRP48_EVIDENCE/common.py" <<'PY'
+          from pathlib import Path
+          import os,json,re,hashlib,subprocess
+          R=Path.cwd();E=Path(os.environ['FRP48_EVIDENCE']);E.mkdir(parents=True,exist_ok=True)
+          names='gamma_noise_target_q16 gamma_noise_state_q16 gamma_drift_word gamma_effective_word phase_gamma_effective_word heat_q16 heat_peak_q16 generated_power_q16 thermal_dissipation_q16 thermal_diffusion_q16 thermal_overload_q16 thermal_node_factor_q30 frequency_lag_q16 mean_heat_q16 mean_heat_peak_q16 maximum_heat_peak_q16 next_heat_q16 next_overload_q16 next_gamma_drift_word next_gamma_effective_word next_thermal_node_factor_q30 phase_thermal_node_factor_q30'.split()
+          page=[(0x70+4*i,n if n.startswith('phase_') else 'local_'+n,32 if 13<=i<=15 else 256) for i,n in enumerate(names)]
+          def save(name,value): (E/name).write_text(json.dumps(value,indent=2))
+          def run(args,name,timeout=1200):
+           with (E/(name+'.log')).open('w') as log:
+            p=subprocess.run(args,cwd=R,stdout=log,stderr=subprocess.STDOUT,text=True,timeout=timeout)
+           assert p.returncode==0,(name,p.returncode)
+           return (E/(name+'.log')).read_text()
+          def replace_once(s,old,new):
+           assert s.count(old)==1,('Source anchor',old[:80],s.count(old))
+           return s.replace(old,new,1)
+          if __name__=='__main__':
+           expected={'fpga/m32_csr/frp_m32_csr_top.sv':'a1d59248541ff24635fb1193c7dd4dd98b409699af9173c31d88776119fbf897','fpga/m32_csr/frp_m32_csr_tb.sv':'af2795bf906c4c0c9aa2c2eac502bb3aa952fd5c179e2760c228a69bbc6a5a33','fpga/m32/frp_m32_fpga_top.sv':'bee21bd999f01a91d418550fd91fdbc54c17c78cea93ece4061713527806262f','rtl/m32/frp_m32_core.sv':'6e2dda8d4f1f51a5568abf2f328e5393bf4e023476e044024d5f4f0907f30caf'}
+           for p,h in expected.items(): assert hashlib.sha256((R/p).read_bytes()).hexdigest()==h,p
+           files=sorted({p for folder in ['rtl/m22','rtl/m31','rtl/m32','fpga/m32','fpga/m32_csr'] for p in (R/folder).glob('*.sv')})
+           files+=[R/'rtl/m31/frp_m31_sin_q30.mem',R/'.github/workflows/frp-48-m32-csr-local-thermal-gamma.yml']
+           save('sources.json',{'commit':os.environ.get('GITHUB_SHA','local'),'files':{str(p.relative_to(R)):hashlib.sha256(p.read_bytes()).hexdigest() for p in files}})
+           run(['verilator-cli','--version'],'verilator-version');run(['yowasp-yosys','-V'],'yosys-version')
+           import importlib.metadata as md
+           save('tool-versions.json',{n:md.version(n) for n in ['verilator','yowasp-yosys','yowasp-runtime','wasmtime','z3-solver']})
+           save('local-page.json',page);print('Source identities and versions recorded',flush=True)
+          PY
+          python "$FRP48_EVIDENCE/common.py" 2>&1 | tee "$FRP48_EVIDENCE/common.py.log"
+      - name: Exercise CSR pages and all source modes
+        run: |
+          set -euo pipefail
+          cat > "$FRP48_EVIDENCE/simulate.py" <<'PY'
+          from common import *
+          s=(R/'fpga/m32_csr/frp_m32_csr_tb.sv').read_text()
+          s=replace_once(s,'  logic ref_stable;', '''  logic model_page=0, ref_gamma_update=0;
+            logic [1:0] source_flags=0;
+            logic [255:0] staged_gamma=0, retained_before;
+            logic [31:0] ticks_before;
+            int source_coverage[3][4], gamma_commits=0, attenuation_effects=0;
+            logic ref_stable;
+          '''+''.join(f'  logic [{w-1}:0] ref_{n};\n' for a,n,w in page))
+          s=replace_once(s,'    .stable(ref_stable)','    .stable(ref_stable),\n'+''.join(f'    .{n}(ref_{n}),\n' for a,n,w in page)+'''    .local_gamma_enable(source_flags[0]), .local_thermal_enable(source_flags[1]),
+              .gamma_update_valid(ref_gamma_update), .gamma_targets_q16(staged_gamma)''')
+          s=replace_once(s,'      $fatal(1, "core mismatch: stable");\n    checks++;\n  endtask','      $fatal(1, "core mismatch: stable");\n'+''.join(f'    if (dut.u_fpga.{n} !== ref_{n}) $fatal(1,"local mismatch: {n}");\n' for a,n,w in page)+'    checks++;\n  endtask')
+          s=replace_once(s,'addr == 0 && data == 1;','addr == 0 && (data == 1 || data == 512);\n    ref_gamma_update = wr && !expect_error && addr == 0 && data == 512;')
+          s=replace_once(s,'      case (addr)', '''      if (model_page && addr >= 'h68) begin
+                  if (addr == 'h68) source_flags=data[1:0];
+                  else if (addr == 'h6c) staged_gamma[cell_index*32 +: 32]=data;
+                  else $fatal(1,"unexpected local write");
+                end else begin
+                case (addr)''')
+          s=replace_once(s,'if (data == 1) begin valid = 0; ticks++; end','''if (data == 1 || data == 512) begin valid=0; ticks++; end
+                    if (data == 512) gamma_commits++;
+                    if (data == 256) model_page=0;
+                    if (data == 257) model_page=1;''')
+          s=replace_once(s,'      endcase\n    end\n    if (expect_error)','      endcase\n      end\n    end\n    if (expect_error)')
+          s=replace_once(s,'csr_valid = 0; ref_tick = 0; ref_clear = 0; ref_load = 0;','csr_valid = 0; ref_tick = 0; ref_clear = 0; ref_load = 0; ref_gamma_update = 0;')
+          s=replace_once(s,'    phases = 0; frequencies = 0; gamma = 0;', '    model_page=0; source_flags=0; staged_gamma=0; ref_gamma_update=0;\n    phases = 0; frequencies = 0; gamma = 0;')
+          scan='''  task automatic inspect_local;
+              expect_read('hfc,32'h46523202); expect_read('h68,32'(source_flags));
+              for (int i=0;i<8;i++) begin
+                wr('h18,32'(i)); expect_read('h6c,staged_gamma[i*32 +: 32]);
+          '''+''.join(f"      expect_read('h{a:02x},ref_{n}"+(');\n' if w==32 else '[i*32 +: 32]);\n') for a,n,w in page)+'''    end
+            endtask
+          '''
+          s=replace_once(s,'  task automatic reset_all;',scan+'\n  task automatic reset_all;')
+          scenarios='''    $display("LEGACY_COMPLETE checks=%0d ticks=%0d rejected=%0d",checks,ticks,errors);
+              for (int m=0;m<3;m++) begin
+                reset_all(); wr('h04,32'(m)); wr('h68,1);
+                for (int i=0;i<8;i++) begin
+                  wr('h18,32'(i)); wr('h6c,32'h20000000*32'(i));
+                  wr('h70,(i%2)?32'h70000000:32'h90000000);
+                  wr('h74,32'h11111111*32'(i+1)); wr('h78,32'h20000000+32'(i)*12345);
+                end
+                wr(0,8); wr(0,257); inspect_local();
+                for (int a=0;a<256;a++) if (a%4!=0) begin
+                  transfer(1,8'(a),32'hffffffff,1); transfer(0,8'(a),0,1);
+                end
+                for (int a='h70;a<256;a+=4) transfer(1,8'(a),0,1);
+                for (int a='hc8;a<'hfc;a+=4) transfer(0,8'(a),0,1);
+                transfer(1,'h68,4,1); transfer(1,'h68,32'hffffffff,1);
+                transfer(1,0,513,1); transfer(1,0,258,1);
+                for (int sources=0;sources<4;sources++) begin
+                  wr('h68,32'(sources));
+                  retained_before=ref_local_gamma_noise_target_q16; ticks_before=ref_ticks_recorded_q;
+                  for (int i=0;i<8;i++) begin
+                    wr('h18,32'(i));
+                    wr('h6c,(i%2)?(32'h80000000+32'(sources*16+i)):(32'h7fffffff-32'(sources*16+i)));
+                    expect_read('h70,retained_before[i*32 +: 32]);
+                  end
+                  expect_read('h28,ticks_before); wr(0,1);
+                  if (ref_local_gamma_noise_target_q16 !== retained_before) $fatal(1,"ordinary tick accepted staging");
+                  stage(0,2,1); stage(1,6,3); wr(0,512);
+                  if (ref_local_gamma_noise_target_q16 !== staged_gamma) $fatal(1,"atomic gamma acceptance");
+                  expect_read('h14,0); wr('h08,0); expect_read('h14,0);
+                  for (int t=0;t<32;t++) begin
+                    if (t%8==0) begin wr('h18,32'(t/8)); wr('h6c,32'(t*1234567+sources)); end
+                    stage(t%2,t%8,(t%3==0)?0:((t%3==1)?1:3)); wr(0,(t%7==0)?512:1);
+                    source_coverage[m][sources]++;
+                    if (sources>=2 && ref_phase_thermal_node_factor_q30!={8{32'h40000000}}) attenuation_effects++;
+                  end
+                  inspect_local(); retained_before=ref_local_heat_q16;
+                  wr(0,2); expect_read('h28,0); expect_read('h68,32'(sources));
+                  if (ref_local_heat_q16 !== retained_before) $fatal(1,"counter clear reset heat");
+                  inspect_local(); wr(0,256); expect_read('hfc,32'h46523201);
+                  ->inspect_request; @inspect_complete;
+                  wr(0,512); wr(0,257); inspect_local();
+                end
+                reset_all(); wr(0,257); expect_read('h68,0); inspect_local();
+              end
+              for (int m=0;m<3;m++) for (int k=0;k<4;k++)
+                if (source_coverage[m][k]!=32) $fatal(1,"source coverage");
+              if (gamma_commits!=84 || attenuation_effects==0) $fatal(1,"local effect coverage");
+              $display("LOCAL_COVERAGE profiles=12 ticks_per_profile=32 gamma_commits=%0d attenuation_effects=%0d",gamma_commits,attenuation_effects);
+          '''
+          s=replace_once(s,'    $display("FRP_M32_CSR_TB: PASS',scenarios+'    $display("FRP_M32_CSR_TB: PASS')
+          s=replace_once(s,'core_outputs=59", checks','core_outputs=81", checks');tb=E/'integration_tb.sv';tb.write_text(s)
+          args=['verilator-cli','--binary','--timing','--assert','-Wno-fatal','-j','2','-MAKEFLAGS','VK_PCH_I_FAST=','-MAKEFLAGS','VK_PCH_I_SLOW=','-MAKEFLAGS','OPT_FAST=-O0','--top-module','frp_m32_csr_tb','--Mdir',str(E/'obj')]
+          args+=['-I'+p for p in ['rtl/m22','rtl/m31','rtl/m32','fpga/m32','fpga/m32_csr']]+[str(tb)]
+          run(args,'simulation-build');log=run([str(E/'obj/Vfrp_m32_csr_tb')],'simulation-run',180)
+          assert 'LEGACY_COMPLETE checks=6905 ticks=306 rejected=449' in log
+          assert 'PASS checks=44468 ticks=726 rejected_transfers=1760 core_outputs=81' in log
+          match=re.search(r'LOCAL_COVERAGE profiles=12 ticks_per_profile=32 gamma_commits=84 attenuation_effects=(\d+)',log);assert match and int(match[1])>0
+          save('simulation.json',{'checks':44468,'ticks':726,'rejected_transfers':1760,'core_outputs':81,'profiles':12,'ticks_per_profile':32,'gamma_commits':84,'attenuation_effects':int(match[1])});print(log,flush=True)
+          PY
+          python "$FRP48_EVIDENCE/simulate.py" 2>&1 | tee "$FRP48_EVIDENCE/simulate.py.log"
+      - name: Prove CSR contracts and FPGA boundary
+        run: |
+          set -euo pipefail
+          cat > "$FRP48_EVIDENCE/formal.py" <<'PY'
+          from common import *
+          import z3,time
+          T='frp_m32_csr_top'
+          s=(R/'rtl/m31/frp_m31_phase_interference.sv').read_text()
+          pattern=r'    if \(sin_lut[^\n]+\)\n      \$fatal\([^;\n]+\);\n'
+          assert len(re.findall(pattern,s))==4
+          # The four LUT startup diagnostics run in simulation; export keeps the LUT data.
+          (E/'phase.sv').write_text(re.sub(pattern,'',s))
+          for source,old,new,out in [('rtl/m32/frp_m32_core.sv','frp_m31_phase_interference.sv','phase.sv','core.sv'),('fpga/m32/frp_m32_fpga_top.sv','frp_m32_core.sv','core.sv','fpga.sv'),('fpga/m32_csr/frp_m32_csr_top.sv','frp_m32_fpga_top.sv','fpga.sv','top.sv')]:
+           s=replace_once((R/source).read_text(),f'`include "{old}"',f'`include "{E/new}"');(E/out).write_text(s)
+          ys=f'read_slang -j 1 --std 1800-2017 --top {T} -Irtl/m22 -Irtl/m31 -Irtl/m32 {E}/top.sv; proc; flatten; opt -full; check -assert; write_json {E}/netlist.json; async2sync; dffunmap; write_smt2 -wires {E}/design.smt2;'
+          (E/'export.ys').write_text(ys);run(['yowasp-yosys','-Q','-T','-s',str(E/'export.ys')],'formal-export',600)
+          variables={};bindings=[]
+          def sig(name,width=1,state=0):
+           key=f'v{len(variables)}';v=z3.Bool(key) if width==1 else z3.BitVec(key,width);variables[key]=v;bindings.append(f'(assert (= (|{T}_n {name}| s{state}) {key}))');return v
+          ready=sig('core_ready');ready1=sig('core_ready',state=1);rst=sig('rst_n_async');rst1=sig('rst_n_async',state=1)
+          valid=sig('csr_valid');write=sig('csr_write');addr=sig('csr_addr',8);data=sig('csr_wdata',32);ack=sig('csr_ready');error=sig('csr_error');read=sig('csr_rdata',32)
+          p=sig('local_page_q');p1=sig('local_page_q',state=1);src=sig('local_sources_q',2);src1=sig('local_sources_q',2,1);targets=sig('gamma_targets_q',256);targets1=sig('gamma_targets_q',256,1);cell=sig('cell_select_q',3)
+          tick=sig('tick_pulse');gamma=sig('gamma_update_pulse');clear=sig('clear_pulse');load=sig('load_pulse');req1=sig('request_valid_q',2,1)
+          banks={n:(sig(n,w),sig(n,w,1)) for n,w in [('auto_enable_q',1),('phase_load_q',256),('frequency_load_q',256),('gamma_q',256),('thermal_factor_q',256)]}
+          telemetry={a:sig(n,w) for a,n,w in page}
+          q=sig('u_fpga.reset_sync_q',2);q1=sig('u_fpga.reset_sync_q',2,1)
+          gates={n:(sig('u_fpga.'+n),sig('u_fpga.u_m32_core.'+n)) for n in ['tick_enable','clear_counters','phase_load_valid','auto_target_enable','gamma_update_valid']}
+          vr=sig('u_fpga.external_request_valid',2);vc=sig('u_fpga.u_m32_core.external_request_valid',2);cr=sig('u_fpga.u_m32_core.rst_n')
+          text=(E/'design.smt2').read_text()+f'\n(declare-fun s0 () |{T}_s|)\n(declare-fun s1 () |{T}_s|)\n'+'\n'.join(bindings)
+          base=z3.parse_smt2_string(text,decls=variables);trans=z3.parse_smt2_string(text+f'\n(assert (|{T}_t| s0 s1))',decls=variables)
+          sub=[(v.arg(1),v.arg(0)) for v in base];next_sub=[(eq.arg(1),eq.arg(0)) for eq in trans[-1].children()]
+          assert all(str(right.arg(0))=='s1' for right,left in next_sub)
+          results={};queries=E/'queries';queries.mkdir(exist_ok=True)
+          def prove(name,pre,goal,seq=False):
+           goal=z3.substitute(goal,*sub);pre=[z3.substitute(x,*sub) for x in pre]
+           if seq:goal=z3.substitute(goal,*next_sub);pre=[z3.substitute(x,*next_sub) for x in pre]
+           fixed=[]
+           for c in pre:
+            if z3.is_eq(c) and (z3.is_bv_value(c.arg(1)) or z3.is_true(c.arg(1)) or z3.is_false(c.arg(1))):fixed.append((c.arg(0),c.arg(1)))
+            elif z3.is_not(c):fixed.append((c.arg(0),z3.BoolVal(False)))
+            elif z3.is_bool(c) and not z3.is_eq(c):fixed.append((c,z3.BoolVal(True)))
+           goal=z3.simplify(z3.substitute(goal,*fixed));solver=z3.Solver();solver.set(timeout=60000);solver.add(*pre)
+           witness=solver.check();assert witness==z3.sat,('Precondition',name,str(witness))
+           solver.add(z3.Not(goal));(queries/(name+'.smt2')).write_text(solver.to_smt2())
+           start=time.monotonic();r=solver.check();results[name]={'precondition':str(witness),'result':str(r),'seconds':time.monotonic()-start};save('formal-results.json',results);print(name,r,flush=True)
+           assert r==z3.unsat,(name,str(r),solver.reason_unknown())
+          command=z3.And(rst,ready,valid,write,addr==0);active=[ready,ready1,rst]
+          prove('ready',[],ack==z3.And(rst,ready,valid))
+          for name,value,expected in [('tick',tick,z3.Or(data==1,data==512)),('gamma',gamma,data==512),('clear',clear,data==2),('load',load,data==8)]:prove(name+'-decode',[],value==z3.And(command,expected))
+          prove('error-no-action',[error],z3.Not(z3.Or(tick,gamma,clear,load)))
+          prove('page-command-no-action',[command,z3.Or(data==256,data==257)],z3.And(z3.Not(error),z3.Not(z3.Or(tick,gamma,clear,load))))
+          prove('reset-local',[z3.Not(ready)],z3.And(z3.Not(p),src==0,targets==0))
+          prove('page-transition',active,p1==z3.If(z3.And(command,z3.Or(data==256,data==257)),data==257,p),True)
+          prove('source-transition',active,src1==z3.If(z3.And(valid,write,p,addr==104,z3.ULE(data,3)),z3.Extract(1,0,data),src),True)
+          for i in range(8):prove(f'target-lane-{i}',active,z3.Extract(i*32+31,i*32,targets1)==z3.If(z3.And(valid,write,p,addr==108,cell==i),data,z3.Extract(i*32+31,i*32,targets)),True)
+          prove('tick-consumes-requests',active+[tick],req1==0,True)
+          prove('clear-retains-local',active+[command,data==2],z3.And(p1==p,src1==src,targets1==targets),True)
+          for n,(before,after) in banks.items():prove('local-write-retains-'+n,active+[p,valid,write,z3.UGE(addr,104)],after==before,True)
+          prove('source-payload',[rst,ready,valid,write,p,addr==104],error==z3.UGT(data,3))
+          prove('target-payload',[rst,ready,valid,write,p,addr==108],z3.Not(error))
+          prove('unaligned-error',[rst,ready,valid,z3.Extract(1,0,addr)!=0],error)
+          prove('local-ro-error',[rst,ready,valid,write,p,z3.UGE(addr,112)],error)
+          prove('unused-read-error',[rst,ready,valid,z3.Not(write),p,z3.UGE(addr,200),z3.ULT(addr,252)],error)
+          prove('idle-data-zero',[z3.Not(ack)],read==0)
+          prove('write-error-data-zero',[z3.Or(write,error)],read==0)
+          rpre=[rst,ready,valid,z3.Not(write),p]
+          prove('read-local-id',rpre+[addr==252],z3.And(z3.Not(error),read==0x46523202))
+          prove('read-base-id',[rst,ready,valid,z3.Not(write),z3.Not(p),addr==252],z3.And(z3.Not(error),read==0x46523201))
+          prove('read-sources',rpre+[addr==104],read==z3.ZeroExt(30,src))
+          for i in range(8):prove(f'read-staging-{i}',rpre+[addr==108,cell==i],read==z3.Extract(i*32+31,i*32,targets))
+          for a,n,w in page:
+           value=telemetry[a]
+           if a in [192,196]:
+            for i in range(8):
+             for flags in (range(4) if a==196 else [None]):
+              pre=rpre+[addr==a,cell==i]+([] if flags is None else [src==flags])
+              prove(f'read-{a:02x}-cell-{i}-sources-{flags}',pre,z3.And(z3.Not(error),read==z3.Extract(i*32+31,i*32,value)))
+           else:
+            expected=value if w==32 else z3.Extract(31,0,z3.LShR(value,z3.ZeroExt(253,cell)*32))
+            prove(f'read-{a:02x}',rpre+[addr==a],z3.And(z3.Not(error),read==expected))
+          assert len(results)==103
+          for n,(raw,gated) in gates.items():prove('fpga-'+n,[],gated==z3.And(raw,ready))
+          prove('fpga-request-valid',[],vc==z3.If(ready,vr,z3.BitVecVal(0,2)))
+          prove('fpga-reset-output',[],cr==ready)
+          prove('fpga-reset-assertion',[z3.Not(rst)],z3.And(q==0,z3.Not(ready)))
+          prove('fpga-reset-shift',[rst,rst1],q1==z3.Concat(z3.Extract(0,0,q),z3.BitVecVal(1,1)),True)
+          for old,new in [(0,1),(1,3),(3,3)]:prove(f'fpga-release-{old}',[rst,rst1,q==old],z3.And(q1==new,ready1==z3.BoolVal(new==3)),True)
+          assert len(results)==115
+          nets=json.loads((E/'netlist.json').read_text())['modules'][T]['netnames'];connections=[]
+          def connected(a,b):
+           assert nets[a]['bits']==nets[b]['bits'],(a,b)
+           connections.append([a,b,len(nets[a]['bits'])])
+          for a,n,w in page:connected(n,'u_fpga.'+n)
+          for a,b in [('gamma_targets_q','gamma_targets_q16'),('gamma_update_pulse','gamma_update_valid')]:connected(a,'u_fpga.'+b)
+          for i,n in enumerate(['local_gamma_enable','local_thermal_enable']):
+           assert nets['u_fpga.'+n]['bits']==nets['local_sources_q']['bits'][i:i+1],n
+           connections.append(['local_sources_q['+str(i)+']','u_fpga.'+n,1])
+          header=(R/'fpga/m32/frp_m32_fpga_top.sv').read_text().split('\n) (',1)[1].split('\n);',1)[0]
+          ports=re.findall(r'\boutput\s+[^,]+?\b(\w+)\s*(?:,|$)',header,re.S)
+          outputs=[n for n in ports if n!='core_ready'];assert len(outputs)==81,outputs
+          for n in outputs:connected('u_fpga.'+n,'u_fpga.u_m32_core.'+n)
+          for n in ['clk','scheduler_mode','phase_load','frequency_load_q16','gamma_effective_word','thermal_node_factor_q30','external_request_cell_index','external_request_target','external_target_bank','local_gamma_enable','gamma_targets_q16','local_thermal_enable']:connected('u_fpga.'+n,'u_fpga.u_m32_core.'+n)
+          assert len(connections)==119;save('connections.json',connections);print('PASS 115 UNSAT; 119 exact connections',flush=True)
+          PY
+          python "$FRP48_EVIDENCE/formal.py" 2>&1 | tee "$FRP48_EVIDENCE/formal.py.log"
+      - name: Require complete results
+        run: |
+          set -euo pipefail
+          cat > "$FRP48_EVIDENCE/summary.py" <<'PY'
+          from common import *
+          read=lambda n:json.loads((E/n).read_text())
+          manifest=read('sources.json');simulation=read('simulation.json');proof=read('formal-results.json');connections=read('connections.json')
+          assert len(proof)==115 and all(x['result']=='unsat' and x['precondition']=='sat' for x in proof.values())
+          assert len(connections)==119
+          assert all(simulation[k]==v for k,v in {'checks':44468,'ticks':726,'rejected_transfers':1760,'core_outputs':81,'profiles':12,'ticks_per_profile':32,'gamma_commits':84}.items())
+          assert simulation['attenuation_effects']>0
+          for p,h in manifest['files'].items():assert hashlib.sha256((R/p).read_bytes()).hexdigest()==h,p
+          report={'status':'PASS','commit':manifest['commit'],'simulation':simulation,'formal_unsat':115,'satisfiable_preconditions':115,'exact_connections':119,'formal_scope':'103 CSR page/control/storage/read contracts and 12 FPGA reset/input-qualification contracts','formal_semantics':'Sampled two-state RTL; async2sync; combinational and single-transition counterexample queries','simulation_reference':'Separate M32 core driven by the transaction model; 81 outputs compared after clock edges'}
+          save('result.json',report)
+          lines=['## FRP 48: PASS','',f"Commit: `{report['commit']}`",'','- CSR simulation: 44,468 checks; 726 FRP ticks; 1,760 rejected transfers.','- All 81 core outputs compared with the separately driven reference core.','- Source selection: four combinations in free, 7/1 and 1/7 modes.','- Gamma staging: 84 atomic commits; ordinary ticks retain the accepted targets.',f"- Local attenuation effect observed in {simulation['attenuation_effects']} profile ticks.",'- Formal: 103 CSR contracts and 12 FPGA boundary contracts; all UNSAT.','- All 115 proof preconditions have SAT witnesses.','- Exact signal connections: 119.','- Formal semantics: sampled two-state RTL with async2sync.']
+          if 'GITHUB_STEP_SUMMARY' in os.environ:
+           with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write('\n'.join(lines)+'\n')
+          print(json.dumps(report,indent=2))
+          PY
+          python "$FRP48_EVIDENCE/summary.py" 2>&1 | tee "$FRP48_EVIDENCE/summary.py.log"
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-48-csr-local-thermal-gamma-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/frp-48-evidence/**/*.json
+            ${{ runner.temp }}/frp-48-evidence/**/*.log
+            ${{ runner.temp }}/frp-48-evidence/**/*.smt2
+            ${{ runner.temp }}/frp-48-evidence/**/*.ys
+            ${{ runner.temp }}/frp-48-evidence/**/*.sv
+            ${{ runner.temp }}/frp-48-evidence/**/*.py
+            ${{ runner.temp }}/frp-48-evidence/**/*.txt
+          if-no-files-found: error
+          retention-days: 30
