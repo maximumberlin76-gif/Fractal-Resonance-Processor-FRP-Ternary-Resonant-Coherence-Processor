@@ -1,12 +1,12 @@
  // Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
- // Eight-cell local thermal state, power, dissipation and hierarchical diffusion.
+ // Local thermal state, power, dissipation and diffusion for 8, 16 and 32 cells.
  // Source: frp_prototype_v1_7_0.py, QuantizedReferenceShadowProcessor,
  // thermal_weighted_sum_q16 and update_local_thermal_field, default parameters.
  // Heat and power use signed Q16.16; weights use signed Q2.30.
  // Frequency lag is unsigned Q16.16, the absolute target/current difference.
  // Each weighted difference is rounded before summation, as in the source.
  // Products round to nearest, with half cases away from zero, then saturate.
- // All eight updates read the same retained heat bank before the clock edge.
+ // All cell updates read the same retained heat bank before the clock edge.
  // rst_n clears thermal history; tick_enable commits one thermal update.
  // next_heat_q16 and next_overload_q16 expose that update before its commit.
 
@@ -16,20 +16,22 @@
 `timescale 1ns / 1ps
 `include "frp_m31_fixed_point_pkg.sv"
 
-module frp_m31_local_thermal_field (
+module frp_m31_local_thermal_field #(
+  parameter int CELLS = 8
+) (
   input  logic clk,
   input  logic rst_n,
   input  logic tick_enable,
-  input  logic [7:0] switch_activity,
-  input  logic [255:0] frequency_lag_q16,
-  output wire [255:0] heat_q16,
-  output wire [255:0] local_heat_peak_q16,
-  output wire [255:0] generated_power_q16,
-  output wire [255:0] thermal_dissipation_q16,
-  output wire [255:0] thermal_diffusion_q16,
-  output wire [255:0] thermal_overload_q16,
-  output wire [255:0] next_heat_q16,
-  output wire [255:0] next_overload_q16,
+  input  logic [CELLS-1:0] switch_activity,
+  input  logic [(CELLS*32)-1:0] frequency_lag_q16,
+  output wire [(CELLS*32)-1:0] heat_q16,
+  output wire [(CELLS*32)-1:0] local_heat_peak_q16,
+  output wire [(CELLS*32)-1:0] generated_power_q16,
+  output wire [(CELLS*32)-1:0] thermal_dissipation_q16,
+  output wire [(CELLS*32)-1:0] thermal_diffusion_q16,
+  output wire [(CELLS*32)-1:0] thermal_overload_q16,
+  output wire [(CELLS*32)-1:0] next_heat_q16,
+  output wire [(CELLS*32)-1:0] next_overload_q16,
   output logic signed [31:0] mean_heat_q16,
   output logic signed [31:0] mean_heat_peak_q16,
   output logic signed [31:0] maximum_local_heat_q16
@@ -44,24 +46,27 @@ module frp_m31_local_thermal_field (
   localparam logic signed [31:0] LAG_GAIN_Q16 = 32'sd1180;
   localparam logic signed [31:0] DIFFUSION_GAIN_Q16 = 32'sd2294;
 
-  // quantized_level_weights(8, 1.20); w1 + 2*w2 + 4*w3 = 2**30.
-  localparam logic signed [31:0] WEIGHT_1_Q30 = 32'sd630553580;
-  localparam logic signed [31:0] WEIGHT_2_Q30 = 32'sd137232194;
-  localparam logic signed [31:0] WEIGHT_3_Q30 = 32'sd42180964;
+  localparam int DEPTH = $clog2(CELLS);
 
-  logic signed [31:0] heat_q [0:7];
-  logic signed [31:0] peak_q [0:7];
-  logic signed [31:0] power_q [0:7];
-  logic signed [31:0] dissipation_q [0:7];
-  logic signed [31:0] diffusion_q [0:7];
-  logic signed [31:0] overload_q [0:7];
-  logic signed [31:0] heat_d [0:7];
-  logic signed [31:0] power_d [0:7];
-  logic signed [31:0] dissipation_d [0:7];
-  logic signed [31:0] diffusion_d [0:7];
-  logic signed [31:0] overload_d [0:7];
+  logic signed [31:0] heat_q [0:CELLS-1];
+  logic signed [31:0] peak_q [0:CELLS-1];
+  logic signed [31:0] power_q [0:CELLS-1];
+  logic signed [31:0] dissipation_q [0:CELLS-1];
+  logic signed [31:0] diffusion_q [0:CELLS-1];
+  logic signed [31:0] overload_q [0:CELLS-1];
+  logic signed [31:0] heat_d [0:CELLS-1];
+  logic signed [31:0] power_d [0:CELLS-1];
+  logic signed [31:0] dissipation_d [0:CELLS-1];
+  logic signed [31:0] diffusion_d [0:CELLS-1];
+  logic signed [31:0] overload_d [0:CELLS-1];
   logic signed [31:0] mean_heat_d;
 
+  initial begin
+    if ((CELLS != 8) && (CELLS != 16) && (CELLS != 32))
+      $fatal(1, "FRP M31 local thermal field requires 8, 16 or 32 cells");
+  end
+
+  // quantized_level_weights(CELLS, 1.20); each row sums to 2**30.
   function automatic logic signed [31:0] thermal_weight_q30(
     input int unsigned left_index,
     input int unsigned right_index
@@ -69,18 +74,34 @@ module frp_m31_local_thermal_field (
     int unsigned differing;
     begin
       differing = left_index ^ right_index;
-      if (differing == 0)
-        thermal_weight_q30 = 32'sd0;
-      else if (differing < 2)
-        thermal_weight_q30 = WEIGHT_1_Q30;
-      else if (differing < 4)
-        thermal_weight_q30 = WEIGHT_2_Q30;
-      else
-        thermal_weight_q30 = WEIGHT_3_Q30;
+      thermal_weight_q30 = 32'sd0;
+      if (differing != 0) begin
+        case (CELLS)
+          8: begin
+            if (differing < 2) thermal_weight_q30 = 32'sd630553580;
+            else if (differing < 4) thermal_weight_q30 = 32'sd137232194;
+            else thermal_weight_q30 = 32'sd42180964;
+          end
+          16: begin
+            if (differing < 2) thermal_weight_q30 = 32'sd567420738;
+            else if (differing < 4) thermal_weight_q30 = 32'sd123492111;
+            else if (differing < 8) thermal_weight_q30 = 32'sd37957684;
+            else thermal_weight_q30 = 32'sd13438266;
+          end
+          32: begin
+            if (differing < 2) thermal_weight_q30 = 32'sd527047716;
+            else if (differing < 4) thermal_weight_q30 = 32'sd114705422;
+            else if (differing < 8) thermal_weight_q30 = 32'sd35256926;
+            else if (differing < 16) thermal_weight_q30 = 32'sd12482109;
+            else thermal_weight_q30 = 32'sd4774918;
+          end
+          default: thermal_weight_q30 = 32'sd0;
+        endcase
+      end
     end
   endfunction
 
-  for (genvar cell_index = 0; cell_index < 8; cell_index = cell_index + 1) begin : g_cell
+  for (genvar cell_index = 0; cell_index < CELLS; cell_index = cell_index + 1) begin : g_cell
     assign heat_q16[cell_index*32 +: 32] = heat_q[cell_index];
     assign local_heat_peak_q16[cell_index*32 +: 32] = peak_q[cell_index];
     assign generated_power_q16[cell_index*32 +: 32] = power_q[cell_index];
@@ -107,7 +128,7 @@ module frp_m31_local_thermal_field (
       heat_difference = 64'sd0;
       weighted_product = 64'sd0;
       weighted_difference = 32'sd0;
-      for (int other = 0; other < 8; other = other + 1) begin
+      for (int other = 0; other < CELLS; other = other + 1) begin
         if (other != cell_index) begin
           heat_difference =
             {{32{heat_q[other][31]}}, heat_q[other]} -
@@ -178,14 +199,14 @@ module frp_m31_local_thermal_field (
     current_sum = 64'sd0;
     next_sum = 64'sd0;
     maximum_local_heat_q16 = AMBIENT_Q16;
-    for (int cell_index = 0; cell_index < 8; cell_index = cell_index + 1) begin
+    for (int cell_index = 0; cell_index < CELLS; cell_index = cell_index + 1) begin
       current_sum = current_sum + {{32{heat_q[cell_index][31]}}, heat_q[cell_index]};
       next_sum = next_sum + {{32{heat_d[cell_index][31]}}, heat_d[cell_index]};
       if (peak_q[cell_index] > maximum_local_heat_q16)
         maximum_local_heat_q16 = peak_q[cell_index];
     end
-    mean_heat_q16 = 32'(frp_m31_round_shift_s64(current_sum, 3));
-    mean_heat_d = 32'(frp_m31_round_shift_s64(next_sum, 3));
+    mean_heat_q16 = 32'(frp_m31_round_shift_s64(current_sum, DEPTH));
+    mean_heat_d = 32'(frp_m31_round_shift_s64(next_sum, DEPTH));
   end
 
   always_ff @(posedge clk or negedge rst_n) begin
