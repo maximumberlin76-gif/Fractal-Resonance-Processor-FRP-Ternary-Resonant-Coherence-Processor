@@ -71,13 +71,13 @@
 
 //
 // Banked local extension; the CSR address remains eight bits wide.
-// CONTROL additionally accepts these exact hexadecimal commands on either page:
+// CONTROL additionally accepts these exact hexadecimal commands on every page:
 //   00000100 = select base page (reset page); 00000101 = select local page;
 //   00000200 = one tick with atomic acceptance of all staged gamma targets.
 // Page selection does not tick, load phases, clear requests, or clear history.
 // Command 1 ticks using retained gamma targets. Command 00000200 also consumes
 // both request-valid bits and captures tick results, exactly as command 1 does.
-// Addresses 00..64 retain their meanings on both pages. Only 68..FC are banked.
+// Addresses 00..64 retain their meanings on every page. Only 68..FC are banked.
 // Base-page register meanings, access rules, and interface ID remain unchanged.
 // Local page (hex addresses; per-cell words use the common selector at 18):
 //   68 RW source selection: bit 0 local gamma, bit 1 local attenuation;
@@ -103,6 +103,37 @@
 // from the current retained state and currently presented core controls.
 // Counter clear retains page, source selection, staging, and local histories.
 // Reset restores the base page, external sources, and zero staged targets.
+
+//
+// Stability/coherence page: CONTROL command 00000102 selects this page.
+// Commands 00000100 and 00000101 select the existing base and local pages.
+// Addresses 00..64 remain common; all extension words on this page are RO.
+//   68 compression Q30          6C effective coherence Q30
+//   70 coherence capacity Q16   74 pressure Q16
+//   78 stability margin Q16     7C stable (bit 0)
+//   80 retained margin Q16      84 sample-valid pulse (bit 0)
+//   88 sample count             8C sampled raw coherence Q30
+//   90 sampled cluster Q30      94 sampled mean heat Q16
+//   98 sampled mean overload Q16  9C sampled mean frequency lag Q16
+//   A0 sampled active-zero fraction Q30
+//   A4 sampled compression argument Q16   A8 sampled switch load Q16
+//   AC..C4 seven live group coherence Q30 words in ascending packed order
+//   C8..D0 three live level means Q30, from pairs to the complete bank
+//   D4..DC three live level minima Q30
+//   E0..E8 three live level maxima Q30
+//   EC..F4 three live level dispersions Q30
+//   F8 reserved (read/write error); FC RO page ID 46523203
+// Stability commits one rising edge after an accepted tick. Allow one idle
+// clock after the tick or wait for the sample count to advance before reading
+// a complete result. The valid word reports the current one-clock pulse;
+// the count and sampled words remain available after that pulse ends.
+// Consecutive ticks produce consecutive commits; the final pending sample
+// commits even when ticking stops. Phase loading alone creates no sample.
+// Group/level words are live and can change after phase loading. Complete
+// the read sequence before issuing another tick/load for a consistent view.
+// Page selection, reads, and counter clear retain stability history/count;
+// an already pending sample can still commit on any of those clock edges.
+// Reset selects the base page and resets stability through the core.
 
 `ifndef FRP_M32_CSR_TOP_SV
 `define FRP_M32_CSR_TOP_SV
@@ -136,9 +167,11 @@ module frp_m32_csr_top #(
   localparam logic [31:0] COMMAND_LOAD = 32'd8;
   localparam logic [31:0] COMMAND_BASE_PAGE = 32'h00000100;
   localparam logic [31:0] COMMAND_LOCAL_PAGE = 32'h00000101;
+  localparam logic [31:0] COMMAND_STABILITY_PAGE = 32'h00000102;
   localparam logic [31:0] COMMAND_TICK_GAMMA = 32'h00000200;
 
   logic local_page_q;
+  logic stability_page_q;
   logic [1:0] local_sources_q;
   logic [255:0] gamma_targets_q;
   logic gamma_update_pulse;
@@ -202,6 +235,29 @@ module frp_m32_csr_top #(
   logic signed [31:0] local_maximum_heat_peak_q16;
 
 
+  logic [223:0] group_coherence_q30;
+  logic [95:0] level_mean_coherence_q30;
+  logic [95:0] level_min_coherence_q30;
+  logic [95:0] level_max_coherence_q30;
+  logic [95:0] level_dispersion_q30;
+  logic signed [31:0] local_coherence_compression_q30;
+  logic signed [31:0] local_effective_coherence_q30;
+  logic signed [31:0] local_coherence_capacity_q16;
+  logic signed [31:0] local_pressure_q16;
+  logic signed [31:0] local_stability_margin_q16;
+  logic local_stable;
+  logic signed [31:0] local_previous_margin_q16;
+  logic local_stability_valid_q;
+  logic [31:0] local_stability_sample_count_q;
+  logic signed [31:0] local_stability_raw_coherence_q30;
+  logic signed [31:0] local_stability_cluster_coherence_q30;
+  logic signed [31:0] local_stability_mean_heat_q16;
+  logic signed [31:0] local_stability_mean_overload_q16;
+  logic signed [31:0] local_stability_mean_lag_q16;
+  logic signed [31:0] local_stability_neutral_fraction_q30;
+  logic signed [31:0] local_stability_compression_arg_q16;
+  logic signed [31:0] local_stability_switch_load_q16;
+
   typedef struct packed {
     logic [1:0] request_accept, request_reject;
     logic [7:0] accepted_cells, neutral_cells, changed_cells;
@@ -234,11 +290,13 @@ module frp_m32_csr_top #(
 
   always_comb begin
     address_writable = frp_m22_is_writable_address(csr_addr)
-      || (local_page_q
+      || (!stability_page_q && (local_page_q
         ? ((csr_addr == ADDR_AUTO) || (csr_addr == ADDR_PHASE_LOAD))
-        : (csr_addr >= ADDR_AUTO && csr_addr <= ADDR_THERMAL_FACTOR));
+        : (csr_addr >= ADDR_AUTO && csr_addr <= ADDR_THERMAL_FACTOR)));
     payload_valid = 1'b0;
-    if (local_page_q && (csr_addr >= ADDR_AUTO)) begin
+    if (stability_page_q && (csr_addr >= ADDR_AUTO)) begin
+      payload_valid = 1'b0;
+    end else if (local_page_q && (csr_addr >= ADDR_AUTO)) begin
       case (csr_addr)
         ADDR_AUTO: payload_valid = (csr_wdata <= 32'd3);
         ADDR_PHASE_LOAD: payload_valid = 1'b1;
@@ -253,6 +311,7 @@ module frp_m32_csr_top #(
             || (csr_wdata == COMMAND_LOAD)
             || (csr_wdata == COMMAND_BASE_PAGE)
             || (csr_wdata == COMMAND_LOCAL_PAGE)
+            || (csr_wdata == COMMAND_STABILITY_PAGE)
             || (csr_wdata == COMMAND_TICK_GAMMA);
         FRP_M22_ADDR_SCHEDULER_MODE:
           payload_valid = (csr_wdata <= 32'd2);
@@ -280,7 +339,8 @@ module frp_m32_csr_top #(
         csr_error = !address_writable || !payload_valid;
       else
         csr_error = (csr_addr == FRP_M22_ADDR_CONTROL)
-          || (local_page_q && (csr_addr >= 8'hC8) && (csr_addr < 8'hFC));
+          || (local_page_q && (csr_addr >= 8'hC8) && (csr_addr < 8'hFC))
+          || (stability_page_q && (csr_addr == 8'hF8));
     end
   end
 
@@ -304,6 +364,7 @@ module frp_m32_csr_top #(
       cell_select_q <= '0;
       auto_enable_q <= 1'b0;
       local_page_q <= 1'b0;
+      stability_page_q <= 1'b0;
       local_sources_q <= '0;
       gamma_targets_q <= '0;
       request_cells_q <= '0;
@@ -337,10 +398,12 @@ module frp_m32_csr_top #(
             FRP_M22_ADDR_CONTROL: begin
               if (csr_wdata == FRP_M22_CONTROL_CLEAR_REQUESTS)
                 request_valid_q <= '0;
-              if (csr_wdata == COMMAND_BASE_PAGE)
-                local_page_q <= 1'b0;
-              if (csr_wdata == COMMAND_LOCAL_PAGE)
-                local_page_q <= 1'b1;
+              if ((csr_wdata == COMMAND_BASE_PAGE)
+                  || (csr_wdata == COMMAND_LOCAL_PAGE)
+                  || (csr_wdata == COMMAND_STABILITY_PAGE)) begin
+                local_page_q <= (csr_wdata == COMMAND_LOCAL_PAGE);
+                stability_page_q <= (csr_wdata == COMMAND_STABILITY_PAGE);
+              end
             end
             FRP_M22_ADDR_SCHEDULER_MODE:
               mode_control_q <= frp_m31_scheduler_mode_e'(csr_wdata[1:0]);
@@ -373,7 +436,48 @@ module frp_m32_csr_top #(
   always_comb begin
     csr_rdata = '0;
     if (csr_ready && !csr_write && !csr_error) begin
-      if (local_page_q && (csr_addr >= ADDR_AUTO)) begin
+      if (stability_page_q && (csr_addr >= ADDR_AUTO)) begin
+        case (csr_addr)
+          8'h68: csr_rdata = local_coherence_compression_q30;
+          8'h6C: csr_rdata = local_effective_coherence_q30;
+          8'h70: csr_rdata = local_coherence_capacity_q16;
+          8'h74: csr_rdata = local_pressure_q16;
+          8'h78: csr_rdata = local_stability_margin_q16;
+          8'h7C: csr_rdata[0] = local_stable;
+          8'h80: csr_rdata = local_previous_margin_q16;
+          8'h84: csr_rdata[0] = local_stability_valid_q;
+          8'h88: csr_rdata = local_stability_sample_count_q;
+          8'h8C: csr_rdata = local_stability_raw_coherence_q30;
+          8'h90: csr_rdata = local_stability_cluster_coherence_q30;
+          8'h94: csr_rdata = local_stability_mean_heat_q16;
+          8'h98: csr_rdata = local_stability_mean_overload_q16;
+          8'h9C: csr_rdata = local_stability_mean_lag_q16;
+          8'hA0: csr_rdata = local_stability_neutral_fraction_q30;
+          8'hA4: csr_rdata = local_stability_compression_arg_q16;
+          8'hA8: csr_rdata = local_stability_switch_load_q16;
+          8'hAC: csr_rdata = group_coherence_q30[0 +: 32];
+          8'hB0: csr_rdata = group_coherence_q30[32 +: 32];
+          8'hB4: csr_rdata = group_coherence_q30[64 +: 32];
+          8'hB8: csr_rdata = group_coherence_q30[96 +: 32];
+          8'hBC: csr_rdata = group_coherence_q30[128 +: 32];
+          8'hC0: csr_rdata = group_coherence_q30[160 +: 32];
+          8'hC4: csr_rdata = group_coherence_q30[192 +: 32];
+          8'hC8: csr_rdata = level_mean_coherence_q30[0 +: 32];
+          8'hCC: csr_rdata = level_mean_coherence_q30[32 +: 32];
+          8'hD0: csr_rdata = level_mean_coherence_q30[64 +: 32];
+          8'hD4: csr_rdata = level_min_coherence_q30[0 +: 32];
+          8'hD8: csr_rdata = level_min_coherence_q30[32 +: 32];
+          8'hDC: csr_rdata = level_min_coherence_q30[64 +: 32];
+          8'hE0: csr_rdata = level_max_coherence_q30[0 +: 32];
+          8'hE4: csr_rdata = level_max_coherence_q30[32 +: 32];
+          8'hE8: csr_rdata = level_max_coherence_q30[64 +: 32];
+          8'hEC: csr_rdata = level_dispersion_q30[0 +: 32];
+          8'hF0: csr_rdata = level_dispersion_q30[32 +: 32];
+          8'hF4: csr_rdata = level_dispersion_q30[64 +: 32];
+          8'hFC: csr_rdata = 32'h46523203;
+          default: csr_rdata = '0;
+        endcase
+      end else if (local_page_q && (csr_addr >= ADDR_AUTO)) begin
         case (csr_addr)
           ADDR_AUTO: csr_rdata[1:0] = local_sources_q;
           ADDR_PHASE_LOAD:
@@ -594,7 +698,29 @@ module frp_m32_csr_top #(
     .local_gamma_enable(local_sources_q[0]),
     .local_thermal_enable(local_sources_q[1]),
     .gamma_targets_q16(gamma_targets_q),
-    .gamma_update_valid(gamma_update_pulse)
+    .gamma_update_valid(gamma_update_pulse),
+    .local_coherence_compression_q30(local_coherence_compression_q30),
+    .local_effective_coherence_q30(local_effective_coherence_q30),
+    .local_coherence_capacity_q16(local_coherence_capacity_q16),
+    .local_pressure_q16(local_pressure_q16),
+    .local_stability_margin_q16(local_stability_margin_q16),
+    .local_stable(local_stable),
+    .local_previous_margin_q16(local_previous_margin_q16),
+    .local_stability_valid_q(local_stability_valid_q),
+    .local_stability_sample_count_q(local_stability_sample_count_q),
+    .local_stability_raw_coherence_q30(local_stability_raw_coherence_q30),
+    .local_stability_cluster_coherence_q30(local_stability_cluster_coherence_q30),
+    .local_stability_mean_heat_q16(local_stability_mean_heat_q16),
+    .local_stability_mean_overload_q16(local_stability_mean_overload_q16),
+    .local_stability_mean_lag_q16(local_stability_mean_lag_q16),
+    .local_stability_neutral_fraction_q30(local_stability_neutral_fraction_q30),
+    .local_stability_compression_arg_q16(local_stability_compression_arg_q16),
+    .local_stability_switch_load_q16(local_stability_switch_load_q16),
+    .group_coherence_q30(group_coherence_q30),
+    .level_mean_coherence_q30(level_mean_coherence_q30),
+    .level_min_coherence_q30(level_min_coherence_q30),
+    .level_max_coherence_q30(level_max_coherence_q30),
+    .level_dispersion_q30(level_dispersion_q30)
   );
 endmodule : frp_m32_csr_top
 
