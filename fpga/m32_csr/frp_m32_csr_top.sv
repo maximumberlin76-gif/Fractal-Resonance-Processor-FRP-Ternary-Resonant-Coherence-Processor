@@ -22,13 +22,13 @@
 // (20). A tick immediately after the write uses the previous scheduler state.
 // Lane selector (08) accepts 0..1; cell selectors (0C,18) accept 0..7.
 // Target (10): 0 = active zero, 1 = +1, 3 = -1; 2 is rejected.
-// Request valid (14) and automatic target enable (68) accept only 0 or 1.
+// Request valid (14) and base-page auto enable (68) accept only 0 or 1.
 // Requests are one-shot: every tick clears BOTH staged valid bits, including
 // ticks in automatic mode. Clear/load commands do not execute requests.
 // Duplicate-cell arbitration remains in the core. As in M22, the target bank
 // is built in lane order; the higher lane supplies a duplicate bank entry.
 //
-// Extension map (hex byte addresses; aligned 32-bit accesses only):
+// Base-page extension map (hex addresses; aligned 32-bit accesses only):
 //   68 RW automatic target enable (reset 0)
 //   6C RW staged phase word for selected cell (selector at 18)
 //   70 RW staged signed frequency Q16 for selected cell
@@ -58,7 +58,7 @@
 // Unlisted high bits in narrow registers read as zero.
 //
 // Phase/frequency staging does not affect the core until command 8 loads the
-// entire bank. Gamma/thermal writes take effect immediately; configure the
+// entire bank. Base-page gamma/thermal writes act immediately; configure the
 // complete bank before ticking. Reads of per-cell data use selector 18.
 // Signed Q-format registers preserve the core's raw two's-complement bits.
 // State, scheduler counters, and phase/thermal telemetry are live post-edge
@@ -68,6 +68,41 @@
 // or changing configuration if a consistent multi-register view is required.
 // Counter clear retains phases, registered targets, state, and pending routes.
 // The underlying core alone implements both tick-separated routes through 0.
+
+//
+// Banked local extension; the CSR address remains eight bits wide.
+// CONTROL additionally accepts these exact hexadecimal commands on either page:
+//   00000100 = select base page (reset page); 00000101 = select local page;
+//   00000200 = one tick with atomic acceptance of all staged gamma targets.
+// Page selection does not tick, load phases, clear requests, or clear history.
+// Command 1 ticks using retained gamma targets. Command 00000200 also consumes
+// both request-valid bits and captures tick results, exactly as command 1 does.
+// Addresses 00..64 retain their meanings on both pages. Only 68..FC are banked.
+// Base-page register meanings, access rules, and interface ID remain unchanged.
+// Local page (hex addresses; per-cell words use the common selector at 18):
+//   68 RW source selection: bit 0 local gamma, bit 1 local attenuation;
+//         only values 0..3 are accepted; reset 0 selects both external banks
+//   6C RW staged signed gamma target Q16 (reset 0 for every cell)
+//   70 RO retained gamma target Q16   74 RO gamma noise state Q16
+//   78 RO gamma drift word           7C RO effective local gamma word
+//   80 RO selected phase gamma word  84 RO local heat Q16
+//   88 RO local peak heat Q16        8C RO generated power Q16
+//   90 RO dissipation Q16            94 RO diffusion Q16
+//   98 RO thermal overload Q16       9C RO retained attenuation Q30
+//   A0 RO frequency lag Q16          A4 RO mean heat Q16
+//   A8 RO peak mean heat Q16         AC RO maximum local peak heat Q16
+//   B0 RO next heat Q16              B4 RO next overload Q16
+//   B8 RO next gamma drift word      BC RO next effective gamma word
+//   C0 RO next attenuation Q30       C4 RO selected phase attenuation Q30
+//   FC RO local-extension ID 46523202
+// Local-page C8..F8 and all unaligned addresses complete with an error.
+// Local-page writes are accepted only at 68 and 6C; other extension words are RO.
+// Source selection and staging take effect on the accepted write edge.
+// Gamma targets are applied together by command 00000200 in either source mode.
+// Reads do not advance any local history. Candidate telemetry is combinational
+// from the current retained state and currently presented core controls.
+// Counter clear retains page, source selection, staging, and local histories.
+// Reset restores the base page, external sources, and zero staged targets.
 
 `ifndef FRP_M32_CSR_TOP_SV
 `define FRP_M32_CSR_TOP_SV
@@ -99,6 +134,14 @@ module frp_m32_csr_top #(
   localparam logic [7:0] ADDR_GAMMA = 8'h74;
   localparam logic [7:0] ADDR_THERMAL_FACTOR = 8'h78;
   localparam logic [31:0] COMMAND_LOAD = 32'd8;
+  localparam logic [31:0] COMMAND_BASE_PAGE = 32'h00000100;
+  localparam logic [31:0] COMMAND_LOCAL_PAGE = 32'h00000101;
+  localparam logic [31:0] COMMAND_TICK_GAMMA = 32'h00000200;
+
+  logic local_page_q;
+  logic [1:0] local_sources_q;
+  logic [255:0] gamma_targets_q;
+  logic gamma_update_pulse;
 
   logic core_ready;
   logic accepted_write, tick_pulse, clear_pulse, load_pulse;
@@ -135,6 +178,29 @@ module frp_m32_csr_top #(
   logic signed [31:0] stability_margin_q16;
   logic [31:0] thermal_sample_count_q;
   logic stable;
+  logic [255:0] local_heat_q16;
+  logic [255:0] local_heat_peak_q16;
+  logic [255:0] local_generated_power_q16;
+  logic [255:0] local_thermal_dissipation_q16;
+  logic [255:0] local_thermal_diffusion_q16;
+  logic [255:0] local_thermal_overload_q16;
+  logic [255:0] local_next_heat_q16;
+  logic [255:0] local_next_overload_q16;
+  logic [255:0] local_frequency_lag_q16;
+  logic [255:0] local_gamma_noise_target_q16;
+  logic [255:0] local_gamma_noise_state_q16;
+  logic [255:0] local_gamma_drift_word;
+  logic [255:0] local_gamma_effective_word;
+  logic [255:0] local_next_gamma_drift_word;
+  logic [255:0] local_next_gamma_effective_word;
+  logic [255:0] phase_gamma_effective_word;
+  logic [255:0] local_thermal_node_factor_q30;
+  logic [255:0] local_next_thermal_node_factor_q30;
+  logic [255:0] phase_thermal_node_factor_q30;
+  logic signed [31:0] local_mean_heat_q16;
+  logic signed [31:0] local_mean_heat_peak_q16;
+  logic signed [31:0] local_maximum_heat_peak_q16;
+
 
   typedef struct packed {
     logic [1:0] request_accept, request_reject;
@@ -168,29 +234,42 @@ module frp_m32_csr_top #(
 
   always_comb begin
     address_writable = frp_m22_is_writable_address(csr_addr)
-      || (csr_addr >= ADDR_AUTO && csr_addr <= ADDR_THERMAL_FACTOR);
+      || (local_page_q
+        ? ((csr_addr == ADDR_AUTO) || (csr_addr == ADDR_PHASE_LOAD))
+        : (csr_addr >= ADDR_AUTO && csr_addr <= ADDR_THERMAL_FACTOR));
     payload_valid = 1'b0;
-    case (csr_addr)
-      FRP_M22_ADDR_CONTROL:
-        payload_valid = (csr_wdata == FRP_M22_CONTROL_TICK)
-          || (csr_wdata == FRP_M22_CONTROL_CLEAR_COUNTERS)
-          || (csr_wdata == FRP_M22_CONTROL_CLEAR_REQUESTS)
-          || (csr_wdata == COMMAND_LOAD);
-      FRP_M22_ADDR_SCHEDULER_MODE:
-        payload_valid = (csr_wdata <= 32'd2);
-      FRP_M22_ADDR_REQUEST_LANE_SELECT:
-        payload_valid = (csr_wdata <= 32'd1);
-      FRP_M22_ADDR_REQUEST_CELL_INDEX, FRP_M22_ADDR_OBSERVE_CELL_INDEX:
-        payload_valid = (csr_wdata <= 32'd7);
-      FRP_M22_ADDR_REQUEST_TARGET:
-        payload_valid = (csr_wdata == 32'd0) || (csr_wdata == 32'd1)
-          || (csr_wdata == 32'd3);
-      FRP_M22_ADDR_REQUEST_VALID, ADDR_AUTO:
-        payload_valid = (csr_wdata <= 32'd1);
-      ADDR_PHASE_LOAD, ADDR_FREQUENCY_LOAD, ADDR_GAMMA, ADDR_THERMAL_FACTOR:
-        payload_valid = 1'b1;
-      default: payload_valid = 1'b0;
-    endcase
+    if (local_page_q && (csr_addr >= ADDR_AUTO)) begin
+      case (csr_addr)
+        ADDR_AUTO: payload_valid = (csr_wdata <= 32'd3);
+        ADDR_PHASE_LOAD: payload_valid = 1'b1;
+        default: payload_valid = 1'b0;
+      endcase
+    end else begin
+      case (csr_addr)
+        FRP_M22_ADDR_CONTROL:
+          payload_valid = (csr_wdata == FRP_M22_CONTROL_TICK)
+            || (csr_wdata == FRP_M22_CONTROL_CLEAR_COUNTERS)
+            || (csr_wdata == FRP_M22_CONTROL_CLEAR_REQUESTS)
+            || (csr_wdata == COMMAND_LOAD)
+            || (csr_wdata == COMMAND_BASE_PAGE)
+            || (csr_wdata == COMMAND_LOCAL_PAGE)
+            || (csr_wdata == COMMAND_TICK_GAMMA);
+        FRP_M22_ADDR_SCHEDULER_MODE:
+          payload_valid = (csr_wdata <= 32'd2);
+        FRP_M22_ADDR_REQUEST_LANE_SELECT:
+          payload_valid = (csr_wdata <= 32'd1);
+        FRP_M22_ADDR_REQUEST_CELL_INDEX, FRP_M22_ADDR_OBSERVE_CELL_INDEX:
+          payload_valid = (csr_wdata <= 32'd7);
+        FRP_M22_ADDR_REQUEST_TARGET:
+          payload_valid = (csr_wdata == 32'd0) || (csr_wdata == 32'd1)
+            || (csr_wdata == 32'd3);
+        FRP_M22_ADDR_REQUEST_VALID, ADDR_AUTO:
+          payload_valid = (csr_wdata <= 32'd1);
+        ADDR_PHASE_LOAD, ADDR_FREQUENCY_LOAD, ADDR_GAMMA, ADDR_THERMAL_FACTOR:
+          payload_valid = 1'b1;
+        default: payload_valid = 1'b0;
+      endcase
+    end
 
     csr_ready = rst_n_async && core_ready && csr_valid;
     csr_error = 1'b0;
@@ -200,13 +279,18 @@ module frp_m32_csr_top #(
       else if (csr_write)
         csr_error = !address_writable || !payload_valid;
       else
-        csr_error = (csr_addr == FRP_M22_ADDR_CONTROL);
+        csr_error = (csr_addr == FRP_M22_ADDR_CONTROL)
+          || (local_page_q && (csr_addr >= 8'hC8) && (csr_addr < 8'hFC));
     end
   end
 
   assign accepted_write = csr_ready && csr_write && !csr_error;
   assign tick_pulse = accepted_write && (csr_addr == FRP_M22_ADDR_CONTROL)
-    && (csr_wdata == FRP_M22_CONTROL_TICK);
+    && ((csr_wdata == FRP_M22_CONTROL_TICK)
+      || (csr_wdata == COMMAND_TICK_GAMMA));
+  assign gamma_update_pulse = accepted_write
+    && (csr_addr == FRP_M22_ADDR_CONTROL)
+    && (csr_wdata == COMMAND_TICK_GAMMA);
   assign clear_pulse = accepted_write && (csr_addr == FRP_M22_ADDR_CONTROL)
     && (csr_wdata == FRP_M22_CONTROL_CLEAR_COUNTERS);
   assign load_pulse = accepted_write && (csr_addr == FRP_M22_ADDR_CONTROL)
@@ -219,6 +303,9 @@ module frp_m32_csr_top #(
       lane_select_q <= 1'b0;
       cell_select_q <= '0;
       auto_enable_q <= 1'b0;
+      local_page_q <= 1'b0;
+      local_sources_q <= '0;
+      gamma_targets_q <= '0;
       request_cells_q <= '0;
       request_targets_q <= '0;
       request_valid_q <= '0;
@@ -238,33 +325,47 @@ module frp_m32_csr_top #(
         last_tick_q.invariant_flags <= '1;
       end
       if (accepted_write) begin
-        case (csr_addr)
-          FRP_M22_ADDR_CONTROL:
-            if (csr_wdata == FRP_M22_CONTROL_CLEAR_REQUESTS)
-              request_valid_q <= '0;
-          FRP_M22_ADDR_SCHEDULER_MODE:
-            mode_control_q <= frp_m31_scheduler_mode_e'(csr_wdata[1:0]);
-          FRP_M22_ADDR_REQUEST_LANE_SELECT:
-            lane_select_q <= csr_wdata[0];
-          FRP_M22_ADDR_REQUEST_CELL_INDEX:
-            request_cells_q[int'(lane_select_q)*3 +: 3] <= csr_wdata[2:0];
-          FRP_M22_ADDR_REQUEST_TARGET:
-            request_targets_q[int'(lane_select_q)*2 +: 2] <= csr_wdata[1:0];
-          FRP_M22_ADDR_REQUEST_VALID:
-            request_valid_q[lane_select_q] <= csr_wdata[0];
-          FRP_M22_ADDR_OBSERVE_CELL_INDEX:
-            cell_select_q <= csr_wdata[2:0];
-          ADDR_AUTO: auto_enable_q <= csr_wdata[0];
-          ADDR_PHASE_LOAD:
-            phase_load_q[int'(cell_select_q)*32 +: 32] <= csr_wdata;
-          ADDR_FREQUENCY_LOAD:
-            frequency_load_q[int'(cell_select_q)*32 +: 32] <= csr_wdata;
-          ADDR_GAMMA:
-            gamma_q[int'(cell_select_q)*32 +: 32] <= csr_wdata;
-          ADDR_THERMAL_FACTOR:
-            thermal_factor_q[int'(cell_select_q)*32 +: 32] <= csr_wdata;
-          default: begin end
-        endcase
+        if (local_page_q && (csr_addr >= ADDR_AUTO)) begin
+          case (csr_addr)
+            ADDR_AUTO: local_sources_q <= csr_wdata[1:0];
+            ADDR_PHASE_LOAD:
+              gamma_targets_q[int'(cell_select_q)*32 +: 32] <= csr_wdata;
+            default: begin end
+          endcase
+        end else begin
+          case (csr_addr)
+            FRP_M22_ADDR_CONTROL: begin
+              if (csr_wdata == FRP_M22_CONTROL_CLEAR_REQUESTS)
+                request_valid_q <= '0;
+              if (csr_wdata == COMMAND_BASE_PAGE)
+                local_page_q <= 1'b0;
+              if (csr_wdata == COMMAND_LOCAL_PAGE)
+                local_page_q <= 1'b1;
+            end
+            FRP_M22_ADDR_SCHEDULER_MODE:
+              mode_control_q <= frp_m31_scheduler_mode_e'(csr_wdata[1:0]);
+            FRP_M22_ADDR_REQUEST_LANE_SELECT:
+              lane_select_q <= csr_wdata[0];
+            FRP_M22_ADDR_REQUEST_CELL_INDEX:
+              request_cells_q[int'(lane_select_q)*3 +: 3] <= csr_wdata[2:0];
+            FRP_M22_ADDR_REQUEST_TARGET:
+              request_targets_q[int'(lane_select_q)*2 +: 2] <= csr_wdata[1:0];
+            FRP_M22_ADDR_REQUEST_VALID:
+              request_valid_q[lane_select_q] <= csr_wdata[0];
+            FRP_M22_ADDR_OBSERVE_CELL_INDEX:
+              cell_select_q <= csr_wdata[2:0];
+            ADDR_AUTO: auto_enable_q <= csr_wdata[0];
+            ADDR_PHASE_LOAD:
+              phase_load_q[int'(cell_select_q)*32 +: 32] <= csr_wdata;
+            ADDR_FREQUENCY_LOAD:
+              frequency_load_q[int'(cell_select_q)*32 +: 32] <= csr_wdata;
+            ADDR_GAMMA:
+              gamma_q[int'(cell_select_q)*32 +: 32] <= csr_wdata;
+            ADDR_THERMAL_FACTOR:
+              thermal_factor_q[int'(cell_select_q)*32 +: 32] <= csr_wdata;
+            default: begin end
+          endcase
+        end
       end
     end
   end
@@ -272,106 +373,138 @@ module frp_m32_csr_top #(
   always_comb begin
     csr_rdata = '0;
     if (csr_ready && !csr_write && !csr_error) begin
-      case (csr_addr)
-        FRP_M22_ADDR_SCHEDULER_MODE: csr_rdata = {30'd0, mode_control_q};
-        FRP_M22_ADDR_REQUEST_LANE_SELECT: csr_rdata[0] = lane_select_q;
-        FRP_M22_ADDR_REQUEST_CELL_INDEX:
-          csr_rdata[2:0] = request_cells_q[int'(lane_select_q)*3 +: 3];
-        FRP_M22_ADDR_REQUEST_TARGET:
-          csr_rdata[1:0] = request_targets_q[int'(lane_select_q)*2 +: 2];
-        FRP_M22_ADDR_REQUEST_VALID:
-          csr_rdata[0] = request_valid_q[lane_select_q];
-        FRP_M22_ADDR_OBSERVE_CELL_INDEX: csr_rdata[2:0] = cell_select_q;
-        FRP_M22_ADDR_STATUS: begin
-          csr_rdata[FRP_M22_STATUS_READY] = core_ready;
-          csr_rdata[FRP_M22_STATUS_CAPACITY_EXHAUSTED] =
-            last_tick_q.capacity_exhausted;
-          csr_rdata[FRP_M22_STATUS_REQUEST_ACCEPTED] =
-            |last_tick_q.request_accept;
-          csr_rdata[FRP_M22_STATUS_REQUEST_REJECTED] =
-            |last_tick_q.request_reject;
-          csr_rdata[FRP_M22_STATUS_PENDING_ACTIVE] = |pending_route_out;
-          csr_rdata[FRP_M22_STATUS_INVARIANT_FAILURE] =
-            !(&last_tick_q.invariant_flags);
-          csr_rdata[FRP_M22_STATUS_ACTUAL_DIRECT_NONZERO] =
-            |last_tick_q.actual_direct;
-          csr_rdata[FRP_M22_STATUS_RESERVED_STATE_NONZERO] =
-            |last_tick_q.reserved_state;
-          csr_rdata[FRP_M22_STATUS_QUEUE_OVERFLOW_NONZERO] =
-            |last_tick_q.queue_overflow;
-        end
-        FRP_M22_ADDR_SCHEDULER_MODE_ACTIVE:
-          csr_rdata[1:0] = scheduler_mode_q;
-        FRP_M22_ADDR_SCHEDULER_STATE: csr_rdata[2:0] = scheduler_state_q;
-        FRP_M22_ADDR_TICKS_RECORDED: csr_rdata = ticks_recorded_q;
-        FRP_M22_ADDR_REQUEST_ACCEPT: csr_rdata[1:0] = last_tick_q.request_accept;
-        FRP_M22_ADDR_REQUEST_REJECT: csr_rdata[1:0] = last_tick_q.request_reject;
-        FRP_M22_ADDR_RETAINED_STATE:
-          csr_rdata[1:0] = state_out[int'(cell_select_q)*2 +: 2];
-        FRP_M22_ADDR_PENDING_ROUTE:
-          csr_rdata[1:0] = pending_route_out[int'(cell_select_q)*2 +: 2];
-        FRP_M22_ADDR_ACCEPTED_CHANGES: csr_rdata = last_tick_q.accepted_changes;
-        FRP_M22_ADDR_CAPACITY_REMAINING:
-          csr_rdata = last_tick_q.capacity_remaining;
-        FRP_M22_ADDR_CAPACITY_EXHAUSTED:
-          csr_rdata[0] = last_tick_q.capacity_exhausted;
-        FRP_M22_ADDR_SWITCH_LOAD_NUMERATOR: csr_rdata = last_tick_q.switch_load;
-        FRP_M22_ADDR_INVARIANT_FLAGS:
-          csr_rdata[FRP_M31_INVARIANT_FLAGS-1:0] = last_tick_q.invariant_flags;
-        FRP_M22_ADDR_REQUESTED_DIRECT_EVENTS:
-          csr_rdata = last_tick_q.requested_direct;
-        FRP_M22_ADDR_PREVENTED_DIRECT_EVENTS:
-          csr_rdata = last_tick_q.prevented_direct;
-        FRP_M22_ADDR_NEUTRAL_ROUTED_EVENTS: csr_rdata = last_tick_q.neutral_routed;
-        FRP_M22_ADDR_ACTUAL_DIRECT_EVENTS: csr_rdata = last_tick_q.actual_direct;
-        FRP_M22_ADDR_RESERVED_STATE_EVENTS: csr_rdata = last_tick_q.reserved_state;
-        FRP_M22_ADDR_QUEUE_OVERFLOW_EVENTS: csr_rdata = last_tick_q.queue_overflow;
-        ADDR_AUTO: csr_rdata[0] = auto_enable_q;
-        ADDR_PHASE_LOAD:
-          csr_rdata = phase_load_q[int'(cell_select_q)*32 +: 32];
-        ADDR_FREQUENCY_LOAD:
-          csr_rdata = frequency_load_q[int'(cell_select_q)*32 +: 32];
-        ADDR_GAMMA: csr_rdata = gamma_q[int'(cell_select_q)*32 +: 32];
-        ADDR_THERMAL_FACTOR:
-          csr_rdata = thermal_factor_q[int'(cell_select_q)*32 +: 32];
-        8'h7C: csr_rdata = phase_word_q[int'(cell_select_q)*32 +: 32];
-        8'h80: csr_rdata = frequency_current_q16[int'(cell_select_q)*32 +: 32];
-        8'h84: csr_rdata = coupling_field_q16[int'(cell_select_q)*32 +: 32];
-        8'h88: csr_rdata = phase_projection_q30[int'(cell_select_q)*32 +: 32];
-        8'h8C: csr_rdata[1:0] = phase_target_source[int'(cell_select_q)*2 +: 2];
-        8'h90: csr_rdata[1:0] = registered_target_q[int'(cell_select_q)*2 +: 2];
-        8'h94: csr_rdata[5:0] = {last_tick_q.capture_rejected,
-          last_tick_q.capture_accepted, registered_request_enable,
-          registered_target_domain_valid, phase_target_domain_valid,
-          registered_target_valid_q};
-        8'h98: csr_rdata = accepted_target_capture_events_q;
-        8'h9C: csr_rdata = rejected_target_capture_events_q;
-        8'hA0: csr_rdata = scheduler_count_free_q;
-        8'hA4: csr_rdata = scheduler_count_balance_q;
-        8'hA8: csr_rdata = scheduler_count_commit_q;
-        8'hAC: csr_rdata = scheduler_count_excite_q;
-        8'hB0: csr_rdata = scheduler_count_neutralize_q;
-        8'hB4: csr_rdata = pair_coherence_q30;
-        8'hB8: csr_rdata = cluster_coherence_q30;
-        8'hBC: csr_rdata = global_coherence_q30;
-        8'hC0: csr_rdata = organization_dispersion_q30;
-        8'hC4: csr_rdata = last_tick_q.cycle_cost;
-        8'hC8: csr_rdata = temperature_proxy_q16;
-        8'hCC: csr_rdata = peak_temperature_proxy_q16;
-        8'hD0: csr_rdata = thermal_sample_count_q;
-        8'hD4: csr_rdata = coherence_capacity_q16;
-        8'hD8: csr_rdata = pressure_q16;
-        8'hDC: csr_rdata = stability_margin_q16;
-        8'hE0: csr_rdata[0] = stable;
-        8'hE4: csr_rdata[7:0] = last_tick_q.accepted_cells;
-        8'hE8: csr_rdata[7:0] = last_tick_q.neutral_cells;
-        8'hEC: csr_rdata[7:0] = last_tick_q.changed_cells;
-        8'hF0: csr_rdata[11:0] = last_tick_q.phase_requests;
-        8'hF4: csr_rdata[11:0] = last_tick_q.execution_requests;
-        8'hF8: csr_rdata[15:0] = last_tick_q.execution_target_bank;
-        8'hFC: csr_rdata = 32'h46523201;
-        default: csr_rdata = '0;
-      endcase
+      if (local_page_q && (csr_addr >= ADDR_AUTO)) begin
+        case (csr_addr)
+          ADDR_AUTO: csr_rdata[1:0] = local_sources_q;
+          ADDR_PHASE_LOAD:
+            csr_rdata = gamma_targets_q[int'(cell_select_q)*32 +: 32];
+          8'h70: csr_rdata = local_gamma_noise_target_q16[int'(cell_select_q)*32 +: 32];
+          8'h74: csr_rdata = local_gamma_noise_state_q16[int'(cell_select_q)*32 +: 32];
+          8'h78: csr_rdata = local_gamma_drift_word[int'(cell_select_q)*32 +: 32];
+          8'h7C: csr_rdata = local_gamma_effective_word[int'(cell_select_q)*32 +: 32];
+          8'h80: csr_rdata = phase_gamma_effective_word[int'(cell_select_q)*32 +: 32];
+          8'h84: csr_rdata = local_heat_q16[int'(cell_select_q)*32 +: 32];
+          8'h88: csr_rdata = local_heat_peak_q16[int'(cell_select_q)*32 +: 32];
+          8'h8C: csr_rdata = local_generated_power_q16[int'(cell_select_q)*32 +: 32];
+          8'h90: csr_rdata = local_thermal_dissipation_q16[int'(cell_select_q)*32 +: 32];
+          8'h94: csr_rdata = local_thermal_diffusion_q16[int'(cell_select_q)*32 +: 32];
+          8'h98: csr_rdata = local_thermal_overload_q16[int'(cell_select_q)*32 +: 32];
+          8'h9C: csr_rdata = local_thermal_node_factor_q30[int'(cell_select_q)*32 +: 32];
+          8'hA0: csr_rdata = local_frequency_lag_q16[int'(cell_select_q)*32 +: 32];
+          8'hA4: csr_rdata = local_mean_heat_q16;
+          8'hA8: csr_rdata = local_mean_heat_peak_q16;
+          8'hAC: csr_rdata = local_maximum_heat_peak_q16;
+          8'hB0: csr_rdata = local_next_heat_q16[int'(cell_select_q)*32 +: 32];
+          8'hB4: csr_rdata = local_next_overload_q16[int'(cell_select_q)*32 +: 32];
+          8'hB8: csr_rdata = local_next_gamma_drift_word[int'(cell_select_q)*32 +: 32];
+          8'hBC: csr_rdata = local_next_gamma_effective_word[int'(cell_select_q)*32 +: 32];
+          8'hC0: csr_rdata = local_next_thermal_node_factor_q30[int'(cell_select_q)*32 +: 32];
+          8'hC4: csr_rdata = phase_thermal_node_factor_q30[int'(cell_select_q)*32 +: 32];
+          8'hFC: csr_rdata = 32'h46523202;
+          default: csr_rdata = '0;
+        endcase
+      end else begin
+        case (csr_addr)
+          FRP_M22_ADDR_SCHEDULER_MODE: csr_rdata = {30'd0, mode_control_q};
+          FRP_M22_ADDR_REQUEST_LANE_SELECT: csr_rdata[0] = lane_select_q;
+          FRP_M22_ADDR_REQUEST_CELL_INDEX:
+            csr_rdata[2:0] = request_cells_q[int'(lane_select_q)*3 +: 3];
+          FRP_M22_ADDR_REQUEST_TARGET:
+            csr_rdata[1:0] = request_targets_q[int'(lane_select_q)*2 +: 2];
+          FRP_M22_ADDR_REQUEST_VALID:
+            csr_rdata[0] = request_valid_q[lane_select_q];
+          FRP_M22_ADDR_OBSERVE_CELL_INDEX: csr_rdata[2:0] = cell_select_q;
+          FRP_M22_ADDR_STATUS: begin
+            csr_rdata[FRP_M22_STATUS_READY] = core_ready;
+            csr_rdata[FRP_M22_STATUS_CAPACITY_EXHAUSTED] =
+              last_tick_q.capacity_exhausted;
+            csr_rdata[FRP_M22_STATUS_REQUEST_ACCEPTED] =
+              |last_tick_q.request_accept;
+            csr_rdata[FRP_M22_STATUS_REQUEST_REJECTED] =
+              |last_tick_q.request_reject;
+            csr_rdata[FRP_M22_STATUS_PENDING_ACTIVE] = |pending_route_out;
+            csr_rdata[FRP_M22_STATUS_INVARIANT_FAILURE] =
+              !(&last_tick_q.invariant_flags);
+            csr_rdata[FRP_M22_STATUS_ACTUAL_DIRECT_NONZERO] =
+              |last_tick_q.actual_direct;
+            csr_rdata[FRP_M22_STATUS_RESERVED_STATE_NONZERO] =
+              |last_tick_q.reserved_state;
+            csr_rdata[FRP_M22_STATUS_QUEUE_OVERFLOW_NONZERO] =
+              |last_tick_q.queue_overflow;
+          end
+          FRP_M22_ADDR_SCHEDULER_MODE_ACTIVE:
+            csr_rdata[1:0] = scheduler_mode_q;
+          FRP_M22_ADDR_SCHEDULER_STATE: csr_rdata[2:0] = scheduler_state_q;
+          FRP_M22_ADDR_TICKS_RECORDED: csr_rdata = ticks_recorded_q;
+          FRP_M22_ADDR_REQUEST_ACCEPT: csr_rdata[1:0] = last_tick_q.request_accept;
+          FRP_M22_ADDR_REQUEST_REJECT: csr_rdata[1:0] = last_tick_q.request_reject;
+          FRP_M22_ADDR_RETAINED_STATE:
+            csr_rdata[1:0] = state_out[int'(cell_select_q)*2 +: 2];
+          FRP_M22_ADDR_PENDING_ROUTE:
+            csr_rdata[1:0] = pending_route_out[int'(cell_select_q)*2 +: 2];
+          FRP_M22_ADDR_ACCEPTED_CHANGES: csr_rdata = last_tick_q.accepted_changes;
+          FRP_M22_ADDR_CAPACITY_REMAINING:
+            csr_rdata = last_tick_q.capacity_remaining;
+          FRP_M22_ADDR_CAPACITY_EXHAUSTED:
+            csr_rdata[0] = last_tick_q.capacity_exhausted;
+          FRP_M22_ADDR_SWITCH_LOAD_NUMERATOR: csr_rdata = last_tick_q.switch_load;
+          FRP_M22_ADDR_INVARIANT_FLAGS:
+            csr_rdata[FRP_M31_INVARIANT_FLAGS-1:0] = last_tick_q.invariant_flags;
+          FRP_M22_ADDR_REQUESTED_DIRECT_EVENTS:
+            csr_rdata = last_tick_q.requested_direct;
+          FRP_M22_ADDR_PREVENTED_DIRECT_EVENTS:
+            csr_rdata = last_tick_q.prevented_direct;
+          FRP_M22_ADDR_NEUTRAL_ROUTED_EVENTS: csr_rdata = last_tick_q.neutral_routed;
+          FRP_M22_ADDR_ACTUAL_DIRECT_EVENTS: csr_rdata = last_tick_q.actual_direct;
+          FRP_M22_ADDR_RESERVED_STATE_EVENTS: csr_rdata = last_tick_q.reserved_state;
+          FRP_M22_ADDR_QUEUE_OVERFLOW_EVENTS: csr_rdata = last_tick_q.queue_overflow;
+          ADDR_AUTO: csr_rdata[0] = auto_enable_q;
+          ADDR_PHASE_LOAD:
+            csr_rdata = phase_load_q[int'(cell_select_q)*32 +: 32];
+          ADDR_FREQUENCY_LOAD:
+            csr_rdata = frequency_load_q[int'(cell_select_q)*32 +: 32];
+          ADDR_GAMMA: csr_rdata = gamma_q[int'(cell_select_q)*32 +: 32];
+          ADDR_THERMAL_FACTOR:
+            csr_rdata = thermal_factor_q[int'(cell_select_q)*32 +: 32];
+          8'h7C: csr_rdata = phase_word_q[int'(cell_select_q)*32 +: 32];
+          8'h80: csr_rdata = frequency_current_q16[int'(cell_select_q)*32 +: 32];
+          8'h84: csr_rdata = coupling_field_q16[int'(cell_select_q)*32 +: 32];
+          8'h88: csr_rdata = phase_projection_q30[int'(cell_select_q)*32 +: 32];
+          8'h8C: csr_rdata[1:0] = phase_target_source[int'(cell_select_q)*2 +: 2];
+          8'h90: csr_rdata[1:0] = registered_target_q[int'(cell_select_q)*2 +: 2];
+          8'h94: csr_rdata[5:0] = {last_tick_q.capture_rejected,
+            last_tick_q.capture_accepted, registered_request_enable,
+            registered_target_domain_valid, phase_target_domain_valid,
+            registered_target_valid_q};
+          8'h98: csr_rdata = accepted_target_capture_events_q;
+          8'h9C: csr_rdata = rejected_target_capture_events_q;
+          8'hA0: csr_rdata = scheduler_count_free_q;
+          8'hA4: csr_rdata = scheduler_count_balance_q;
+          8'hA8: csr_rdata = scheduler_count_commit_q;
+          8'hAC: csr_rdata = scheduler_count_excite_q;
+          8'hB0: csr_rdata = scheduler_count_neutralize_q;
+          8'hB4: csr_rdata = pair_coherence_q30;
+          8'hB8: csr_rdata = cluster_coherence_q30;
+          8'hBC: csr_rdata = global_coherence_q30;
+          8'hC0: csr_rdata = organization_dispersion_q30;
+          8'hC4: csr_rdata = last_tick_q.cycle_cost;
+          8'hC8: csr_rdata = temperature_proxy_q16;
+          8'hCC: csr_rdata = peak_temperature_proxy_q16;
+          8'hD0: csr_rdata = thermal_sample_count_q;
+          8'hD4: csr_rdata = coherence_capacity_q16;
+          8'hD8: csr_rdata = pressure_q16;
+          8'hDC: csr_rdata = stability_margin_q16;
+          8'hE0: csr_rdata[0] = stable;
+          8'hE4: csr_rdata[7:0] = last_tick_q.accepted_cells;
+          8'hE8: csr_rdata[7:0] = last_tick_q.neutral_cells;
+          8'hEC: csr_rdata[7:0] = last_tick_q.changed_cells;
+          8'hF0: csr_rdata[11:0] = last_tick_q.phase_requests;
+          8'hF4: csr_rdata[11:0] = last_tick_q.execution_requests;
+          8'hF8: csr_rdata[15:0] = last_tick_q.execution_target_bank;
+          8'hFC: csr_rdata = 32'h46523201;
+          default: csr_rdata = '0;
+        endcase
+      end
     end
   end
 
@@ -435,7 +568,33 @@ module frp_m32_csr_top #(
     .peak_temperature_proxy_q16(peak_temperature_proxy_q16),
     .thermal_sample_count_q(thermal_sample_count_q),
     .coherence_capacity_q16(coherence_capacity_q16), .pressure_q16(pressure_q16),
-    .stability_margin_q16(stability_margin_q16), .stable(stable)
+    .stability_margin_q16(stability_margin_q16), .stable(stable),
+    .local_heat_q16(local_heat_q16),
+    .local_heat_peak_q16(local_heat_peak_q16),
+    .local_generated_power_q16(local_generated_power_q16),
+    .local_thermal_dissipation_q16(local_thermal_dissipation_q16),
+    .local_thermal_diffusion_q16(local_thermal_diffusion_q16),
+    .local_thermal_overload_q16(local_thermal_overload_q16),
+    .local_next_heat_q16(local_next_heat_q16),
+    .local_next_overload_q16(local_next_overload_q16),
+    .local_frequency_lag_q16(local_frequency_lag_q16),
+    .local_gamma_noise_target_q16(local_gamma_noise_target_q16),
+    .local_gamma_noise_state_q16(local_gamma_noise_state_q16),
+    .local_gamma_drift_word(local_gamma_drift_word),
+    .local_gamma_effective_word(local_gamma_effective_word),
+    .local_next_gamma_drift_word(local_next_gamma_drift_word),
+    .local_next_gamma_effective_word(local_next_gamma_effective_word),
+    .phase_gamma_effective_word(phase_gamma_effective_word),
+    .local_thermal_node_factor_q30(local_thermal_node_factor_q30),
+    .local_next_thermal_node_factor_q30(local_next_thermal_node_factor_q30),
+    .phase_thermal_node_factor_q30(phase_thermal_node_factor_q30),
+    .local_mean_heat_q16(local_mean_heat_q16),
+    .local_mean_heat_peak_q16(local_mean_heat_peak_q16),
+    .local_maximum_heat_peak_q16(local_maximum_heat_peak_q16),
+    .local_gamma_enable(local_sources_q[0]),
+    .local_thermal_enable(local_sources_q[1]),
+    .gamma_targets_q16(gamma_targets_q),
+    .gamma_update_valid(gamma_update_pulse)
   );
 endmodule : frp_m32_csr_top
 
