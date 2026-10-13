@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // FRP M32 FPGA integration boundary for the complete registered-target core.
 //
-// The integrated phase engine supports exactly eight cells. The default
-// profile therefore exposes two request lanes and three-bit cell indexes.
+// The integrated phase engine supports 8, 16 and 32 cells. The default
+// eight-cell profile exposes two request lanes and three-bit cell indexes.
 // All core outputs are forwarded without added registers or output masking.
 // The core retains its -1/0/1 encoding and free, 7/1, and 1/7 execution modes.
 //
@@ -21,13 +21,17 @@
 // Local gamma and thermal selectors are independent synchronous controls.
 // Omitted selectors choose the external gamma and thermal data inputs.
 // gamma_update_valid is qualified by core_ready and is accepted only on an
-// enabled tick; gamma_targets_q16 carries eight signed Q16.16 target words.
+// enabled tick; gamma_targets_q16 carries CELLS signed Q16.16 target words.
 // A target-update pulse during reset release is discarded. A held request
 // becomes visible after release and is sampled on the next enabled tick.
 // Local thermal, gamma, and attenuation histories advance with enabled ticks
 // in either source mode. Counter clear retains all three local histories.
 // Retained values, next-update candidates, and selected phase inputs are
 // forwarded separately, without an additional cycle of latency.
+//
+// Local stability results and their sample-valid/count outputs are forwarded
+// directly. Their one-edge snapshot latency is provided by the core.
+// Multiscale coherence outputs expose every dyadic group and level.
 //
 // Data buses and combinational status outputs retain the core's semantics
 // during reset. SIN_LUT_FILE is passed directly to the phase engine.
@@ -159,15 +163,15 @@ module frp_m32_fpga_top #(
   output logic signed [31:0] stability_margin_q16,
   output logic stable,
 
-  output wire [255:0] local_heat_q16,
-  output wire [255:0] local_heat_peak_q16,
-  output wire [255:0] local_generated_power_q16,
-  output wire [255:0] local_thermal_dissipation_q16,
-  output wire [255:0] local_thermal_diffusion_q16,
-  output wire [255:0] local_thermal_overload_q16,
-  output wire [255:0] local_next_heat_q16,
-  output wire [255:0] local_next_overload_q16,
-  output logic [255:0] local_frequency_lag_q16,
+  output wire [(CELLS*32)-1:0] local_heat_q16,
+  output wire [(CELLS*32)-1:0] local_heat_peak_q16,
+  output wire [(CELLS*32)-1:0] local_generated_power_q16,
+  output wire [(CELLS*32)-1:0] local_thermal_dissipation_q16,
+  output wire [(CELLS*32)-1:0] local_thermal_diffusion_q16,
+  output wire [(CELLS*32)-1:0] local_thermal_overload_q16,
+  output wire [(CELLS*32)-1:0] local_next_heat_q16,
+  output wire [(CELLS*32)-1:0] local_next_overload_q16,
+  output logic [(CELLS*32)-1:0] local_frequency_lag_q16,
   output wire signed [31:0] local_mean_heat_q16,
   output wire signed [31:0] local_mean_heat_peak_q16,
   output wire signed [31:0] local_maximum_heat_peak_q16,
@@ -186,7 +190,31 @@ module frp_m32_fpga_top #(
   input logic local_thermal_enable = 1'b0,
   output wire [(CELLS*32)-1:0] local_thermal_node_factor_q30,
   output wire [(CELLS*32)-1:0] local_next_thermal_node_factor_q30,
-  output wire [(CELLS*32)-1:0] phase_thermal_node_factor_q30
+  output wire [(CELLS*32)-1:0] phase_thermal_node_factor_q30,
+
+  output wire [((CELLS-1)*32)-1:0] group_coherence_q30,
+  output wire [($clog2(CELLS)*32)-1:0] level_mean_coherence_q30,
+  output wire [($clog2(CELLS)*32)-1:0] level_min_coherence_q30,
+  output wire [($clog2(CELLS)*32)-1:0] level_max_coherence_q30,
+  output wire [($clog2(CELLS)*32)-1:0] level_dispersion_q30,
+
+  output wire signed [31:0] local_coherence_compression_q30,
+  output wire signed [31:0] local_effective_coherence_q30,
+  output wire signed [31:0] local_coherence_capacity_q16,
+  output wire signed [31:0] local_pressure_q16,
+  output wire signed [31:0] local_stability_margin_q16,
+  output wire local_stable,
+  output wire signed [31:0] local_previous_margin_q16,
+  output logic local_stability_valid_q,
+  output logic [31:0] local_stability_sample_count_q,
+  output logic signed [31:0] local_stability_raw_coherence_q30,
+  output logic signed [31:0] local_stability_cluster_coherence_q30,
+  output logic signed [31:0] local_stability_mean_heat_q16,
+  output logic signed [31:0] local_stability_mean_overload_q16,
+  output logic signed [31:0] local_stability_mean_lag_q16,
+  output logic signed [31:0] local_stability_neutral_fraction_q30,
+  output logic signed [31:0] local_stability_compression_arg_q16,
+  output logic signed [31:0] local_stability_switch_load_q16
 );
 
   logic [1:0] reset_sync_q;
@@ -200,8 +228,8 @@ module frp_m32_fpga_top #(
 
 `ifndef SYNTHESIS
   initial begin
-    if (CELLS != 8)
-      $fatal(1, "FRP M32 FPGA top requires exactly eight cells");
+    if ((CELLS != 8) && (CELLS != 16) && (CELLS != 32))
+      $fatal(1, "FRP M32 FPGA top requires 8, 16 or 32 cells");
     if (REQUEST_LANES != frp_m31_pkg::frp_calc_request_lanes(CELLS))
       $fatal(1, "FRP M32 FPGA top request-lane count mismatch");
     if (CELL_INDEX_BITS != ((CELLS <= 1) ? 1 : $clog2(CELLS)))
@@ -338,7 +366,29 @@ module frp_m32_fpga_top #(
     .local_gamma_enable(local_gamma_enable),
     .gamma_update_valid(gamma_update_valid_core),
     .gamma_targets_q16(gamma_targets_q16),
-    .local_thermal_enable(local_thermal_enable)
+    .local_thermal_enable(local_thermal_enable),
+    .group_coherence_q30(group_coherence_q30),
+    .level_mean_coherence_q30(level_mean_coherence_q30),
+    .level_min_coherence_q30(level_min_coherence_q30),
+    .level_max_coherence_q30(level_max_coherence_q30),
+    .level_dispersion_q30(level_dispersion_q30),
+    .local_coherence_compression_q30(local_coherence_compression_q30),
+    .local_effective_coherence_q30(local_effective_coherence_q30),
+    .local_coherence_capacity_q16(local_coherence_capacity_q16),
+    .local_pressure_q16(local_pressure_q16),
+    .local_stability_margin_q16(local_stability_margin_q16),
+    .local_stable(local_stable),
+    .local_previous_margin_q16(local_previous_margin_q16),
+    .local_stability_valid_q(local_stability_valid_q),
+    .local_stability_sample_count_q(local_stability_sample_count_q),
+    .local_stability_raw_coherence_q30(local_stability_raw_coherence_q30),
+    .local_stability_cluster_coherence_q30(local_stability_cluster_coherence_q30),
+    .local_stability_mean_heat_q16(local_stability_mean_heat_q16),
+    .local_stability_mean_overload_q16(local_stability_mean_overload_q16),
+    .local_stability_mean_lag_q16(local_stability_mean_lag_q16),
+    .local_stability_neutral_fraction_q30(local_stability_neutral_fraction_q30),
+    .local_stability_compression_arg_q16(local_stability_compression_arg_q16),
+    .local_stability_switch_load_q16(local_stability_switch_load_q16)
   );
 
 endmodule : frp_m32_fpga_top
