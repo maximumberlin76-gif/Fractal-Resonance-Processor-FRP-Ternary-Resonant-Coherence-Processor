@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: Apache-2.0
-// FRP M32 integrated registered-target composition over the M31 RTL contour.
+ // SPDX-License-Identifier: Apache-2.0
+ // FRP M32 integrated registered-target composition over the M31 RTL contour.
 
 `ifndef FRP_M32_CORE_SV
 `define FRP_M32_CORE_SV
@@ -134,15 +134,15 @@ module frp_m32_core #(
   output logic signed [31:0] stability_margin_q16,
   output logic stable,
 
-  output wire [255:0] local_heat_q16,
-  output wire [255:0] local_heat_peak_q16,
-  output wire [255:0] local_generated_power_q16,
-  output wire [255:0] local_thermal_dissipation_q16,
-  output wire [255:0] local_thermal_diffusion_q16,
-  output wire [255:0] local_thermal_overload_q16,
-  output wire [255:0] local_next_heat_q16,
-  output wire [255:0] local_next_overload_q16,
-  output logic [255:0] local_frequency_lag_q16,
+  output wire [(CELLS*32)-1:0] local_heat_q16,
+  output wire [(CELLS*32)-1:0] local_heat_peak_q16,
+  output wire [(CELLS*32)-1:0] local_generated_power_q16,
+  output wire [(CELLS*32)-1:0] local_thermal_dissipation_q16,
+  output wire [(CELLS*32)-1:0] local_thermal_diffusion_q16,
+  output wire [(CELLS*32)-1:0] local_thermal_overload_q16,
+  output wire [(CELLS*32)-1:0] local_next_heat_q16,
+  output wire [(CELLS*32)-1:0] local_next_overload_q16,
+  output logic [(CELLS*32)-1:0] local_frequency_lag_q16,
   output wire signed [31:0] local_mean_heat_q16,
   output wire signed [31:0] local_mean_heat_peak_q16,
   output wire signed [31:0] local_maximum_heat_peak_q16,
@@ -161,19 +161,30 @@ module frp_m32_core #(
   input logic local_thermal_enable = 1'b0,
   output wire [(CELLS*32)-1:0] local_thermal_node_factor_q30,
   output wire [(CELLS*32)-1:0] local_next_thermal_node_factor_q30,
-  output wire [(CELLS*32)-1:0] phase_thermal_node_factor_q30
+  output wire [(CELLS*32)-1:0] phase_thermal_node_factor_q30,
+
+  output wire [((CELLS-1)*32)-1:0] group_coherence_q30,
+  output wire [($clog2(CELLS)*32)-1:0] level_mean_coherence_q30,
+  output wire [($clog2(CELLS)*32)-1:0] level_min_coherence_q30,
+  output wire [($clog2(CELLS)*32)-1:0] level_max_coherence_q30,
+  output wire [($clog2(CELLS)*32)-1:0] level_dispersion_q30
 );
 
   logic [63:0] normalized_cycle_cost_wide;
 
   import frp_m31_fixed_point_pkg::*;
 
+  initial begin
+    if ((CELLS != 8) && (CELLS != 16) && (CELLS != 32))
+      $fatal(1, "FRP M32 core requires 8, 16 or 32 cells");
+  end
+
   // The local thermal field uses the frequency selected for this edge.
   // A phase load selects frequency_load_q16; otherwise the phase engine's
   // rounded delay update is used. Both paths use the retained ternary state
   // and accepted changes visible before the edge, as in the M32 phase path.
   // A disabled tick holds thermal history; clear_counters does not clear it.
-  for (genvar lane = 0; lane < 8; lane = lane + 1) begin : g_local_frequency_lag
+  for (genvar lane = 0; lane < CELLS; lane = lane + 1) begin : g_local_frequency_lag
     logic signed [31:0] selected_frequency_q16;
     logic signed [31:0] target_frequency_q16;
     logic signed [31:0] current_frequency_q16;
@@ -213,7 +224,9 @@ module frp_m32_core #(
     end
   end
 
-  frp_m31_local_thermal_field u_local_thermal_field (
+  frp_m31_local_thermal_field #(
+    .CELLS(CELLS)
+  ) u_local_thermal_field (
     .clk(clk),
     .rst_n(rst_n),
     .tick_enable(tick_enable),
@@ -389,7 +402,12 @@ module frp_m32_core #(
     .pair_coherence_q30(pair_coherence_q30),
     .cluster_coherence_q30(cluster_coherence_q30),
     .global_coherence_q30(global_coherence_q30),
-    .organization_dispersion_q30(organization_dispersion_q30)
+    .organization_dispersion_q30(organization_dispersion_q30),
+    .group_coherence_q30(group_coherence_q30),
+    .level_mean_coherence_q30(level_mean_coherence_q30),
+    .level_min_coherence_q30(level_min_coherence_q30),
+    .level_max_coherence_q30(level_max_coherence_q30),
+    .level_dispersion_q30(level_dispersion_q30)
   );
 
   frp_m31_thermal_proxy u_thermal_proxy (
