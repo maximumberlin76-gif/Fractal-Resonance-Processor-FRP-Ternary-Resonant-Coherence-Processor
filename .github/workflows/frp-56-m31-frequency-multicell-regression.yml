@@ -1,0 +1,181 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# Dependencies retain their own licenses.
+name: 56 - FRP M31 Frequency Multicell Regression
+run-name: "56 - FRP Retained Frequency | 8/16/32 cells and free/7:1/1:7 @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-56-frequency-multicell-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Prepare evidence and pinned simulator
+        run: |
+          set -euo pipefail
+          export FRP56_EVIDENCE="$RUNNER_TEMP/frp-56-evidence"
+          mkdir -p "$FRP56_EVIDENCE"
+          printf '%s\n' "FRP56_EVIDENCE=$FRP56_EVIDENCE" >> "$GITHUB_ENV"
+          python -m pip install --disable-pip-version-check \
+            verilator==5.48.0 systemc==3.0.2.1 click==8.5.0 platformdirs==4.13.0 \
+            2>&1 | tee "$FRP56_EVIDENCE/install.log"
+          python -m pip freeze > "$FRP56_EVIDENCE/packages.txt"
+      - name: Run frequency multicell regression and verify results
+        run: |
+          set -euo pipefail
+          cat > "$FRP56_EVIDENCE/verify.py" <<'FRP56_EOF'
+          from pathlib import Path
+          import hashlib, importlib.metadata, json, os, re, shutil, subprocess
+          R=Path.cwd()
+          B=Path(os.environ['FRP56_EVIDENCE'])
+          def save(name,value):
+              (B/name).write_text(json.dumps(value,indent=2)+'\n')
+          def run(args,name,timeout=900):
+              save(name+'-command.json',args)
+              path=B/(name+'.log')
+              print('RUN',name,flush=True)
+              with path.open('w') as log:
+                  try:
+                      result=subprocess.run(args,cwd=R,stdout=log,
+                          stderr=subprocess.STDOUT,text=True,timeout=timeout)
+                  except subprocess.TimeoutExpired:
+                      log.write('\nTIMEOUT\n')
+                      raise
+              text=path.read_text()
+              if result.returncode:
+                  print(text[-12000:],flush=True)
+                  raise RuntimeError((name,result.returncode))
+              print(text[-2000:],flush=True)
+              return text
+          files=[
+              'rtl/m31/frp_m31_fixed_point_pkg.sv',
+              'rtl/m31/frp_m31_pkg.sv',
+              'rtl/m31/frp_m31_isqrt_u64.sv',
+              'rtl/m31/frp_m31_phase_interference.sv',
+              'rtl/m31/frp_m31_scheduler.sv',
+              'rtl/m31/frp_m31_sin_q30.mem',
+              'rtl/m31/frp_m31_frequency_multicell_tb.sv',
+              'frp_prototype_v1_7_0.py',
+              '.github/workflows/frp-56-m31-frequency-multicell-regression.yml',
+          ]
+          hashes={p:hashlib.sha256((R/p).read_bytes()).hexdigest() for p in files}
+          save('sources.json',{'commit':os.environ['GITHUB_SHA'],'files':hashes})
+          save('versions.json',{p:importlib.metadata.version(p)
+              for p in ['verilator','systemc']})
+          run(['verilator-cli','--version'],'verilator-version')
+          run(['c++','--version'],'compiler-version')
+          top='frp_m31_frequency_multicell_tb'
+          source=R/'rtl/m31'/f'{top}.sv'
+          shutil.copy2(source,B/source.name)
+          obj=B/'obj'
+          run(['verilator-cli','--binary','--timing','--assert','-Wno-fatal',
+               '-j','1','-MAKEFLAGS','VK_PCH_I_FAST=',
+               '-MAKEFLAGS','VK_PCH_I_SLOW=','-MAKEFLAGS','OPT_FAST=-O1',
+               '--top-module',top,'--Mdir',str(obj),'-Irtl/m31',str(source)],
+              'frequency-multicell-build')
+          text=run([str(obj/('V'+top))],'frequency-multicell-run',120)
+          keys=['cells','steps','checks','updates','loads','holds','resets',
+                'residues','random','convergence','cross']
+          pattern=r'^PASS FREQUENCY_MULTICELL '+r' '.join(k+r'=(\d+)' for k in keys)+r'$'
+          matches=re.findall(pattern,text,re.MULTILINE)
+          assert len(matches)==3,('Expected three checker records',text)
+          expected={
+              8: (33841,1896287,23734,8620),
+              16:(25649,2669695,19638,4524),
+              32:(21553,4314815,17590,2476),
+          }
+          results={}
+          for match in matches:
+              v=dict(zip(keys,map(int,match)))
+              n=v['cells']
+              assert n in expected and str(n) not in results,v
+              assert tuple(v[k] for k in ('steps','checks','updates','loads'))==expected[n],v
+              assert v['updates']+v['loads']+v['holds']==v['steps'],v
+              assert v['holds']==1487 and v['resets']==14,v
+              assert v['residues']==65536 and v['random']==8192,v
+              assert v['convergence']==36 and v['cross']==30,v
+              results[str(n)]=v
+          assert set(results)=={'8','16','32'}
+          event_keys=['cells','half_pos','half_neg','wide_delta','zero_adapts',
+                      'positive','negative','wraps','load_over_tick','mode_changes']
+          pattern=r'^FREQUENCY_EVENTS '+r' '.join(k+r'=(\d+)' for k in event_keys)+r'$'
+          matches=re.findall(pattern,text,re.MULTILINE)
+          assert len(matches)==3,('Expected three event records',text)
+          events={}
+          for match in matches:
+              v=dict(zip(event_keys,map(int,match)))
+              n=str(v['cells'])
+              assert n in results and n not in events,v
+              assert all(v[k]>0 for k in event_keys if k!='cells'),v
+              events[n]=v
+          assert set(events)==set(results)
+          marker='PASS FREQUENCY_MULTICELL_ALL cells=8,16,32'
+          assert text.splitlines().count(marker)==1,text
+          for p,h in hashes.items():
+              assert hashlib.sha256((R/p).read_bytes()).hexdigest()==h,p
+          totals={k:sum(v[k] for v in results.values()) for k in keys if k!='cells'}
+          assert totals['steps']==81043 and totals['checks']==8880797,totals
+          assert totals['updates']==60962 and totals['loads']==15620,totals
+          assert totals['residues']==196608 and totals['random']==24576,totals
+          assert totals['convergence']==108 and totals['cross']==90,totals
+          save('result.json',{'result':'PASS','commit':os.environ['GITHUB_SHA'],
+                             'cells':results,'events':events,'totals':totals})
+          lines=['## FRP M31 frequency multicell regression: PASS','',
+                 'Commit: `'+os.environ['GITHUB_SHA']+'`','',
+                 '| Cells | Steps | Comparisons | Updates | Loads | Holds | Resets |',
+                 '|---|---|---|---|---|---|---|']
+          for n in ('8','16','32'):
+              v=results[n]
+              lines.append(f"| {n} | {v['steps']} | {v['checks']} | {v['updates']} | {v['loads']} | {v['holds']} | {v['resets']} |")
+          lines += ['',
+              'Thermal factors are zero to isolate retained-frequency and phase-step behavior.',
+              'The real scheduler runs free, 7:1 and 1:7 with independent cadence checks.',
+              'Ternary inputs use -1/0/+1; zero-state frequency adaptation is exercised.',
+              'Per configuration: 65536 product residues, 8192 fixed-seed samples,',
+              '36 endpoint-convergence sequences and all 30 scheduler/state/activity combinations.',
+              'Checks include signed boundaries, half-away rounding, phase wrap, retention,',
+              'load priority, mode changes and asynchronous reset.',
+              'Expected frequency, phase and scheduler histories are maintained separately.',
+              'RTL simulation; source hashes, commands, tool versions and logs are attached.','']
+          summary='\n'.join(lines)
+          (B/'summary.md').write_text(summary)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write(summary)
+          print(summary)
+          FRP56_EOF
+          python "$FRP56_EVIDENCE/verify.py" 2>&1 | tee "$FRP56_EVIDENCE/verify.log"
+      - name: Upload logs and reproducibility records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-56-frequency-multicell-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/frp-56-evidence/*.log
+            ${{ runner.temp }}/frp-56-evidence/*.json
+            ${{ runner.temp }}/frp-56-evidence/*.txt
+            ${{ runner.temp }}/frp-56-evidence/*.py
+            ${{ runner.temp }}/frp-56-evidence/*.sv
+            ${{ runner.temp }}/frp-56-evidence/*.md
+          if-no-files-found: error
+          retention-days: 30
