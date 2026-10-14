@@ -1,54 +1,134 @@
-// SPDX-License-Identifier: Apache-2.0
-// FRP M32 deterministic post-synthesis FPGA testbench.
-//
-// Scope: the flattened eight-cell, two-request-lane FPGA netlist.
-// Prepare the simulation netlist from the synthesized JSON in Yosys:
-//   read_json netlist-run-1.json
-//   techmap -map +/techmap.v t:$shiftx
-//   opt_clean
-//   check -assert
-//   select -assert-none t:$shiftx t:$connect
-//   rename frp_m32_fpga_top frp_m32_fpga_netlist
-//   write_verilog -noattr frp_m32_fpga_netlist.v
-//
-// Mapping $shiftx before export gives explicit selection logic for signed
-// indices in the simulation netlist. This avoids the indexed part-select
-// mismatch reproduced with Verilator 5.020 on the unmapped export.
-// The original synthesis JSON is the input; its file remains unchanged.
-// Compile the generated Verilog module together with this testbench and
-// the simlib.v cell models from the same Yosys package used for synthesis.
-// Use --timing --assert and -DSIMLIB_NOCONNECT with Verilator 5.020;
-// the export check above requires that the design contains no $connect.
-// The distinct DUT module name requires the generated netlist input.
-//
-// All 59 synthesized core outputs are compared with a separate RTL
-// frp_m32_core instance. Reference reset release follows scenario
-// expectations independently of the synthesized reset synchronizer.
-// The five escaped control names refer to preserved flattened netlist
-// wires; they are observed only and do not drive the reference.
-// Direct checks cover reset latency, startup control blocking, phase-load
-// priority, registered-target capture, retained active zero and pending
-// polarity, scheduler counts, pause, and counter clear.
-// Both 7/1 and 1/7 modes are exercised alongside free execution.
-//
-// Run from the repository root with include directories rtl/m31 and
-// rtl/m32; select frp_m32_fpga_post_synthesis_tb as the simulation top.
-// The reference reads the canonical rtl/m31/frp_m31_sin_q30.mem file;
-// the synthesized DUT uses the initialization embedded in its netlist.
+// Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+// Parameterized M32 FPGA post-synthesis comparison: 8, 16 or 32 cells.
+// Build one netlist per CELLS value, rename its top frp_m32_fpga_netlist,
+// and compile this top with the identical CELLS parameter override.
+// The DUT is the generated netlist; the reference is canonical frp_m32_core.
+// Compare all 103 core outputs before and after clock edges. Independently
+// check reset release, active-zero routes, scheduler cadence, source selection,
+// local history retention, gamma target capture and stability sample latency.
+// Sources use ternary -1/0/+1 and scheduler free, 7/1 and 1/7.
+// Map Yosys $shiftx with techmap.v before export, preserve the original JSON,
+// require no $connect, and compile with the matching simlib.v plus
+// -DSIMLIB_NOCONNECT --timing --assert and include paths rtl/m31 and rtl/m32.
+// The six escaped DUT control wires are observations, not reference drivers.
+// Run from the repository root for the canonical sine ROM used by the RTL.
 
 `ifndef FRP_M32_FPGA_POST_SYNTHESIS_TB_SV
 `define FRP_M32_FPGA_POST_SYNTHESIS_TB_SV
-
-`timescale 1ns / 1ps
+`timescale 1ns/1ps
 `include "frp_m32_core.sv"
 
-module frp_m32_fpga_post_synthesis_tb;
+`define FRP_M32_PS_OUTPUTS(M) \
+  `M(logic [(CELLS*32)-1:0], phase_word_q) \
+  `M(logic [(CELLS*32)-1:0], frequency_current_q16) \
+  `M(logic [(CELLS*32)-1:0], coupling_field_q16) \
+  `M(logic [(CELLS*32)-1:0], phase_projection_q30) \
+  `M(logic [ (CELLS*frp_m31_pkg::FRP_M31_STATE_BITS)-1:0 ], phase_target_source) \
+  `M(logic [ (CELLS*frp_m31_pkg::FRP_M31_STATE_BITS)-1:0 ], registered_target_q) \
+  `M(logic, registered_target_valid_q) \
+  `M(logic, phase_target_domain_valid) \
+  `M(logic, registered_target_domain_valid) \
+  `M(logic, target_capture_accepted) \
+  `M(logic, target_capture_rejected) \
+  `M(logic [COUNTER_BITS-1:0], accepted_target_capture_events_q) \
+  `M(logic [COUNTER_BITS-1:0], rejected_target_capture_events_q) \
+  `M(logic, registered_request_enable) \
+  `M(logic [REQUEST_LANES-1:0], phase_request_valid) \
+  `M(logic [ (REQUEST_LANES*CELL_INDEX_BITS)-1:0 ], phase_request_cell_index) \
+  `M(logic [ (REQUEST_LANES*frp_m31_pkg::FRP_M31_STATE_BITS)-1:0 ], phase_request_target) \
+  `M(logic [REQUEST_LANES-1:0], execution_request_valid) \
+  `M(logic [ (REQUEST_LANES*CELL_INDEX_BITS)-1:0 ], execution_request_cell_index) \
+  `M(logic [ (REQUEST_LANES*frp_m31_pkg::FRP_M31_STATE_BITS)-1:0 ], execution_request_target) \
+  `M(logic [ (CELLS*frp_m31_pkg::FRP_M31_STATE_BITS)-1:0 ], execution_target_bank) \
+  `M(logic [ (CELLS*frp_m31_pkg::FRP_M31_STATE_BITS)-1:0 ], state_out) \
+  `M(logic [ (CELLS*frp_m31_pkg::FRP_M31_STATE_BITS)-1:0 ], pending_route_out) \
+  `M(frp_m31_pkg::frp_m31_scheduler_mode_e, scheduler_mode_q) \
+  `M(frp_m31_pkg::frp_m31_scheduler_state_e, scheduler_state_q) \
+  `M(logic [COUNTER_BITS-1:0], ticks_recorded_q) \
+  `M(logic [COUNTER_BITS-1:0], scheduler_count_free_q) \
+  `M(logic [COUNTER_BITS-1:0], scheduler_count_balance_q) \
+  `M(logic [COUNTER_BITS-1:0], scheduler_count_commit_q) \
+  `M(logic [COUNTER_BITS-1:0], scheduler_count_excite_q) \
+  `M(logic [COUNTER_BITS-1:0], scheduler_count_neutralize_q) \
+  `M(logic [REQUEST_LANES-1:0], request_accept) \
+  `M(logic [REQUEST_LANES-1:0], request_reject) \
+  `M(logic [CELLS-1:0], accepted_cell_mask) \
+  `M(logic [CELLS-1:0], neutral_routed_cell_mask) \
+  `M(logic [CELLS-1:0], accepted_change_mask) \
+  `M(logic [COUNTER_BITS-1:0], accepted_changes) \
+  `M(logic [COUNTER_BITS-1:0], capacity_remaining) \
+  `M(logic, capacity_exhausted) \
+  `M(logic [COUNTER_BITS-1:0], switch_load_numerator) \
+  `M(logic [COUNTER_BITS-1:0], requested_direct_events) \
+  `M(logic [COUNTER_BITS-1:0], prevented_direct_events) \
+  `M(logic [COUNTER_BITS-1:0], neutral_routed_events) \
+  `M(logic [COUNTER_BITS-1:0], actual_direct_events) \
+  `M(logic [COUNTER_BITS-1:0], reserved_state_events) \
+  `M(logic [COUNTER_BITS-1:0], queue_overflow_events) \
+  `M(logic [ frp_m31_pkg::FRP_M31_INVARIANT_FLAGS-1:0 ], invariant_flags) \
+  `M(logic signed [31:0], pair_coherence_q30) \
+  `M(logic signed [31:0], cluster_coherence_q30) \
+  `M(logic signed [31:0], global_coherence_q30) \
+  `M(logic signed [31:0], organization_dispersion_q30) \
+  `M(logic signed [31:0], normalized_cycle_cost_q16) \
+  `M(logic signed [31:0], temperature_proxy_q16) \
+  `M(logic signed [31:0], peak_temperature_proxy_q16) \
+  `M(logic [31:0], thermal_sample_count_q) \
+  `M(logic signed [31:0], coherence_capacity_q16) \
+  `M(logic signed [31:0], pressure_q16) \
+  `M(logic signed [31:0], stability_margin_q16) \
+  `M(logic, stable) \
+  `M(logic [(CELLS*32)-1:0], local_heat_q16) \
+  `M(logic [(CELLS*32)-1:0], local_heat_peak_q16) \
+  `M(logic [(CELLS*32)-1:0], local_generated_power_q16) \
+  `M(logic [(CELLS*32)-1:0], local_thermal_dissipation_q16) \
+  `M(logic [(CELLS*32)-1:0], local_thermal_diffusion_q16) \
+  `M(logic [(CELLS*32)-1:0], local_thermal_overload_q16) \
+  `M(logic [(CELLS*32)-1:0], local_next_heat_q16) \
+  `M(logic [(CELLS*32)-1:0], local_next_overload_q16) \
+  `M(logic [(CELLS*32)-1:0], local_frequency_lag_q16) \
+  `M(logic signed [31:0], local_mean_heat_q16) \
+  `M(logic signed [31:0], local_mean_heat_peak_q16) \
+  `M(logic signed [31:0], local_maximum_heat_peak_q16) \
+  `M(logic [(CELLS*32)-1:0], local_gamma_noise_target_q16) \
+  `M(logic [(CELLS*32)-1:0], local_gamma_noise_state_q16) \
+  `M(logic [(CELLS*32)-1:0], local_gamma_drift_word) \
+  `M(logic [(CELLS*32)-1:0], local_gamma_effective_word) \
+  `M(logic [(CELLS*32)-1:0], local_next_gamma_drift_word) \
+  `M(logic [(CELLS*32)-1:0], local_next_gamma_effective_word) \
+  `M(logic [(CELLS*32)-1:0], phase_gamma_effective_word) \
+  `M(logic [(CELLS*32)-1:0], local_thermal_node_factor_q30) \
+  `M(logic [(CELLS*32)-1:0], local_next_thermal_node_factor_q30) \
+  `M(logic [(CELLS*32)-1:0], phase_thermal_node_factor_q30) \
+  `M(logic [((CELLS-1)*32)-1:0], group_coherence_q30) \
+  `M(logic [($clog2(CELLS)*32)-1:0], level_mean_coherence_q30) \
+  `M(logic [($clog2(CELLS)*32)-1:0], level_min_coherence_q30) \
+  `M(logic [($clog2(CELLS)*32)-1:0], level_max_coherence_q30) \
+  `M(logic [($clog2(CELLS)*32)-1:0], level_dispersion_q30) \
+  `M(logic signed [31:0], local_coherence_compression_q30) \
+  `M(logic signed [31:0], local_effective_coherence_q30) \
+  `M(logic signed [31:0], local_coherence_capacity_q16) \
+  `M(logic signed [31:0], local_pressure_q16) \
+  `M(logic signed [31:0], local_stability_margin_q16) \
+  `M(logic, local_stable) \
+  `M(logic signed [31:0], local_previous_margin_q16) \
+  `M(logic, local_stability_valid_q) \
+  `M(logic [31:0], local_stability_sample_count_q) \
+  `M(logic signed [31:0], local_stability_raw_coherence_q30) \
+  `M(logic signed [31:0], local_stability_cluster_coherence_q30) \
+  `M(logic signed [31:0], local_stability_mean_heat_q16) \
+  `M(logic signed [31:0], local_stability_mean_overload_q16) \
+  `M(logic signed [31:0], local_stability_mean_lag_q16) \
+  `M(logic signed [31:0], local_stability_neutral_fraction_q30) \
+  `M(logic signed [31:0], local_stability_compression_arg_q16) \
+  `M(logic signed [31:0], local_stability_switch_load_q16)
+
+module frp_m32_fpga_post_synthesis_tb #(parameter int CELLS=8);
   import frp_m31_pkg::*;
   import frp_m31_fixed_point_pkg::*;
-  localparam int CELLS = 8;
   localparam int STATE_BITS = FRP_M31_STATE_BITS;
-  localparam int REQUEST_LANES = 2;
-  localparam int CELL_INDEX_BITS = 3;
+  localparam int REQUEST_LANES = frp_calc_request_lanes(CELLS);
+  localparam int CELL_INDEX_BITS = $clog2(CELLS);
   localparam int COUNTER_BITS = 32;
   logic clk;
   logic rst_n_async;
@@ -67,67 +147,13 @@ module frp_m32_fpga_post_synthesis_tb;
   logic [(CELLS*STATE_BITS)-1:0] external_target_bank;
   logic core_ready;
   logic reference_rst_n;
+  logic local_gamma_enable, local_thermal_enable, gamma_update_valid;
+  logic [CELLS*32-1:0] gamma_targets_q16;
+`define FRP_PS_DECLARE(T,N) T N;
   typedef struct packed {
-    logic [(CELLS*32)-1:0] phase_word_q;
-    logic [(CELLS*32)-1:0] frequency_current_q16;
-    logic [(CELLS*32)-1:0] coupling_field_q16;
-    logic [(CELLS*32)-1:0] phase_projection_q30;
-    logic [(CELLS*STATE_BITS)-1:0] phase_target_source;
-    logic [(CELLS*STATE_BITS)-1:0] registered_target_q;
-    logic registered_target_valid_q;
-    logic phase_target_domain_valid;
-    logic registered_target_domain_valid;
-    logic target_capture_accepted;
-    logic target_capture_rejected;
-    logic [COUNTER_BITS-1:0] accepted_target_capture_events_q;
-    logic [COUNTER_BITS-1:0] rejected_target_capture_events_q;
-    logic registered_request_enable;
-    logic [REQUEST_LANES-1:0] phase_request_valid;
-    logic [(REQUEST_LANES*CELL_INDEX_BITS)-1:0] phase_request_cell_index;
-    logic [(REQUEST_LANES*STATE_BITS)-1:0] phase_request_target;
-    logic [REQUEST_LANES-1:0] execution_request_valid;
-    logic [(REQUEST_LANES*CELL_INDEX_BITS)-1:0] execution_request_cell_index;
-    logic [(REQUEST_LANES*STATE_BITS)-1:0] execution_request_target;
-    logic [(CELLS*STATE_BITS)-1:0] execution_target_bank;
-    logic [(CELLS*STATE_BITS)-1:0] state_out;
-    logic [(CELLS*STATE_BITS)-1:0] pending_route_out;
-    frp_m31_scheduler_mode_e scheduler_mode_q;
-    frp_m31_scheduler_state_e scheduler_state_q;
-    logic [COUNTER_BITS-1:0] ticks_recorded_q;
-    logic [COUNTER_BITS-1:0] scheduler_count_free_q;
-    logic [COUNTER_BITS-1:0] scheduler_count_balance_q;
-    logic [COUNTER_BITS-1:0] scheduler_count_commit_q;
-    logic [COUNTER_BITS-1:0] scheduler_count_excite_q;
-    logic [COUNTER_BITS-1:0] scheduler_count_neutralize_q;
-    logic [REQUEST_LANES-1:0] request_accept;
-    logic [REQUEST_LANES-1:0] request_reject;
-    logic [CELLS-1:0] accepted_cell_mask;
-    logic [CELLS-1:0] neutral_routed_cell_mask;
-    logic [CELLS-1:0] accepted_change_mask;
-    logic [COUNTER_BITS-1:0] accepted_changes;
-    logic [COUNTER_BITS-1:0] capacity_remaining;
-    logic capacity_exhausted;
-    logic [COUNTER_BITS-1:0] switch_load_numerator;
-    logic [COUNTER_BITS-1:0] requested_direct_events;
-    logic [COUNTER_BITS-1:0] prevented_direct_events;
-    logic [COUNTER_BITS-1:0] neutral_routed_events;
-    logic [COUNTER_BITS-1:0] actual_direct_events;
-    logic [COUNTER_BITS-1:0] reserved_state_events;
-    logic [COUNTER_BITS-1:0] queue_overflow_events;
-    logic [FRP_M31_INVARIANT_FLAGS-1:0] invariant_flags;
-    logic signed [31:0] pair_coherence_q30;
-    logic signed [31:0] cluster_coherence_q30;
-    logic signed [31:0] global_coherence_q30;
-    logic signed [31:0] organization_dispersion_q30;
-    logic signed [31:0] normalized_cycle_cost_q16;
-    logic signed [31:0] temperature_proxy_q16;
-    logic signed [31:0] peak_temperature_proxy_q16;
-    logic [31:0] thermal_sample_count_q;
-    logic signed [31:0] coherence_capacity_q16;
-    logic signed [31:0] pressure_q16;
-    logic signed [31:0] stability_margin_q16;
-    logic stable;
+    `FRP_M32_PS_OUTPUTS(FRP_PS_DECLARE)
   } outputs_t;
+`undef FRP_PS_DECLARE
   outputs_t actual, expected;
   logic [(CELLS*FRP_M31_STATE_BITS)-1:0] previous_state;
   logic [(CELLS*STATE_BITS)-1:0] source_before_edge;
@@ -137,10 +163,11 @@ module frp_m32_fpga_post_synthesis_tb;
   bit initialized = 1'b0;
 
   initial begin
-    #100000;
+    #2000000;
     $fatal(1, "FRP M32 FPGA post-synthesis TB timeout");
   end
 
+`define FRP_PS_ACTUAL(T,N) .N(actual.N),
   frp_m32_fpga_netlist dut (
     .clk(clk),
     .rst_n_async(rst_n_async),
@@ -157,68 +184,16 @@ module frp_m32_fpga_post_synthesis_tb;
     .external_request_cell_index(external_request_cell_index),
     .external_request_target(external_request_target),
     .external_target_bank(external_target_bank),
-    .phase_word_q(actual.phase_word_q),
-    .frequency_current_q16(actual.frequency_current_q16),
-    .coupling_field_q16(actual.coupling_field_q16),
-    .phase_projection_q30(actual.phase_projection_q30),
-    .phase_target_source(actual.phase_target_source),
-    .registered_target_q(actual.registered_target_q),
-    .registered_target_valid_q(actual.registered_target_valid_q),
-    .phase_target_domain_valid(actual.phase_target_domain_valid),
-    .registered_target_domain_valid(actual.registered_target_domain_valid),
-    .target_capture_accepted(actual.target_capture_accepted),
-    .target_capture_rejected(actual.target_capture_rejected),
-    .accepted_target_capture_events_q(actual.accepted_target_capture_events_q),
-    .rejected_target_capture_events_q(actual.rejected_target_capture_events_q),
-    .registered_request_enable(actual.registered_request_enable),
-    .phase_request_valid(actual.phase_request_valid),
-    .phase_request_cell_index(actual.phase_request_cell_index),
-    .phase_request_target(actual.phase_request_target),
-    .execution_request_valid(actual.execution_request_valid),
-    .execution_request_cell_index(actual.execution_request_cell_index),
-    .execution_request_target(actual.execution_request_target),
-    .execution_target_bank(actual.execution_target_bank),
-    .state_out(actual.state_out),
-    .pending_route_out(actual.pending_route_out),
-    .scheduler_mode_q(actual.scheduler_mode_q),
-    .scheduler_state_q(actual.scheduler_state_q),
-    .ticks_recorded_q(actual.ticks_recorded_q),
-    .scheduler_count_free_q(actual.scheduler_count_free_q),
-    .scheduler_count_balance_q(actual.scheduler_count_balance_q),
-    .scheduler_count_commit_q(actual.scheduler_count_commit_q),
-    .scheduler_count_excite_q(actual.scheduler_count_excite_q),
-    .scheduler_count_neutralize_q(actual.scheduler_count_neutralize_q),
-    .request_accept(actual.request_accept),
-    .request_reject(actual.request_reject),
-    .accepted_cell_mask(actual.accepted_cell_mask),
-    .neutral_routed_cell_mask(actual.neutral_routed_cell_mask),
-    .accepted_change_mask(actual.accepted_change_mask),
-    .accepted_changes(actual.accepted_changes),
-    .capacity_remaining(actual.capacity_remaining),
-    .capacity_exhausted(actual.capacity_exhausted),
-    .switch_load_numerator(actual.switch_load_numerator),
-    .requested_direct_events(actual.requested_direct_events),
-    .prevented_direct_events(actual.prevented_direct_events),
-    .neutral_routed_events(actual.neutral_routed_events),
-    .actual_direct_events(actual.actual_direct_events),
-    .reserved_state_events(actual.reserved_state_events),
-    .queue_overflow_events(actual.queue_overflow_events),
-    .invariant_flags(actual.invariant_flags),
-    .pair_coherence_q30(actual.pair_coherence_q30),
-    .cluster_coherence_q30(actual.cluster_coherence_q30),
-    .global_coherence_q30(actual.global_coherence_q30),
-    .organization_dispersion_q30(actual.organization_dispersion_q30),
-    .normalized_cycle_cost_q16(actual.normalized_cycle_cost_q16),
-    .temperature_proxy_q16(actual.temperature_proxy_q16),
-    .peak_temperature_proxy_q16(actual.peak_temperature_proxy_q16),
-    .thermal_sample_count_q(actual.thermal_sample_count_q),
-    .coherence_capacity_q16(actual.coherence_capacity_q16),
-    .pressure_q16(actual.pressure_q16),
-    .stability_margin_q16(actual.stability_margin_q16),
-    .stable(actual.stable),
+    .local_gamma_enable(local_gamma_enable),
+    .local_thermal_enable(local_thermal_enable),
+    .gamma_update_valid(gamma_update_valid),
+    .gamma_targets_q16(gamma_targets_q16),
+    `FRP_M32_PS_OUTPUTS(FRP_PS_ACTUAL)
     .core_ready(core_ready)
   );
 
+`undef FRP_PS_ACTUAL
+`define FRP_PS_EXPECTED(T,N) .N(expected.N),
   frp_m32_core #(
     .CELLS(CELLS),
     .REQUEST_LANES(REQUEST_LANES),
@@ -240,190 +215,41 @@ module frp_m32_fpga_post_synthesis_tb;
     .external_request_cell_index(external_request_cell_index),
     .external_request_target(external_request_target),
     .external_target_bank(external_target_bank),
-    .phase_word_q(expected.phase_word_q),
-    .frequency_current_q16(expected.frequency_current_q16),
-    .coupling_field_q16(expected.coupling_field_q16),
-    .phase_projection_q30(expected.phase_projection_q30),
-    .phase_target_source(expected.phase_target_source),
-    .registered_target_q(expected.registered_target_q),
-    .registered_target_valid_q(expected.registered_target_valid_q),
-    .phase_target_domain_valid(expected.phase_target_domain_valid),
-    .registered_target_domain_valid(expected.registered_target_domain_valid),
-    .target_capture_accepted(expected.target_capture_accepted),
-    .target_capture_rejected(expected.target_capture_rejected),
-    .accepted_target_capture_events_q(expected.accepted_target_capture_events_q),
-    .rejected_target_capture_events_q(expected.rejected_target_capture_events_q),
-    .registered_request_enable(expected.registered_request_enable),
-    .phase_request_valid(expected.phase_request_valid),
-    .phase_request_cell_index(expected.phase_request_cell_index),
-    .phase_request_target(expected.phase_request_target),
-    .execution_request_valid(expected.execution_request_valid),
-    .execution_request_cell_index(expected.execution_request_cell_index),
-    .execution_request_target(expected.execution_request_target),
-    .execution_target_bank(expected.execution_target_bank),
-    .state_out(expected.state_out),
-    .pending_route_out(expected.pending_route_out),
-    .scheduler_mode_q(expected.scheduler_mode_q),
-    .scheduler_state_q(expected.scheduler_state_q),
-    .ticks_recorded_q(expected.ticks_recorded_q),
-    .scheduler_count_free_q(expected.scheduler_count_free_q),
-    .scheduler_count_balance_q(expected.scheduler_count_balance_q),
-    .scheduler_count_commit_q(expected.scheduler_count_commit_q),
-    .scheduler_count_excite_q(expected.scheduler_count_excite_q),
-    .scheduler_count_neutralize_q(expected.scheduler_count_neutralize_q),
-    .request_accept(expected.request_accept),
-    .request_reject(expected.request_reject),
-    .accepted_cell_mask(expected.accepted_cell_mask),
-    .neutral_routed_cell_mask(expected.neutral_routed_cell_mask),
-    .accepted_change_mask(expected.accepted_change_mask),
-    .accepted_changes(expected.accepted_changes),
-    .capacity_remaining(expected.capacity_remaining),
-    .capacity_exhausted(expected.capacity_exhausted),
-    .switch_load_numerator(expected.switch_load_numerator),
-    .requested_direct_events(expected.requested_direct_events),
-    .prevented_direct_events(expected.prevented_direct_events),
-    .neutral_routed_events(expected.neutral_routed_events),
-    .actual_direct_events(expected.actual_direct_events),
-    .reserved_state_events(expected.reserved_state_events),
-    .queue_overflow_events(expected.queue_overflow_events),
-    .invariant_flags(expected.invariant_flags),
-    .pair_coherence_q30(expected.pair_coherence_q30),
-    .cluster_coherence_q30(expected.cluster_coherence_q30),
-    .global_coherence_q30(expected.global_coherence_q30),
-    .organization_dispersion_q30(expected.organization_dispersion_q30),
-    .normalized_cycle_cost_q16(expected.normalized_cycle_cost_q16),
-    .temperature_proxy_q16(expected.temperature_proxy_q16),
-    .peak_temperature_proxy_q16(expected.peak_temperature_proxy_q16),
-    .thermal_sample_count_q(expected.thermal_sample_count_q),
-    .coherence_capacity_q16(expected.coherence_capacity_q16),
-    .pressure_q16(expected.pressure_q16),
-    .stability_margin_q16(expected.stability_margin_q16),
-    .stable(expected.stable)
+    .local_gamma_enable(local_gamma_enable),
+    .local_thermal_enable(local_thermal_enable),
+    .gamma_update_valid(gamma_update_valid && reference_rst_n),
+    `FRP_M32_PS_OUTPUTS(FRP_PS_EXPECTED)
+    .gamma_targets_q16(gamma_targets_q16)
   );
+`undef FRP_PS_EXPECTED
 
+`define FRP_PS_COMPARE(T,N) if (a.N !== e.N) return index; index++;
+  function automatic int compare_outputs(input outputs_t a, e);
+    /*verilator no_inline_task*/
+    int index;
+    index=0;
+    `FRP_M32_PS_OUTPUTS(FRP_PS_COMPARE)
+    return -1;
+  endfunction
+`undef FRP_PS_COMPARE
+`define FRP_PS_NAME(T,N) if (index==k) return `"N`"; k++;
+  function automatic string output_name(input int index);
+    /*verilator no_inline_task*/
+    int k;
+    k=0;
+    `FRP_M32_PS_OUTPUTS(FRP_PS_NAME)
+    return "unknown";
+  endfunction
+`undef FRP_PS_NAME
   task automatic check_outputs;
+    int mismatch;
     if (core_ready !== reference_rst_n)
       $fatal(1, "Readiness changed outside its expected release edge");
     if ($isunknown(actual) || $isunknown(expected))
       $fatal(1, "Unknown core output at sample %0d", samples);
-    if (actual.phase_word_q !== expected.phase_word_q)
-      $fatal(1, "Output mismatch: phase_word_q at sample %0d", samples);
-    if (actual.frequency_current_q16 !== expected.frequency_current_q16)
-      $fatal(1, "Output mismatch: frequency_current_q16 at sample %0d", samples);
-    if (actual.coupling_field_q16 !== expected.coupling_field_q16)
-      $fatal(1, "Output mismatch: coupling_field_q16 at sample %0d", samples);
-    if (actual.phase_projection_q30 !== expected.phase_projection_q30)
-      $fatal(1, "Output mismatch: phase_projection_q30 at sample %0d", samples);
-    if (actual.phase_target_source !== expected.phase_target_source)
-      $fatal(1, "Output mismatch: phase_target_source at sample %0d", samples);
-    if (actual.registered_target_q !== expected.registered_target_q)
-      $fatal(1, "Output mismatch: registered_target_q at sample %0d", samples);
-    if (actual.registered_target_valid_q !== expected.registered_target_valid_q)
-      $fatal(1, "Output mismatch: registered_target_valid_q at sample %0d", samples);
-    if (actual.phase_target_domain_valid !== expected.phase_target_domain_valid)
-      $fatal(1, "Output mismatch: phase_target_domain_valid at sample %0d", samples);
-    if (actual.registered_target_domain_valid !== expected.registered_target_domain_valid)
-      $fatal(1, "Output mismatch: registered_target_domain_valid at sample %0d", samples);
-    if (actual.target_capture_accepted !== expected.target_capture_accepted)
-      $fatal(1, "Output mismatch: target_capture_accepted at sample %0d", samples);
-    if (actual.target_capture_rejected !== expected.target_capture_rejected)
-      $fatal(1, "Output mismatch: target_capture_rejected at sample %0d", samples);
-    if (actual.accepted_target_capture_events_q !== expected.accepted_target_capture_events_q)
-      $fatal(1, "Output mismatch: accepted_target_capture_events_q at sample %0d", samples);
-    if (actual.rejected_target_capture_events_q !== expected.rejected_target_capture_events_q)
-      $fatal(1, "Output mismatch: rejected_target_capture_events_q at sample %0d", samples);
-    if (actual.registered_request_enable !== expected.registered_request_enable)
-      $fatal(1, "Output mismatch: registered_request_enable at sample %0d", samples);
-    if (actual.phase_request_valid !== expected.phase_request_valid)
-      $fatal(1, "Output mismatch: phase_request_valid at sample %0d", samples);
-    if (actual.phase_request_cell_index !== expected.phase_request_cell_index)
-      $fatal(1, "Output mismatch: phase_request_cell_index at sample %0d", samples);
-    if (actual.phase_request_target !== expected.phase_request_target)
-      $fatal(1, "Output mismatch: phase_request_target at sample %0d", samples);
-    if (actual.execution_request_valid !== expected.execution_request_valid)
-      $fatal(1, "Output mismatch: execution_request_valid at sample %0d", samples);
-    if (actual.execution_request_cell_index !== expected.execution_request_cell_index)
-      $fatal(1, "Output mismatch: execution_request_cell_index at sample %0d", samples);
-    if (actual.execution_request_target !== expected.execution_request_target)
-      $fatal(1, "Output mismatch: execution_request_target at sample %0d", samples);
-    if (actual.execution_target_bank !== expected.execution_target_bank)
-      $fatal(1, "Output mismatch: execution_target_bank at sample %0d", samples);
-    if (actual.state_out !== expected.state_out)
-      $fatal(1, "Output mismatch: state_out at sample %0d", samples);
-    if (actual.pending_route_out !== expected.pending_route_out)
-      $fatal(1, "Output mismatch: pending_route_out at sample %0d", samples);
-    if (actual.scheduler_mode_q !== expected.scheduler_mode_q)
-      $fatal(1, "Output mismatch: scheduler_mode_q at sample %0d", samples);
-    if (actual.scheduler_state_q !== expected.scheduler_state_q)
-      $fatal(1, "Output mismatch: scheduler_state_q at sample %0d", samples);
-    if (actual.ticks_recorded_q !== expected.ticks_recorded_q)
-      $fatal(1, "Output mismatch: ticks_recorded_q at sample %0d", samples);
-    if (actual.scheduler_count_free_q !== expected.scheduler_count_free_q)
-      $fatal(1, "Output mismatch: scheduler_count_free_q at sample %0d", samples);
-    if (actual.scheduler_count_balance_q !== expected.scheduler_count_balance_q)
-      $fatal(1, "Output mismatch: scheduler_count_balance_q at sample %0d", samples);
-    if (actual.scheduler_count_commit_q !== expected.scheduler_count_commit_q)
-      $fatal(1, "Output mismatch: scheduler_count_commit_q at sample %0d", samples);
-    if (actual.scheduler_count_excite_q !== expected.scheduler_count_excite_q)
-      $fatal(1, "Output mismatch: scheduler_count_excite_q at sample %0d", samples);
-    if (actual.scheduler_count_neutralize_q !== expected.scheduler_count_neutralize_q)
-      $fatal(1, "Output mismatch: scheduler_count_neutralize_q at sample %0d", samples);
-    if (actual.request_accept !== expected.request_accept)
-      $fatal(1, "Output mismatch: request_accept at sample %0d", samples);
-    if (actual.request_reject !== expected.request_reject)
-      $fatal(1, "Output mismatch: request_reject at sample %0d", samples);
-    if (actual.accepted_cell_mask !== expected.accepted_cell_mask)
-      $fatal(1, "Output mismatch: accepted_cell_mask at sample %0d", samples);
-    if (actual.neutral_routed_cell_mask !== expected.neutral_routed_cell_mask)
-      $fatal(1, "Output mismatch: neutral_routed_cell_mask at sample %0d", samples);
-    if (actual.accepted_change_mask !== expected.accepted_change_mask)
-      $fatal(1, "Output mismatch: accepted_change_mask at sample %0d", samples);
-    if (actual.accepted_changes !== expected.accepted_changes)
-      $fatal(1, "Output mismatch: accepted_changes at sample %0d", samples);
-    if (actual.capacity_remaining !== expected.capacity_remaining)
-      $fatal(1, "Output mismatch: capacity_remaining at sample %0d", samples);
-    if (actual.capacity_exhausted !== expected.capacity_exhausted)
-      $fatal(1, "Output mismatch: capacity_exhausted at sample %0d", samples);
-    if (actual.switch_load_numerator !== expected.switch_load_numerator)
-      $fatal(1, "Output mismatch: switch_load_numerator at sample %0d", samples);
-    if (actual.requested_direct_events !== expected.requested_direct_events)
-      $fatal(1, "Output mismatch: requested_direct_events at sample %0d", samples);
-    if (actual.prevented_direct_events !== expected.prevented_direct_events)
-      $fatal(1, "Output mismatch: prevented_direct_events at sample %0d", samples);
-    if (actual.neutral_routed_events !== expected.neutral_routed_events)
-      $fatal(1, "Output mismatch: neutral_routed_events at sample %0d", samples);
-    if (actual.actual_direct_events !== expected.actual_direct_events)
-      $fatal(1, "Output mismatch: actual_direct_events at sample %0d", samples);
-    if (actual.reserved_state_events !== expected.reserved_state_events)
-      $fatal(1, "Output mismatch: reserved_state_events at sample %0d", samples);
-    if (actual.queue_overflow_events !== expected.queue_overflow_events)
-      $fatal(1, "Output mismatch: queue_overflow_events at sample %0d", samples);
-    if (actual.invariant_flags !== expected.invariant_flags)
-      $fatal(1, "Output mismatch: invariant_flags at sample %0d", samples);
-    if (actual.pair_coherence_q30 !== expected.pair_coherence_q30)
-      $fatal(1, "Output mismatch: pair_coherence_q30 at sample %0d", samples);
-    if (actual.cluster_coherence_q30 !== expected.cluster_coherence_q30)
-      $fatal(1, "Output mismatch: cluster_coherence_q30 at sample %0d", samples);
-    if (actual.global_coherence_q30 !== expected.global_coherence_q30)
-      $fatal(1, "Output mismatch: global_coherence_q30 at sample %0d", samples);
-    if (actual.organization_dispersion_q30 !== expected.organization_dispersion_q30)
-      $fatal(1, "Output mismatch: organization_dispersion_q30 at sample %0d", samples);
-    if (actual.normalized_cycle_cost_q16 !== expected.normalized_cycle_cost_q16)
-      $fatal(1, "Output mismatch: normalized_cycle_cost_q16 at sample %0d", samples);
-    if (actual.temperature_proxy_q16 !== expected.temperature_proxy_q16)
-      $fatal(1, "Output mismatch: temperature_proxy_q16 at sample %0d", samples);
-    if (actual.peak_temperature_proxy_q16 !== expected.peak_temperature_proxy_q16)
-      $fatal(1, "Output mismatch: peak_temperature_proxy_q16 at sample %0d", samples);
-    if (actual.thermal_sample_count_q !== expected.thermal_sample_count_q)
-      $fatal(1, "Output mismatch: thermal_sample_count_q at sample %0d", samples);
-    if (actual.coherence_capacity_q16 !== expected.coherence_capacity_q16)
-      $fatal(1, "Output mismatch: coherence_capacity_q16 at sample %0d", samples);
-    if (actual.pressure_q16 !== expected.pressure_q16)
-      $fatal(1, "Output mismatch: pressure_q16 at sample %0d", samples);
-    if (actual.stability_margin_q16 !== expected.stability_margin_q16)
-      $fatal(1, "Output mismatch: stability_margin_q16 at sample %0d", samples);
-    if (actual.stable !== expected.stable)
-      $fatal(1, "Output mismatch: stable at sample %0d", samples);
+    mismatch=compare_outputs(actual,expected);
+    if (mismatch>=0)
+      $fatal(1,"Output mismatch %s cells=%0d sample=%0d",output_name(mismatch),CELLS,samples);
     for (int cell_index = 0; cell_index < CELLS; cell_index++) begin
       if (actual.state_out[2*cell_index +: 2] == FRP_STATE_RESERVED)
         $fatal(1, "Reserved state at sample %0d", samples);
@@ -443,7 +269,8 @@ module frp_m32_fpga_post_synthesis_tb;
           || dut.\u_m32_core.clear_counters  !== 1'b0
           || dut.\u_m32_core.phase_load_valid  !== 1'b0
           || dut.\u_m32_core.auto_target_enable  !== 1'b0
-          || dut.\u_m32_core.external_request_valid  !== '0)
+          || dut.\u_m32_core.external_request_valid  !== '0
+          || dut.\u_m32_core.gamma_update_valid  !== 1'b0)
         $fatal(1, "Control escaped reset qualification");
       if (actual.execution_request_valid || actual.phase_request_valid
           || actual.target_capture_accepted || actual.target_capture_rejected)
@@ -451,6 +278,8 @@ module frp_m32_fpga_post_synthesis_tb;
     end
     samples++;
   endtask
+
+`undef FRP_PS_COMPARE
 
   task automatic check_counters_zero;
     if ({actual.ticks_recorded_q,
@@ -510,6 +339,12 @@ module frp_m32_fpga_post_synthesis_tb;
 
   task automatic check_reset_values;
     check_counters_zero();
+    if (actual.local_heat_q16!=={CELLS{32'sd3277}}
+        || actual.local_gamma_noise_target_q16!='0
+        || actual.local_gamma_noise_state_q16!='0
+        || actual.local_thermal_node_factor_q30!=={CELLS{32'd1073741824}}
+        || actual.local_stability_sample_count_q!=0 || actual.local_stability_valid_q)
+      $fatal(1,"Local reset defaults mismatch");
     if (actual.state_out != '0 || actual.pending_route_out != '0
         || actual.registered_target_q != '0
         || actual.registered_target_valid_q
@@ -520,7 +355,7 @@ module frp_m32_fpga_post_synthesis_tb;
       $fatal(1, "Reset state/counters differ from canonical defaults");
     for (int cell_index = 0; cell_index < CELLS; cell_index++) begin
       if (actual.phase_word_q[32*cell_index +: 32]
-          !== (cell_index * 32'h20000000))
+          !== 32'(64'(cell_index) * (64'h100000000 / CELLS)))
         $fatal(1, "Phase changed during reset or release");
       if (actual.frequency_current_q16[32*cell_index +: 32]
           !== FRP_M31_BASE_FREQUENCY_Q16)
@@ -534,12 +369,14 @@ module frp_m32_fpga_post_synthesis_tb;
     #4;
     if (initialized)
       check_outputs();
+    before_edge();
     clk = 1'b1;
     #1;
     if (core_ready !== expected_ready)
       $fatal(1, "Wrong ready latency, expected %0b", expected_ready);
     reference_rst_n = expected_ready;
     #1;
+    after_edge();
     check_outputs();
     initialized = 1'b1;
     #4;
@@ -556,6 +393,7 @@ module frp_m32_fpga_post_synthesis_tb;
     #1;
     if (core_ready !== 1'b0)
       $fatal(1, "Reset assertion waited for a clock edge");
+    pending_model=0; stability_count_model=0; stability_valid_model=0;
     check_outputs();
     check_reset_values();
   endtask
@@ -571,6 +409,196 @@ module frp_m32_fpga_post_synthesis_tb;
     check_reset_values();
   endtask
 
+  outputs_t before_sample;
+  bit edge_active, edge_tick, edge_gamma_valid;
+  bit pending_model=0, stability_valid_model=0;
+  logic [31:0] stability_count_model=0;
+  logic [CELLS*32-1:0] target_at_edge;
+  int profiles=0, route_cases=0, random_steps=0;
+  int gamma_accepts=0, gamma_holds=0, stability_drains=0, clear_retains=0;
+  int nonzero_coupling=0, heated_samples=0, attenuation_samples=0;
+  bit [3:0] selector_seen=0;
+  int unsigned rng=32'h81f32a79;
+
+  function automatic int unsigned random_word();
+    rng^=rng<<13; rng^=rng>>17; rng^=rng<<5;
+    return rng;
+  endfunction
+
+  task automatic before_edge;
+    before_sample=actual;
+    edge_active=reference_rst_n;
+    edge_tick=tick_enable;
+    edge_gamma_valid=gamma_update_valid;
+    target_at_edge=gamma_targets_q16;
+    if (!edge_active) begin
+      pending_model=0; stability_valid_model=0; stability_count_model=0;
+    end else begin
+      stability_valid_model=pending_model;
+      if (pending_model) begin
+        stability_count_model++;
+        if (!tick_enable) stability_drains++;
+      end
+      pending_model=tick_enable;
+    end
+  endtask
+
+  task automatic after_edge;
+    if (actual.local_stability_valid_q!==stability_valid_model
+        || actual.local_stability_sample_count_q!==stability_count_model)
+      $fatal(1,"Stability latency/count cells=%0d sample=%0d",CELLS,samples);
+    if (edge_active) begin
+      if (stability_valid_model
+          && (actual.local_stability_raw_coherence_q30!==before_sample.global_coherence_q30
+          || actual.local_stability_cluster_coherence_q30!==before_sample.cluster_coherence_q30))
+        $fatal(1,"Stability did not capture the completed phase snapshot");
+      if (edge_tick) begin
+        if (actual.local_heat_q16!==before_sample.local_next_heat_q16
+            || actual.local_gamma_drift_word!==before_sample.local_next_gamma_drift_word
+            || actual.local_gamma_effective_word!==before_sample.local_next_gamma_effective_word
+            || actual.local_thermal_node_factor_q30!==before_sample.local_next_thermal_node_factor_q30)
+          $fatal(1,"Local candidate commit mismatch cells=%0d sample=%0d",CELLS,samples);
+        if (edge_gamma_valid) begin
+          if (actual.local_gamma_noise_target_q16!==target_at_edge)
+            $fatal(1,"Gamma target update lost");
+          gamma_accepts++;
+        end else begin
+          if (actual.local_gamma_noise_target_q16!==before_sample.local_gamma_noise_target_q16)
+            $fatal(1,"Gamma target changed without update request");
+          gamma_holds++;
+        end
+        selector_seen[{local_thermal_enable,local_gamma_enable}]=1;
+        if (actual.coupling_field_q16!='0) nonzero_coupling++;
+        if (actual.local_mean_heat_q16>3277) heated_samples++;
+        if (actual.local_thermal_node_factor_q30!={CELLS{32'd1073741824}})
+          attenuation_samples++;
+      end else begin
+        if (actual.local_heat_q16!==before_sample.local_heat_q16
+            || actual.local_heat_peak_q16!==before_sample.local_heat_peak_q16
+            || actual.local_mean_heat_peak_q16!==before_sample.local_mean_heat_peak_q16
+            || actual.local_maximum_heat_peak_q16!==before_sample.local_maximum_heat_peak_q16
+            || actual.local_gamma_noise_target_q16!==before_sample.local_gamma_noise_target_q16
+            || actual.local_gamma_noise_state_q16!==before_sample.local_gamma_noise_state_q16
+            || actual.local_gamma_drift_word!==before_sample.local_gamma_drift_word
+            || actual.local_gamma_effective_word!==before_sample.local_gamma_effective_word
+            || actual.local_thermal_node_factor_q30!==before_sample.local_thermal_node_factor_q30)
+          $fatal(1,"Local history changed without tick");
+        if (clear_counters) clear_retains++;
+      end
+    end
+    if (actual.phase_gamma_effective_word !==
+        (local_gamma_enable?actual.local_next_gamma_effective_word:gamma_effective_word)
+        || actual.phase_thermal_node_factor_q30 !==
+        (local_thermal_enable?actual.local_next_thermal_node_factor_q30:thermal_node_factor_q30))
+      $fatal(1,"Local/external source selection mismatch");
+  endtask
+
+  task automatic extended_profiles;
+    logic [1:0] desired;
+    int unsigned word;
+    // Exercise both polarity routes at every physical cell index, including
+    // indexes above seven in the sixteen- and thirty-two-cell configurations.
+    scheduler_mode=FRP_MODE_FREE; local_gamma_enable=1; local_thermal_enable=1;
+    gamma_update_valid=0; phase_load_valid=0; clear_counters=0;
+    tick_enable=0; auto_target_enable=0; external_request_valid='0;
+    for (int c=0;c<CELLS;c++) begin
+      assert_reset(); release_reset();
+      external_request_cell_index='0;
+      external_request_cell_index[0+:CELL_INDEX_BITS]=CELL_INDEX_BITS'(c);
+      external_request_target='0;
+      external_request_target[0+:STATE_BITS]=FRP_STATE_POS;
+      external_target_bank='0;
+      external_target_bank[c*STATE_BITS+:STATE_BITS]=FRP_STATE_POS;
+      external_request_valid='0; external_request_valid[0]=1;
+      tick_enable=1; cycle(1);
+      if (actual.state_out[c*STATE_BITS+:STATE_BITS]!==FRP_STATE_POS)
+        $fatal(1,"Indexed positive request failed cell=%0d",c);
+      for (int polarity=0;polarity<2;polarity++) begin
+        desired=(polarity==0)?FRP_STATE_NEG:FRP_STATE_POS;
+        external_request_valid[0]=1;
+        external_request_target[0+:STATE_BITS]=desired;
+        external_target_bank[c*STATE_BITS+:STATE_BITS]=desired;
+        tick_enable=1; cycle(1);
+        if (actual.state_out[c*STATE_BITS+:STATE_BITS]!==FRP_ACTIVE_NEUTRAL
+            || actual.pending_route_out[c*STATE_BITS+:STATE_BITS]!==desired)
+          $fatal(1,"Indexed active-zero route failed cell=%0d",c);
+        tick_enable=0; external_request_valid='0; retained_snapshot=actual;
+        repeat(3) begin cycle(1); check_retained_words(); end
+        clear_counters=1; cycle(1); check_retained_words(); check_counters_zero();
+        clear_counters=0; tick_enable=1; cycle(1);
+        if (actual.state_out[c*STATE_BITS+:STATE_BITS]!==desired
+            || actual.pending_route_out[c*STATE_BITS+:STATE_BITS]!==FRP_ACTIVE_NEUTRAL)
+          $fatal(1,"Indexed pending route failed cell=%0d",c);
+        route_cases++;
+      end
+      tick_enable=0; external_request_valid='0;
+    end
+    $display("PASS: both active-zero routes at every cell index");
+
+    // Three scheduler modes x four source selections x two request sources.
+    // Each profile runs reproducible lane traffic, loads, pauses and clear.
+    for (int mode=0;mode<3;mode++) begin
+      for (int sources=0;sources<4;sources++) begin
+        for (int automatic_requests=0;automatic_requests<2;automatic_requests++) begin
+          tick_enable=0; clear_counters=0; phase_load_valid=0;
+          external_request_valid='0; gamma_update_valid=1;
+          scheduler_mode=frp_m31_scheduler_mode_e'(mode);
+          local_gamma_enable=1'(sources%2); local_thermal_enable=1'(sources/2);
+          auto_target_enable=1'(automatic_requests);
+          gamma_targets_q16={CELLS{32'sd32768}};
+          assert_reset(); release_reset();
+          // A request held through release is accepted only on an enabled tick.
+          cycle(1);
+          if (actual.local_gamma_noise_target_q16!='0)
+            $fatal(1,"Gamma target accepted while tick disabled");
+          for (int c=0;c<CELLS;c++) begin
+            phase_load[c*32+:32]=32'(64'(c)*(64'h100000000/CELLS));
+            frequency_load_q16[c*32+:32]=(c%2==0)?32'sd0:32'sd1048576;
+          end
+          phase_load_valid=1; tick_enable=1; cycle(1); phase_load_valid=0;
+          for (int iteration=0;iteration<128;iteration++) begin
+            tick_enable=(iteration%9!=0);
+            clear_counters=(iteration%31==0);
+            phase_load_valid=(iteration%29==0);
+            gamma_update_valid=(iteration%5==0);
+            for (int c=0;c<CELLS;c++) begin
+              word=random_word(); phase_load[c*32+:32]=word;
+              frequency_load_q16[c*32+:32]=32'((word%2097153))-32'sd1048576;
+              gamma_targets_q16[c*32+:32]=32'(random_word()%131073)-32'sd65536;
+              gamma_effective_word[c*32+:32]=random_word();
+              thermal_node_factor_q30[c*32+:32]=32'(random_word()%1073741825);
+              external_target_bank[c*2+:2]=(c+iteration)%3==0?FRP_STATE_ZERO:
+                ((c+iteration)%2==0?FRP_STATE_POS:FRP_STATE_NEG);
+            end
+            for (int lane=0;lane<REQUEST_LANES;lane++) begin
+              external_request_valid[lane]=(iteration+lane)%4!=0;
+              external_request_cell_index[lane*CELL_INDEX_BITS+:CELL_INDEX_BITS]=
+                CELL_INDEX_BITS'((iteration+lane)%CELLS);
+              external_request_target[lane*2+:2]=(iteration+lane)%3==0?FRP_STATE_ZERO:
+                ((iteration+lane)%2==0?FRP_STATE_POS:FRP_STATE_NEG);
+            end
+            cycle(1); random_steps++;
+          end
+          tick_enable=0; phase_load_valid=0; gamma_update_valid=1;
+          external_request_valid='0; clear_counters=0;
+          // Drain the preceding snapshot before checking retained stability.
+          cycle(1); cycle(1); retained_snapshot=actual;
+          repeat(3) begin
+            gamma_targets_q16=~gamma_targets_q16;
+            clear_counters=1; cycle(1); check_retained_words();
+            if (actual.local_stability_sample_count_q!==retained_snapshot.local_stability_sample_count_q
+                || actual.local_stability_margin_q16!==retained_snapshot.local_stability_margin_q16)
+              $fatal(1,"Counter clear changed drained stability history");
+          end
+          clear_counters=0; profiles++;
+        end
+      end
+    end
+    $display("PASS: 24 scheduler/thermal/gamma/request profiles and 3072 fixed-seed steps");
+    tick_enable=0; phase_load_valid=0; gamma_update_valid=0;
+    assert_reset(); release_reset(); cycle(1); check_reset_values();
+  endtask
+
   initial begin
     clk = 1'b0;
     rst_n_async = 1'b0;
@@ -582,13 +610,17 @@ module frp_m32_fpga_post_synthesis_tb;
     scheduler_mode = FRP_MODE_FREE;
     auto_target_enable = 1'b1;
     external_request_valid = '1;
-    external_request_cell_index = {3'd1, 3'd0};
-    external_request_target = {FRP_STATE_NEG, FRP_STATE_POS};
+    external_request_cell_index = '0;
+    for (int lane=0;lane<REQUEST_LANES;lane++)
+      external_request_cell_index[lane*CELL_INDEX_BITS+:CELL_INDEX_BITS]=CELL_INDEX_BITS'(lane);
+    external_request_target = {REQUEST_LANES{FRP_STATE_POS}};
     external_target_bank = {CELLS{FRP_STATE_POS}};
     phase_load = '0;
     frequency_load_q16 = '0;
     gamma_effective_word = '0;
     thermal_node_factor_q30 = '0;
+    local_gamma_enable=0; local_thermal_enable=0; gamma_update_valid=1;
+    gamma_targets_q16={CELLS{32'sd16384}};
     for (int cell_index = 0; cell_index < CELLS; cell_index++) begin
       phase_load[32*cell_index +: 32] =
         32'h10000000 + cell_index * 32'h08000000;
@@ -612,6 +644,7 @@ module frp_m32_fpga_post_synthesis_tb;
     phase_load_valid = 1'b0;
     auto_target_enable = 1'b0;
     external_request_valid = '0;
+    gamma_update_valid=0;
     cycle(1'b1);
     cycle(1'b1);
     check_reset_values();
@@ -631,9 +664,10 @@ module frp_m32_fpga_post_synthesis_tb;
     // Exercise both mandatory polarity routes through a retained active
     // zero. Disable ticks while each pending polarity remains stored.
     tick_enable = 1'b1;
-    external_request_valid = 2'b01;
+    external_request_valid = {{(REQUEST_LANES-1){1'b0}},1'b1};
     external_request_cell_index = '0;
-    external_request_target = {FRP_STATE_ZERO, FRP_STATE_POS};
+    external_request_target = '0;
+    external_request_target[0+:STATE_BITS]=FRP_STATE_POS;
     external_target_bank = '0;
     external_target_bank[0 +: STATE_BITS] = FRP_STATE_POS;
     cycle(1'b1);
@@ -660,7 +694,7 @@ module frp_m32_fpga_post_synthesis_tb;
       if (actual.state_out[0 +: STATE_BITS] !== route_target
           || actual.pending_route_out[0 +: STATE_BITS] !== FRP_ACTIVE_NEUTRAL)
         $fatal(1, "Pending route failed to complete without a new request");
-      external_request_valid = 2'b01;
+      external_request_valid = {{(REQUEST_LANES-1){1'b0}},1'b1};
     end
     $display("PASS: 1 -> 0 -> -1 and -1 -> 0 -> 1; pending retained during pause");
 
@@ -701,12 +735,13 @@ module frp_m32_fpga_post_synthesis_tb;
 
       for (int tick_index = 0; tick_index < 96; tick_index++) begin
         auto_target_enable = (tick_index % 12) < 6;
-        external_request_valid = (tick_index % 5) == 0 ? 2'b01 : 2'b11;
-        external_request_cell_index =
-          {3'((tick_index + 1) % CELLS), 3'(tick_index % CELLS)};
-        external_request_target = (tick_index % 2) == 0
-          ? {FRP_STATE_POS, FRP_STATE_NEG}
-          : {FRP_STATE_NEG, FRP_STATE_POS};
+        for (int lane=0;lane<REQUEST_LANES;lane++) begin
+          external_request_valid[lane]=(tick_index%5!=0 || lane==0);
+          external_request_cell_index[lane*CELL_INDEX_BITS+:CELL_INDEX_BITS]=
+            CELL_INDEX_BITS'((tick_index+lane)%CELLS);
+          external_request_target[lane*STATE_BITS+:STATE_BITS]=
+            ((tick_index+lane)%2==0)?FRP_STATE_POS:FRP_STATE_NEG;
+        end
         for (int cell_index = 0; cell_index < CELLS; cell_index++) begin
           gamma_effective_word[32*cell_index +: 32] =
             FRP_M31_GAMMA_NOMINAL
@@ -764,10 +799,20 @@ module frp_m32_fpga_post_synthesis_tb;
     release_reset();
     cycle(1'b1);
     check_reset_values();
-    $display("PASS: 59 synthesized outputs match standalone M32 across %0d samples", samples);
+    extended_profiles();
+    if (profiles!=24 || route_cases!=2*CELLS || random_steps!=3072
+        || selector_seen!=4'b1111 || !(gamma_accepts>0 && gamma_holds>0
+        && stability_drains>0 && clear_retains>0 && nonzero_coupling>0
+        && heated_samples>0 && attenuation_samples>0))
+      $fatal(1,"Incomplete extended post-synthesis scenarios");
+    $display("PASS M32_POST_SYNTH cells=%0d lanes=%0d outputs=103 samples=%0d profiles=%0d routes=%0d random=%0d",
+      CELLS,REQUEST_LANES,samples,profiles,route_cases,random_steps);
+    $display("M32_POST_SYNTH_EVENTS cells=%0d gamma_accepts=%0d gamma_holds=%0d stability_drains=%0d clear_retains=%0d coupling=%0d heated=%0d attenuated=%0d",
+      CELLS,gamma_accepts,gamma_holds,stability_drains,clear_retains,nonzero_coupling,heated_samples,attenuation_samples);
     $display("FRP M32 FPGA post-synthesis testbench PASS");
     $finish;
   end
 endmodule : frp_m32_fpga_post_synthesis_tb
+`undef FRP_M32_PS_OUTPUTS
 
 `endif
