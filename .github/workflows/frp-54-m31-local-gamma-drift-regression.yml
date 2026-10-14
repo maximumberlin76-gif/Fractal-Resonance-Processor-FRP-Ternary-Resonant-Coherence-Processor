@@ -1,0 +1,177 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# Dependencies retain their own licenses.
+name: 54 - FRP M31 Local Gamma Drift Regression
+run-name: "54 - FRP Local Gamma Drift | 8/16/32 cells @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-54-local-gamma-drift-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Prepare evidence and pinned simulator
+        run: |
+          set -euo pipefail
+          export FRP54_EVIDENCE="$RUNNER_TEMP/frp-54-evidence"
+          mkdir -p "$FRP54_EVIDENCE"
+          printf '%s\n' "FRP54_EVIDENCE=$FRP54_EVIDENCE" >> "$GITHUB_ENV"
+          python -m pip install --disable-pip-version-check \
+            verilator==5.48.0 systemc==3.0.2.1 click==8.5.0 platformdirs==4.13.0 \
+            2>&1 | tee "$FRP54_EVIDENCE/install.log"
+          python -m pip freeze > "$FRP54_EVIDENCE/packages.txt"
+      - name: Run local gamma drift regression and verify results
+        run: |
+          set -euo pipefail
+          cat > "$FRP54_EVIDENCE/verify.py" <<'FRP54_EOF'
+          from pathlib import Path
+          import hashlib, importlib.metadata, json, os, re, shutil, subprocess
+          R=Path.cwd()
+          B=Path(os.environ['FRP54_EVIDENCE'])
+          def save(name,value):
+              (B/name).write_text(json.dumps(value,indent=2)+'\n')
+          def run(args,name,timeout=900):
+              save(name+'-command.json',args)
+              path=B/(name+'.log')
+              print('RUN',name,flush=True)
+              with path.open('w') as log:
+                  try:
+                      result=subprocess.run(args,cwd=R,stdout=log,
+                          stderr=subprocess.STDOUT,text=True,timeout=timeout)
+                  except subprocess.TimeoutExpired:
+                      log.write('\nTIMEOUT\n')
+                      raise
+              text=path.read_text()
+              if result.returncode:
+                  print(text[-12000:],flush=True)
+                  raise RuntimeError((name,result.returncode))
+              print(text[-2000:],flush=True)
+              return text
+          files=[
+              'rtl/m31/frp_m31_fixed_point_pkg.sv',
+              'rtl/m31/frp_m31_local_gamma_drift.sv',
+              'rtl/m31/frp_m31_local_gamma_drift_tb.sv',
+              'frp_prototype_v1_7_0.py',
+              '.github/workflows/frp-54-m31-local-gamma-drift-regression.yml',
+          ]
+          hashes={p:hashlib.sha256((R/p).read_bytes()).hexdigest() for p in files}
+          save('sources.json',{'commit':os.environ['GITHUB_SHA'],'files':hashes})
+          save('versions.json',{p:importlib.metadata.version(p)
+              for p in ['verilator','systemc']})
+          run(['verilator-cli','--version'],'verilator-version')
+          run(['c++','--version'],'compiler-version')
+          top='frp_m31_local_gamma_drift_tb'
+          source=R/'rtl/m31'/f'{top}.sv'
+          shutil.copy2(source,B/source.name)
+          obj=B/'obj'
+          run(['verilator-cli','--binary','--timing','--assert','-Wno-fatal',
+               '-j','2','-MAKEFLAGS','VK_PCH_I_FAST=',
+               '-MAKEFLAGS','VK_PCH_I_SLOW=','-MAKEFLAGS','OPT_FAST=-O1',
+               '--top-module',top,'--Mdir',str(obj),'-Irtl/m31',str(source)],
+              'local-gamma-drift-build')
+          text=run([str(obj/('V'+top))],'local-gamma-drift-run',120)
+          keys=['cells','steps','checks','commits','holds','resets',
+                'target_sweep','overload_sweep','random','isolated']
+          pattern=r'^PASS LOCAL_GAMMA '+r' '.join(k+r'=(\d+)' for k in keys)+r'$'
+          matches=re.findall(pattern,text,re.MULTILINE)
+          assert len(matches)==3,('Expected three checker records',text)
+          expected={
+              8: (25729,4890832,24079,1650,16806),
+              16:(17561,5856672,15903,1658,8622),
+              32:(13513,7809856,11839,1674,4542),
+          }
+          results={}
+          for match in matches:
+              v=dict(zip(keys,map(int,match)))
+              n=v['cells']
+              assert n in expected and str(n) not in results,v
+              assert tuple(v[k] for k in ('steps','checks','commits','holds','resets'))==expected[n],v
+              assert v['commits']+v['holds']==v['steps'],v
+              assert v['target_sweep']==65536 and v['overload_sweep']==65536,v
+              assert v['random']==8192 and v['isolated']==n,v
+              results[str(n)]=v
+          assert set(results)=={'8','16','32'}
+          event_keys=['cells','wide_pos','wide_neg','sat_pos','sat_neg','phase_pos',
+                      'phase_neg','effective_wrap','correlation_ties','gain_ties',
+                      'drift_ties','held_valid','retained_ticks']
+          pattern=r'^GAMMA_EVENTS '+r' '.join(k+r'=(\d+)' for k in event_keys)+r'$'
+          matches=re.findall(pattern,text,re.MULTILINE)
+          assert len(matches)==3,('Expected three event records',text)
+          events={}
+          for match in matches:
+              v=dict(zip(event_keys,map(int,match)))
+              n=str(v['cells'])
+              assert n in results and n not in events,v
+              assert all(v[k]>0 for k in event_keys if k!='cells'),v
+              events[n]=v
+          assert set(events)==set(results)
+          marker='PASS LOCAL_GAMMA_ALL cells=8,16,32'
+          assert text.splitlines().count(marker)==1,text
+          for p,h in hashes.items():
+              assert hashlib.sha256((R/p).read_bytes()).hexdigest()==h,p
+          totals={k:sum(v[k] for v in results.values()) for k in keys if k!='cells'}
+          assert totals['steps']==56803 and totals['checks']==18557360,totals
+          assert totals['target_sweep']==196608 and totals['overload_sweep']==196608,totals
+          assert totals['random']==24576 and totals['isolated']==56,totals
+          save('result.json',{'result':'PASS','commit':os.environ['GITHUB_SHA'],
+                             'cells':results,'events':events,'totals':totals})
+          lines=['## FRP M31 local gamma drift regression: PASS','',
+                 'Commit: `'+os.environ['GITHUB_SHA']+'`','',
+                 '| Cells | Steps | Comparisons | Commits | Holds | Resets |',
+                 '|---|---|---|---|---|---|']
+          for n in ('8','16','32'):
+              v=results[n]
+              lines.append(f"| {n} | {v['steps']} | {v['checks']} | {v['commits']} | {v['holds']} | {v['resets']} |")
+          lines += ['',
+              'Per configuration: all 65536 signed 16-bit target values from reset,',
+              'all 65536 signed 16-bit overload values from reset, and 8192 fixed-seed samples.',
+              'Each cell is also driven separately to check lane isolation.',
+              'The reference keeps independent target/noise history and uses integer division',
+              'with half-away rounding and a split-constant phase conversion.',
+              'Checks include same-tick target updates, held valid inputs, retained targets,',
+              'asynchronous reset, wide signed differences, drift saturation and phase wrapping.',
+              'The checker requires correlation, gain and drift half-tie events.',
+              'Physical-range samples use nonnegative overload; signed stress covers the full interface.',
+              'RTL simulation; source hashes, commands, tool versions and logs are attached.','']
+          summary='\n'.join(lines)
+          (B/'summary.md').write_text(summary)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write(summary)
+          print(summary)
+          FRP54_EOF
+          python "$FRP54_EVIDENCE/verify.py" 2>&1 | tee "$FRP54_EVIDENCE/verify.log"
+      - name: Upload logs and reproducibility records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-54-local-gamma-drift-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/frp-54-evidence/*.log
+            ${{ runner.temp }}/frp-54-evidence/*.json
+            ${{ runner.temp }}/frp-54-evidence/*.txt
+            ${{ runner.temp }}/frp-54-evidence/*.py
+            ${{ runner.temp }}/frp-54-evidence/*.sv
+            ${{ runner.temp }}/frp-54-evidence/*.md
+          if-no-files-found: error
+          retention-days: 30
