@@ -705,4 +705,215 @@ jobs:
           from pathlib import Path
           evidence = Path(os.environ["M32_EVIDENCE"])
           for name in ("top-lint.log", "post-synthesis-build.log"):
-              log = (evidence / name).read_text
+              log = (evidence / name).read_text(encoding="utf-8")
+              if re.search(r"%Warning-(PINMISSING|IMPLICIT|MULTIDRIVEN):", log):
+                  raise SystemExit(f"Invalid connection or multiple driver: {name}")
+          PY
+
+      - name: Run and compare two post-synthesis simulations
+        run: |
+          set -euo pipefail
+          for replay in 1 2; do
+            timeout 300s "$M32_BUILD/Vfrp_m32_fpga_post_synthesis_tb" \
+              2>&1 | tee "$M32_EVIDENCE/post-synthesis-run-$replay.log"
+          done
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_EVIDENCE"])
+          cells = int(os.environ["M32_CELLS"])
+          samples, holds, drains, retains, coupling, attenuated = {
+              8: (11285, 2499, 405, 115, 3075, 2791),
+              16: (11653, 2539, 421, 131, 3115, 2869),
+              32: (12389, 2619, 453, 163, 3195, 2886),
+          }[cells]
+          expected = [
+              "PASS: startup pulses discarded; phase load without tick",
+              "PASS: 1 -> 0 -> -1 and -1 -> 0 -> 1; pending retained during pause",
+              "PASS: reset reassertion restarts both release stages",
+              "PASS: free, 97 ticks, pause, isolated and concurrent clear",
+              "PASS: 7/1, 84 balance + 12 commit, reset FREE tick, clear",
+              "PASS: 1/7, 12 excite + 84 neutralize, reset FREE tick, clear",
+              "PASS: both active-zero routes at every cell index",
+              "PASS: 24 scheduler/thermal/gamma/request profiles and 3072 fixed-seed steps",
+              f"PASS M32_POST_SYNTH cells={cells} lanes={cells // 4} outputs=103 "
+              f"samples={samples} profiles=24 routes={2 * cells} random=3072",
+              f"M32_POST_SYNTH_EVENTS cells={cells} gamma_accepts=576 "
+              f"gamma_holds={holds} stability_drains={drains} clear_retains={retains} "
+              f"coupling={coupling} heated={coupling} attenuated={attenuated}",
+              "FRP M32 FPGA post-synthesis testbench PASS",
+          ]
+          for replay in (1, 2):
+              log = (evidence / f"post-synthesis-run-{replay}.log").read_text(
+                  encoding="utf-8"
+              )
+              actual = [line for line in log.splitlines()
+                        if line.startswith(("PASS:", "PASS M32_POST_SYNTH",
+                                            "M32_POST_SYNTH_EVENTS", "FRP M32 FPGA post-synthesis"))]
+              if actual != expected:
+                  raise SystemExit(f"Incomplete post-synthesis transcript: run {replay}")
+              (evidence / f"post-synthesis-run-{replay}.txt").write_text(
+                  "\n".join(actual) + "\n", encoding="utf-8"
+              )
+          if (evidence / "post-synthesis-run-1.txt").read_bytes() != (
+              evidence / "post-synthesis-run-2.txt"
+          ).read_bytes():
+              raise SystemExit("Post-synthesis semantic replay mismatch")
+          print("Two complete post-synthesis transcripts match: PASS")
+          PY
+
+      - name: Verify repository integrity and bind qualification evidence
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          evidence = Path(os.environ["M32_EVIDENCE"])
+
+          def require(condition, message):
+              if not condition:
+                  raise SystemExit(message)
+
+          manifest = json.loads((evidence / "source-manifest.json").read_text())
+          for record in manifest["files"]:
+              raw = Path(record["path"]).read_bytes()
+              require(len(raw) == record["bytes"]
+                      and hashlib.sha256(raw).hexdigest() == record["sha256"],
+                      f'Canonical source changed: {record["path"]}')
+          workflow = manifest["workflow"]
+          require(hashlib.sha256(Path(workflow["path"]).read_bytes()).hexdigest()
+                  == workflow["sha256"], "Workflow source changed")
+          require(subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+                  == os.environ["GITHUB_SHA"], "Checkout commit changed")
+          subprocess.run(["git", "diff", "--exit-code"], check=True)
+          require(not subprocess.check_output(["git", "status", "--porcelain"]),
+                  "Repository working tree changed")
+
+          structure = json.loads((evidence / "structure.json").read_text())
+          export = json.loads((evidence / "simulation-export.json").read_text())
+          require(structure["result"] == "PASS" and export["result"] == "PASS",
+                  "Missing structural or simulation export qualification")
+          models = json.loads((evidence / "cell-models.json").read_text())
+          for record in models["files"]:
+              raw = (evidence / record["path"]).read_bytes()
+              require(len(raw) == record["bytes"]
+                      and hashlib.sha256(raw).hexdigest() == record["sha256"],
+                      f'Cell support file changed: {record["path"]}')
+          required = [
+              "source-manifest.json", "canonical-sources.sha256", "toolchain.log",
+              "python-packages.txt", "read-slang-help.log", "cell-models.json",
+              "yosys-simlib.v", "yosys-techmap.v", "top-lint.log",
+              "synthesis-view.patch", "structure.json", "simulation-export.json",
+              "post-synthesis-build.log",
+          ]
+          for replay in (1, 2):
+              required.extend([
+                  f"netlist-run-{replay}.json", f"netlist-run-{replay}.v",
+                  f"stat-run-{replay}.json", f"synthesis-run-{replay}.ys",
+                  f"synthesis-run-{replay}.log", f"simulation-netlist-{replay}.json",
+                  f"simulation-netlist-{replay}.v", f"simulation-netlist-{replay}.ys",
+                  f"simulation-netlist-{replay}.log", f"post-synthesis-run-{replay}.log",
+                  f"post-synthesis-run-{replay}.txt",
+              ])
+          records = []
+          for name in sorted(required):
+              path = evidence / name
+              require(path.is_file() and path.stat().st_size > 0,
+                      f"Missing qualification evidence: {name}")
+              raw = path.read_bytes()
+              records.append({"path": name, "bytes": len(raw),
+                              "sha256": hashlib.sha256(raw).hexdigest()})
+          result = {
+              "schema": "frp.m32.fpga-post-synthesis-qualification.v2",
+              "result": "PASS", "repository": os.environ["GITHUB_REPOSITORY"],
+              "source_commit": os.environ["GITHUB_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "profile": {"cells": int(os.environ["M32_CELLS"]),
+                          "request_lanes": int(os.environ["M32_CELLS"]) // 4},
+              "source_files": 24,
+              "synthesis": structure,
+              "simulation_export": export,
+              "post_synthesis_simulation": {
+                  "top": "frp_m32_fpga_post_synthesis_tb",
+                  "dut": "frp_m32_fpga_netlist", "reference": "frp_m32_core",
+                  "replays": 2,
+                  "samples_per_replay": {8: 11285, 16: 11653, 32: 12389}[int(os.environ["M32_CELLS"])],
+                  "profiles_per_replay": 24, "random_steps_per_replay": 3072,
+                  "indexed_polarity_routes": 2 * int(os.environ["M32_CELLS"]),
+                  "compared_core_outputs": 103, "independent_ready_checks": True,
+                  "modes": ["free", "7/1", "1/7"],
+                  "semantic_transcripts_identical": True,
+              },
+              "cell_models": models, "repository_unchanged": True,
+              "evidence_files": records,
+          }
+          (evidence / "qualification.json").write_text(
+              json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          checksum_rows = [
+              f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n"
+              for path in sorted(evidence.iterdir())
+              if path.is_file() and path.name != "artifacts.sha256"
+          ]
+          (evidence / "artifacts.sha256").write_text("".join(checksum_rows), encoding="ascii")
+          print("FRP M32 FPGA post-synthesis qualification: PASS")
+          PY
+
+      - name: Upload qualification reports and diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: frp-m32-fpga-post-synthesis-${{ matrix.cells }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-m32-post-synthesis-evidence/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Publish qualification summary
+        if: always()
+        env:
+          M32_JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          lines = [
+              "# FRP M32 FPGA Post-Synthesis Qualification", "",
+              f'- Job result: {os.environ["M32_JOB_STATUS"]}',
+              f'- Source commit: {os.environ["GITHUB_SHA"]}',
+          ]
+          report = Path(os.environ["M32_EVIDENCE"]) / "qualification.json"
+          if report.is_file():
+              result = json.loads(report.read_text())
+              lines.extend([
+                  f'- Profile: {result["profile"]["cells"]} cells / {result["profile"]["request_lanes"]} request lanes',
+                  "- Synthesis: Yosys begin:fine, noalumacc, noshare / complete flattened FPGA top",
+                  "- Synthesis replays: identical JSON, Verilog, and statistics",
+                  "- Simulation exports: identical JSON and Verilog",
+                  "- Post-synthesis simulations: 2 complete matching transcripts",
+                  f'- Compared core outputs: 103 / {result["post_synthesis_simulation"]["samples_per_replay"]} samples per replay',
+                  "- Profiles: 24 / fixed-seed steps: 3072 per replay",
+                  "- Scheduler modes: free, 7/1, 1/7",
+                  "- Polarity routes: -1 -> 0 -> 1 and 1 -> 0 -> -1",
+                  "- Active zero and pending polarity retained during pause",
+                  f'- FPGA interface: 123 ports / {result["synthesis"]["port_bits"]} bits',
+                  f'- Synthesized cells: {result["synthesis"]["cells"]}',
+                  "- Remaining processes and latch cells: 0",
+                  "- Reset release: 2 stages / independent readiness checks",
+                  f'- Sine ROM: 4096 x 32 / {result["synthesis"]["sine_rom"]["read_ports"]} read ports / canonical content',
+                  "- Source files and original synthesis JSON retained unchanged",
+                  f'- Qualification result: {result["result"]}',
+              ])
+          else:
+              lines.append("- Qualification report was not produced; see diagnostic logs.")
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
+              stream.write("\n".join(lines) + "\n")
+          PY
