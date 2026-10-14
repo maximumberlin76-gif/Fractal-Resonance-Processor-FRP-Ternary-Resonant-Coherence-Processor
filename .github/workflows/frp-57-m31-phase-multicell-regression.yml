@@ -25,10 +25,16 @@ jobs:
       PYTHONHASHSEED: "0"
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
-      FRP57_EVIDENCE: ${{ runner.temp }}/frp-57-evidence
-      FRP57_BUILD: ${{ runner.temp }}/frp-57-build
 
     steps:
+      - name: Initialize runner paths
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/frp-57-evidence" "$RUNNER_TEMP/frp-57-build"
+          printf '%s\n' \
+            "FRP57_EVIDENCE=$RUNNER_TEMP/frp-57-evidence" \
+            "FRP57_BUILD=$RUNNER_TEMP/frp-57-build" >> "$GITHUB_ENV"
+
       - name: Check out dispatched commit
         uses: actions/checkout@v5
         with:
