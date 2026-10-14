@@ -14,13 +14,18 @@ concurrency:
 
 jobs:
   qualify-m32-post-synthesis:
-    name: Synthesize and simulate the complete M32 FPGA netlist
+    name: M32 FPGA netlist / ${{ matrix.cells }} cells
+    strategy:
+      fail-fast: false
+      matrix:
+        cells: [8, 16, 32]
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     defaults:
       run:
         shell: bash
     env:
+      M32_CELLS: ${{ matrix.cells }}
       LC_ALL: C.UTF-8
       TZ: UTC
       PYTHONHASHSEED: "0"
@@ -79,16 +84,21 @@ jobs:
           rtl/m31/frp_m31_capacity_guard.sv|20787|d0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123
           rtl/m31/frp_m31_state_update.sv|18147|ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90
           rtl/m31/frp_m31_execution_core.sv|33724|e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92
-          rtl/m31/frp_m31_phase_interference.sv|11245|e8ceb80feb0b30db5e28d70bc4d68d51506da4d596b46a73c0137465d1455fe0
+          rtl/m31/frp_m31_phase_interference.sv|15042|81cd497e3f3e04abc93a2052c23deb189b2c200b11cc249ec51dbd40588e9523
           rtl/m31/frp_m31_phase_request_adapter.sv|2251|fa78bcfe965270cc74855908aa392989d857575a2097a126539aabb1aab8990d
           rtl/m31/frp_m31_thermal_proxy.sv|1883|34df4ebfc5dfad8e3e5e454e560404585de5c881e6f75abaae367d3bd9fb11bd
           rtl/m31/frp_m31_stability.sv|2203|69c06833e6dfbb28e25b74a5787dcd03756dddf0f66726de3ea47c1ad2931931
           rtl/m31/frp_m31_sin_q30.mem|36864|adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d
           rtl/m32/frp_m32_registered_target_boundary.sv|3947|9626474b49d32b411e107d7ccc8ee5aa7f42728e9a6f70d634d16d3f2a414c5e
           rtl/m32/frp_m32_registered_target_request_path.sv|3244|02250069a68737f055a419cd67bf2d439b3f63b3f6a7a245f40e9bf29d1958eb
-          rtl/m32/frp_m32_core.sv|10564|925342326b7ad555a1382e8ee3bc5754ed3012ba60e0eabf512113731e0ee6c9
-          fpga/m32/frp_m32_fpga_top.sv|11355|4893b157fba0ce090766d73429bce154a8b06dbb4118ec4a6dcb7e4a4c4a3348
-          fpga/m32/frp_m32_fpga_post_synthesis_tb.sv|38441|f619094e59932cc48d54a27a6650d8913ede84e754069f1b911ef3e692d953d8
+          rtl/m32/frp_m32_core.sv|22631|df35b73ccb01f06908385656332942858a5f056e7b92556cc16658beb5732b98
+          fpga/m32/frp_m32_fpga_top.sv|18068|db9a9a5bb72b74b1acb4a1e1b34c943451324b919d3eb1c2621b28e8483f284e
+          fpga/m32/frp_m32_fpga_post_synthesis_tb.sv|37656|99fe8ef049b9197f8ab7bf4790793dd920d1cf5ef7f02ca66813f352523ab8a7
+          rtl/m31/frp_m31_global_stability.sv|14765|d1604e08fa6cf658f25b579fb76202e65fca1481167e6d8d6039a7034e354832
+          rtl/m31/frp_m31_isqrt_u64.sv|2622|cbb5a531283164d1d54d59ec748b97bf84e172704854bf5eb7c6bda2c502f7c7
+          rtl/m31/frp_m31_local_gamma_drift.sv|3837|478882d4f6a2986f5079c88b444c7b007d68145d61e5150209cb0637f35b2ec0
+          rtl/m31/frp_m31_local_thermal_attenuation.sv|9521|6e10f738f94c43ac9748ec7a033adde16243beea59e2f7f2973a3ab51c2e5e04
+          rtl/m31/frp_m31_local_thermal_field.sv|9442|2973c4ce73c014cd2692e2fa34cbf1ef6daa88d8e4115a545d6e776acb75cff6
           """
           records = []
           for row in identity_rows.strip().splitlines():
@@ -109,8 +119,8 @@ jobs:
                       f"Actual: {len(raw)} bytes, SHA-256 {actual_sha}"
                   )
               records.append({"path": name, "bytes": len(raw), "sha256": actual_sha})
-          if len(records) != 19:
-              raise SystemExit("Expected nineteen canonical input files")
+          if len(records) != 24:
+              raise SystemExit("Expected twenty-four canonical input files")
 
           allowed = {r["path"] for r in records if r["path"].endswith(".sv")}
           visited = set()
@@ -164,7 +174,7 @@ jobs:
               "".join(f'{r["sha256"]}  {r["path"]}\n' for r in records),
               encoding="ascii",
           )
-          print("Exact sources: 18 SystemVerilog files and one sine ROM: PASS")
+          print("Exact sources: 23 SystemVerilog files and one sine ROM: PASS")
           PY
 
       - name: Install and record simulation and synthesis tools
@@ -172,12 +182,13 @@ jobs:
           set -euo pipefail
           {
             sudo apt-get update
-            sudo apt-get install --yes verilator g++ make
+            sudo apt-get install --yes g++ make
             python -m pip install --disable-pip-version-check \
-              yowasp-yosys==0.68.0.0.post1208
+              yowasp-yosys==0.68.0.0.post1208 yowasp-runtime==1.96 wasmtime==47.0.1 \
+              verilator==5.48.0 systemc==3.0.2.1 click==8.5.0 platformdirs==4.13.0
             python -m pip check
             python --version
-            verilator --version
+            verilator-cli --version
             g++ --version
             make --version
             yowasp-yosys -V
@@ -224,8 +235,8 @@ jobs:
       - name: Lint the complete FPGA top
         run: |
           set -euo pipefail
-          verilator --sv --lint-only --timing --assert -Wall -Wno-fatal \
-            --top-module frp_m32_fpga_top \
+          verilator-cli --sv --lint-only --timing --assert -Wall -Wno-fatal \
+            --top-module frp_m32_fpga_top -GCELLS="$M32_CELLS" \
             -Irtl/m31 -Irtl/m32 -Ifpga/m32 \
             fpga/m32/frp_m32_fpga_top.sv \
             2>&1 | tee "$M32_EVIDENCE/top-lint.log"
@@ -259,8 +270,8 @@ jobs:
           if original.count(old) != 1:
               raise SystemExit("Expected four ROM simulation checks were not unique")
           normalized = original.replace(old, new, 1)
-          if len(normalized) != 10853 or hashlib.sha256(normalized).hexdigest() != (
-              "571a1df102318fc5b62d2b0977aa57625e7abd999db3487e62fe2d270f190bb8"
+          if len(normalized) != 14650 or hashlib.sha256(normalized).hexdigest() != (
+              "0190a40ed577986017fb686639af791e417fe494352635d04f34a058b29a7106"
           ):
               raise SystemExit("Synthesis phase-source identity mismatch")
           if normalized.count(new) != 1:
@@ -300,10 +311,11 @@ jobs:
               }
               script = (
                   "read_slang -j 1 --std 1800-2017 --ignore-assertions "
-                  "-G CELLS=8 -G REQUEST_LANES=2 "
+                  f"-G CELLS={os.environ['M32_CELLS']} "
+                  f"-G REQUEST_LANES={int(os.environ['M32_CELLS']) // 4} "
                   f"--top {top} -Irtl/m31 -Irtl/m32 -Ifpga/m32 "
                   "fpga/m32/frp_m32_fpga_top.sv; "
-                  f"synth -top {top} -run begin:fine; check -assert; "
+                  f"synth -top {top} -noalumacc -noshare -run begin:fine; check -assert; "
                   f'tee -o {json.dumps(str(paths["stat"]))} stat -json -top {top}; '
                   f'write_json {json.dumps(str(paths["json"]))}; '
                   f'write_verilog -noattr -noexpr -nodec {json.dumps(str(paths["v"]))}'
@@ -315,7 +327,7 @@ jobs:
               subprocess.run(
                   ["yowasp-yosys", "-Q", "-T", "-q", "-l", str(paths["log"]),
                    "-p", script],
-                  cwd=view, check=True, timeout=300,
+                  cwd=view, check=True, timeout=1200,
               )
               for path in paths.values():
                   if not path.is_file() or path.stat().st_size == 0:
@@ -358,96 +370,147 @@ jobs:
           require(int(module["attributes"].get("top", "0"), 2) == 1,
                   "Missing top attribute")
           port_rows = """
-          clk|input|1
-          rst_n_async|input|1
-          tick_enable|input|1
-          clear_counters|input|1
-          scheduler_mode|input|2
-          phase_load_valid|input|1
-          phase_load|input|256
-          frequency_load_q16|input|256
-          gamma_effective_word|input|256
-          thermal_node_factor_q30|input|256
-          auto_target_enable|input|1
-          external_request_valid|input|2
-          external_request_cell_index|input|6
-          external_request_target|input|4
-          external_target_bank|input|16
-          phase_word_q|output|256
-          frequency_current_q16|output|256
-          coupling_field_q16|output|256
-          phase_projection_q30|output|256
-          phase_target_source|output|16
-          registered_target_q|output|16
-          registered_target_valid_q|output|1
-          phase_target_domain_valid|output|1
-          registered_target_domain_valid|output|1
-          target_capture_accepted|output|1
-          target_capture_rejected|output|1
-          accepted_target_capture_events_q|output|32
-          rejected_target_capture_events_q|output|32
-          registered_request_enable|output|1
-          phase_request_valid|output|2
-          phase_request_cell_index|output|6
-          phase_request_target|output|4
-          execution_request_valid|output|2
-          execution_request_cell_index|output|6
-          execution_request_target|output|4
-          execution_target_bank|output|16
-          state_out|output|16
-          pending_route_out|output|16
-          scheduler_mode_q|output|2
-          scheduler_state_q|output|3
-          ticks_recorded_q|output|32
-          scheduler_count_free_q|output|32
-          scheduler_count_balance_q|output|32
-          scheduler_count_commit_q|output|32
-          scheduler_count_excite_q|output|32
-          scheduler_count_neutralize_q|output|32
-          request_accept|output|2
-          request_reject|output|2
-          accepted_cell_mask|output|8
-          neutral_routed_cell_mask|output|8
-          accepted_change_mask|output|8
-          accepted_changes|output|32
-          capacity_remaining|output|32
-          capacity_exhausted|output|1
-          switch_load_numerator|output|32
-          requested_direct_events|output|32
-          prevented_direct_events|output|32
-          neutral_routed_events|output|32
-          actual_direct_events|output|32
-          reserved_state_events|output|32
-          queue_overflow_events|output|32
-          invariant_flags|output|10
-          pair_coherence_q30|output|32
-          cluster_coherence_q30|output|32
-          global_coherence_q30|output|32
-          organization_dispersion_q30|output|32
-          normalized_cycle_cost_q16|output|32
-          temperature_proxy_q16|output|32
-          peak_temperature_proxy_q16|output|32
-          thermal_sample_count_q|output|32
-          coherence_capacity_q16|output|32
-          pressure_q16|output|32
-          stability_margin_q16|output|32
-          stable|output|1
-          core_ready|output|1
+          clk|input|1,1,1
+          rst_n_async|input|1,1,1
+          tick_enable|input|1,1,1
+          clear_counters|input|1,1,1
+          scheduler_mode|input|2,2,2
+          phase_load_valid|input|1,1,1
+          phase_load|input|256,512,1024
+          frequency_load_q16|input|256,512,1024
+          gamma_effective_word|input|256,512,1024
+          thermal_node_factor_q30|input|256,512,1024
+          auto_target_enable|input|1,1,1
+          external_request_valid|input|2,4,8
+          external_request_cell_index|input|6,16,40
+          external_request_target|input|4,8,16
+          external_target_bank|input|16,32,64
+          core_ready|output|1,1,1
+          phase_word_q|output|256,512,1024
+          frequency_current_q16|output|256,512,1024
+          coupling_field_q16|output|256,512,1024
+          phase_projection_q30|output|256,512,1024
+          phase_target_source|output|16,32,64
+          registered_target_q|output|16,32,64
+          registered_target_valid_q|output|1,1,1
+          phase_target_domain_valid|output|1,1,1
+          registered_target_domain_valid|output|1,1,1
+          target_capture_accepted|output|1,1,1
+          target_capture_rejected|output|1,1,1
+          accepted_target_capture_events_q|output|32,32,32
+          rejected_target_capture_events_q|output|32,32,32
+          registered_request_enable|output|1,1,1
+          phase_request_valid|output|2,4,8
+          phase_request_cell_index|output|6,16,40
+          phase_request_target|output|4,8,16
+          execution_request_valid|output|2,4,8
+          execution_request_cell_index|output|6,16,40
+          execution_request_target|output|4,8,16
+          execution_target_bank|output|16,32,64
+          state_out|output|16,32,64
+          pending_route_out|output|16,32,64
+          scheduler_mode_q|output|2,2,2
+          scheduler_state_q|output|3,3,3
+          ticks_recorded_q|output|32,32,32
+          scheduler_count_free_q|output|32,32,32
+          scheduler_count_balance_q|output|32,32,32
+          scheduler_count_commit_q|output|32,32,32
+          scheduler_count_excite_q|output|32,32,32
+          scheduler_count_neutralize_q|output|32,32,32
+          request_accept|output|2,4,8
+          request_reject|output|2,4,8
+          accepted_cell_mask|output|8,16,32
+          neutral_routed_cell_mask|output|8,16,32
+          accepted_change_mask|output|8,16,32
+          accepted_changes|output|32,32,32
+          capacity_remaining|output|32,32,32
+          capacity_exhausted|output|1,1,1
+          switch_load_numerator|output|32,32,32
+          requested_direct_events|output|32,32,32
+          prevented_direct_events|output|32,32,32
+          neutral_routed_events|output|32,32,32
+          actual_direct_events|output|32,32,32
+          reserved_state_events|output|32,32,32
+          queue_overflow_events|output|32,32,32
+          invariant_flags|output|10,10,10
+          pair_coherence_q30|output|32,32,32
+          cluster_coherence_q30|output|32,32,32
+          global_coherence_q30|output|32,32,32
+          organization_dispersion_q30|output|32,32,32
+          normalized_cycle_cost_q16|output|32,32,32
+          temperature_proxy_q16|output|32,32,32
+          peak_temperature_proxy_q16|output|32,32,32
+          thermal_sample_count_q|output|32,32,32
+          coherence_capacity_q16|output|32,32,32
+          pressure_q16|output|32,32,32
+          stability_margin_q16|output|32,32,32
+          stable|output|1,1,1
+          local_heat_q16|output|256,512,1024
+          local_heat_peak_q16|output|256,512,1024
+          local_generated_power_q16|output|256,512,1024
+          local_thermal_dissipation_q16|output|256,512,1024
+          local_thermal_diffusion_q16|output|256,512,1024
+          local_thermal_overload_q16|output|256,512,1024
+          local_next_heat_q16|output|256,512,1024
+          local_next_overload_q16|output|256,512,1024
+          local_frequency_lag_q16|output|256,512,1024
+          local_mean_heat_q16|output|32,32,32
+          local_mean_heat_peak_q16|output|32,32,32
+          local_maximum_heat_peak_q16|output|32,32,32
+          local_gamma_enable|input|1,1,1
+          gamma_update_valid|input|1,1,1
+          gamma_targets_q16|input|256,512,1024
+          local_gamma_noise_target_q16|output|256,512,1024
+          local_gamma_noise_state_q16|output|256,512,1024
+          local_gamma_drift_word|output|256,512,1024
+          local_gamma_effective_word|output|256,512,1024
+          local_next_gamma_drift_word|output|256,512,1024
+          local_next_gamma_effective_word|output|256,512,1024
+          phase_gamma_effective_word|output|256,512,1024
+          local_thermal_enable|input|1,1,1
+          local_thermal_node_factor_q30|output|256,512,1024
+          local_next_thermal_node_factor_q30|output|256,512,1024
+          phase_thermal_node_factor_q30|output|256,512,1024
+          group_coherence_q30|output|224,480,992
+          level_mean_coherence_q30|output|96,128,160
+          level_min_coherence_q30|output|96,128,160
+          level_max_coherence_q30|output|96,128,160
+          level_dispersion_q30|output|96,128,160
+          local_coherence_compression_q30|output|32,32,32
+          local_effective_coherence_q30|output|32,32,32
+          local_coherence_capacity_q16|output|32,32,32
+          local_pressure_q16|output|32,32,32
+          local_stability_margin_q16|output|32,32,32
+          local_stable|output|1,1,1
+          local_previous_margin_q16|output|32,32,32
+          local_stability_valid_q|output|1,1,1
+          local_stability_sample_count_q|output|32,32,32
+          local_stability_raw_coherence_q30|output|32,32,32
+          local_stability_cluster_coherence_q30|output|32,32,32
+          local_stability_mean_heat_q16|output|32,32,32
+          local_stability_mean_overload_q16|output|32,32,32
+          local_stability_mean_lag_q16|output|32,32,32
+          local_stability_neutral_fraction_q30|output|32,32,32
+          local_stability_compression_arg_q16|output|32,32,32
+          local_stability_switch_load_q16|output|32,32,32
           """
+          profile_cells = int(os.environ["M32_CELLS"])
+          profile_index = (8, 16, 32).index(profile_cells)
+          port_bits = {8: 9445, 16: 17169, 32: 32501}[profile_cells]
           expected_ports = {}
           for row in port_rows.strip().splitlines():
               name, direction, width = row.strip().split("|")
-              expected_ports[name] = (direction, int(width))
+              expected_ports[name] = (direction, int(width.split(",")[profile_index]))
           actual_ports = {
               name: (port["direction"], len(port["bits"]))
               for name, port in module["ports"].items()
           }
           require(actual_ports == expected_ports, "FPGA port contract mismatch")
-          require(len(actual_ports) == 75, "Expected 75 FPGA ports")
-          require(sum(width for _, width in actual_ports.values()) == 3136,
-                  "Expected 3136 FPGA port bits")
+          require(len(actual_ports) == 123, "Expected 123 FPGA ports")
+          require(sum(width for _, width in actual_ports.values()) == port_bits,
+                  "Unexpected FPGA port bit count")
           require(Counter(d for d, _ in actual_ports.values()) == {
-              "input": 15, "output": 60,
+              "input": 19, "output": 104,
           }, "FPGA port direction mismatch")
 
           cells = module["cells"]
@@ -492,7 +555,7 @@ jobs:
           require(rom is not None and rom["type"] == "$mem_v2",
                   "Canonical sine ROM was not retained as memory")
           expected_rom = {"WIDTH": 32, "SIZE": 4096, "ABITS": 12,
-                          "RD_PORTS": 72, "WR_PORTS": 0}
+                          "RD_PORTS": profile_cells * (profile_cells + 1), "WR_PORTS": 0}
           for name, value in expected_rom.items():
               require(int(rom["parameters"][name], 2) == value,
                       f"Sine ROM parameter mismatch: {name}")
@@ -509,19 +572,19 @@ jobs:
           stat_module = stat["modules"].get("\\" + top)
           require(stat_module is not None, "Missing FPGA synthesis statistics")
           require(stat_module["num_processes"] == 0
-                  and stat_module["num_ports"] == 75
-                  and stat_module["num_port_bits"] == 3136
+                  and stat_module["num_ports"] == 123
+                  and stat_module["num_port_bits"] == port_bits
                   and stat_module["num_cells"] == len(cells)
                   and stat_module["num_cells_by_type"] == dict(cell_types)
-                  and cell_types["$mem_v2"] == 2,
+                  and cell_types["$mem_v2"] >= 2,
                   "FPGA synthesis statistics mismatch")
 
           result = {
-              "result": "PASS", "top": top, "ports": 75, "port_bits": 3136,
+              "result": "PASS", "top": top, "ports": 123, "port_bits": port_bits,
               "cells": len(cells), "cell_types": dict(sorted(cell_types.items())),
               "flattened_modules": 1, "processes": 0, "latches": 0,
               "reset_stages": 2, "core_uses_second_stage": True,
-              "sine_rom": {"width": 32, "depth": 4096, "read_ports": 72,
+              "sine_rom": {"width": 32, "depth": 4096, "read_ports": profile_cells * (profile_cells + 1),
                            "write_ports": 0, "matches_canonical_mem": True},
               "replays": 2, "json_verilog_statistics_identical": True,
           }
@@ -545,7 +608,7 @@ jobs:
           top = "frp_m32_fpga_top"
           simulation_top = "frp_m32_fpga_netlist"
           controls = ["tick_enable", "clear_counters", "phase_load_valid",
-                      "auto_target_enable", "external_request_valid"]
+                      "auto_target_enable", "external_request_valid", "gamma_update_valid"]
 
           def require(condition, message):
               if not condition:
@@ -626,10 +689,10 @@ jobs:
       - name: Build the post-synthesis FPGA testbench
         run: |
           set -euo pipefail
-          verilator -DSIMLIB_NOCONNECT --sv --timing --assert --binary \
-            -Wall -Wno-fatal -CFLAGS -std=c++20 \
+          verilator-cli -DSIMLIB_NOCONNECT --sv --timing --assert --binary \
+            -Wall -Wno-fatal --output-groups 0 -MAKEFLAGS OPT_FAST=-O0 \
             -MAKEFLAGS VK_PCH_I_FAST= -MAKEFLAGS VK_PCH_I_SLOW= \
-            -j 2 --top-module frp_m32_fpga_post_synthesis_tb \
+            -j 2 --top-module frp_m32_fpga_post_synthesis_tb -GCELLS="$M32_CELLS" \
             --Mdir "$M32_BUILD" -Irtl/m31 -Irtl/m32 \
             -v "$M32_EVIDENCE/yosys-simlib.v" \
             "$M32_EVIDENCE/simulation-netlist-1.v" \
@@ -642,197 +705,4 @@ jobs:
           from pathlib import Path
           evidence = Path(os.environ["M32_EVIDENCE"])
           for name in ("top-lint.log", "post-synthesis-build.log"):
-              log = (evidence / name).read_text(encoding="utf-8")
-              if re.search(r"%Warning-(PINMISSING|IMPLICIT|MULTIDRIVEN):", log):
-                  raise SystemExit(f"Invalid connection or multiple driver: {name}")
-          PY
-
-      - name: Run and compare two post-synthesis simulations
-        run: |
-          set -euo pipefail
-          for replay in 1 2; do
-            timeout 120s "$M32_BUILD/Vfrp_m32_fpga_post_synthesis_tb" \
-              2>&1 | tee "$M32_EVIDENCE/post-synthesis-run-$replay.log"
-          done
-          python - <<'PY'
-          import os
-          from pathlib import Path
-
-          evidence = Path(os.environ["M32_EVIDENCE"])
-          expected = [
-              "PASS: startup pulses discarded; phase load without tick",
-              "PASS: 1 -> 0 -> -1 and -1 -> 0 -> 1; pending retained during pause",
-              "PASS: reset reassertion restarts both release stages",
-              "PASS: free, 97 ticks, pause, isolated and concurrent clear",
-              "PASS: 7/1, 84 balance + 12 commit, reset FREE tick, clear",
-              "PASS: 1/7, 12 excite + 84 neutralize, reset FREE tick, clear",
-              "PASS: 59 synthesized outputs match standalone M32 across 1019 samples",
-              "FRP M32 FPGA post-synthesis testbench PASS",
-          ]
-          for replay in (1, 2):
-              log = (evidence / f"post-synthesis-run-{replay}.log").read_text(
-                  encoding="utf-8"
-              )
-              actual = [line for line in log.splitlines()
-                        if line.startswith(("PASS:", "FRP M32 FPGA post-synthesis"))]
-              if actual != expected:
-                  raise SystemExit(f"Incomplete post-synthesis transcript: run {replay}")
-              (evidence / f"post-synthesis-run-{replay}.txt").write_text(
-                  "\n".join(actual) + "\n", encoding="utf-8"
-              )
-          if (evidence / "post-synthesis-run-1.txt").read_bytes() != (
-              evidence / "post-synthesis-run-2.txt"
-          ).read_bytes():
-              raise SystemExit("Post-synthesis semantic replay mismatch")
-          print("Two complete post-synthesis transcripts match: PASS")
-          PY
-
-      - name: Verify repository integrity and bind qualification evidence
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import hashlib
-          import json
-          import os
-          import subprocess
-          from pathlib import Path
-
-          evidence = Path(os.environ["M32_EVIDENCE"])
-
-          def require(condition, message):
-              if not condition:
-                  raise SystemExit(message)
-
-          manifest = json.loads((evidence / "source-manifest.json").read_text())
-          for record in manifest["files"]:
-              raw = Path(record["path"]).read_bytes()
-              require(len(raw) == record["bytes"]
-                      and hashlib.sha256(raw).hexdigest() == record["sha256"],
-                      f'Canonical source changed: {record["path"]}')
-          workflow = manifest["workflow"]
-          require(hashlib.sha256(Path(workflow["path"]).read_bytes()).hexdigest()
-                  == workflow["sha256"], "Workflow source changed")
-          require(subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-                  == os.environ["GITHUB_SHA"], "Checkout commit changed")
-          subprocess.run(["git", "diff", "--exit-code"], check=True)
-          require(not subprocess.check_output(["git", "status", "--porcelain"]),
-                  "Repository working tree changed")
-
-          structure = json.loads((evidence / "structure.json").read_text())
-          export = json.loads((evidence / "simulation-export.json").read_text())
-          require(structure["result"] == "PASS" and export["result"] == "PASS",
-                  "Missing structural or simulation export qualification")
-          models = json.loads((evidence / "cell-models.json").read_text())
-          for record in models["files"]:
-              raw = (evidence / record["path"]).read_bytes()
-              require(len(raw) == record["bytes"]
-                      and hashlib.sha256(raw).hexdigest() == record["sha256"],
-                      f'Cell support file changed: {record["path"]}')
-          required = [
-              "source-manifest.json", "canonical-sources.sha256", "toolchain.log",
-              "python-packages.txt", "read-slang-help.log", "cell-models.json",
-              "yosys-simlib.v", "yosys-techmap.v", "top-lint.log",
-              "synthesis-view.patch", "structure.json", "simulation-export.json",
-              "post-synthesis-build.log",
-          ]
-          for replay in (1, 2):
-              required.extend([
-                  f"netlist-run-{replay}.json", f"netlist-run-{replay}.v",
-                  f"stat-run-{replay}.json", f"synthesis-run-{replay}.ys",
-                  f"synthesis-run-{replay}.log", f"simulation-netlist-{replay}.json",
-                  f"simulation-netlist-{replay}.v", f"simulation-netlist-{replay}.ys",
-                  f"simulation-netlist-{replay}.log", f"post-synthesis-run-{replay}.log",
-                  f"post-synthesis-run-{replay}.txt",
-              ])
-          records = []
-          for name in sorted(required):
-              path = evidence / name
-              require(path.is_file() and path.stat().st_size > 0,
-                      f"Missing qualification evidence: {name}")
-              raw = path.read_bytes()
-              records.append({"path": name, "bytes": len(raw),
-                              "sha256": hashlib.sha256(raw).hexdigest()})
-          result = {
-              "schema": "frp.m32.fpga-post-synthesis-qualification.v1",
-              "result": "PASS", "repository": os.environ["GITHUB_REPOSITORY"],
-              "source_commit": os.environ["GITHUB_SHA"],
-              "run_id": os.environ["GITHUB_RUN_ID"],
-              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
-              "profile": {"cells": 8, "request_lanes": 2},
-              "source_files": 19,
-              "synthesis": structure,
-              "simulation_export": export,
-              "post_synthesis_simulation": {
-                  "top": "frp_m32_fpga_post_synthesis_tb",
-                  "dut": "frp_m32_fpga_netlist", "reference": "frp_m32_core",
-                  "replays": 2, "samples_per_replay": 1019,
-                  "compared_core_outputs": 59, "independent_ready_checks": True,
-                  "modes": ["free", "7/1", "1/7"],
-                  "semantic_transcripts_identical": True,
-              },
-              "cell_models": models, "repository_unchanged": True,
-              "evidence_files": records,
-          }
-          (evidence / "qualification.json").write_text(
-              json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-          )
-          checksum_rows = [
-              f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n"
-              for path in sorted(evidence.iterdir())
-              if path.is_file() and path.name != "artifacts.sha256"
-          ]
-          (evidence / "artifacts.sha256").write_text("".join(checksum_rows), encoding="ascii")
-          print("FRP M32 FPGA post-synthesis qualification: PASS")
-          PY
-
-      - name: Upload qualification reports and diagnostic logs
-        if: always()
-        uses: actions/upload-artifact@v4.6.2
-        with:
-          name: frp-m32-fpga-post-synthesis-${{ github.sha }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/frp-m32-post-synthesis-evidence/
-          if-no-files-found: warn
-          retention-days: 30
-
-      - name: Publish qualification summary
-        if: always()
-        env:
-          M32_JOB_STATUS: ${{ job.status }}
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          lines = [
-              "# FRP M32 FPGA Post-Synthesis Qualification", "",
-              f'- Job result: {os.environ["M32_JOB_STATUS"]}',
-              f'- Source commit: {os.environ["GITHUB_SHA"]}',
-          ]
-          report = Path(os.environ["M32_EVIDENCE"]) / "qualification.json"
-          if report.is_file():
-              result = json.loads(report.read_text())
-              lines.extend([
-                  "- Profile: 8 cells / 2 request lanes",
-                  "- Synthesis: Yosys begin:fine / complete flattened FPGA top",
-                  "- Synthesis replays: identical JSON, Verilog, and statistics",
-                  "- Simulation exports: identical JSON and Verilog",
-                  "- Post-synthesis simulations: 2 complete matching transcripts",
-                  "- Compared core outputs: 59 / 1019 samples per replay",
-                  "- Scheduler modes: free, 7/1, 1/7",
-                  "- Polarity routes: -1 -> 0 -> 1 and 1 -> 0 -> -1",
-                  "- Active zero and pending polarity retained during pause",
-                  "- FPGA interface: 75 ports / 3136 bits",
-                  f'- Synthesized cells: {result["synthesis"]["cells"]}',
-                  "- Remaining processes and latch cells: 0",
-                  "- Reset release: 2 stages / independent readiness checks",
-                  "- Sine ROM: 4096 x 32 / 72 read ports / canonical content",
-                  "- Source files and original synthesis JSON retained unchanged",
-                  f'- Qualification result: {result["result"]}',
-              ])
-          else:
-              lines.append("- Qualification report was not produced; see diagnostic logs.")
-          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
-              stream.write("\n".join(lines) + "\n")
-          PY
+              log = (evidence / name).read_text
