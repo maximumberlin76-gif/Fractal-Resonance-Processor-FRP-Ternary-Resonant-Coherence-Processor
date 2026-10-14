@@ -1,0 +1,203 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 57 - FRP M31 Phase Multicell Regression
+run-name: "57 - FRP Coupled Phase | 8/16/32 cells and deterministic replay @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-57-phase-multicell-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      FRP57_EVIDENCE: ${{ runner.temp }}/frp-57-evidence
+      FRP57_BUILD: ${{ runner.temp }}/frp-57-build
+
+    steps:
+      - name: Check out dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify manual execution and exact sources
+        run: |
+          set -euo pipefail
+          mkdir -p "$FRP57_EVIDENCE" "$FRP57_BUILD"
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          cat > "$FRP57_EVIDENCE/sources.sha256" <<'SHA'
+          762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94  rtl/m31/frp_m31_pkg.sv
+          6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24  rtl/m31/frp_m31_fixed_point_pkg.sv
+          cbb5a531283164d1d54d59ec748b97bf84e172704854bf5eb7c6bda2c502f7c7  rtl/m31/frp_m31_isqrt_u64.sv
+          81cd497e3f3e04abc93a2052c23deb189b2c200b11cc249ec51dbd40588e9523  rtl/m31/frp_m31_phase_interference.sv
+          adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d  rtl/m31/frp_m31_sin_q30.mem
+          724b60fe16957786b8a89d30d1dad40a2511ae54e2553092ca9e5f82b15b911b  rtl/m31/frp_m31_phase_multicell_tb.sv
+          SHA
+          sha256sum .github/workflows/frp-57-m31-phase-multicell-regression.yml \
+            >> "$FRP57_EVIDENCE/sources.sha256"
+          sha256sum --check "$FRP57_EVIDENCE/sources.sha256" \
+            | tee "$FRP57_EVIDENCE/source-check.log"
+          printf '%s\n' "$GITHUB_SHA" > "$FRP57_EVIDENCE/commit.txt"
+
+      - name: Install and record pinned simulator
+        run: |
+          set -euo pipefail
+          {
+            python -m pip install --disable-pip-version-check \
+              verilator==5.48.0 systemc==3.0.2.1 click==8.5.0 platformdirs==4.13.0
+            python -m pip check
+            verilator-cli --version
+            c++ --version
+            make --version
+          } 2>&1 | tee "$FRP57_EVIDENCE/toolchain.log"
+          python -m pip freeze > "$FRP57_EVIDENCE/packages.txt"
+
+      - name: Build all three cell configurations
+        run: |
+          set -euo pipefail
+          timeout 1800s verilator-cli --binary --timing --assert -Wall -Wno-fatal \
+            --output-groups 0 -MAKEFLAGS OPT_FAST=-O0 \
+            -MAKEFLAGS VK_PCH_I_FAST= -MAKEFLAGS VK_PCH_I_SLOW= \
+            -j 2 --top-module frp_m31_phase_multicell_tb \
+            --Mdir "$FRP57_BUILD" -Irtl/m31 \
+            rtl/m31/frp_m31_phase_multicell_tb.sv \
+            2>&1 | tee "$FRP57_EVIDENCE/build.log"
+          test -x "$FRP57_BUILD/Vfrp_m31_phase_multicell_tb"
+          if grep -Eq '%Warning-(PINMISSING|IMPLICIT|MULTIDRIVEN):' "$FRP57_EVIDENCE/build.log"; then
+            echo "Invalid connection or multiple driver"
+            exit 1
+          fi
+
+      - name: Run two complete phase regressions
+        run: |
+          set -euo pipefail
+          for replay in 1 2; do
+            timeout 300s "$FRP57_BUILD/Vfrp_m31_phase_multicell_tb" \
+              2>&1 | tee "$FRP57_EVIDENCE/run-$replay.log"
+          done
+
+      - name: Verify counts, signatures and replay
+        run: |
+          set -euo pipefail
+          sha256sum --check "$FRP57_EVIDENCE/sources.sha256"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          evidence = Path(os.environ["FRP57_EVIDENCE"])
+          profiles = {
+              8: (9927, 1254524, 2575, 256, 112, "a4b7766a1a3ab36e"),
+              16: (9527, 2213432, 2175, 512, 480, "b4860972ff01895e"),
+              32: (11031, 4896228, 3679, 1024, 1984, "6b60fce9ec4da44b"),
+          }
+          events = {
+              8: "positive=62589 negative=94730 isolated=1344 zero_adapts=12337 wraps=3383 targets=35845,86654,36373",
+              16: "positive=129690 negative=161168 isolated=13440 zero_adapts=24578 wraps=6859 targets=61841,179693,63410",
+              32: "positive=277871 negative=306844 isolated=119040 zero_adapts=49205 wraps=13585 targets=124863,454393,126888",
+          }
+          expected = ["PASS PHASE_MULTICELL_ALL cells=8,16,32"]
+          results = {}
+          for cells, values in profiles.items():
+              samples, checks, loads, permutations, edges, signature = values
+              expected.append(
+                  f"PASS PHASE_MULTICELL cells={cells} samples={samples} checks={checks} "
+                  f"loads={loads} updates=3072 holds=4280 resets=5 projection=4096 "
+                  f"relative=4096 cross=30 rotations=96 permutations={permutations} "
+                  f"edges={edges} signature={signature}"
+              )
+              expected.append(f"PHASE_EVENTS cells={cells} {events[cells]}")
+              results[str(cells)] = dict(
+                  samples=samples, comparisons=checks, loads=loads, updates=3072,
+                  holds=4280, resets=5, projection_addresses=4096,
+                  relative_addresses=4096, state_activity_combinations=30,
+                  rotations=96, permutations=permutations, signed_edges=edges,
+                  signature=signature, events=events[cells],
+              )
+          transcripts = []
+          for replay in (1, 2):
+              text = (evidence / f"run-{replay}.log").read_text(encoding="utf-8")
+              lines = [line for line in text.splitlines()
+                       if line.startswith(("PASS PHASE_", "PHASE_EVENTS"))]
+              if sorted(lines) != sorted(expected):
+                  raise SystemExit(f"Counts, events or signatures differ: replay {replay}")
+              transcript = "\n".join(lines) + "\n"
+              transcripts.append(transcript)
+              (evidence / f"replay-{replay}.txt").write_text(transcript, encoding="utf-8")
+          if transcripts[0] != transcripts[1]:
+              raise SystemExit("Semantic replay mismatch")
+          comparisons = sum(v[1] for v in profiles.values())
+          result = {
+              "schema": "frp.m31.phase-multicell-regression.v1",
+              "result": "PASS", "commit": os.environ["GITHUB_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "replays": 2, "identical_transcripts": True,
+              "comparisons_per_replay": comparisons,
+              "comparisons_total": 2 * comparisons, "profiles": results,
+              "transcript_sha256": hashlib.sha256(transcripts[0].encode()).hexdigest(),
+          }
+          (evidence / "result.json").write_text(
+              json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          lines = ["## FRP M31 coupled phase multicell: PASS", "",
+                   f'Commit: `{os.environ["GITHUB_SHA"]}`', "",
+                   "| Cells | Samples per replay | Comparisons per replay | Signature |",
+                   "|---|---:|---:|---|"]
+          for cells, values in profiles.items():
+              lines.append(f"| {cells} | {values[0]} | {values[1]} | `{values[5]}` |")
+          lines += ["", f"Two matching replays: {2 * comparisons} comparisons.",
+                    "Phase engine: all 14 output ports checked against an independent oracle.",
+                    "Relative-phase interference, receiver-local gamma and pairwise thermal attenuation.",
+                    "Every dyadic group and every level mean, minimum, maximum and dispersion.",
+                    "Retained frequency, active-zero adaptation, phase wrap, pause, load priority and reset.",
+                    "Phase-engine scheduler inputs follow free, 7/1 and 1/7 cadence.",
+                    "Per size: 4096 projection addresses, 4096 relative addresses and 30 state/activity combinations.",
+                    "Analytic sine reference, integer division and independent binary-search roots.", ""]
+          summary = "\n".join(lines)
+          (evidence / "summary.md").write_text(summary, encoding="utf-8")
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
+              stream.write(summary)
+          (evidence / "artifacts.sha256").write_text("".join(
+              f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n"
+              for p in sorted(evidence.iterdir())
+              if p.is_file() and p.name != "artifacts.sha256"
+          ), encoding="ascii")
+          print(summary)
+          PY
+
+      - name: Upload results and diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: frp-57-phase-multicell-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-57-evidence/
+          if-no-files-found: error
+          retention-days: 30
