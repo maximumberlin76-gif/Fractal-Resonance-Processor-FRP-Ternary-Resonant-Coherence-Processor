@@ -1,0 +1,208 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 58 - FRP M32 Target Execution Multicell Regression
+run-name: "58 - FRP Target Execution | 8/16/32 cells and deterministic replay @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-58-target-execution-multicell-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Initialize runner paths
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/frp-58-evidence" "$RUNNER_TEMP/frp-58-build"
+          printf '%s\n' \
+            "FRP58_EVIDENCE=$RUNNER_TEMP/frp-58-evidence" \
+            "FRP58_BUILD=$RUNNER_TEMP/frp-58-build" >> "$GITHUB_ENV"
+
+      - name: Check out dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify manual execution and exact sources
+        run: |
+          set -euo pipefail
+          mkdir -p "$FRP58_EVIDENCE" "$FRP58_BUILD"
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          cat > "$FRP58_EVIDENCE/sources.sha256" <<'SHA'
+          762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94  rtl/m31/frp_m31_pkg.sv
+          fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f  rtl/m31/frp_m31_scheduler.sv
+          32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109  rtl/m31/frp_m31_request_lanes.sv
+          18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411  rtl/m31/frp_m31_pending_routes.sv
+          765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0  rtl/m31/frp_m31_active_neutral.sv
+          d0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123  rtl/m31/frp_m31_capacity_guard.sv
+          ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90  rtl/m31/frp_m31_state_update.sv
+          e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92  rtl/m31/frp_m31_execution_core.sv
+          fa78bcfe965270cc74855908aa392989d857575a2097a126539aabb1aab8990d  rtl/m31/frp_m31_phase_request_adapter.sv
+          9626474b49d32b411e107d7ccc8ee5aa7f42728e9a6f70d634d16d3f2a414c5e  rtl/m32/frp_m32_registered_target_boundary.sv
+          02250069a68737f055a419cd67bf2d439b3f63b3f6a7a245f40e9bf29d1958eb  rtl/m32/frp_m32_registered_target_request_path.sv
+          ced06a0308e87d22f8ce83dfe3a0dd851087cd1d636ae7265be7489430288474  rtl/m32/frp_m32_target_execution_multicell_tb.sv
+          SHA
+          sha256sum .github/workflows/frp-58-m32-target-execution-multicell-regression.yml \
+            >> "$FRP58_EVIDENCE/sources.sha256"
+          sha256sum --check "$FRP58_EVIDENCE/sources.sha256" \
+            | tee "$FRP58_EVIDENCE/source-check.log"
+          printf '%s\n' "$GITHUB_SHA" > "$FRP58_EVIDENCE/commit.txt"
+
+      - name: Install and record pinned simulator
+        run: |
+          set -euo pipefail
+          {
+            python -m pip install --disable-pip-version-check \
+              verilator==5.48.0 systemc==3.0.2.1 click==8.5.0 platformdirs==4.13.0
+            python -m pip check
+            verilator-cli --version
+            c++ --version
+            make --version
+          } 2>&1 | tee "$FRP58_EVIDENCE/toolchain.log"
+          python -m pip freeze > "$FRP58_EVIDENCE/packages.txt"
+
+      - name: Build all three cell configurations
+        run: |
+          set -euo pipefail
+          timeout 1800s verilator-cli --binary --timing --assert -Wall -Wno-fatal \
+            --output-groups 0 -MAKEFLAGS OPT_FAST=-O0 \
+            -MAKEFLAGS VK_PCH_I_FAST= -MAKEFLAGS VK_PCH_I_SLOW= \
+            -j 2 --top-module frp_m32_target_execution_multicell_tb \
+            --Mdir "$FRP58_BUILD" -Irtl/m31 -Irtl/m32 \
+            rtl/m32/frp_m32_target_execution_multicell_tb.sv \
+            2>&1 | tee "$FRP58_EVIDENCE/build.log"
+          test -x "$FRP58_BUILD/Vfrp_m32_target_execution_multicell_tb"
+          if grep -Eq '%Warning-(PINMISSING|IMPLICIT|MULTIDRIVEN):' "$FRP58_EVIDENCE/build.log"; then
+            echo "Invalid connection or multiple driver"
+            exit 1
+          fi
+
+      - name: Run two complete target execution regressions
+        run: |
+          set -euo pipefail
+          for replay in 1 2; do
+            timeout 300s "$FRP58_BUILD/Vfrp_m32_target_execution_multicell_tb" \
+              2>&1 | tee "$FRP58_EVIDENCE/run-$replay.log"
+          done
+
+      - name: Verify counts, signatures and replay
+        run: |
+          set -euo pipefail
+          sha256sum --check "$FRP58_EVIDENCE/sources.sha256"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          evidence = Path(os.environ["FRP58_EVIDENCE"])
+          expected = [
+              'PASS TARGET_EXECUTION cells=8 cycles=52610 checks=4998716 patterns=19683 faults=384 resets=11 signature=6fb583332183ebb6',
+              'EXECUTION_EVENTS cells=8 routes=10801 completions=10801 retargeted=4293 blocked=10026 paused=3401 auto_off_completion=390 saturations=21729',
+              'PASS TARGET_EXECUTION cells=16 cycles=52994 checks=7579540 patterns=19683 faults=768 resets=11 signature=df5025c5cab58f9c',
+              'EXECUTION_EVENTS cells=16 routes=21850 completions=21847 retargeted=8798 blocked=20634 paused=3591 auto_off_completion=750 saturations=21729',
+              'PASS TARGET_EXECUTION cells=32 cycles=53762 checks=12851780 patterns=19683 faults=1536 resets=11 signature=f6e270ce16220877',
+              'EXECUTION_EVENTS cells=32 routes=43684 completions=43669 retargeted=17802 blocked=41223 paused=3993 auto_off_completion=1801 saturations=21729',
+              'PASS TARGET_EXECUTION_ALL cells=8,16,32',
+          ]
+          profiles = {
+              8: dict(cycles=52610, comparisons=4998716, patterns=19683,
+                      faults=384, resets=11, signature="6fb583332183ebb6"),
+              16: dict(cycles=52994, comparisons=7579540, patterns=19683,
+                       faults=768, resets=11, signature="df5025c5cab58f9c"),
+              32: dict(cycles=53762, comparisons=12851780, patterns=19683,
+                       faults=1536, resets=11, signature="f6e270ce16220877"),
+          }
+          transcripts = []
+          for replay in (1, 2):
+              text = (evidence / f"run-{replay}.log").read_text(encoding="utf-8")
+              lines = [line for line in text.splitlines()
+                       if line.startswith(("PASS TARGET_EXECUTION", "EXECUTION_EVENTS"))]
+              if sorted(lines) != sorted(expected):
+                  raise SystemExit(f"Counts, events or signatures differ: replay {replay}")
+              transcript = "\n".join(lines) + "\n"
+              transcripts.append(transcript)
+              (evidence / f"replay-{replay}.txt").write_text(transcript, encoding="utf-8")
+          if transcripts[0] != transcripts[1]:
+              raise SystemExit("Semantic replay mismatch")
+          comparisons = sum(v["comparisons"] for v in profiles.values())
+          result = {
+              "schema": "frp.m32.target-execution-multicell-regression.v1",
+              "result": "PASS", "commit": os.environ["GITHUB_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "replays": 2, "identical_transcripts": True,
+              "comparisons_per_replay": comparisons,
+              "comparisons_total": 2 * comparisons, "profiles": profiles,
+              "transcript_sha256": hashlib.sha256(transcripts[0].encode()).hexdigest(),
+          }
+          (evidence / "result.json").write_text(
+              json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          lines = ["## FRP M32 target execution multicell: PASS", "",
+                   f'Commit: `{os.environ["GITHUB_SHA"]}`', "",
+                   "| Cells | Cycles per replay | Comparisons per replay | Signature |",
+                   "|---|---:|---:|---|"]
+          for cells, values in profiles.items():
+              lines.append(
+                  f"| {cells} | {values['cycles']} | {values['comparisons']} | `{values['signature']}` |"
+              )
+          lines += ["", f"Two matching replays: {2 * comparisons} comparisons.",
+                    "Registered phase target -> request selection -> active-zero execution -> retained writeback.",
+                    "Integer -1/0/+1 reference model using public ports and independent transition rules.",
+                    "Free, 7/1 and 1/7: all 24 mode/position combinations exercised.",
+                    "Per size and replay: 19683 target-pattern cases and 8192 mixed-control cycles.",
+                    "Every cell: both polarity bridges through active zero and retained route completion.",
+                    "Pending destinations retain priority during retargeting and automatic-request disable.",
+                    "All 16 control tuples, source-domain rejection at every cell, counter clear and saturation.",
+                    "Exact request ordering, capacity accounting, state, route and target registers checked each cycle.",
+                    "Legal transition coverage, forbidden direct transitions and all execution invariant flags checked.", ""]
+          summary = "\n".join(lines)
+          (evidence / "summary.md").write_text(summary, encoding="utf-8")
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
+              stream.write(summary)
+          (evidence / "artifacts.sha256").write_text("".join(
+              f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n"
+              for p in sorted(evidence.iterdir())
+              if p.is_file() and p.name != "artifacts.sha256"
+          ), encoding="ascii")
+          print(summary)
+          PY
+
+      - name: Upload results and diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: frp-58-target-execution-multicell-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-58-evidence/
+          if-no-files-found: error
+          retention-days: 30
