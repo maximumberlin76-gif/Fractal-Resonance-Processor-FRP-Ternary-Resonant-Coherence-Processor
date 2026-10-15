@@ -1,0 +1,199 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 62 - FRP M31 Common Task Thermal Comparison
+run-name: "62 - FRP Thermal and Active Zero | 8/16/32/64 cells @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-62-common-task-thermal-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  compare:
+    name: Common task - ${{ matrix.cells }} cells
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        cells: [8, 16, 32, 64]
+    defaults:
+      run:
+        shell: bash
+    env:
+      CELLS: ${{ matrix.cells }}
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Initialize evidence directory
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/frp-62-evidence"
+          echo "FRP62_EVIDENCE=$RUNNER_TEMP/frp-62-evidence" >> "$GITHUB_ENV"
+
+      - name: Check out dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify manual execution and exact sources
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          cat > "$FRP62_EVIDENCE/sources.sha256" <<'SHA'
+          765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0  rtl/m31/frp_m31_active_neutral.sv
+          d0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123  rtl/m31/frp_m31_capacity_guard.sv
+          005cb99b6b1fed9dba59667f1b6a1ffaf5143fba208b48658d96df22a7aaf7c8  rtl/m31/frp_m31_common_task_thermal_tb.sv
+          e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92  rtl/m31/frp_m31_execution_core.sv
+          18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411  rtl/m31/frp_m31_pending_routes.sv
+          762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94  rtl/m31/frp_m31_pkg.sv
+          32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109  rtl/m31/frp_m31_request_lanes.sv
+          fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f  rtl/m31/frp_m31_scheduler.sv
+          ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90  rtl/m31/frp_m31_state_update.sv
+          SHA
+          sha256sum .github/workflows/frp-62-m31-common-task-thermal-comparison.yml \
+            >> "$FRP62_EVIDENCE/sources.sha256"
+          sha256sum --check "$FRP62_EVIDENCE/sources.sha256" \
+            | tee "$FRP62_EVIDENCE/source-check.log"
+          printf '%s\n' "$GITHUB_SHA" > "$FRP62_EVIDENCE/commit.txt"
+
+      - name: Install and record simulator
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check 'verilator==5.48.0' \
+            2>&1 | tee "$FRP62_EVIDENCE/install.log"
+          python -m pip freeze > "$FRP62_EVIDENCE/python-packages.txt"
+          verilator-cli --version 2>&1 | tee "$FRP62_EVIDENCE/verilator-version.txt"
+          g++ --version > "$FRP62_EVIDENCE/compiler-version.txt"
+
+      - name: Build, compare and verify deterministic replay
+        run: |
+          set -euo pipefail
+          python - <<'PYTHON'
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          cells = int(os.environ["CELLS"])
+          expected = {
+              8: (168, 73156, 1440, 198, "61b44a4832eee393"),
+              16: (273, 126439, 1498, 311, "f0653023b53c78e1"),
+              32: (552, 222025, 1461, 638, "a79ace5d1e973fc6"),
+              64: (1059, 420778, 1467, 1220, "adddf4cd0a265b7b"),
+          }
+          if cells not in expected:
+              raise SystemExit("Unsupported cell count")
+          evidence = Path(os.environ["FRP62_EVIDENCE"]).absolute()
+          obj = Path(os.environ["RUNNER_TEMP"]) / f"frp-62-build-{cells}"
+          top = "frp_m31_common_task_thermal_tb"
+          command = [
+              "verilator-cli", "--binary", "--timing", "--assert", "-Wall", "-Wno-fatal",
+              "--output-groups", "0", "-MAKEFLAGS", "OPT_FAST=-O0",
+              "-MAKEFLAGS", "VK_PCH_I_FAST=", "-MAKEFLAGS", "VK_PCH_I_SLOW=", "-j", "2",
+              "--top-module", top, f"-GCELLS={cells}", "--Mdir", str(obj),
+              "-Irtl/m31", f"rtl/m31/{top}.sv",
+          ]
+          (evidence / "build-command.json").write_text(json.dumps(command, indent=2) + "\n")
+          with (evidence / "build.log").open("w") as log:
+              built = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=600)
+          build_text = (evidence / "build.log").read_text(errors="replace")
+          if built.returncode or re.search(r"%Error|%Warning-(PINMISSING|IMPLICIT|MULTIDRIVEN)", build_text):
+              print(build_text[-16000:])
+              raise SystemExit("RTL build failed")
+
+          prefixes = ("THERMAL_COMPARE ", "RTL_THERMAL_MODE ", "PASS THERMAL_TASK ")
+          replays = []
+          for attempt in (1, 2):
+              path = evidence / f"run-{attempt}.log"
+              with path.open("w") as log:
+                  ran = subprocess.run([str(obj / f"V{top}")], stdout=log,
+                                       stderr=subprocess.STDOUT, timeout=240)
+              text = path.read_text(errors="replace")
+              print(text)
+              if ran.returncode:
+                  raise SystemExit(f"Simulation failed: replay {attempt}")
+              lines = [line for line in text.splitlines() if line.startswith(prefixes)]
+              if len(lines) != 8:
+                  raise SystemExit("Missing or duplicate result records")
+              replays.append(lines)
+          if replays[0] != replays[1]:
+              raise SystemExit("Deterministic replay mismatch")
+
+          records = [dict(re.findall(r"(\w+)=([^ ]+)", line)) for line in replays[0]]
+          architectures, modes, result = records[:4], records[4:7], records[7]
+          routes, checks, cycles, prevented, signature = expected[cells]
+          for arch, row in enumerate(architectures):
+              if (int(row["cells"]), int(row["arch"]), int(row["cases"]), row["match"]) != (cells, arch, 75, "1"):
+                  raise SystemExit("Architecture record mismatch")
+              if int(row["direct"]) != (routes if arch < 2 else 0):
+                  raise SystemExit("Direct-transition count mismatch")
+              if int(row["neutralized"]) != (0 if arch < 2 else routes):
+                  raise SystemExit("Committed neutralization count mismatch")
+          for mode, row in enumerate(modes):
+              if (int(row["cells"]), int(row["mode"]), int(row["cases"])) != (cells, mode, 25):
+                  raise SystemExit("Scheduler coverage mismatch")
+              if int(row["samples"]) <= 0:
+                  raise SystemExit("Empty scheduler result")
+          wanted = dict(cells=cells, cases=75, checks=checks, cycles=cycles,
+                        completed_routes=routes, prevented_candidates=prevented, signature=signature)
+          if result != {key: str(value) for key, value in wanted.items()}:
+              raise SystemExit("Qualification signature or counters changed")
+          subprocess.run(["sha256sum", "--check", str(evidence / "sources.sha256")], check=True)
+
+          names = ["Binary forced (two rails)", "Direct ternary", "Distributed neutral reference", "M31 retained execution"]
+          summary = f"## Common-task thermal comparison: PASS ({cells} cells)\n\n"
+          summary += f"Commit: `{os.environ['GITHUB_SHA']}`\n\n"
+          summary += "75 cases: five tasks, five seeds, free / 7:1 / 1:7; two identical replays.\n\n"
+          summary += "| Architecture | Model heat peak | Switching load peak | Direct reversals | Neutralized |\n"
+          summary += "|---|---:|---:|---:|---:|\n"
+          for name, row in zip(names, architectures):
+              summary += f"| {name} | {row['heat_peak']} | {row['switch_peak']} | {row['direct']} | {row['neutralized']} |\n"
+          summary += "\nTernary load counts logical state changes per cell; binary load counts rail toggles per rail.\n"
+          summary += "M31 thermal scores use observed retained-state transitions and the historical distributed heat rule.\n"
+          summary += "\n| M31 scheduler | Model heat peak | Samples |\n|---|---:|---:|\n"
+          for name, row in zip(["free", "7/1", "1/7"], modes):
+              summary += f"| {name} | {row['heat_peak']} | {row['samples']} |\n"
+          summary += f"\nCompleted opposite-polarity routes through zero: {routes}; direct reversals: 0.\n"
+          summary += f"Checks per replay: {checks}; signature: `{signature}`.\n"
+          (evidence / "summary.md").write_text(summary)
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as stream:
+              stream.write(summary)
+          report = dict(status="PASS", commit=os.environ["GITHUB_SHA"],
+                        run_id=os.environ["GITHUB_RUN_ID"], run_attempt=os.environ["GITHUB_RUN_ATTEMPT"],
+                        replays=2, architectures=architectures, scheduler_modes=modes, result=result)
+          (evidence / "result.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+          (evidence / "artifacts.sha256").write_text("".join(
+              f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n"
+              for p in sorted(evidence.iterdir()) if p.is_file() and p.name != "artifacts.sha256"
+          ))
+          print(summary)
+          PYTHON
+
+      - name: Upload comparison and replay evidence
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: frp-62-thermal-${{ matrix.cells }}-cells-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-62-evidence/
+          if-no-files-found: error
+          retention-days: 30
