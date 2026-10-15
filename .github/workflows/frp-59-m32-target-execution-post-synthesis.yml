@@ -1,0 +1,417 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 59 - FRP M32 Target Execution Post-Synthesis
+run-name: "59 - FRP Target Execution Post-Synthesis | 8/16/32 cells and deterministic replay @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-59-target-execution-multicell-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        cells: [8, 16, 32]
+    defaults:
+      run:
+        shell: bash
+    env:
+      FRP59_CELLS: ${{ matrix.cells }}
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Initialize runner paths
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/frp-59-evidence" "$RUNNER_TEMP/frp-59-build" "$RUNNER_TEMP/frp-59-source"
+          printf '%s\n' \
+            "FRP59_EVIDENCE=$RUNNER_TEMP/frp-59-evidence" \
+            "FRP59_SOURCE=$RUNNER_TEMP/frp-59-source" \
+            "FRP59_BUILD=$RUNNER_TEMP/frp-59-build" >> "$GITHUB_ENV"
+
+      - name: Check out dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify manual execution and exact sources
+        run: |
+          set -euo pipefail
+          mkdir -p "$FRP59_EVIDENCE" "$FRP59_BUILD"
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          cat > "$FRP59_EVIDENCE/sources.sha256" <<'SHA'
+          762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94  rtl/m31/frp_m31_pkg.sv
+          fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f  rtl/m31/frp_m31_scheduler.sv
+          32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109  rtl/m31/frp_m31_request_lanes.sv
+          18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411  rtl/m31/frp_m31_pending_routes.sv
+          765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0  rtl/m31/frp_m31_active_neutral.sv
+          d0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123  rtl/m31/frp_m31_capacity_guard.sv
+          ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90  rtl/m31/frp_m31_state_update.sv
+          e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92  rtl/m31/frp_m31_execution_core.sv
+          fa78bcfe965270cc74855908aa392989d857575a2097a126539aabb1aab8990d  rtl/m31/frp_m31_phase_request_adapter.sv
+          9626474b49d32b411e107d7ccc8ee5aa7f42728e9a6f70d634d16d3f2a414c5e  rtl/m32/frp_m32_registered_target_boundary.sv
+          02250069a68737f055a419cd67bf2d439b3f63b3f6a7a245f40e9bf29d1958eb  rtl/m32/frp_m32_registered_target_request_path.sv
+          ced06a0308e87d22f8ce83dfe3a0dd851087cd1d636ae7265be7489430288474  rtl/m32/frp_m32_target_execution_multicell_tb.sv
+          SHA
+          sha256sum .github/workflows/frp-59-m32-target-execution-post-synthesis.yml \
+            >> "$FRP59_EVIDENCE/sources.sha256"
+          sha256sum --check "$FRP59_EVIDENCE/sources.sha256" \
+            | tee "$FRP59_EVIDENCE/source-check.log"
+          printf '%s\n' "$GITHUB_SHA" > "$FRP59_EVIDENCE/commit.txt"
+
+      - name: Install and record pinned simulator
+        run: |
+          set -euo pipefail
+          {
+            python -m pip install --disable-pip-version-check \
+              yowasp-yosys==0.68.0.0.post1208 yowasp-runtime==1.96 wasmtime==47.0.1 \
+              verilator==5.48.0 systemc==3.0.2.1 click==8.5.0 platformdirs==4.13.0
+            python -m pip check
+            yowasp-yosys -V
+            verilator-cli --version
+            c++ --version
+            make --version
+          } 2>&1 | tee "$FRP59_EVIDENCE/toolchain.log"
+          python -m pip freeze > "$FRP59_EVIDENCE/packages.txt"
+
+      - name: Prepare public-port comparison harness
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import shutil
+          from pathlib import Path
+
+          n = int(os.environ['FRP59_CELLS'])
+          evidence = Path(os.environ['FRP59_EVIDENCE'])
+          view = Path(os.environ['FRP59_SOURCE'])
+          view.mkdir(parents=True, exist_ok=True)
+          for line in (evidence / 'sources.sha256').read_text().splitlines():
+              relative = line.split(None, 1)[1]
+              if relative.startswith('rtl/'):
+                  destination = view / relative
+                  destination.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(relative, destination)
+
+          tops = [
+              ('frp_m32_registered_target_request_path', 'rtl/m32', 8),
+              ('frp_m31_execution_core', 'rtl/m31', 32),
+          ]
+          bench_path = Path('rtl/m32/frp_m32_target_execution_multicell_tb.sv')
+          bench = bench_path.read_text()
+          contracts = []
+          wrappers = []
+          for top, folder, counter_bits in tops:
+              source = Path(folder, top + '.sv').read_text()
+              start = source.index('module ' + top + ' #(')
+              end = source.index('\n);', start) + 3
+              header = source[start:end]
+              declarations = re.findall(
+                  r'\b(input|output)\s+(.+?)(?=,\s*(?:input|output)\b|\s*\);)',
+                  header, re.S,
+              )
+              ports = []
+              for direction, declaration in declarations:
+                  match = re.fullmatch(r'(.+?)\s+(\w+)\s*', declaration, re.S)
+                  if not match:
+                      raise SystemExit('Unsupported port declaration: ' + declaration)
+                  type_text, name = match.groups()
+                  ports.append((direction, type_text, name))
+              expected_count = 22 if counter_bits == 8 else 35
+              if len(ports) != expected_count or len({p[2] for p in ports}) != len(ports):
+                  raise SystemExit(f'Port contract mismatch: {top}, count={len(ports)}')
+              parameters = re.findall(r'parameter int (\w+)\s*=', header)
+              checked = top + '_checked'
+              needle = top + ' #('
+              if bench.count(needle) != 1:
+                  raise SystemExit('Nonunique DUT instantiation: ' + top)
+              bench = bench.replace(needle, checked + ' #(', 1)
+              wrapper = header.replace('module ' + top, 'module ' + checked, 1) + '\n'
+              outputs = [p for p in ports if p[0] == 'output']
+              wrapper += '  longint unsigned comparisons = 0;\n'
+              wrapper += f'  initial if (CELLS != {n} || REQUEST_LANES != {n//4} || COUNTER_BITS != {counter_bits}) $fatal(1, "Netlist profile mismatch");\n'
+              for _, type_text, name in outputs:
+                  wrapper += f'  {type_text} gold_{name};\n'
+              wrapper += top + ' #(' + ', '.join(f'.{p}({p})' for p in parameters) + ') rtl (\n'
+              wrapper += ',\n'.join(f'    .{name}({"gold_" if direction == "output" else ""}{name})'
+                                    for direction, _, name in ports) + '\n  );\n'
+              wrapper += f'  {top}_net netlist (.*);\n'
+              wrapper += '  always @(posedge clk or negedge clk or negedge rst_n) begin\n    #0.1;\n'
+              for _, _, name in outputs:
+                  wrapper += f'    comparisons++; if ({name} !== gold_{name}) $fatal(1, "RTL/netlist mismatch: {top}.{name}");\n'
+              wrapper += '  end\nendmodule\n'
+              wrappers.append(wrapper)
+              widths = {name: 1 for _, _, name in ports}
+              widths.update(scheduler_mode=2, scheduler_mode_q=2, scheduler_state=3,
+                            scheduler_state_q=3, retained_state=2*n, pending_route=2*n,
+                            phase_target_source=2*n, registered_target_q=2*n,
+                            phase_request_valid=n//4, phase_request_cell_index=(n//4)*(n.bit_length()-1),
+                            phase_request_target=n//2, accepted_capture_events_q=8,
+                            rejected_capture_events_q=8, request_valid=n//4,
+                            request_accept=n//4, request_reject=n//4,
+                            request_cell_index=(n//4)*(n.bit_length()-1), request_target=n//2,
+                            target_q=2*n, state_out=2*n, pending_route_out=2*n,
+                            accepted_cell_mask=n, neutral_routed_cell_mask=n,
+                            accepted_change_mask=n, invariant_flags=10)
+              for name in ("ticks_recorded_q scheduler_count_free_q scheduler_count_balance_q "
+                           "scheduler_count_commit_q scheduler_count_excite_q scheduler_count_neutralize_q "
+                           "accepted_changes capacity_remaining switch_load_numerator requested_direct_events "
+                           "prevented_direct_events neutral_routed_events actual_direct_events "
+                           "reserved_state_events queue_overflow_events").split():
+                  widths[name] = 32
+              contracts.append(dict(top=top, folder=folder, counter_bits=counter_bits,
+                                    ports={name: [direction, widths[name]] for direction, _, name in ports},
+                                    outputs=len(outputs)))
+          (evidence / 'contracts.json').write_text(json.dumps(contracts, indent=2) + '\n')
+          (evidence / 'checked.sv').write_text(bench + '\n' + '\n'.join(wrappers) + f'''
+          module frp59_tb;
+            wire done;
+            frp_m32_target_execution_checker #(.N({n})) check_profile(done);
+            initial begin
+              wait (done);
+              #1;
+              $display("PASS NETLIST_EQUIVALENCE cells={n} boundary_checks=%0d execution_checks=%0d",
+                check_profile.boundary_dut.comparisons, check_profile.execution_dut.comparisons);
+              $finish;
+            end
+            initial begin
+              #2000000;
+              $fatal(1, "Post-synthesis watchdog");
+            end
+          endmodule
+          ''')
+          print('Prepared canonical source copies and complete public-port comparators')
+          PY
+
+      - name: Record synthesis simulation library
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import yowasp_yosys
+
+          evidence = Path(os.environ['FRP59_EVIDENCE'])
+          source = Path(yowasp_yosys.__file__).resolve().parent / 'share' / 'simlib.v'
+          data = source.read_bytes()
+          (evidence / 'yosys-simlib.v').write_bytes(data)
+          (evidence / 'cell-library.json').write_text(json.dumps({
+              'file': 'yosys-simlib.v', 'sha256': hashlib.sha256(data).hexdigest()
+          }, indent=2)+'\n')
+          PY
+
+      - name: Synthesize both blocks twice and verify structure
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          os.chdir(os.environ['FRP59_SOURCE'])
+          import hashlib
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          n = int(os.environ['FRP59_CELLS'])
+          evidence = Path(os.environ['FRP59_EVIDENCE'])
+          contracts = json.loads((evidence / 'contracts.json').read_text())
+          records = []
+          for contract in contracts:
+              top = contract['top']
+              for replay in (1, 2):
+                  stem = f'{top}-{replay}'
+                  script = (
+                      'read_slang -j 1 --std 1800-2017 --ignore-assertions '
+                      f'-G CELLS={n} -G REQUEST_LANES={n//4} '
+                      f'-G COUNTER_BITS={contract["counter_bits"]} '
+                      f'--top {top} -Irtl/m31 -Irtl/m32 {contract["folder"]}/{top}.sv; '
+                      f'synth -top {top} -noalumacc -noshare -run begin:fine; '
+                      'check -assert; '
+                      f'write_json {json.dumps(str(evidence / (stem + "-raw.json")))}; '
+                      'techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; '
+                      'select -assert-none t:$shiftx t:$connect; '
+                      f'rename {top} {top}_net; '
+                      f'write_json {json.dumps(str(evidence / (stem + ".json")))}; '
+                      f'write_verilog -noattr {json.dumps(str(evidence / (stem + ".v")))}'
+                  )
+                  (evidence / (stem + '.ys')).write_text(script + '\n')
+                  print(f'Synthesis cells={n} top={top} replay={replay}', flush=True)
+                  subprocess.run(['yowasp-yosys', '-Q', '-T', '-q', '-l',
+                                  str(evidence / (stem + '.log')), '-p', script],
+                                 check=True, timeout=1200)
+                  raw = json.loads((evidence / (stem + '-raw.json')).read_text())
+                  mapped = json.loads((evidence / (stem + '.json')).read_text())
+                  if set(raw['modules']) != {top} or set(mapped['modules']) != {top + '_net'}:
+                      raise SystemExit('Unflattened or unexpected module set')
+                  original = raw['modules'][top]
+                  module = mapped['modules'][top + '_net']
+                  def ports(m):
+                      return {k: (v['direction'], len(v['bits']), v.get('signed', 0))
+                              for k, v in m['ports'].items()}
+                  if ports(original) != ports(module):
+                      raise SystemExit('Simulation export changed ports')
+                  if {k: [v['direction'], len(v['bits'])] for k, v in module['ports'].items()} != contract['ports']:
+                      raise SystemExit('Public ports differ from canonical RTL')
+                  for m in (original, module):
+                      if m.get('processes') or not m['cells']:
+                          raise SystemExit('Missing synthesized cells or remaining processes')
+                      for cell in m['cells'].values():
+                          if not cell['type'].startswith('$') or 'latch' in cell['type'].lower():
+                              raise SystemExit('Unresolved module or latch: ' + cell['type'])
+                      if not any('dff' in c['type'].lower() for c in m['cells'].values()):
+                          raise SystemExit('Missing retained registers')
+                  log = (evidence / (stem + '.log')).read_text()
+                  if 'ERROR:' in log or 'Found and reported 0 problems.' not in log:
+                      raise SystemExit('Structural check failed')
+                  records.append(dict(top=top, replay=replay, cells=n,
+                                      ports=len(module['ports']), logic_cells=len(module['cells']),
+                                      sha256=hashlib.sha256((evidence / (stem + '.v')).read_bytes()).hexdigest()))
+              for suffix in ('-raw.json', '.json', '.v'):
+                  if (evidence / f'{top}-1{suffix}').read_bytes() != (evidence / f'{top}-2{suffix}').read_bytes():
+                      raise SystemExit('Synthesis replay mismatch: ' + top + suffix)
+          (evidence / 'structure.json').write_text(json.dumps(records, indent=2) + '\n')
+          print('PASS deterministic synthesis and complete port contracts', flush=True)
+          PY
+
+      - name: Build RTL and netlist comparison
+        run: |
+          set -euo pipefail
+          cd "$FRP59_SOURCE"
+          timeout 1800s verilator-cli -DSIMLIB_NOCONNECT --binary --timing --assert \
+            -Wall -Wno-fatal --output-groups 0 -MAKEFLAGS OPT_FAST=-O0 \
+            -MAKEFLAGS VK_PCH_I_FAST= -MAKEFLAGS VK_PCH_I_SLOW= \
+            -j 2 --top-module frp59_tb --Mdir "$FRP59_BUILD" -Irtl/m31 -Irtl/m32 \
+            -v "$FRP59_EVIDENCE/yosys-simlib.v" \
+            "$FRP59_EVIDENCE/checked.sv" \
+            "$FRP59_EVIDENCE/frp_m32_registered_target_request_path-1.v" \
+            "$FRP59_EVIDENCE/frp_m31_execution_core-1.v" \
+            2>&1 | tee "$FRP59_EVIDENCE/build.log"
+          test -x "$FRP59_BUILD/Vfrp59_tb"
+          if grep -Eq '%Warning-(PINMISSING|IMPLICIT|MULTIDRIVEN):' "$FRP59_EVIDENCE/build.log"; then
+            echo "Invalid connection or multiple driver"
+            exit 1
+          fi
+
+      - name: Run two complete post-synthesis regressions
+        run: |
+          set -euo pipefail
+          cd "$FRP59_SOURCE"
+          for replay in 1 2; do
+            timeout 300s "$FRP59_BUILD/Vfrp59_tb" \
+              2>&1 | tee "$FRP59_EVIDENCE/run-$replay.log"
+          done
+
+      - name: Verify canonical sources remain unchanged
+        run: |
+          set -euo pipefail
+          sha256sum --check "$FRP59_EVIDENCE/sources.sha256"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          cd "$FRP59_SOURCE"
+          grep '  rtl/' "$FRP59_EVIDENCE/sources.sha256" | sha256sum --check -
+
+      - name: Verify exact results and deterministic replay
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          n = int(os.environ['FRP59_CELLS'])
+          evidence = Path(os.environ['FRP59_EVIDENCE'])
+          profiles = {
+              8: (52610, 4998716, 384, '6fb583332183ebb6', 1262760, 2735980),
+              16: (52994, 7579540, 768, 'df5025c5cab58f9c', 1271976, 2755948),
+              32: (53762, 12851780, 1536, 'f6e270ce16220877', 1290408, 2795884),
+          }
+          events = {
+              8: 'routes=10801 completions=10801 retargeted=4293 blocked=10026 paused=3401 auto_off_completion=390 saturations=21729',
+              16: 'routes=21850 completions=21847 retargeted=8798 blocked=20634 paused=3591 auto_off_completion=750 saturations=21729',
+              32: 'routes=43684 completions=43669 retargeted=17802 blocked=41223 paused=3993 auto_off_completion=1801 saturations=21729',
+          }
+          cycles, checks, faults, signature, boundary, execution = profiles[n]
+          expected = [
+              f'PASS TARGET_EXECUTION cells={n} cycles={cycles} checks={checks} patterns=19683 faults={faults} resets=11 signature={signature}',
+              f'EXECUTION_EVENTS cells={n} {events[n]}',
+              f'PASS NETLIST_EQUIVALENCE cells={n} boundary_checks={boundary} execution_checks={execution}',
+          ]
+          transcripts = []
+          for replay in (1, 2):
+              text = (evidence / f'run-{replay}.log').read_text()
+              lines = [s for s in text.splitlines() if s.startswith(('PASS ', 'EXECUTION_EVENTS'))]
+              if lines != expected:
+                  raise SystemExit(f'Incomplete or incorrect results: replay {replay}')
+              transcript = '\n'.join(lines) + '\n'
+              transcripts.append(transcript)
+              (evidence / f'replay-{replay}.txt').write_text(transcript)
+          if transcripts[0] != transcripts[1]:
+              raise SystemExit('Simulation replay mismatch')
+          structure = json.loads((evidence / 'structure.json').read_text())
+          if len(structure) != 4 or any(r['cells'] != n for r in structure):
+              raise SystemExit('Missing synthesis records')
+          result = dict(schema='frp.m32.target-execution-post-synthesis.v1', result='PASS',
+                        commit=os.environ['GITHUB_SHA'], run_id=os.environ['GITHUB_RUN_ID'],
+                        run_attempt=os.environ['GITHUB_RUN_ATTEMPT'], cells=n, replays=2,
+                        oracle_comparisons_per_replay=checks,
+                        rtl_netlist_comparisons_per_replay=boundary+execution,
+                        comparisons_total=2*(checks+boundary+execution),
+                        target_patterns_per_replay=19683, signature=signature,
+                        transcript_sha256=hashlib.sha256(transcripts[0].encode()).hexdigest(),
+                        synthesis=structure)
+          (evidence / 'result.json').write_text(json.dumps(result, indent=2, sort_keys=True)+'\n')
+          summary = (
+              f'## FRP M32 target execution post-synthesis: {n} cells PASS\n\n'
+              f'Commit: `{os.environ["GITHUB_SHA"]}`\n\n'
+              f'- Two deterministic synthesis runs for each of two connected blocks.\n'
+              f'- Complete port names, directions and widths preserved.\n'
+              f'- Two simulation replays; {checks} independent-oracle comparisons per replay.\n'
+              f'- {boundary+execution} RTL/netlist public-output comparisons per replay.\n'
+              f'- Free, 7/1, 1/7; active-zero bridges, pending destination retention and capacity.\n'
+              f'- Signature: `{signature}`.\n'
+          )
+          (evidence / 'summary.md').write_text(summary)
+          with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as stream:
+              stream.write(summary)
+          (evidence / 'artifacts.sha256').write_text(''.join(
+              f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n'
+              for p in sorted(evidence.iterdir()) if p.is_file() and p.name != 'artifacts.sha256'
+          ))
+          print(summary)
+          PY
+
+      - name: Upload evidence and diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: frp-59-target-execution-${{ matrix.cells }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-59-evidence/
+          if-no-files-found: error
+          retention-days: 30
