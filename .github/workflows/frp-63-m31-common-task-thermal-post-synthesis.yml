@@ -1,0 +1,329 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 63 - FRP M31 Common Task Thermal Post-Synthesis
+run-name: "63 - FRP Thermal Post-Synthesis | 8/16/32/64 cells @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-63-common-task-thermal-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  compare:
+    name: Common task - ${{ matrix.cells }} cells
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        cells: [8, 16, 32, 64]
+    defaults:
+      run:
+        shell: bash
+    env:
+      CELLS: ${{ matrix.cells }}
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Initialize evidence directory
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/frp-63-evidence"
+          echo "FRP63_EVIDENCE=$RUNNER_TEMP/frp-63-evidence" >> "$GITHUB_ENV"
+
+      - name: Check out dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify manual execution and exact sources
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          cat > "$FRP63_EVIDENCE/sources.sha256" <<'SHA'
+          765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0  rtl/m31/frp_m31_active_neutral.sv
+          d0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123  rtl/m31/frp_m31_capacity_guard.sv
+          005cb99b6b1fed9dba59667f1b6a1ffaf5143fba208b48658d96df22a7aaf7c8  rtl/m31/frp_m31_common_task_thermal_tb.sv
+          e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92  rtl/m31/frp_m31_execution_core.sv
+          18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411  rtl/m31/frp_m31_pending_routes.sv
+          762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94  rtl/m31/frp_m31_pkg.sv
+          32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109  rtl/m31/frp_m31_request_lanes.sv
+          fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f  rtl/m31/frp_m31_scheduler.sv
+          ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90  rtl/m31/frp_m31_state_update.sv
+          SHA
+          sha256sum .github/workflows/frp-63-m31-common-task-thermal-post-synthesis.yml \
+            >> "$FRP63_EVIDENCE/sources.sha256"
+          sha256sum --check "$FRP63_EVIDENCE/sources.sha256" \
+            | tee "$FRP63_EVIDENCE/source-check.log"
+          printf '%s\n' "$GITHUB_SHA" > "$FRP63_EVIDENCE/commit.txt"
+
+      - name: Install and record pinned toolchain
+        run: |
+          set -euo pipefail
+          {
+            python -m pip install --disable-pip-version-check \
+              yowasp-yosys==0.68.0.0.post1208 yowasp-runtime==1.96 wasmtime==47.0.1 \
+              verilator==5.48.0 systemc==3.0.2.1 click==8.5.0 platformdirs==4.13.0
+            python -m pip check
+            yowasp-yosys -V
+            verilator-cli --version
+            g++ --version
+          } 2>&1 | tee "$FRP63_EVIDENCE/toolchain.log"
+          python -m pip freeze > "$FRP63_EVIDENCE/packages.txt"
+
+      - name: Synthesize twice and qualify all public outputs
+        run: |
+          set -euo pipefail
+          python - <<'PYTHON'
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+          import yowasp_yosys
+
+          n = int(os.environ['CELLS'])
+          profiles = {
+              8: (168, 73156, 1440, 198, '61b44a4832eee393'),
+              16: (273, 126439, 1498, 311, 'f0653023b53c78e1'),
+              32: (552, 222025, 1461, 638, 'a79ace5d1e973fc6'),
+              64: (1059, 420778, 1467, 1220, 'adddf4cd0a265b7b'),
+          }
+          if n not in profiles:
+              raise SystemExit('Unsupported cell count')
+          e = Path(os.environ['FRP63_EVIDENCE']).absolute()
+          build = Path(os.environ['RUNNER_TEMP']) / f'frp-63-build-{n}'
+          top = 'frp_m31_execution_core'
+          tb = 'frp_m31_common_task_thermal_tb'
+          source = Path(f'rtl/m31/{top}.sv').read_text()
+          start = source.index('module ' + top + ' #(')
+          header = source[start:source.index('\n);', start) + 3]
+          ports = []
+          for direction, declaration in re.findall(
+              r'\b(input|output)\s+(.+?)(?=,\s*(?:input|output)\b|\s*\);)', header, re.S
+          ):
+              match = re.fullmatch(r'(.+?)\s+(\w+)\s*', declaration, re.S)
+              if not match:
+                  raise SystemExit('Unsupported port declaration')
+              ports.append((direction, *match.groups()))
+          outputs = [p for p in ports if p[0] == 'output']
+          if len(ports) != 35 or len(outputs) != 26 or len({p[2] for p in ports}) != 35:
+              raise SystemExit('Public-port contract changed')
+          parameters = re.findall(r'parameter int (\w+)\s*=', header)
+          widths = {name: 1 for _, _, name in ports}
+          widths.update(scheduler_mode=2, scheduler_mode_q=2, scheduler_state_q=3,
+                        request_valid=n//4, request_accept=n//4, request_reject=n//4,
+                        request_cell_index=(n//4)*(n.bit_length()-1), request_target=n//2,
+                        target_q=2*n, state_out=2*n, pending_route_out=2*n,
+                        accepted_cell_mask=n, neutral_routed_cell_mask=n,
+                        accepted_change_mask=n, invariant_flags=10)
+          for name in ('ticks_recorded_q scheduler_count_free_q scheduler_count_balance_q '
+                       'scheduler_count_commit_q scheduler_count_excite_q scheduler_count_neutralize_q '
+                       'accepted_changes capacity_remaining switch_load_numerator requested_direct_events '
+                       'prevented_direct_events neutral_routed_events actual_direct_events '
+                       'reserved_state_events queue_overflow_events').split():
+              widths[name] = 32
+          contract = {name: [direction, widths[name]] for direction, _, name in ports}
+          (e / 'ports.json').write_text(json.dumps(contract, indent=2) + '\n')
+
+          # The original task checker consumes netlist outputs; RTL runs alongside it.
+          wrapper = header.replace('module ' + top, 'module ' + top + '_checked', 1) + '\n'
+          wrapper += 'longint unsigned comparisons=0, frames=0;\n'
+          wrapper += f'initial if (CELLS!={n} || REQUEST_LANES!={n//4} || COUNTER_BITS!=32) $fatal(1,"Netlist profile mismatch");\n'
+          for _, typ, name in outputs:
+              wrapper += f'{typ} gold_{name};\n'
+          wrapper += top + ' #(' + ','.join(f'.{p}({p})' for p in parameters) + ') rtl (\n'
+          wrapper += ',\n'.join(f'.{name}({"gold_" if d == "output" else ""}{name})'
+                               for d, _, name in ports) + '\n);\n'
+          wrapper += f'{top}_net netlist (.*);\n'
+          wrapper += 'always @(posedge clk or negedge clk or negedge rst_n) begin\n#0.1; frames++;\n'
+          for _, _, name in outputs:
+              wrapper += f'comparisons++; if ({name} !== gold_{name}) $fatal(1,"RTL/netlist mismatch: {name}");\n'
+          wrapper += 'end\nendmodule\n'
+          bench = Path(f'rtl/m31/{tb}.sv').read_text()
+          if bench.count(top + ' #(') != 1 or bench.count('$finish;') != 1:
+              raise SystemExit('Unexpected testbench structure')
+          bench = bench.replace(top + ' #(', top + '_checked #(', 1)
+          bench = bench.replace('$finish;', '''
+              if (dut.frames < 2*cycles || dut.comparisons != 26*dut.frames)
+                $fatal(1,"Incomplete RTL/netlist observation coverage");
+              $display("PASS NETLIST_EQUIVALENCE cells=%0d outputs=26 frames=%0d comparisons=%0d",
+                CELLS,dut.frames,dut.comparisons);
+              $finish;''', 1)
+          (e / 'checked.sv').write_text(bench + '\n' + wrapper)
+          simlib = Path(yowasp_yosys.__file__).resolve().parent / 'share' / 'simlib.v'
+          (e / 'yosys-simlib.v').write_bytes(simlib.read_bytes())
+
+          structures = []
+          for replay in (1, 2):
+              stem = f'net-{replay}'
+              script = (
+                  'read_slang -j 1 --std 1800-2017 --ignore-assertions '
+                  f'-G CELLS={n} -G REQUEST_LANES={n//4} -G COUNTER_BITS=32 '
+                  f'--top {top} -Irtl/m31 rtl/m31/{top}.sv; '
+                  f'synth -top {top} -noalumacc -noshare -run begin:fine; check -assert; '
+                  f'write_json {json.dumps(str(e / (stem + "-raw.json")))}; '
+                  'techmap -map +/techmap.v t:$shiftx; opt_clean; check -assert; '
+                  'select -assert-none t:$shiftx t:$connect; '
+                  f'rename {top} {top}_net; '
+                  f'write_json {json.dumps(str(e / (stem + ".json")))}; '
+                  f'write_verilog -noattr {json.dumps(str(e / (stem + ".v")))}'
+              )
+              (e / (stem + '.ys')).write_text(script + '\n')
+              print(f'Synthesis cells={n} replay={replay}', flush=True)
+              subprocess.run(['yowasp-yosys', '-Q', '-T', '-q', '-l', str(e / (stem + '.log')),
+                              '-s', str(e / (stem + '.ys'))], check=True, timeout=1200)
+              raw = json.loads((e / (stem + '-raw.json')).read_text())
+              mapped = json.loads((e / (stem + '.json')).read_text())
+              if set(raw['modules']) != {top} or set(mapped['modules']) != {top + '_net'}:
+                  raise SystemExit('Unexpected synthesized hierarchy')
+              original, module = raw['modules'][top], mapped['modules'][top + '_net']
+              def port_types(m):
+                  return {k: (v['direction'], len(v['bits']), v.get('signed', 0))
+                          for k, v in m['ports'].items()}
+              if port_types(original) != port_types(module):
+                  raise SystemExit('Export changed port types')
+              if {k: [v['direction'], len(v['bits'])] for k, v in module['ports'].items()} != contract:
+                  raise SystemExit('Netlist port contract mismatch')
+              for m in (original, module):
+                  if m.get('processes') or not m['cells']:
+                      raise SystemExit('Incomplete synthesis')
+                  if any(not c['type'].startswith('$') or 'latch' in c['type'].lower()
+                         for c in m['cells'].values()):
+                      raise SystemExit('Unresolved module or latch')
+                  if not any('dff' in c['type'].lower() for c in m['cells'].values()):
+                      raise SystemExit('Retained registers missing')
+              log = (e / (stem + '.log')).read_text()
+              if 'ERROR:' in log or 'Found and reported 0 problems.' not in log:
+                  raise SystemExit('Synthesis structural check failed')
+              structures.append(dict(replay=replay, cells=n, logic_cells=len(module['cells']),
+                                     sha256=hashlib.sha256((e / (stem + '.v')).read_bytes()).hexdigest()))
+          for suffix in ('-raw.json', '.json', '.v'):
+              if (e / ('net-1' + suffix)).read_bytes() != (e / ('net-2' + suffix)).read_bytes():
+                  raise SystemExit('Synthesis replay mismatch: ' + suffix)
+          (e / 'structure.json').write_text(json.dumps(structures, indent=2) + '\n')
+
+          command = [
+              'verilator-cli', '-DSIMLIB_NOCONNECT', '--binary', '--timing', '--assert',
+              '-Wall', '-Wno-fatal', '--output-groups', '0', '-MAKEFLAGS', 'OPT_FAST=-O0',
+              '-MAKEFLAGS', 'VK_PCH_I_FAST=', '-MAKEFLAGS', 'VK_PCH_I_SLOW=', '-j', '2',
+              '--top-module', tb, f'-GCELLS={n}', '--Mdir', str(build), '-Irtl/m31',
+              '-v', str(e / 'yosys-simlib.v'), str(e / 'checked.sv'), str(e / 'net-1.v'),
+          ]
+          (e / 'build-command.json').write_text(json.dumps(command, indent=2) + '\n')
+          with (e / 'build.log').open('w') as log:
+              built = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=1800)
+          text = (e / 'build.log').read_text(errors='replace')
+          if built.returncode or re.search(r'%Error|%Warning-(PINMISSING|IMPLICIT|MULTIDRIVEN)', text):
+              print(text[-16000:])
+              raise SystemExit('RTL/netlist build failed')
+          print('PASS build', n, flush=True)
+          replays = []
+          prefixes = ('THERMAL_COMPARE ', 'RTL_THERMAL_MODE ', 'PASS THERMAL_TASK ', 'PASS NETLIST_EQUIVALENCE ')
+          for replay in (1, 2):
+              path = e / f'run-{replay}.log'
+              with path.open('w') as log:
+                  ran = subprocess.run([str(build / ('V' + tb))], stdout=log,
+                                       stderr=subprocess.STDOUT, timeout=300)
+              text = path.read_text(errors='replace')
+              print(text)
+              if ran.returncode:
+                  raise SystemExit(f'Simulation failed: replay {replay}')
+              lines = [line for line in text.splitlines() if line.startswith(prefixes)]
+              if len(lines) != 9:
+                  raise SystemExit('Incomplete or duplicate result records')
+              replays.append(lines)
+          if replays[0] != replays[1]:
+              raise SystemExit('Simulation replay mismatch')
+          rows = [dict(re.findall(r'(\w+)=([^ ]+)', line)) for line in replays[0]]
+          architectures, modes, result, equivalence = rows[:4], rows[4:7], rows[7], rows[8]
+          routes, checks, cycles, prevented, signature = profiles[n]
+          wanted = dict(cells=n, cases=75, checks=checks, cycles=cycles,
+                        completed_routes=routes, prevented_candidates=prevented, signature=signature)
+          if result != {k: str(v) for k, v in wanted.items()}:
+              raise SystemExit('Original RTL qualification signature or counters changed')
+          for arch, row in enumerate(architectures):
+              if (int(row['cells']), int(row['arch']), int(row['cases']), row['match']) != (n, arch, 75, '1'):
+                  raise SystemExit('Architecture coverage mismatch')
+              if int(row['direct']) != (routes if arch < 2 else 0):
+                  raise SystemExit('Direct-transition count mismatch')
+              if int(row['neutralized']) != (0 if arch < 2 else routes):
+                  raise SystemExit('Neutralization count mismatch')
+          for mode, row in enumerate(modes):
+              if (int(row['cells']), int(row['mode']), int(row['cases'])) != (n, mode, 25):
+                  raise SystemExit('Scheduler coverage mismatch')
+              if int(row['samples']) <= 0:
+                  raise SystemExit('Empty scheduler result')
+          if int(equivalence['cells']) != n or int(equivalence['outputs']) != 26:
+              raise SystemExit('Output coverage mismatch')
+          frames, comparisons = int(equivalence['frames']), int(equivalence['comparisons'])
+          if frames < 2*cycles or comparisons != 26*frames:
+              raise SystemExit('Insufficient RTL/netlist comparisons')
+          subprocess.run(['sha256sum', '--check', str(e / 'sources.sha256')], check=True)
+
+          summary = f'## Common-task post-synthesis: PASS ({n} cells)\n\n'
+          summary += f'Commit: `{os.environ["GITHUB_SHA"]}`\n\n'
+          summary += '75 cases; two synthesis replays; two simulation replays.\n'
+          summary += f'All 26 outputs matched across {frames} sampled frames: {comparisons} comparisons per replay.\n'
+          summary += 'Sampling follows both clock edges and reset assertion, after settling.\n'
+          summary += 'The netlist passes the common-task oracle with the original RTL signature.\n\n'
+          summary += '| Architecture | Model heat peak | Switching load peak | Direct reversals | Neutralized |\n'
+          summary += '|---|---:|---:|---:|---:|\n'
+          names = ['Binary forced (two rails)', 'Direct ternary', 'Distributed neutral reference', 'M31 netlist execution']
+          for name, row in zip(names, architectures):
+              summary += f'| {name} | {row["heat_peak"]} | {row["switch_peak"]} | {row["direct"]} | {row["neutralized"]} |\n'
+          summary += '\nTernary load counts logical state changes per cell; binary load counts rail toggles per rail.\n'
+          summary += 'Thermal scores apply the historical distributed heat rule to observed netlist retained states.\n'
+          summary += '\n| M31 scheduler | Model heat peak | Samples |\n|---|---:|---:|\n'
+          for name, row in zip(['free', '7/1', '1/7'], modes):
+              summary += f'| {name} | {row["heat_peak"]} | {row["samples"]} |\n'
+          summary += f'\nCompleted opposite-polarity routes through zero: {routes}; direct reversals: 0.\n'
+          summary += f'Oracle checks per replay: {checks}; signature: `{signature}`.\n'
+          (e / 'summary.md').write_text(summary)
+          with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as stream:
+              stream.write(summary)
+          report = dict(status='PASS', commit=os.environ['GITHUB_SHA'], run_id=os.environ['GITHUB_RUN_ID'],
+                        run_attempt=os.environ['GITHUB_RUN_ATTEMPT'], cells=n, synthesis_replays=2,
+                        simulation_replays=2, architectures=architectures, scheduler_modes=modes,
+                        oracle=result, equivalence=equivalence, synthesis=structures)
+          (e / 'result.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
+          (e / 'artifacts.sha256').write_text(''.join(
+              f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n'
+              for p in sorted(e.iterdir()) if p.is_file() and p.name != 'artifacts.sha256'
+          ))
+          print(summary)
+          PYTHON
+
+      - name: Verify canonical checkout is unchanged
+        run: |
+          set -euo pipefail
+          sha256sum --check "$FRP63_EVIDENCE/sources.sha256"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+
+      - name: Upload netlists and comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: frp-63-thermal-netlist-${{ matrix.cells }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-63-evidence/
+          if-no-files-found: error
+          retention-days: 30
