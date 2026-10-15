@@ -1,0 +1,194 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 61 - FRP M31 No Direct Ternary Transition Formal
+run-name: "61 - FRP Active Zero | 8/16/32 cells and formal safety @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-61-no-direct-transition-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Formal safety - ${{ matrix.cells }} cells
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        cells: [8, 16, 32]
+    defaults:
+      run:
+        shell: bash
+    env:
+      CELLS: ${{ matrix.cells }}
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Initialize evidence directory
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/frp-61-evidence"
+          echo "FRP61_EVIDENCE=$RUNNER_TEMP/frp-61-evidence" >> "$GITHUB_ENV"
+
+      - name: Check out dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify manual execution and exact sources
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          cat > "$FRP61_EVIDENCE/sources.sha256" <<'SHA'
+          762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94  rtl/m31/frp_m31_pkg.sv
+          ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90  rtl/m31/frp_m31_state_update.sv
+          356214da513f84e1724ef2f8f6d9652483704fe3f158f37492c6c3aaa8e3babe  rtl/m31/frp_m31_no_direct_transition_formal.sv
+          SHA
+          sha256sum .github/workflows/frp-61-m31-no-direct-transition-formal.yml \
+            >> "$FRP61_EVIDENCE/sources.sha256"
+          sha256sum --check "$FRP61_EVIDENCE/sources.sha256" \
+            | tee "$FRP61_EVIDENCE/source-check.log"
+          printf '%s\n' "$GITHUB_SHA" > "$FRP61_EVIDENCE/commit.txt"
+
+      - name: Install and record formal tool
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            'yowasp-yosys==0.68.0.0.post1208' \
+            2>&1 | tee "$FRP61_EVIDENCE/install.log"
+          python -m pip freeze > "$FRP61_EVIDENCE/python-packages.txt"
+          yowasp-yosys -V 2>&1 | tee "$FRP61_EVIDENCE/yosys-version.txt"
+
+      - name: Prove assertions and check reachability from reset
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          cells = int(os.environ["CELLS"])
+          if cells not in (8, 16, 32):
+              raise SystemExit("Unsupported cell count")
+          evidence = Path(os.environ["FRP61_EVIDENCE"]).absolute()
+          top = "frp_m31_no_direct_transition_formal"
+          setup = (
+              f"read_slang -j 1 --std 1800-2017 -G CELLS={cells} "
+              f"--top {top} -Irtl/m31 rtl/m31/{top}.sv; "
+              f"prep -top {top} -flatten; async2sync; opt_clean; "
+          )
+
+          def run_query(name, command, marker, count):
+              script = evidence / f"{name}.ys"
+              script.write_text(setup + command + "\n", encoding="utf-8")
+              log = evidence / f"{name}.log"
+              with log.open("w", encoding="utf-8") as stream:
+                  result = subprocess.run(
+                      ["yowasp-yosys", "-s", str(script)],
+                      stdout=stream, stderr=subprocess.STDOUT, timeout=300,
+                  )
+              text = log.read_text(encoding="utf-8", errors="replace")
+              if result.returncode != 0 or text.count(marker) != count:
+                  print(text[-12000:])
+                  raise SystemExit(f"FAIL {name}: exit={result.returncode}")
+              print(f"PASS {name}: cells={cells}, results={count}")
+
+          # Two symbolic steps, with arbitrary defined initial DUT state.
+          # This checks the writeback guard and the sampled-state monitor.
+          # It is not a whole-processor unbounded liveness proof.
+          run_query(
+              "safety",
+              "sat -seq 2 -set-def-inputs -set-init-def "
+              "-prove-asserts -prove all_properties 1 -verify -show-ports",
+              "SAT proof finished - no model found: SUCCESS!", 1,
+          )
+          witnesses = [
+              "negative_request", "positive_request",
+              "negative_to_zero", "positive_to_zero",
+              "zero_to_negative", "zero_to_positive",
+          ]
+          queries = []
+          for witness in witnesses:
+              vcd = evidence / f"{witness}.vcd"
+              queries.append(
+                  "sat -seq 3 -set-def-inputs -set-init-def "
+                  "-set-at 1 rst_n 0 -set-at 2 rst_n 1 -set-at 3 rst_n 1 "
+                  f'-set-at 3 witness_{witness} 1 -show-ports -dump_vcd "{vcd}"'
+              )
+          run_query(
+              "reachability", "; ".join(queries),
+              "SAT solving finished - model found:", len(witnesses),
+          )
+          for witness in witnesses:
+              vcd = evidence / f"{witness}.vcd"
+              if not vcd.is_file() or vcd.stat().st_size == 0:
+                  raise SystemExit(f"Missing witness trace: {witness}")
+          subprocess.run(
+              ["sha256sum", "--check", str(evidence / "sources.sha256")],
+              check=True,
+          )
+          result = {
+              "status": "PASS", "commit": os.environ["GITHUB_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "cells": cells, "safety_steps": 2,
+              "scope": "frp_m31_state_update public writeback and retained state",
+              "properties": [
+                  "no_direct_writeback", "no_direct_observed",
+                  "opposite_candidate_blocked", "neutral_route_from_nonzero",
+                  "completion_from_zero", "disabled_tick_holds", "reset_writes_zero",
+              ],
+              "reachability_steps": 3, "reachable_from_reset": witnesses,
+          }
+          (evidence / "result.json").write_text(
+              json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          summary = (
+              f"## FRP active-zero formal safety: PASS ({cells} cells)\n\n"
+              f"Commit: `{os.environ['GITHUB_SHA']}`\n\n"
+              "Seven safety assertions checked over two symbolic steps.\n"
+              "All cells are checked simultaneously; input ports remain symbolic.\n"
+              "Both direct polarity reversals are blocked at writeback.\n"
+              "Six independent witnesses are reachable in three steps from reset.\n"
+              "Opposite-request witnesses have actual_direct_mask deasserted.\n"
+              "VCD traces, proof logs and source hashes are attached.\n"
+          )
+          (evidence / "summary.md").write_text(summary, encoding="utf-8")
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
+              stream.write(summary)
+          (evidence / "artifacts.sha256").write_text("".join(
+              f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n"
+              for p in sorted(evidence.iterdir())
+              if p.is_file() and p.name != "artifacts.sha256"
+          ), encoding="ascii")
+          print(summary)
+          PY
+
+      - name: Upload proof logs and witness traces
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: frp-61-formal-${{ matrix.cells }}-cells-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-61-evidence/
+          if-no-files-found: error
+          retention-days: 30
