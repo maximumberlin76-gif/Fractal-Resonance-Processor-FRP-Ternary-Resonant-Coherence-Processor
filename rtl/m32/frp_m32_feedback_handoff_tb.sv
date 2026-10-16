@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
-// M32 live mode handoff with local thermal/gamma feedback, 8/16/32 cells.
+// M32 live mode handoff with local thermal/gamma feedback, 8/16/32/64 cells.
 // Checks FREE / 7:1 / 1:7 at all eight cadence positions, with tick hold
 // and counter clear, retained active-zero routes and delayed C-P snapshots.
 // Independent scheduler, ternary execution, relative-phase coupling,
@@ -141,6 +141,15 @@ module frp_m32_feedback_handoff_tb #(parameter int CELLS=8);
         1:return thermal?123492111:134453864;
         2:return thermal?37957684:50615020;
         default:return thermal?13438266:20691515;
+      endcase
+      64: case(level)
+        0:return thermal?498545852:350050538;
+        1:return thermal?108502338:107740697;
+        2:return thermal?33350288:40558875;
+        3:return thermal?11807096:16580545;
+        4:return thermal?4516698:7091397;
+        5:return thermal?1814569:3120865;
+        default:begin $fatal(1,"Reference shell outside hierarchy"); return 0; end
       endcase
       default: case(level)
         0:return thermal?527047716:385947114;
@@ -475,7 +484,7 @@ module frp_m32_feedback_handoff_tb #(parameter int CELLS=8);
   initial begin : qualification
     real v;
     logic [31:0] random_word;
-    if(CELLS!=8 && CELLS!=16 && CELLS!=32) $fatal(1,"Use 8, 16 or 32 cells");
+    if(CELLS!=8 && CELLS!=16 && CELLS!=32 && CELLS!=64) $fatal(1,"Use 8, 16, 32 or 64 cells");
     for(int i=0;i<4096;i++) begin
       v=$sin(6.283185307179586476925286766559*i/4096.0)*real'(Q30);
       sine_table[i]=$rtoi(v<0?v-0.5:v+0.5);
