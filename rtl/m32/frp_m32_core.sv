@@ -194,8 +194,8 @@ module frp_m32_core #(
   import frp_m31_fixed_point_pkg::*;
 
   initial begin
-    if ((CELLS != 8) && (CELLS != 16) && (CELLS != 32))
-      $fatal(1, "FRP M32 core requires 8, 16 or 32 cells");
+    if ((CELLS != 8) && (CELLS != 16) && (CELLS != 32) && (CELLS != 64))
+      $fatal(1, "FRP M32 core requires 8, 16, 32 or 64 cells");
   end
 
   // The local thermal field uses the frequency selected for this edge.
