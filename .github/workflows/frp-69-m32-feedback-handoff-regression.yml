@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
 name: 69 - FRP M32 Feedback Handoff Regression
-run-name: "69 - FRP Feedback Handoff | 8/16/32 cells and deterministic replay @ ${{ github.sha }}"
+run-name: "69 - FRP Feedback Handoff | 8/16/32/64 cells and deterministic replay @ ${{ github.sha }}"
 
 on:
   workflow_dispatch:
@@ -16,11 +16,11 @@ jobs:
   qualify:
     name: M32 feedback handoff - ${{ matrix.cells }} cells
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        cells: [8, 16, 32]
+        cells: [8, 16, 32, 64]
     defaults:
       run:
         shell: bash
@@ -78,13 +78,13 @@ jobs:
           ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90  rtl/m31/frp_m31_state_update.sv
           34df4ebfc5dfad8e3e5e454e560404585de5c881e6f75abaae367d3bd9fb11bd  rtl/m31/frp_m31_thermal_proxy.sv
           0be6c5ee28ee4a23baf6110143eec309f387200c1c2c80e3016353d5d4107541  rtl/m32/frp_m32_core.sv
-          54626d2d2e1ebe8430414d545242e6970d9bd1f7be424acc5e16b3385987fe07  rtl/m32/frp_m32_feedback_handoff_tb.sv
+          dcab5e4c539de7bafb6c71345ff9e2fefe039a36bfce34386cc61131b8023724  rtl/m32/frp_m32_feedback_handoff_tb.sv
           9626474b49d32b411e107d7ccc8ee5aa7f42728e9a6f70d634d16d3f2a414c5e  rtl/m32/frp_m32_registered_target_boundary.sv
           02250069a68737f055a419cd67bf2d439b3f63b3f6a7a245f40e9bf29d1958eb  rtl/m32/frp_m32_registered_target_request_path.sv
           SHA
           sha256sum .github/workflows/frp-69-m32-feedback-handoff-regression.yml \
             >> "$FRP69_EVIDENCE/sources.sha256"
-          sha256sum --check "$FRP69_EVIDENCE/sources.sha256" \
+          sha256sum --check --strict "$FRP69_EVIDENCE/sources.sha256" \
             | tee "$FRP69_EVIDENCE/source-check.log"
           printf '%s\n' "$GITHUB_SHA" > "$FRP69_EVIDENCE/commit.txt"
 
@@ -117,6 +117,7 @@ jobs:
               8: 'c487de7840da8b8fbbc6e66f9cc17cc789a418744542c70f1d0e36f219d79ff3',
               16: 'd4736c4a99d0e90235b244af41195b4d15fd126b5d19205d2cfea9341739010e',
               32: 'd82d53b2ac8eb400ec7ab6885ab00a3d6c1ab4762b933f18a2180e3fceb1dbdd',
+              64: '6bc07b104620ff700376775f4f8d3c838c53589a08c923b5f0ea6d44de0a8313',
           }
           if n not in golden:
               raise SystemExit('Unsupported cell count')
@@ -152,7 +153,7 @@ jobs:
               '-MAKEFLAGS', 'VK_PCH_I_SLOW=',
               '--top-module', top, f'-GCELLS={n}', '--Mdir', str(build),
               '-Irtl/m31', '-Irtl/m32', f'rtl/m32/{top}.sv',
-          ], 'compile.log', 1200)
+          ], 'compile.log', 1800 if n == 64 else 1200)
           compile_log = (evidence / 'compile.log').read_text(errors='replace')
           if re.search(r'%Warning-(PINMISSING|IMPLICIT|MULTIDRIVEN)\b', compile_log):
               raise SystemExit('Unexpected port, implicit signal or multiple driver')
@@ -226,7 +227,7 @@ jobs:
           results = []
           for replay in (1, 2):
               logfile = f'run-{replay}.log'
-              run([str(executable)], logfile, 300)
+              run([str(executable)], logfile, 1200 if n == 64 else 300)
               total, semantic = collect(evidence / logfile)
               (evidence / f'replay-{replay}.txt').write_text(semantic)
               results.append((total, semantic))
@@ -266,7 +267,7 @@ jobs:
           print(semantic, end='')
           print('PASS: M32 feedback handoff, active-zero retention and deterministic replay')
           PYTHON
-          sha256sum --check "$FRP69_EVIDENCE/sources.sha256" \
+          sha256sum --check --strict "$FRP69_EVIDENCE/sources.sha256" \
             > "$FRP69_EVIDENCE/source-recheck.log"
 
       - name: Upload qualification evidence
