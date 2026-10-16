@@ -73,7 +73,7 @@ jobs:
           762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94  rtl/m31/frp_m31_pkg.sv
           32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109  rtl/m31/frp_m31_request_lanes.sv
           fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f  rtl/m31/frp_m31_scheduler.sv
-          adbb4b94fcf8fa0b0fc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d  rtl/m31/frp_m31_sin_q30.mem
+          adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d  rtl/m31/frp_m31_sin_q30.mem
           69c06833e6dfbb28e25b74a5787dcd03756dddf0f66726de3ea47c1ad2931931  rtl/m31/frp_m31_stability.sv
           ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90  rtl/m31/frp_m31_state_update.sv
           34df4ebfc5dfad8e3e5e454e560404585de5c881e6f75abaae367d3bd9fb11bd  rtl/m31/frp_m31_thermal_proxy.sv
@@ -84,7 +84,7 @@ jobs:
           SHA
           sha256sum .github/workflows/frp-70-m32-cross-feedback-regression.yml \
             >> "$FRP70_EVIDENCE/sources.sha256"
-          sha256sum --check "$FRP70_EVIDENCE/sources.sha256" \
+          sha256sum --check --strict "$FRP70_EVIDENCE/sources.sha256" \
             | tee "$FRP70_EVIDENCE/source-check.log"
           printf '%s\n' "$GITHUB_SHA" > "$FRP70_EVIDENCE/commit.txt"
 
@@ -282,7 +282,7 @@ jobs:
               stream.write(summary)
           print('PASS: M32 cross-feedback, active-zero service, multiscale coherence and deterministic replay')
           PYTHON
-          sha256sum --check "$FRP70_EVIDENCE/sources.sha256" \
+          sha256sum --check --strict "$FRP70_EVIDENCE/sources.sha256" \
             > "$FRP70_EVIDENCE/source-recheck.log"
 
       - name: Upload qualification evidence
