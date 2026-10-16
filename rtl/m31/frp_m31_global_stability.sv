@@ -204,8 +204,8 @@ module frp_m31_global_stability #(
   logic [31:0] exp_rom [0:4095];
 
   initial begin
-    if ((CELLS != 8) && (CELLS != 16) && (CELLS != 32))
-      $fatal(1, "FRP global stability requires 8, 16 or 32 cells");
+    if ((CELLS != 8) && (CELLS != 16) && (CELLS != 32) && (CELLS != 64))
+      $fatal(1, "FRP global stability requires 8, 16, 32 or 64 cells");
   end
 
   for (genvar page = 0; page < 4; page = page + 1) begin : g_rom_page
