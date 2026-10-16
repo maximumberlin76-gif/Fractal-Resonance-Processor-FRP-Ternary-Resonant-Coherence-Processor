@@ -1,5 +1,5 @@
  // Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
- // Local thermal state, power, dissipation and diffusion for 8, 16 and 32 cells.
+ // Local thermal state, power, dissipation and diffusion for 8, 16, 32 and 64 cells.
  // Source: frp_prototype_v1_7_0.py, QuantizedReferenceShadowProcessor,
  // thermal_weighted_sum_q16 and update_local_thermal_field, default parameters.
  // Heat and power use signed Q16.16; weights use signed Q2.30.
@@ -62,8 +62,8 @@ module frp_m31_local_thermal_field #(
   logic signed [31:0] mean_heat_d;
 
   initial begin
-    if ((CELLS != 8) && (CELLS != 16) && (CELLS != 32))
-      $fatal(1, "FRP M31 local thermal field requires 8, 16 or 32 cells");
+    if ((CELLS != 8) && (CELLS != 16) && (CELLS != 32) && (CELLS != 64))
+      $fatal(1, "FRP M31 local thermal field requires 8, 16, 32 or 64 cells");
   end
 
   // quantized_level_weights(CELLS, 1.20); each row sums to 2**30.
@@ -94,6 +94,14 @@ module frp_m31_local_thermal_field #(
             else if (differing < 8) thermal_weight_q30 = 32'sd35256926;
             else if (differing < 16) thermal_weight_q30 = 32'sd12482109;
             else thermal_weight_q30 = 32'sd4774918;
+          end
+          64: begin
+            if (differing < 2) thermal_weight_q30 = 32'sd498545852;
+            else if (differing < 4) thermal_weight_q30 = 32'sd108502338;
+            else if (differing < 8) thermal_weight_q30 = 32'sd33350288;
+            else if (differing < 16) thermal_weight_q30 = 32'sd11807096;
+            else if (differing < 32) thermal_weight_q30 = 32'sd4516698;
+            else thermal_weight_q30 = 32'sd1814569;
           end
           default: thermal_weight_q30 = 32'sd0;
         endcase
