@@ -4,7 +4,7 @@
 // Independent arithmetic references use public ports; no DUT state forcing.
 // CASE=0 runs all; CASE=1 source handoffs; CASE=2 hot reset; CASE=3 backlog.
 // Optional +SEED=<decimal> selects reproducible backlog stimuli.
-// Build once per CELLS=8/16/32; run from repository root for the sine ROM.
+// Build once per CELLS=8/16/32/64; run from repository root for the sine ROM.
 `timescale 1ns/1ps
 `include "frp_m32_core.sv"
 
@@ -153,6 +153,15 @@ module frp_m32_cross_feedback_tb #(parameter int CELLS=8);
         1:return thermal?123492111:134453864;
         2:return thermal?37957684:50615020;
         default:return thermal?13438266:20691515;
+      endcase
+      64: case(level)
+        0:return thermal?498545852:350050538;
+        1:return thermal?108502338:107740697;
+        2:return thermal?33350288:40558875;
+        3:return thermal?11807096:16580545;
+        4:return thermal?4516698:7091397;
+        5:return thermal?1814569:3120865;
+        default:begin $fatal(1,"Reference shell outside hierarchy"); return 0; end
       endcase
       default: case(level)
         0:return thermal?527047716:385947114;
@@ -663,7 +672,7 @@ module frp_m32_cross_feedback_tb #(parameter int CELLS=8);
   endtask
   initial begin : qualification
     real v;
-    if(CELLS!=8 && CELLS!=16 && CELLS!=32) $fatal(1,"Use 8, 16 or 32 cells");
+    if(CELLS!=8 && CELLS!=16 && CELLS!=32 && CELLS!=64) $fatal(1,"Use 8, 16, 32 or 64 cells");
     if($value$plusargs("CASE=%d",case_id)) begin end
     if($value$plusargs("SEED=%d",seed)) begin end
     if(case_id<0 || case_id>3 || seed==0 || seed==1 || seed==2 || seed==3)
