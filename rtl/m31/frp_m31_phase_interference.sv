@@ -1,5 +1,5 @@
  // SPDX-License-Identifier: Apache-2.0
- // FRP M31 retained relative-phase interference for 8, 16 and 32 cells.
+ // FRP M31 retained relative-phase interference for 8, 16, 32 and 64 cells.
  // Q30 shell weights: frp_prototype_v1_7_0.py, quantized_level_weights(N, 0.70).
  // Groups are packed by ascending dyadic level, then ascending cell range.
  // Level statistics use rounded means and integer RMS deviations.
@@ -117,6 +117,14 @@ module frp_m31_phase_interference #(
             else if (differing < 16) phase_weight_q30 = 32'sd18280826;
             else phase_weight_q30 = 32'sd7818597;
           end
+          64: begin
+            if (differing < 2) phase_weight_q30 = 32'sd350050538;
+            else if (differing < 4) phase_weight_q30 = 32'sd107740697;
+            else if (differing < 8) phase_weight_q30 = 32'sd40558875;
+            else if (differing < 16) phase_weight_q30 = 32'sd16580545;
+            else if (differing < 32) phase_weight_q30 = 32'sd7091397;
+            else phase_weight_q30 = 32'sd3120865;
+          end
           default: phase_weight_q30 = 32'sd0;
         endcase
       end
@@ -175,8 +183,8 @@ module frp_m31_phase_interference #(
   endfunction
 
   initial begin
-    if ((CELLS != 8) && (CELLS != 16) && (CELLS != 32))
-      $fatal(1, "FRP M31 phase engine requires 8, 16 or 32 cells");
+    if ((CELLS != 8) && (CELLS != 16) && (CELLS != 32) && (CELLS != 64))
+      $fatal(1, "FRP M31 phase engine requires 8, 16, 32 or 64 cells");
     $readmemh(SIN_LUT_FILE, sin_lut);
     if (sin_lut[0] !== 32'sd0)
       $fatal(1, "FRP M31 sine LUT zero-point mismatch");
