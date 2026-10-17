@@ -1,18 +1,22 @@
 # Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
 # Dependencies retain their own licenses.
 name: 53 - FRP M31 Local Thermal Field Regression
-run-name: "53 - FRP Local Thermal Field | 8/16/32 cells @ ${{ github.sha }}"
+run-name: "53 - FRP Local Thermal Field | 8/16/32/64 cells and deterministic replay @ ${{ github.sha }}"
+
 on:
   workflow_dispatch:
+
 permissions:
   contents: read
+
 concurrency:
   group: frp-53-local-thermal-field-${{ github.ref }}
   cancel-in-progress: false
+
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 60
     defaults:
       run:
         shell: bash
@@ -22,111 +26,197 @@ jobs:
       PYTHONHASHSEED: "0"
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
+
     steps:
-      - uses: actions/checkout@v5
+      - name: Initialize evidence directory
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/frp-53-evidence"
+          printf 'commit=%s\nrun=%s\nattempt=%s\ncells=8,16,32,64\n' \
+            "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$RUNNER_TEMP/frp-53-evidence/context.txt"
+          echo "FRP53_EVIDENCE=$RUNNER_TEMP/frp-53-evidence" >> "$GITHUB_ENV"
+
+      - name: Check out dispatched commit
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
-      - uses: actions/setup-python@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Prepare evidence and pinned simulator
+
+      - name: Verify manual execution and qualified sources
         run: |
           set -euo pipefail
-          export FRP53_EVIDENCE="$RUNNER_TEMP/frp-53-evidence"
-          mkdir -p "$FRP53_EVIDENCE"
-          printf '%s\n' "FRP53_EVIDENCE=$FRP53_EVIDENCE" >> "$GITHUB_ENV"
-          python -m pip install --disable-pip-version-check \
-            verilator==5.48.0 systemc==3.0.2.1 click==8.5.0 platformdirs==4.13.0 \
-            2>&1 | tee "$FRP53_EVIDENCE/install.log"
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          cat > "$FRP53_EVIDENCE/sources.sha256" <<'SHA'
+          6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24  rtl/m31/frp_m31_fixed_point_pkg.sv
+          cb97c1bfeabbb2acaebf2f9644d484b2f7c5e995dbf1b70777f6bc2e7df9368e  rtl/m31/frp_m31_local_thermal_field.sv
+          278acc5fa731b24cdadd4b4d210e5e597042658b47aab0c979bc80120abce68c  rtl/m31/frp_m31_local_thermal_field_tb.sv
+          SHA
+          sha256sum frp_prototype_v1_7_0.py \
+            .github/workflows/frp-53-m31-local-thermal-field-regression.yml \
+            >> "$FRP53_EVIDENCE/sources.sha256"
+          sha256sum --check --strict "$FRP53_EVIDENCE/sources.sha256" \
+            | tee "$FRP53_EVIDENCE/source-check.log"
+          cp rtl/m31/frp_m31_local_thermal_field_tb.sv "$FRP53_EVIDENCE/"
+
+      - name: Install and record toolchain
+        run: |
+          set -euo pipefail
+          {
+            python -m pip install --disable-pip-version-check \
+              verilator==5.48.0 systemc==3.0.2.1 click==8.5.0 platformdirs==4.13.0
+            python -m pip check
+            verilator-cli --version
+            c++ --version
+            make --version
+          } 2>&1 | tee "$FRP53_EVIDENCE/toolchain.log"
           python -m pip freeze > "$FRP53_EVIDENCE/packages.txt"
-      - name: Run local thermal field regression and verify results
+
+      - name: Build once and qualify two full replays
         run: |
           set -euo pipefail
-          cat > "$FRP53_EVIDENCE/verify.py" <<'FRP53_EOF'
+          cat > "$FRP53_EVIDENCE/verify.py" <<'PYTHON'
+          import hashlib
+          import json
+          import os
+          import re
+          import signal
+          import subprocess
+          import time
           from pathlib import Path
-          import hashlib, importlib.metadata, json, os, re, shutil, subprocess
-          R=Path.cwd()
-          B=Path(os.environ['FRP53_EVIDENCE'])
-          def save(name,value):
-              (B/name).write_text(json.dumps(value,indent=2)+'\n')
-          def run(args,name,timeout=900):
-              save(name+'-command.json',args)
-              path=B/(name+'.log')
-              print('RUN',name,flush=True)
-              with path.open('w') as log:
-                  try:
-                      result=subprocess.run(args,cwd=R,stdout=log,
-                          stderr=subprocess.STDOUT,text=True,timeout=timeout)
-                  except subprocess.TimeoutExpired:
-                      log.write('\nTIMEOUT\n')
-                      raise
-              text=path.read_text()
-              if result.returncode:
-                  print(text[-12000:],flush=True)
-                  raise RuntimeError((name,result.returncode))
-              print(text[-2000:],flush=True)
-              return text
-          files=[
-              'rtl/m31/frp_m31_fixed_point_pkg.sv',
-              'rtl/m31/frp_m31_local_thermal_field.sv',
-              'rtl/m31/frp_m31_local_thermal_field_tb.sv',
-              'frp_prototype_v1_7_0.py',
-              '.github/workflows/frp-53-m31-local-thermal-field-regression.yml',
-          ]
-          hashes={p:hashlib.sha256((R/p).read_bytes()).hexdigest() for p in files}
-          save('sources.json',{'commit':os.environ['GITHUB_SHA'],'files':hashes})
-          save('versions.json',{p:importlib.metadata.version(p)
-              for p in ['verilator','systemc']})
-          run(['verilator-cli','--version'],'verilator-version')
-          run(['c++','--version'],'compiler-version')
-          top='frp_m31_local_thermal_field_tb'
-          source=R/'rtl/m31'/f'{top}.sv'
-          shutil.copy2(source,B/source.name)
-          obj=B/'obj'
-          run(['verilator-cli','--binary','--timing','--assert','-Wno-fatal',
-               '-j','2','-MAKEFLAGS','VK_PCH_I_FAST=',
-               '-MAKEFLAGS','VK_PCH_I_SLOW=','-MAKEFLAGS','OPT_FAST=-O1',
-               '--top-module',top,'--Mdir',str(obj),'-Irtl/m31',str(source)],
-              'local-thermal-field-build')
-          text=run([str(obj/('V'+top))],'local-thermal-field-run',120)
-          keys=['cells','steps','checks','commits','holds','resets','diffusion_pairs',
-                'lag_cases','random','thresholds','mean_ties','dissipation_ties']
-          pattern=r'^PASS LOCAL_THERMAL '+r' '.join(k+r'=(\d+)' for k in keys)+r'$'
-          matches=re.findall(pattern,text,re.MULTILINE)
-          assert len(matches)==3,('Expected three checker records',text)
-          results={}
-          expected_checks={8:732829,16:1564885,32:3615301}
-          for match in matches:
-              v=dict(zip(keys,map(int,match)))
-              n=v['cells']
-              assert n in (8,16,32) and str(n) not in results,v
-              assert v['steps']==4890+62*n and v['checks']==expected_checks[n],v
-              assert v['commits']==4303+48*n and v['holds']==587+14*n,v
-              assert v['commits']+v['holds']==v['steps'],v
-              assert v['resets']==n+33,v
-              assert v['diffusion_pairs']==n*(n-1) and v['lag_cases']==14*n,v
-              assert v['random']==4096 and v['thresholds']==3,v
-              assert v['mean_ties']==3 and v['dissipation_ties']==9,v
-              results[str(n)]=v
-          assert set(results)=={'8','16','32'}
-          marker='PASS LOCAL_THERMAL_ALL cells=8,16,32'
-          assert text.splitlines().count(marker)==1,text
-          for p,h in hashes.items():
-              assert hashlib.sha256((R/p).read_bytes()).hexdigest()==h,p
-          totals={k:sum(v[k] for v in results.values()) for k in keys if k!='cells'}
-          assert totals['steps']==18142 and totals['checks']==5913015,totals
-          assert totals['diffusion_pairs']==1288 and totals['random']==12288,totals
-          save('result.json',{'result':'PASS','commit':os.environ['GITHUB_SHA'],
-                             'cells':results,'totals':totals})
-          lines=['## FRP M31 local thermal field regression: PASS','',
-                 'Commit: `'+os.environ['GITHUB_SHA']+'`','',
-                 '| Cells | Steps | Comparisons | Commits | Holds | Resets | Diffusion pairs |',
-                 '|---|---|---|---|---|---|---|']
-          for n in ('8','16','32'):
-              v=results[n]
-              lines.append(f"| {n} | {v['steps']} | {v['checks']} | {v['commits']} | {v['holds']} | {v['resets']} | {v['diffusion_pairs']} |")
+
+          SIZES = (8, 16, 32, 64)
+          EXPECTED_CHECKS = {8: 732829, 16: 1564885, 32: 3615301, 64: 9261349}
+          GOLDEN = 'c726b9045f0d4106d5a26823008fe0457449c37bc0cfe954ad4252a9a5e8d573'
+
+          def require(condition, message):
+              if not condition:
+                  raise SystemExit(message)
+
+          def collect(path):
+              text = path.read_text()
+              require(not re.search(r'%Error|Assertion failed|Aborting|\bFAIL\b|\bFATAL\b', text),
+                      f'{path.name}: simulator failure')
+              require(sum('Verilog $finish' in line for line in text.splitlines()) == 1,
+                      f'{path.name}: missing or duplicated simulator finish')
+              keys = ('cells steps checks commits holds resets diffusion_pairs lag_cases random '
+                      'thresholds mean_ties dissipation_ties').split()
+              pattern = r'PASS LOCAL_THERMAL ' + ' '.join(k + r'=(\d+)' for k in keys)
+              selected = [line for line in text.splitlines() if line.startswith('PASS ')]
+              require(len(selected) == 5, 'Expected four checker records and one completion record')
+              require(selected[-1] == 'PASS LOCAL_THERMAL_ALL cells=8,16,32,64',
+                      'Incorrect full-regression completion record')
+              results = {}
+              for n, line in zip(SIZES, selected[:4]):
+                  match = re.fullmatch(pattern, line)
+                  require(match is not None, f'Malformed checker record: {line}')
+                  row = dict(zip(keys, map(int, match.groups())))
+                  expected = dict(cells=n, steps=4890+62*n, checks=EXPECTED_CHECKS[n],
+                                  commits=4303+48*n, holds=587+14*n, resets=n+33,
+                                  diffusion_pairs=n*(n-1), lag_cases=14*n, random=4096,
+                                  thresholds=3, mean_ties=3, dissipation_ties=9)
+                  require(row == expected, f'Checker result mismatch: {row}')
+                  require(row['commits'] + row['holds'] == row['steps'], 'Cycle accounting mismatch')
+                  results[str(n)] = row
+              totals = {k: sum(row[k] for row in results.values()) for k in keys if k != 'cells'}
+              require(totals['steps'] == 27000 and totals['checks'] == 15174364,
+                      'Combined step or comparison count mismatch')
+              require(totals['diffusion_pairs'] == 5320 and totals['random'] == 16384,
+                      'Combined coverage mismatch')
+              semantic = '\n'.join(selected) + '\n'
+              digest = hashlib.sha256(semantic.encode()).hexdigest()
+              require(digest == GOLDEN, f'Semantic result mismatch: {digest}')
+              return {'cells': results, 'totals': totals, 'semantic_sha256': digest}, semantic
+
+          evidence = Path(os.environ['FRP53_EVIDENCE']).resolve()
+          build = Path(os.environ['RUNNER_TEMP']) / 'frp-53-build'
+          top = 'frp_m31_local_thermal_field_tb'
+          commands = []
+
+          def run(command, logfile, seconds):
+              entry = {'argv': command, 'timeout_seconds': seconds, 'log': logfile, 'status': 'running'}
+              commands.append(entry)
+              def save():
+                  (evidence / 'commands.json').write_text(json.dumps(commands, indent=2) + '\n')
+              save()
+              print('Running:', command, flush=True)
+              path = evidence / logfile
+              started = time.monotonic()
+              process = None
+              try:
+                  with path.open('w') as stream:
+                      process = subprocess.Popen(command, stdout=stream, stderr=subprocess.STDOUT,
+                                                 start_new_session=True)
+                      while True:
+                          remaining = seconds - (time.monotonic() - started)
+                          if remaining <= 0:
+                              raise TimeoutError(f'{logfile}: timeout after {seconds} seconds')
+                          try:
+                              code = process.wait(timeout=min(30, remaining))
+                              break
+                          except subprocess.TimeoutExpired:
+                              print(f'{logfile}: running, elapsed={time.monotonic()-started:.0f}s, '
+                                    f'log_bytes={path.stat().st_size}', flush=True)
+                  entry['returncode'] = code
+                  require(code == 0, f'{logfile}: exit {code}')
+                  entry['status'] = 'passed'
+              except BaseException as error:
+                  if process is not None and process.poll() is None:
+                      os.killpg(process.pid, signal.SIGKILL)
+                      process.wait()
+                  entry['status'] = 'failed'
+                  entry['error'] = str(error)
+                  if path.exists():
+                      print(path.read_text(errors='replace')[-16000:], flush=True)
+                  raise
+              finally:
+                  entry['elapsed_seconds'] = round(time.monotonic() - started, 3)
+                  save()
+              print(f'{logfile}: passed in {entry["elapsed_seconds"]}s', flush=True)
+
+          run([
+              'verilator-cli', '--binary', '--timing', '--assert', '-Wno-fatal',
+              '-j', '2', '-MAKEFLAGS', 'VK_PCH_I_FAST=',
+              '-MAKEFLAGS', 'VK_PCH_I_SLOW=', '-MAKEFLAGS', 'OPT_FAST=-O1',
+              '--top-module', top, '--Mdir', str(build), '-Irtl/m31', f'rtl/m31/{top}.sv',
+          ], 'compile.log', 2400)
+          compile_log = (evidence / 'compile.log').read_text(errors='replace')
+          require(not re.search(r'%Error|%Warning-(PINMISSING|IMPLICIT|MULTIDRIVEN)\b', compile_log),
+                  'Compile error or unexpected port, implicit signal or multiple driver')
+          executable = build / f'V{top}'
+          (evidence / 'executable.sha256').write_text(
+              f'{hashlib.sha256(executable.read_bytes()).hexdigest()}  V{top}\n')
+          replays = []
+          for replay in (1, 2):
+              logfile = f'run-{replay}.log'
+              run([str(executable)], logfile, 300)
+              result, semantic = collect(evidence / logfile)
+              (evidence / f'run-{replay}.txt').write_text(semantic)
+              replays.append((result, semantic))
+              print(semantic, end='')
+          require(replays[0] == replays[1], 'Deterministic replay mismatch')
+          result, semantic = replays[0]
+          report = {'result': 'PASS', 'commit': os.environ['GITHUB_SHA'], 'builds': 1,
+                    'replays': 2, 'replay_equal': True, **result}
+          (evidence / 'result.json').write_text(json.dumps(report, indent=2) + '\n')
+          lines = ['## FRP M31 local thermal field regression: PASS', '',
+                   'Commit: `' + os.environ['GITHUB_SHA'] + '`', '',
+                   'One build; two full replays; counts below are per replay.', '',
+                   '| Cells | Steps | Comparisons | Commits | Holds | Resets | Diffusion pairs |',
+                   '|---|---|---|---|---|---|---|']
+          for n in SIZES:
+              row = result['cells'][str(n)]
+              lines.append('| ' + ' | '.join(str(row[k]) for k in
+                           ('cells', 'steps', 'checks', 'commits', 'holds', 'resets', 'diffusion_pairs')) + ' |')
           lines += ['',
               'All directed source/destination diffusion pairs are exercised for each cell count.',
               'Per configuration: 4096 deterministic random samples, three overload thresholds,',
@@ -134,24 +224,43 @@ jobs:
               'Checks include uniform heating/cooling, isolated hot cells, unsigned lag boundaries,',
               'held inputs, asynchronous reset, local peaks and aggregate heat history.',
               'The reference generates dyadic weights at exponent 1.20 with exact row closure',
-              'and rounds each neighbor contribution before accumulation.',
-              'RTL simulation; source hashes, commands, tool versions and logs are attached.','']
-          summary='\n'.join(lines)
-          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
-              f.write(summary)
-          print(summary)
-          FRP53_EOF
+              'and rounds each neighbor contribution before accumulation.', '',
+              f'Semantic SHA-256: `{result["semantic_sha256"]}`', '']
+          summary = '\n'.join(lines)
+          (evidence / 'summary.md').write_text(summary)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+              stream.write(summary)
+          print('PASS: local thermal field 8/16/32/64 and deterministic replay')
+          PYTHON
           python "$FRP53_EVIDENCE/verify.py" 2>&1 | tee "$FRP53_EVIDENCE/verify.log"
+
+      - name: Recheck qualified sources
+        if: always()
+        run: |
+          set -euo pipefail
+          sha256sum --check --strict "$FRP53_EVIDENCE/sources.sha256" \
+            | tee "$FRP53_EVIDENCE/source-recheck.log"
+
+      - name: Hash qualification evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          python - <<'PYTHON'
+          import hashlib
+          import os
+          from pathlib import Path
+          root = Path(os.environ['FRP53_EVIDENCE'])
+          files = sorted(p for p in root.rglob('*') if p.is_file() and p.name != 'evidence.sha256')
+          manifest = ''.join(f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(root)}\n'
+                             for p in files)
+          (root / 'evidence.sha256').write_text(manifest)
+          PYTHON
+
       - name: Upload logs and reproducibility records
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6.0.0
         with:
-          name: frp-53-local-thermal-field-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/frp-53-evidence/*.log
-            ${{ runner.temp }}/frp-53-evidence/*.json
-            ${{ runner.temp }}/frp-53-evidence/*.txt
-            ${{ runner.temp }}/frp-53-evidence/*.py
-            ${{ runner.temp }}/frp-53-evidence/*.sv
+          name: frp-53-local-thermal-field-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-53-evidence/
           if-no-files-found: error
           retention-days: 30
