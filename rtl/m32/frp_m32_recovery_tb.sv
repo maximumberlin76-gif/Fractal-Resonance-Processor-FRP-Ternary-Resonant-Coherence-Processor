@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
-// M32 phase disturbance and autonomous recovery, 8/16/32 cells.
+// M32 phase disturbance and autonomous recovery, 8/16/32/64 cells.
 // Checks the delayed C-P snapshot, local thermal/gamma feedback, frequency
 // memory and tick-separated active-zero routes through public ports only.
 // Four phase-burst profiles cross FREE / 7:1 / 1:7 scheduling. Each burst
@@ -130,10 +130,15 @@ module frp_m32_recovery_tb #(parameter int CELLS=8);
         0:return 567420738; 1:return 123492111;
         2:return 37957684; default:return 13438266;
       endcase
-      default:case(level)
+      32:case(level)
         0:return 527047716; 1:return 114705422; 2:return 35256926;
         3:return 12482109; default:return 4774918;
       endcase
+      64:case(level)
+        0:return 498545852; 1:return 108502338; 2:return 33350288;
+        3:return 11807096; 4:return 4516698; default:return 1814569;
+      endcase
+      default:begin $fatal(1,"Unsupported thermal cell count"); return 0; end
     endcase
   endfunction
   function automatic longint order(input int first, count);
@@ -308,7 +313,8 @@ module frp_m32_recovery_tb #(parameter int CELLS=8);
     real v;
     longint start_heat,end_heat,shock_raw;
     int initial_routes,initial_completions;
-    if(CELLS!=8 && CELLS!=16 && CELLS!=32) $fatal(1,"Use 8, 16 or 32 cells");
+    if(CELLS!=8 && CELLS!=16 && CELLS!=32 && CELLS!=64)
+      $fatal(1,"Use 8, 16, 32 or 64 cells");
     for(int i=0;i<4096;i++) begin
       v=$sin(6.283185307179586476925286766559*i/4096.0)*real'(Q30);
       sine_table[i]=$rtoi(v<0?v-0.5:v+0.5);
