@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
 name: 64 - FRP M32 Phase Task Architecture Regression
-run-name: "64 - FRP Phase Task | 8/16/32 cells and deterministic replay @ ${{ github.sha }}"
+run-name: "64 - FRP Phase Task | 8/16/32/64 cells and deterministic replay @ ${{ github.sha }}"
 
 on:
   workflow_dispatch:
@@ -16,11 +16,11 @@ jobs:
   qualify:
     name: Phase task - ${{ matrix.cells }} cells
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        cells: [8, 16, 32]
+        cells: [8, 16, 32, 64]
     defaults:
       run:
         shell: bash
@@ -64,7 +64,7 @@ jobs:
 
           evidence = Path(os.environ['FRP64_EVIDENCE'])
           bench = Path('rtl/m32/frp_m32_phase_task_architecture_tb.sv')
-          expected = '9600598a2e536a7769e355347e17d0f011ed74a38c90590cfe763f5e6b41dd71'
+          expected = 'bb30f8e850ae68e8f8341229e32f28a380fdedca04b727b6370d5971bd03a912'
           actual = hashlib.sha256(bench.read_bytes()).hexdigest()
           if actual != expected:
               raise SystemExit(f'Testbench SHA256 mismatch: {actual}')
@@ -78,7 +78,7 @@ jobs:
           (evidence / 'commit.txt').write_text(os.environ['GITHUB_SHA'] + '\n')
           print(f'PASS testbench hash; recorded {len(sources)} source files')
           PYTHON
-          sha256sum --check "$FRP64_EVIDENCE/sources.sha256" \
+          sha256sum --check --strict "$FRP64_EVIDENCE/sources.sha256" \
             > "$FRP64_EVIDENCE/source-check.log"
 
       - name: Install and record toolchain
@@ -103,6 +103,7 @@ jobs:
           import os
           import re
           import subprocess
+          from decimal import Decimal
           from pathlib import Path
 
           n = int(os.environ['CELLS'])
@@ -110,6 +111,13 @@ jobs:
               8: (237775, 80, 515, '31bb18e37c4a4500'),
               16: (436368, 204, 1071, '3ce345133e8793b6'),
               32: (830160, 210, 2043, '548d1f306fe260bf'),
+              64: (1643531, 452, 4047, '8e891f105e7b13df'),
+          }
+          goldens = {
+              8: '09667f3d60ca1ff8e9ab3273e462322edd4a8d1a30f64b5b50ff961df05522af',
+              16: '32b6480c8adb3437d2a6bb1bad2a880074be522242a067c51e791bc7cd1f1135',
+              32: '7735cf31ad4b1fb10e6662bed3dd1d8c07321b1ee00701d97eb17b9fd2325b38',
+              64: 'a2ed4d19787d340c9427856898fcf6c12d09062ce7967bdb082c6f9ee09cfd60',
           }
           if n not in profiles:
               raise SystemExit('Unsupported cell count')
@@ -118,19 +126,171 @@ jobs:
           top = 'frp_m32_phase_task_architecture_tb'
           commands = []
 
+
+          def require(condition, message):
+              if not condition:
+                  raise SystemExit(message)
+
+
           def run(command, logfile, seconds):
               commands.append(command)
               (evidence / 'commands.json').write_text(json.dumps(commands, indent=2) + '\n')
               print('Running:', command, flush=True)
               path = evidence / logfile
-              with path.open('w') as stream:
-                  result = subprocess.run(
-                      command, stdout=stream, stderr=subprocess.STDOUT,
-                      timeout=seconds, check=False,
-                  )
+              try:
+                  with path.open('w') as stream:
+                      result = subprocess.run(
+                          command, stdout=stream, stderr=subprocess.STDOUT,
+                          timeout=seconds, check=False,
+                      )
+              except subprocess.TimeoutExpired:
+                  print(path.read_text(errors='replace')[-16000:])
+                  raise SystemExit(f'{logfile}: timeout after {seconds} seconds')
               if result.returncode:
                   print(path.read_text(errors='replace')[-16000:])
                   raise SystemExit(f'{logfile}: exit {result.returncode}')
+
+
+          schemas = {
+              'PASS PHASE_TASK': 'N cases checks phase_updates relative_decisions signature',
+              'ACTIVE_ZERO': (
+                  'N routes completed paused_retention balance_retention balance_entries '
+                  'neutralize_entries zero_goals frequency_memory phase_evolution boundary_lag'
+              ),
+              'BINARY_REFERENCE': 'N match direct rail_toggles execution_heat_peak switch_peak margin_min',
+              'M32_EXECUTION': 'N match direct logical_changes ticks execution_heat_peak switch_peak margin_min',
+              'M32_NATIVE': 'N execution_window_mean_heat_peak_q16 margin_min_q16 local_margin_min_q16',
+              'MODE_TASK': (
+                  'N mode cases relative_decisions routes completed negative zero positive max_execution_ticks'
+              ),
+              'MODE_BINARY': 'N mode match direct rail_toggles execution_heat_peak switch_peak margin_min',
+              'MODE_M32': 'N mode match direct logical_changes ticks execution_heat_peak switch_peak margin_min',
+              'MODE_NATIVE': (
+                  'N mode execution_window_mean_heat_peak_q16 execution_window_proxy_peak_q16 '
+                  'margin_min_q16 local_margin_min_q16'
+              ),
+              'MODE_COVERAGE': 'N checks task_bins route_bins bank_words_checked bank_bits',
+          }
+          global_labels = ('PASS PHASE_TASK', 'ACTIVE_ZERO', 'BINARY_REFERENCE',
+                           'M32_EXECUTION', 'M32_NATIVE')
+          mode_labels = ('MODE_TASK', 'MODE_BINARY', 'MODE_M32', 'MODE_NATIVE')
+          expected_order = [(label, None) for label in global_labels]
+          expected_order += [(label, mode) for mode in range(3) for label in mode_labels]
+          expected_order.append(('MODE_COVERAGE', None))
+
+
+          def collect(path):
+              text = path.read_text()
+              require(not re.search(r'%Error|Assertion failed|Aborting', text),
+                      f'{path.name}: simulator error')
+              require(re.search(rf'^- .*{top}\.sv:\d+: Verilog \$finish$', text, re.M),
+                      f'{path.name}: missing normal testbench finish')
+              records, semantic, order = {}, [], []
+              for line in text.splitlines():
+                  label = next((key for key in schemas if line.startswith(key + ' ')), None)
+                  if label is None:
+                      continue
+                  tokens = line[len(label) + 1:].split()
+                  require(all(re.fullmatch(r'[a-zA-Z_][a-zA-Z_0-9]*=[0-9a-f.\-]+', t)
+                              for t in tokens), f'Malformed {label}')
+                  pairs = [token.split('=', 1) for token in tokens]
+                  values = dict(pairs)
+                  require(len(values) == len(pairs), f'Duplicate fields in {label}')
+                  require(set(values) == set(schemas[label].split()), f'Wrong fields in {label}')
+                  require(int(values['N']) == n, f'Wrong cell count in {label}')
+                  mode = int(values['mode']) if 'mode' in values else None
+                  key = label if mode is None else f'{label}:{mode}'
+                  require(key not in records, f'Duplicate record: {key}')
+                  records[key] = values
+                  order.append((label, mode))
+                  semantic.append(line)
+              require(order == expected_order, f'{path.name}: incomplete or reordered report')
+              return records, '\n'.join(semantic) + '\n'
+
+
+          def qualify(records, semantic):
+              task = records['PASS PHASE_TASK']
+              zero = records['ACTIVE_ZERO']
+              binary = records['BINARY_REFERENCE']
+              frp = records['M32_EXECUTION']
+              native = records['M32_NATIVE']
+              coverage = records['MODE_COVERAGE']
+              checks, relative, routes, signature = profiles[n]
+              require(int(task['cases']) == 144, 'Incomplete task matrix')
+              require(int(task['checks']) == checks, 'Check count changed')
+              require(int(task['phase_updates']) == 2376, 'Phase update count changed')
+              require(int(task['relative_decisions']) == relative, 'Relative-phase coverage changed')
+              require(task['signature'] == signature, 'Task signature changed')
+              require(int(zero['routes']) == int(zero['completed']) == routes,
+                      'Mediated routes did not all complete')
+              for key in ('paused_retention', 'balance_retention', 'balance_entries',
+                          'neutralize_entries', 'zero_goals', 'frequency_memory',
+                          'phase_evolution', 'boundary_lag'):
+                  require(int(zero[key]) > 0, f'Missing active-zero function: {key}')
+              require(int(binary['direct']) == routes, 'Binary opposite-polarity count changed')
+
+              for suffix in (None, 0, 1, 2):
+                  b = binary if suffix is None else records[f'MODE_BINARY:{suffix}']
+                  f = frp if suffix is None else records[f'MODE_M32:{suffix}']
+                  v = native if suffix is None else records[f'MODE_NATIVE:{suffix}']
+                  require(b['match'] == f['match'] == '1', 'Common-task mismatch')
+                  require(f['direct'] == '0', 'Forbidden direct ternary transition')
+                  require(int(b['rail_toggles']) > 0, 'Missing binary activity')
+                  require(int(f['logical_changes']) > 0 and int(f['ticks']) > 0,
+                          'Missing M32 execution activity')
+                  for values, switch_limit in ((b, Decimal('1')), (f, Decimal('0.25'))):
+                      require(Decimal(values['execution_heat_peak']) >= 0, 'Invalid execution heat')
+                      require(0 <= Decimal(values['switch_peak']) <= switch_limit,
+                              'Invalid switching ratio')
+                      require(Decimal(values['margin_min']).is_finite(), 'Invalid execution margin')
+                  for key in ('execution_window_mean_heat_peak_q16', 'margin_min_q16',
+                              'local_margin_min_q16'):
+                      int(v[key])
+                  if suffix is None:
+                      continue
+                  t = records[f'MODE_TASK:{suffix}']
+                  require(int(t['cases']) == 48, f'Mode {suffix}: incomplete task matrix')
+                  require(int(t['relative_decisions']) > 0, f'Mode {suffix}: no relative decisions')
+                  require(int(t['routes']) == int(t['completed']) == int(b['direct']) > 0,
+                          f'Mode {suffix}: incomplete routes')
+                  require(all(int(t[key]) > 0 for key in ('negative', 'zero', 'positive')),
+                          f'Mode {suffix}: missing selected symbol')
+                  require(sum(int(t[key]) for key in ('negative', 'zero', 'positive')) == 48 * n,
+                          f'Mode {suffix}: selected-symbol total mismatch')
+                  require(0 < int(t['max_execution_ticks']) <= 16 * n + 32,
+                          f'Mode {suffix}: completion bound exceeded')
+                  require(int(v['execution_window_proxy_peak_q16']) >= 0,
+                          f'Mode {suffix}: invalid native proxy')
+
+              for label, global_values, fields in (
+                  ('MODE_TASK', task, ('cases', 'relative_decisions')),
+                  ('MODE_TASK', zero, ('routes', 'completed')),
+                  ('MODE_BINARY', binary, ('direct', 'rail_toggles')),
+                  ('MODE_M32', frp, ('direct', 'logical_changes', 'ticks')),
+              ):
+                  for key in fields:
+                      require(sum(int(records[f'{label}:{m}'][key]) for m in range(3))
+                              == int(global_values[key]), f'{label}: total mismatch for {key}')
+              for label, global_values, maxima, minima in (
+                  ('MODE_BINARY', binary, ('execution_heat_peak', 'switch_peak'), ('margin_min',)),
+                  ('MODE_M32', frp, ('execution_heat_peak', 'switch_peak'), ('margin_min',)),
+                  ('MODE_NATIVE', native, ('execution_window_mean_heat_peak_q16',),
+                   ('margin_min_q16', 'local_margin_min_q16')),
+              ):
+                  for reducer, fields in ((max, maxima), (min, minima)):
+                      for key in fields:
+                          require(reducer(Decimal(records[f'{label}:{m}'][key]) for m in range(3))
+                                  == Decimal(global_values[key]), f'{label}: extremum mismatch for {key}')
+              require(int(coverage['checks']) == 180, 'Mode check count changed')
+              require(int(coverage['task_bins']) == 144, 'Incomplete task coverage')
+              require(int(coverage['route_bins']) == 6 * n, 'Incomplete indexed route coverage')
+              require(int(coverage['bank_bits']) == 2 * n, 'Truncated retained-state bank')
+              words = int(coverage['bank_words_checked'])
+              require(words > 0 and words % ((2 * n + 63) // 64) == 0, 'Incomplete bank-word checks')
+              digest = hashlib.sha256(semantic.encode()).hexdigest()
+              require(digest == goldens[n], f'Semantic SHA256 mismatch: {digest}')
+              return digest
+
 
           run([
               'verilator-cli', '--binary', '--output-groups', '0',
@@ -142,90 +302,45 @@ jobs:
               '--top-module', top, f'-GCELLS={n}', '--Mdir', str(build),
               '-Irtl/m31', '-Irtl/m32', f'rtl/m32/{top}.sv',
           ], 'compile.log', 1800)
+          compile_log = (evidence / 'compile.log').read_text(errors='replace')
+          require(not re.search(r'%Warning-(PINMISSING|IMPLICIT|MULTIDRIVEN)\b', compile_log),
+                  'Compile log contains a missing pin, implicit net or multiple driver warning')
           executable = build / f'V{top}'
           (evidence / 'executable.sha256').write_text(
               f'{hashlib.sha256(executable.read_bytes()).hexdigest()}  V{top}\n'
           )
-          labels = ('PASS PHASE_TASK', 'ACTIVE_ZERO', 'BINARY_REFERENCE',
-                    'M32_EXECUTION', 'M32_NATIVE')
-
-          def require(condition, message):
-              if not condition:
-                  raise SystemExit(message)
-
-          def collect(path):
-              lines = path.read_text().splitlines()
-              records, semantic = {}, []
-              for label in labels:
-                  hits = [line for line in lines if line.startswith(label + ' ')]
-                  require(len(hits) == 1, f'{path.name}: expected one {label}')
-                  line = hits[0]
-                  tokens = line[len(label) + 1:].split()
-                  require(all(re.fullmatch(r'[a-zA-Z_][a-zA-Z_0-9]*=[0-9a-f.\-]+', t)
-                              for t in tokens), f'Malformed {label}')
-                  pairs = [token.split('=', 1) for token in tokens]
-                  values = dict(pairs)
-                  require(len(values) == len(pairs), f'Duplicate fields in {label}')
-                  require(int(values['N']) == n, f'Wrong cell count in {label}')
-                  records[label] = values
-                  semantic.append(line)
-              return records, '\n'.join(semantic) + '\n'
-
           results = []
           for replay in (1, 2):
               logfile = f'run-{replay}.log'
-              run([str(executable)], logfile, 600)
+              run([str(executable)], logfile, 1200 if n == 64 else 600)
               records, semantic = collect(evidence / logfile)
               (evidence / f'replay-{replay}.txt').write_text(semantic)
-              results.append((records, semantic))
+              digest = qualify(records, semantic)
+              results.append((records, semantic, digest))
           require(results[0][1] == results[1][1], 'Deterministic replay mismatch')
-          records, semantic = results[0]
-          task = records['PASS PHASE_TASK']
-          zero = records['ACTIVE_ZERO']
-          binary = records['BINARY_REFERENCE']
-          frp = records['M32_EXECUTION']
-          native = records['M32_NATIVE']
-          checks, relative, routes, signature = profiles[n]
-          require(int(task['cases']) == 144, 'Incomplete task matrix')
-          require(int(task['checks']) == checks, 'Check count changed')
-          require(int(task['phase_updates']) == 2376, 'Phase update count changed')
-          require(int(task['relative_decisions']) == relative, 'Relative-phase coverage changed')
-          require(task['signature'] == signature, 'Task signature changed')
-          require(int(zero['routes']) == int(zero['completed']) == routes,
-                  'Mediated routes did not all complete')
-          for key in ('paused_retention', 'balance_retention', 'balance_entries',
-                      'neutralize_entries', 'zero_goals', 'frequency_memory',
-                      'phase_evolution', 'boundary_lag'):
-              require(int(zero[key]) > 0, f'Missing active-zero function: {key}')
-          require(binary['match'] == frp['match'] == '1', 'Common-task mismatch')
-          require(int(binary['direct']) == routes, 'Binary opposite-polarity count changed')
-          require(frp['direct'] == '0', 'Forbidden direct ternary transition')
-          require(int(binary['rail_toggles']) > 0, 'Missing binary activity')
-          require(int(frp['logical_changes']) > 0 and int(frp['ticks']) > 0,
-                  'Missing M32 execution activity')
-          for values in (binary, frp):
-              require(float(values['execution_heat_peak']) >= 0, 'Invalid execution heat')
-              require(0 <= float(values['switch_peak']) <= 1, 'Invalid switching ratio')
-              float(values['margin_min'])
-          for key in ('execution_window_mean_heat_peak_q16', 'margin_min_q16',
-                      'local_margin_min_q16'):
-              int(native[key])
+          records, semantic, digest = results[0]
           report = {
               'commit': os.environ['GITHUB_SHA'], 'cells': n,
               'replays': 2, 'replay_equal': True, 'records': records,
-              'semantic_sha256': hashlib.sha256(semantic.encode()).hexdigest(),
+              'semantic_record_count': len(expected_order),
+              'semantic_sha256': digest, 'expected_semantic_sha256': goldens[n],
               'scope': {
                   'task': 'sampled relative-phase selection with retained execution snapshot',
                   'binary': 'behavioral fixed-point oracle; direct two-rail execution',
                   'ternary': 'M32 phase engine, registered targets and active-zero routes',
                   'execution_heat': 'historical v0.9.3 execution-window scoring',
                   'native': 'separate M32 execution-window thermal/stability telemetry',
+                  'modes': '0=FREE; 1=7:1; 2=1:7',
               },
           }
           (evidence / 'qualification.json').write_text(json.dumps(report, indent=2) + '\n')
           summary = (
               f'### FRP 64: {n} cells — PASS\n\n'
-              f'144 cases; {checks:,} checks per replay; two identical replays.\n\n'
+              f'144 cases; {profiles[n][0]:,} checks and 180 mode checks per replay; '
+              'two identical replays.\n\n'
+              f'144 task bins; {6 * n} route bins; {2 * n}-bit banks; '
+              '18 semantic records per replay.\n\n'
+              'Modes: 0=FREE, 1=7:1, 2=1:7.\n\n'
               '```text\n' + semantic + '```\n\n'
               'Execution heat scoring and native M32 telemetry are reported separately.\n'
           )
@@ -233,9 +348,9 @@ jobs:
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
               stream.write(summary)
           print(semantic, end='')
-          print('PASS: phase task, active-zero coverage and deterministic replay')
+          print('PASS: phase task, per-mode metrics, active-zero coverage and deterministic replay')
           PYTHON
-          sha256sum --check "$FRP64_EVIDENCE/sources.sha256" \
+          sha256sum --check --strict "$FRP64_EVIDENCE/sources.sha256" \
             > "$FRP64_EVIDENCE/source-recheck.log"
 
       - name: Upload qualification evidence
