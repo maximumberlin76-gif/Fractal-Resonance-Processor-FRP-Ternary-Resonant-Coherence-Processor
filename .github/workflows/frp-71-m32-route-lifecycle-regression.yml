@@ -1,0 +1,305 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 71 - FRP M32 Route Lifecycle Regression
+run-name: "71 - FRP Route Lifecycle | 8/16/32/64 cells and deterministic replay @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-71-route-lifecycle-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    name: M32 route-lifecycle - ${{ matrix.cells }} cells
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        cells: [8, 16, 32, 64]
+    defaults:
+      run:
+        shell: bash
+    env:
+      CELLS: ${{ matrix.cells }}
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Initialize evidence directory
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/frp-71-evidence"
+          printf 'commit=%s\ncells=%s\nrun=%s\nattempt=%s\n' \
+            "$GITHUB_SHA" "$CELLS" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$RUNNER_TEMP/frp-71-evidence/context.txt"
+          echo "FRP71_EVIDENCE=$RUNNER_TEMP/frp-71-evidence" >> "$GITHUB_ENV"
+
+      - name: Check out dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify manual execution and qualified sources
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          cat > "$FRP71_EVIDENCE/sources.sha256" <<'SHA'
+          765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0  rtl/m31/frp_m31_active_neutral.sv
+          d0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123  rtl/m31/frp_m31_capacity_guard.sv
+          e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92  rtl/m31/frp_m31_execution_core.sv
+          6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24  rtl/m31/frp_m31_fixed_point_pkg.sv
+          df058d4e3671ba1d7c9d0403a6bb1b8c9750a0a967905b5f91cca455c1dddb83  rtl/m31/frp_m31_global_stability.sv
+          cbb5a531283164d1d54d59ec748b97bf84e172704854bf5eb7c6bda2c502f7c7  rtl/m31/frp_m31_isqrt_u64.sv
+          478882d4f6a2986f5079c88b444c7b007d68145d61e5150209cb0637f35b2ec0  rtl/m31/frp_m31_local_gamma_drift.sv
+          6e10f738f94c43ac9748ec7a033adde16243beea59e2f7f2973a3ab51c2e5e04  rtl/m31/frp_m31_local_thermal_attenuation.sv
+          cb97c1bfeabbb2acaebf2f9644d484b2f7c5e995dbf1b70777f6bc2e7df9368e  rtl/m31/frp_m31_local_thermal_field.sv
+          18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411  rtl/m31/frp_m31_pending_routes.sv
+          7ac3572ef2bf9feef509e7dc43c662d92d23fa3eb0563efbfa8dba7c28157746  rtl/m31/frp_m31_phase_interference.sv
+          fa78bcfe965270cc74855908aa392989d857575a2097a126539aabb1aab8990d  rtl/m31/frp_m31_phase_request_adapter.sv
+          762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94  rtl/m31/frp_m31_pkg.sv
+          32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109  rtl/m31/frp_m31_request_lanes.sv
+          fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f  rtl/m31/frp_m31_scheduler.sv
+          adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d  rtl/m31/frp_m31_sin_q30.mem
+          69c06833e6dfbb28e25b74a5787dcd03756dddf0f66726de3ea47c1ad2931931  rtl/m31/frp_m31_stability.sv
+          ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90  rtl/m31/frp_m31_state_update.sv
+          34df4ebfc5dfad8e3e5e454e560404585de5c881e6f75abaae367d3bd9fb11bd  rtl/m31/frp_m31_thermal_proxy.sv
+          0be6c5ee28ee4a23baf6110143eec309f387200c1c2c80e3016353d5d4107541  rtl/m32/frp_m32_core.sv
+          f67b8618fae7f6a6eeff4f5850bc3ed66705a06eb8d218be19ab116a17af6d1e  rtl/m32/frp_m32_cross_feedback_tb.sv
+          9626474b49d32b411e107d7ccc8ee5aa7f42728e9a6f70d634d16d3f2a414c5e  rtl/m32/frp_m32_registered_target_boundary.sv
+          02250069a68737f055a419cd67bf2d439b3f63b3f6a7a245f40e9bf29d1958eb  rtl/m32/frp_m32_registered_target_request_path.sv
+          45c3410ab152a633fe3ac13f043d087a0a8cd23c0593ed8f45b6efc382b04e12  rtl/m32/frp_m32_route_lifecycle_tb.sv
+          SHA
+          sha256sum .github/workflows/frp-71-m32-route-lifecycle-regression.yml \
+            >> "$FRP71_EVIDENCE/sources.sha256"
+          sha256sum --check --strict "$FRP71_EVIDENCE/sources.sha256" \
+            | tee "$FRP71_EVIDENCE/source-check.log"
+          printf '%s\n' "$GITHUB_SHA" > "$FRP71_EVIDENCE/commit.txt"
+
+      - name: Install and record toolchain
+        run: |
+          set -euo pipefail
+          {
+            python -m pip install --disable-pip-version-check \
+              verilator==5.48.0 systemc==3.0.2.1
+            python -m pip check
+            verilator-cli --version
+            g++ --version
+            make --version
+          } 2>&1 | tee "$FRP71_EVIDENCE/toolchain.log"
+          python -m pip freeze > "$FRP71_EVIDENCE/packages.txt"
+
+      - name: Build once and qualify two full replays
+        run: |
+          set -euo pipefail
+          python - <<'PYTHON'
+          import hashlib
+          import json
+          import os
+          import re
+          import signal
+          import subprocess
+          from pathlib import Path
+
+          GOLDEN = {
+              8: ('4176d226e76b9a595cf573d562b31f65fda41400ff195bf8ac771d9b78a4ed9e',
+                  'c1bec2d8ee51ca3419a338adbc760f396bca93b8e1f88222de16dddcbaf08d13'),
+              16: ('ea6e84058eccbeebdde297b699e6e0573c37b270028d81d30e31828d1e9c38be',
+                   'c45bc891643628e8f0c7dd6724ae1bb93de1582ad91c026ab8fb91e5478d08d6'),
+              32: ('1b569ea2caf1c84edfd56edfbb8b47758784db32fec2248c752f429c3da656ff',
+                   '60f60e40062732fb88eee5750318ce28ce54831d662fff0a30f3a9f653e6c9ed'),
+              64: ('1ab295d8571211b25eab95ae35abd9a769d179a1a39de2045e45bf1395b78847',
+                   'e4a4e2b8e1419cdf0e150f5bf4d4b21db49d4c9337677bc07915224b00838b10'),
+          }
+
+          def require(condition, message):
+              if not condition:
+                  raise SystemExit(message)
+
+          def record(line, prefix, schema, n):
+              require(line.startswith(prefix), f'Missing record: {prefix}')
+              result = {}
+              for token in line[len(prefix):].split():
+                  key, separator, value = token.partition('=')
+                  require(separator and key not in result, f'Malformed or duplicate field: {token}')
+                  pattern = r'[0-9a-f]{16}' if key == 'signature' else r'[0-9]+'
+                  require(re.fullmatch(pattern, value), f'Invalid field: {token}')
+                  result[key] = value if key == 'signature' else int(value)
+              require(set(result) == set(schema.split()), f'Incorrect field set: {prefix}')
+              require(result['cells'] == n, f'Incorrect cell count: {prefix}')
+              return result
+
+          def semantic_hash(lines):
+              return hashlib.sha256(('\n'.join(lines) + '\n').encode()).hexdigest()
+
+          def collect(path, n):
+              lines = path.read_text().splitlines()
+              require(not any(re.search(r'%Error|Assertion failed|Aborting|\bFAIL\b|\bFATAL\b', x)
+                              for x in lines), f'{path.name}: simulator failure')
+              require(sum('Verilog $finish' in x for x in lines) == 1,
+                      f'{path.name}: missing or duplicated simulator finish')
+              selected = [x for x in lines if x.startswith(
+                  ('SOURCE ', 'RESET ', 'BACKLOG ', 'PASS ', 'LIFECYCLE_'))]
+              expected = [f'SOURCE cells={n} mode={m} from={a} to={b} cases=8'
+                          for m in range(3) for a in range(4) for b in range(4)]
+              expected.append(f'RESET cells={n} cases=96')
+              require(len(selected) == 58 and selected[:49] == expected,
+                      'Missing, duplicated or incorrect scenario records')
+              for m in range(3):
+                  row = record(selected[49 + m], 'BACKLOG ', 'cells mode ticks final_services', n)
+                  require(row['mode'] == m and row['ticks'] == 2048 and row['final_services'] <= n,
+                          'Incorrect backlog scenario')
+              parent = record(selected[52], 'PASS CROSS_FEEDBACK ',
+                  'cells case seed cycles checks sources resets stream routes completions retention '
+                  'balancing neutralization arbitration backlog hierarchy uneven_heat auto_switches '
+                  'shocks negative_margin positive_margin signature', n)
+              exact = dict(case=0, seed=1889608517, cycles=42975, sources=384,
+                           resets=96, stream=6144, auto_switches=381, shocks=24)
+              require(all(parent[k] == v for k, v in exact.items()), 'Incorrect parent workload')
+              require(all(v > 0 for k, v in parent.items() if k not in {*exact, 'signature'}),
+                      'Missing parent coverage')
+              modes = []
+              for m in range(3):
+                  row = record(selected[53 + m], 'LIFECYCLE_MODE ',
+                      'cells mode created completed reset_cancelled cancelled_at_mode negative positive', n)
+                  require(row['mode'] == m, 'Incorrect lifecycle mode order')
+                  require(row['created'] == row['completed'] + row['reset_cancelled'],
+                          'Mode route conservation failed')
+                  require(row['negative'] + row['positive'] == row['created'],
+                          'Mode polarity accounting failed')
+                  require(all(row[k] > 0 for k in ('created', 'completed', 'negative', 'positive')),
+                          'Missing mode or polarity coverage')
+                  require(row['cancelled_at_mode'] == 32 * (n // 4), 'Reset-mode coverage mismatch')
+                  modes.append(row)
+              coverage = record(selected[56], 'LIFECYCLE_COVERAGE ',
+                  'cells samples checks resets occupied_resets paused cadence_holds conflicts '
+                  'counter_clear source_handoffs capacity_waits peak_pending', n)
+              exact = dict(samples=44132, resets=579, occupied_resets=96, peak_pending=n)
+              require(all(coverage[k] == v for k, v in exact.items()), 'Incorrect lifecycle workload')
+              require(all(v > 0 for v in coverage.values()), 'Missing lifecycle stress coverage')
+              total = record(selected[57], 'PASS ROUTE_LIFECYCLE ',
+                  'cells created completed reset_cancelled pending max_wall_age max_enabled_age '
+                  'max_service_age drained_routes max_drain_age drain_service_bound signature', n)
+              require(total['pending'] == 0, 'Routes remain pending')
+              require(total['created'] == total['completed'] + total['reset_cancelled'],
+                      'Global route conservation failed')
+              require(total['created'] == parent['routes'] and total['completed'] == parent['completions'],
+                      'Independent route ledgers disagree')
+              require(total['reset_cancelled'] == 96 * (n // 4), 'Reset cancellation mismatch')
+              for key in ('created', 'completed', 'reset_cancelled'):
+                  require(sum(row[key] for row in modes) == total[key], f'Mode sum mismatch: {key}')
+              require(sum(row['cancelled_at_mode'] for row in modes) == total['reset_cancelled'],
+                      'Reset-mode sum mismatch')
+              require(total['max_wall_age'] >= total['max_enabled_age'] >= total['max_service_age'] > 0,
+                      'Invalid route ages')
+              require(0 < total['drained_routes'] <= total['completed'], 'Missing drain coverage')
+              # The bound applies only to consecutive service opportunities with new requests disabled.
+              require(total['drain_service_bound'] == 4 and 0 < total['max_drain_age'] <= 4,
+                      'Closed-drain service bound failed')
+              prior_digest = semantic_hash(selected[:53])
+              digest = semantic_hash(selected)
+              require(prior_digest == GOLDEN[n][0], f'Cross-feedback result mismatch: {prior_digest}')
+              require(digest == GOLDEN[n][1], f'Lifecycle result mismatch: {digest}')
+              return {'parent': parent, 'modes': modes, 'coverage': coverage, 'total': total,
+                      'prior_semantic_sha256': prior_digest, 'semantic_sha256': digest}, '\n'.join(selected) + '\n'
+
+          n = int(os.environ['CELLS'])
+          require(n in GOLDEN, 'Unsupported cell count')
+          evidence = Path(os.environ['FRP71_EVIDENCE']).resolve()
+          build = Path(os.environ['RUNNER_TEMP']) / f'frp-71-build-{n}'
+          top = 'frp_m32_route_lifecycle_tb'
+          commands = []
+
+          def run(command, logfile, seconds):
+              commands.append({'argv': command, 'timeout_seconds': seconds, 'log': logfile})
+              (evidence / 'commands.json').write_text(json.dumps(commands, indent=2) + '\n')
+              print('Running:', command, flush=True)
+              path = evidence / logfile
+              with path.open('w') as stream:
+                  process = subprocess.Popen(command, stdout=stream, stderr=subprocess.STDOUT,
+                                             start_new_session=True)
+                  try:
+                      code = process.wait(timeout=seconds)
+                  except subprocess.TimeoutExpired:
+                      os.killpg(process.pid, signal.SIGKILL)
+                      process.wait()
+                      print(path.read_text(errors='replace')[-16000:])
+                      raise SystemExit(f'{logfile}: timeout after {seconds} seconds')
+              if code:
+                  print(path.read_text(errors='replace')[-16000:])
+                  raise SystemExit(f'{logfile}: exit {code}')
+
+          run([
+              'verilator-cli', '--binary', '--output-groups', '0',
+              '--timing', '--assert', '-Wno-fatal', '-j', '1',
+              '-CFLAGS', '-std=c++20', '-MAKEFLAGS', 'OPT_FAST=-O0',
+              '-MAKEFLAGS', 'VK_PCH_I_FAST=', '-MAKEFLAGS', 'VK_PCH_I_SLOW=',
+              '--top-module', top, f'-GCELLS={n}', '--Mdir', str(build),
+              '-Irtl/m31', '-Irtl/m32', f'rtl/m32/{top}.sv',
+          ], 'compile.log', 1800)
+          compile_log = (evidence / 'compile.log').read_text(errors='replace')
+          require(not re.search(r'%Error|%Warning-(PINMISSING|IMPLICIT|MULTIDRIVEN)\b', compile_log),
+                  'Compile error or unexpected port, implicit signal or multiple driver')
+          executable = build / f'V{top}'
+          (evidence / 'executable.sha256').write_text(
+              f'{hashlib.sha256(executable.read_bytes()).hexdigest()}  V{top}\n')
+          replays = []
+          for replay in (1, 2):
+              logfile = f'run-{replay}.log'
+              run([str(executable), '+CASE=0', '+SEED=1889608517'], logfile, 1800)
+              result, semantic = collect(evidence / logfile, n)
+              (evidence / f'run-{replay}.txt').write_text(semantic)
+              replays.append((result, semantic))
+              print(semantic, end='')
+          require(replays[0] == replays[1], 'Deterministic replay mismatch')
+          result, semantic = replays[0]
+          report = {
+              'commit': os.environ['GITHUB_SHA'], 'cells': n, 'builds': 1,
+              'case': 0, 'seed': 1889608517, 'replays': 2, 'replay_equal': True,
+              'semantic_records': 58, 'prior_records': 53,
+              'drain_bound_scope': 'Consecutive service opportunities with automatic and external requests disabled',
+              **result,
+          }
+          (evidence / 'qualification.json').write_text(json.dumps(report, indent=2) + '\n')
+          summary = (f'### FRP 71: {n} cells - PASS\n\n'
+                     'One build; two full replays; 53 prior and 5 lifecycle records per replay.\n\n'
+                     f'Cross-feedback SHA-256: `{result["prior_semantic_sha256"]}`\n\n'
+                     f'Lifecycle SHA-256: `{result["semantic_sha256"]}`\n\n'
+                     '```text\n' + '\n'.join(semantic.splitlines()[-5:]) + '\n```\n')
+          (evidence / 'summary.md').write_text(summary)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+              stream.write(summary)
+          print('PASS: route lifecycle accounting and deterministic replay')
+          PYTHON
+
+      - name: Recheck qualified sources
+        if: always()
+        run: |
+          set -euo pipefail
+          sha256sum --check --strict "$FRP71_EVIDENCE/sources.sha256" \
+            | tee "$FRP71_EVIDENCE/source-recheck.log"
+
+      - name: Upload qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp-71-route-lifecycle-${{ matrix.cells }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-71-evidence/
+          if-no-files-found: error
+          retention-days: 30
