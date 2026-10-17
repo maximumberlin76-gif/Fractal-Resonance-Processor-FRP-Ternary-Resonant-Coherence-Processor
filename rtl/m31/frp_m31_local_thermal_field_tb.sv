@@ -235,7 +235,7 @@ module frp_m31_local_thermal_checker #(
   initial begin : regression
     word_t target, excess;
     int population;
-    if (!(CELLS inside {8,16,32})) $fatal(1,"Unsupported CELLS");
+    if (!(CELLS inside {8,16,32,64})) $fatal(1,"Unsupported CELLS");
     build_weights(); reset_dut();
 
     // Uniform heat retains zero diffusion during heating and cooling.
@@ -340,13 +340,14 @@ module frp_m31_local_thermal_checker #(
 endmodule
 
 module frp_m31_local_thermal_field_tb;
-  wire done8,done16,done32;
+  wire done8,done16,done32,done64;
   frp_m31_local_thermal_checker #(.CELLS(8)) cells8(.done(done8));
   frp_m31_local_thermal_checker #(.CELLS(16)) cells16(.done(done16));
   frp_m31_local_thermal_checker #(.CELLS(32)) cells32(.done(done32));
+  frp_m31_local_thermal_checker #(.CELLS(64)) cells64(.done(done64));
   initial begin
-    wait(done8 && done16 && done32);
-    $display("PASS LOCAL_THERMAL_ALL cells=8,16,32");
+    wait(done8 && done16 && done32 && done64);
+    $display("PASS LOCAL_THERMAL_ALL cells=8,16,32,64");
     $finish;
   end
   initial begin
