@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
 name: 67 - FRP M32 Phase Recovery Regression
-run-name: "67 - FRP Phase Recovery | 8/16/32 cells and deterministic replay @ ${{ github.sha }}"
+run-name: "67 - FRP Phase Recovery | 8/16/32/64 cells and deterministic replay @ ${{ github.sha }}"
 
 on:
   workflow_dispatch:
@@ -16,11 +16,11 @@ jobs:
   qualify:
     name: M32 phase recovery - ${{ matrix.cells }} cells
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        cells: [8, 16, 32]
+        cells: [8, 16, 32, 64]
     defaults:
       run:
         shell: bash
@@ -36,6 +36,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/frp-67-evidence"
+          printf 'commit=%s\ncells=%s\nrun=%s\nattempt=%s\n' \
+            "$GITHUB_SHA" "$CELLS" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$RUNNER_TEMP/frp-67-evidence/context.txt"
           echo "FRP67_EVIDENCE=$RUNNER_TEMP/frp-67-evidence" >> "$GITHUB_ENV"
 
       - name: Check out dispatched commit
@@ -62,13 +65,13 @@ jobs:
           d0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123  rtl/m31/frp_m31_capacity_guard.sv
           e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92  rtl/m31/frp_m31_execution_core.sv
           6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24  rtl/m31/frp_m31_fixed_point_pkg.sv
-          d1604e08fa6cf658f25b579fb76202e65fca1481167e6d8d6039a7034e354832  rtl/m31/frp_m31_global_stability.sv
+          df058d4e3671ba1d7c9d0403a6bb1b8c9750a0a967905b5f91cca455c1dddb83  rtl/m31/frp_m31_global_stability.sv
           cbb5a531283164d1d54d59ec748b97bf84e172704854bf5eb7c6bda2c502f7c7  rtl/m31/frp_m31_isqrt_u64.sv
           478882d4f6a2986f5079c88b444c7b007d68145d61e5150209cb0637f35b2ec0  rtl/m31/frp_m31_local_gamma_drift.sv
           6e10f738f94c43ac9748ec7a033adde16243beea59e2f7f2973a3ab51c2e5e04  rtl/m31/frp_m31_local_thermal_attenuation.sv
-          2973c4ce73c014cd2692e2fa34cbf1ef6daa88d8e4115a545d6e776acb75cff6  rtl/m31/frp_m31_local_thermal_field.sv
+          cb97c1bfeabbb2acaebf2f9644d484b2f7c5e995dbf1b70777f6bc2e7df9368e  rtl/m31/frp_m31_local_thermal_field.sv
           18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411  rtl/m31/frp_m31_pending_routes.sv
-          81cd497e3f3e04abc93a2052c23deb189b2c200b11cc249ec51dbd40588e9523  rtl/m31/frp_m31_phase_interference.sv
+          7ac3572ef2bf9feef509e7dc43c662d92d23fa3eb0563efbfa8dba7c28157746  rtl/m31/frp_m31_phase_interference.sv
           fa78bcfe965270cc74855908aa392989d857575a2097a126539aabb1aab8990d  rtl/m31/frp_m31_phase_request_adapter.sv
           762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94  rtl/m31/frp_m31_pkg.sv
           32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109  rtl/m31/frp_m31_request_lanes.sv
@@ -77,14 +80,14 @@ jobs:
           69c06833e6dfbb28e25b74a5787dcd03756dddf0f66726de3ea47c1ad2931931  rtl/m31/frp_m31_stability.sv
           ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90  rtl/m31/frp_m31_state_update.sv
           34df4ebfc5dfad8e3e5e454e560404585de5c881e6f75abaae367d3bd9fb11bd  rtl/m31/frp_m31_thermal_proxy.sv
-          df35b73ccb01f06908385656332942858a5f056e7b92556cc16658beb5732b98  rtl/m32/frp_m32_core.sv
-          df95c6fa411e7877074c002a03b3f56797fdde8e2702b36306fe903539db39f3  rtl/m32/frp_m32_recovery_tb.sv
+          0be6c5ee28ee4a23baf6110143eec309f387200c1c2c80e3016353d5d4107541  rtl/m32/frp_m32_core.sv
+          128cae160b7a07fa31bc50d21851480f2e7a5e3e25b5f03934d9135e67c67d5d  rtl/m32/frp_m32_recovery_tb.sv
           9626474b49d32b411e107d7ccc8ee5aa7f42728e9a6f70d634d16d3f2a414c5e  rtl/m32/frp_m32_registered_target_boundary.sv
           02250069a68737f055a419cd67bf2d439b3f63b3f6a7a245f40e9bf29d1958eb  rtl/m32/frp_m32_registered_target_request_path.sv
           SHA
           sha256sum .github/workflows/frp-67-m32-phase-recovery-regression.yml \
             >> "$FRP67_EVIDENCE/sources.sha256"
-          sha256sum --check "$FRP67_EVIDENCE/sources.sha256" \
+          sha256sum --check --strict "$FRP67_EVIDENCE/sources.sha256" \
             | tee "$FRP67_EVIDENCE/source-check.log"
           printf '%s\n' "$GITHUB_SHA" > "$FRP67_EVIDENCE/commit.txt"
 
@@ -109,6 +112,7 @@ jobs:
           import json
           import os
           import re
+          import signal
           import subprocess
           from pathlib import Path
 
@@ -117,6 +121,7 @@ jobs:
               8: '671f260c68998da542e7b2b878f2aac0a87f9b57364442b3cd90e15e29fc6e4b',
               16: '85e896b30680629836ad868dcbb354ce83c54f15ad8fb7b5edd2d0b948a82e34',
               32: 'e8fd2b4b72683cd76d2cf8490a65d059c82d0b5c5a69996b5f97d22eb4a1c15a',
+              64: '5688b9ad719fdf339ddc02d4392546f06b63e59cbffb923116413343d133fd1c',
           }
           if n not in golden:
               raise SystemExit('Unsupported cell count')
@@ -126,22 +131,23 @@ jobs:
           commands = []
 
           def run(command, logfile, seconds):
-              commands.append(command)
+              commands.append({'argv': command, 'timeout_seconds': seconds, 'log': logfile})
               (evidence / 'commands.json').write_text(json.dumps(commands, indent=2) + '\n')
               print('Running:', command, flush=True)
               path = evidence / logfile
-              try:
-                  with path.open('w') as stream:
-                      result = subprocess.run(
-                          command, stdout=stream, stderr=subprocess.STDOUT,
-                          timeout=seconds, check=False,
-                      )
-              except subprocess.TimeoutExpired:
+              with path.open('w') as stream:
+                  process = subprocess.Popen(command, stdout=stream, stderr=subprocess.STDOUT,
+                                             start_new_session=True)
+                  try:
+                      code = process.wait(timeout=seconds)
+                  except subprocess.TimeoutExpired:
+                      os.killpg(process.pid, signal.SIGKILL)
+                      process.wait()
+                      print(path.read_text(errors='replace')[-16000:])
+                      raise SystemExit(f'{logfile}: timeout after {seconds} seconds')
+              if code:
                   print(path.read_text(errors='replace')[-16000:])
-                  raise SystemExit(f'{logfile}: timeout after {seconds} seconds')
-              if result.returncode:
-                  print(path.read_text(errors='replace')[-16000:])
-                  raise SystemExit(f'{logfile}: exit {result.returncode}')
+                  raise SystemExit(f'{logfile}: exit {code}')
 
           run([
               'verilator-cli', '--binary', '--output-groups', '0',
@@ -152,10 +158,10 @@ jobs:
               '-MAKEFLAGS', 'VK_PCH_I_SLOW=',
               '--top-module', top, f'-GCELLS={n}', '--Mdir', str(build),
               '-Irtl/m31', '-Irtl/m32', f'rtl/m32/{top}.sv',
-          ], 'compile.log', 1200)
+          ], 'compile.log', 1800)
           compile_log = (evidence / 'compile.log').read_text(errors='replace')
-          if re.search(r'%Warning-(PINMISSING|IMPLICIT|MULTIDRIVEN)\b', compile_log):
-              raise SystemExit('Unexpected port, implicit signal or multiple driver')
+          if re.search(r'%Error|%Warning-(PINMISSING|IMPLICIT|MULTIDRIVEN)\b', compile_log):
+              raise SystemExit('Compile error or unexpected port, implicit signal or multiple driver')
           executable = build / f'V{top}'
           (evidence / 'executable.sha256').write_text(
               f'{hashlib.sha256(executable.read_bytes()).hexdigest()}  V{top}\n'
@@ -179,13 +185,23 @@ jobs:
 
           def collect(path):
               lines = path.read_text().splitlines()
-              selected = [line for line in lines if line.startswith(('RECOVERY ', 'PASS RECOVERY '))]
+              if any(re.search(r'%Error|Assertion failed|Aborting|\bFAIL\b|\bFATAL\b', line) for line in lines):
+                  raise SystemExit(f'{path.name}: simulator failure')
+              if sum('Verilog $finish' in line for line in lines) != 1:
+                  raise SystemExit(f'{path.name}: missing or duplicated simulator finish')
+              selected = [line for line in lines if line.startswith(('RECOVERY ', 'PASS '))]
               cases = [fields(line, 'RECOVERY ') for line in selected if line.startswith('RECOVERY ')]
               passes = [fields(line, 'PASS RECOVERY ') for line in selected if line.startswith('PASS RECOVERY ')]
-              if len(cases) != 12 or len(passes) != 1:
+              if len(selected) != 13 or len(cases) != 12 or len(passes) != 1 or not selected[-1].startswith('PASS RECOVERY '):
                   raise SystemExit(f'{path.name}: expected twelve cases and one PASS record')
-              expected_cases = {(mode, profile) for mode in range(3) for profile in range(4)}
-              observed_cases = {(row['mode'], row['profile']) for row in cases}
+              case_fields = set(('cells mode profile early_margin late_margin early_R late_R shock_R '
+                                 'min_margin start_heat end_heat peak_heat routes completions').split())
+              total_fields = set(('cells cases cycles checks routes completions zero_memory hot gamma '
+                                  'attenuation cooling holds delayed signature').split())
+              if any(set(row) != case_fields for row in cases) or set(passes[0]) != total_fields:
+                  raise SystemExit('Unexpected recovery field set')
+              expected_cases = [(mode, profile) for mode in range(3) for profile in range(4)]
+              observed_cases = [(row['mode'], row['profile']) for row in cases]
               if observed_cases != expected_cases:
                   raise SystemExit('Missing or duplicated recovery profile')
               for row in cases:
@@ -211,7 +227,7 @@ jobs:
           results = []
           for replay in (1, 2):
               logfile = f'run-{replay}.log'
-              run([str(executable)], logfile, 300)
+              run([str(executable)], logfile, 1200 if n == 64 else 600)
               records = collect(evidence / logfile)
               (evidence / f'replay-{replay}.txt').write_text(records[2])
               results.append(records)
@@ -250,14 +266,19 @@ jobs:
           print(semantic, end='')
           print('PASS: M32 phase recovery, thermal feedback, active zero and deterministic replay')
           PYTHON
-          sha256sum --check "$FRP67_EVIDENCE/sources.sha256" \
-            > "$FRP67_EVIDENCE/source-recheck.log"
+
+      - name: Recheck qualified sources
+        if: always()
+        run: |
+          set -euo pipefail
+          sha256sum --check --strict "$FRP67_EVIDENCE/sources.sha256" \
+            | tee "$FRP67_EVIDENCE/source-recheck.log"
 
       - name: Upload qualification evidence
         if: always()
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v6.0.0
         with:
-          name: frp-67-phase-recovery-${{ matrix.cells }}-${{ github.sha }}
+          name: frp-67-phase-recovery-${{ matrix.cells }}-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/frp-67-evidence/
           if-no-files-found: error
           retention-days: 30
