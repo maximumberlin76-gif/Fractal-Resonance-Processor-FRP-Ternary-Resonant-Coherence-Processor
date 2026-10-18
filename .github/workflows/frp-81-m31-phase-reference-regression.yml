@@ -1,0 +1,260 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 81 - FRP M31 Phase Reference Regression
+run-name: "81 - FRP Phase Reference | 8/16/32/64 cells and deterministic replay @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-81-phase-reference-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    name: M31 phase reference - ${{ matrix.cells }} cells
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        cells: [8, 16, 32, 64]
+    defaults:
+      run:
+        shell: bash
+    env:
+      CELLS: ${{ matrix.cells }}
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Initialize evidence directory
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/frp-81-evidence"
+          printf 'commit=%s\ncells=%s\nrun=%s\nattempt=%s\n' \
+            "$GITHUB_SHA" "$CELLS" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$RUNNER_TEMP/frp-81-evidence/context.txt"
+          printf '%s\n' '{"status":"NOT_COMPLETED"}' \
+            > "$RUNNER_TEMP/frp-81-evidence/qualification.json"
+          echo "FRP81_EVIDENCE=$RUNNER_TEMP/frp-81-evidence" >> "$GITHUB_ENV"
+
+      - name: Check out dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify manual execution and qualified sources
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          cat > "$FRP81_EVIDENCE/sources.sha256" <<'SHA'
+          7ac3572ef2bf9feef509e7dc43c662d92d23fa3eb0563efbfa8dba7c28157746  rtl/m31/frp_m31_phase_interference.sv
+          762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94  rtl/m31/frp_m31_pkg.sv
+          6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24  rtl/m31/frp_m31_fixed_point_pkg.sv
+          cbb5a531283164d1d54d59ec748b97bf84e172704854bf5eb7c6bda2c502f7c7  rtl/m31/frp_m31_isqrt_u64.sv
+          adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d  rtl/m31/frp_m31_sin_q30.mem
+          fac2a2e1d8b6dbf3afc388f6ec061fa28637ed59e9618e1c4cbc9ab9e4b77fc4  rtl/m31/frp_m31_phase_reference_tb.sv
+          SHA
+          sha256sum .github/workflows/frp-81-m31-phase-reference-regression.yml \
+            >> "$FRP81_EVIDENCE/sources.sha256"
+          sha256sum --check --strict "$FRP81_EVIDENCE/sources.sha256" \
+            | tee "$FRP81_EVIDENCE/source-check.log"
+
+      - name: Install and record toolchain
+        run: |
+          set -euo pipefail
+          {
+            python -m pip install --disable-pip-version-check \
+              verilator==5.48.0 systemc==3.0.2.1
+            python -m pip check
+            verilator-cli --version
+            g++ --version
+            make --version
+          } 2>&1 | tee "$FRP81_EVIDENCE/toolchain.log"
+          python -m pip freeze > "$FRP81_EVIDENCE/packages.txt"
+
+      - name: Build once and qualify two full replays
+        run: |
+          set -euo pipefail
+          python - <<'PYTHON'
+          import hashlib
+          import json
+          import os
+          import re
+          import signal
+          import subprocess
+          import time
+          from pathlib import Path
+
+          evidence = Path(os.environ['FRP81_EVIDENCE']).resolve()
+          n = int(os.environ['CELLS'])
+          build = Path(os.environ['RUNNER_TEMP']) / f'frp-81-build-{n}'
+          top = 'frp_m31_phase_reference_tb'
+          report = dict(status='RUNNING', commit=os.environ['GITHUB_SHA'], cells=n, commands=[])
+          metrics = {
+              8: (98302, 4074, 42378, 43576, 41801, 28656, 'a0fc60dac2f34e12'),
+              16: (196606, 8113, 85300, 86584, 83448, 57312, '770a741209840de7'),
+              32: (393214, 16232, 171042, 172738, 167017, 114624, 'e279ee9efd266dba'),
+              64: (786428, 32348, 341518, 345988, 334188, 229248, '122b14aa5dd934ab'),
+          }
+          if n not in metrics:
+              raise RuntimeError(f'Unsupported CELLS: {n}')
+          offsets = ['00000001', '000fffff', '00100000', '3fffffff',
+                     '40000000', '80000000', 'c0000000', 'ffffffff']
+          expected = [
+              f'PHASE_REFERENCE_PROFILE cells={n} mode={mode} offset={offset} '
+              'updates=256 loads=4 holds=37'
+              for mode in range(3) for offset in offsets
+          ]
+          total = dict(cells=n, cases=24, edges=7128, updates=6144, loads=96,
+                       holds=888, checks=150252*n+5337, quarter=5337)
+          total.update(zip(('moving', 'wraps', 'positive', 'negative',
+                            'target_changes', 'isolated', 'signature'), metrics[n]))
+          expected.append('FRP_PHASE_REFERENCE_PASS ' +
+                          ' '.join(f'{key}={value}' for key, value in total.items()))
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          def save():
+              (evidence / 'qualification.json').write_text(json.dumps(report, indent=2) + '\n')
+
+          def collect(path):
+              text = path.read_text()
+              require(not re.search(r'%Error|%Fatal|Assertion failed|Aborting|^FAIL\b', text, re.M),
+                      'Simulation failure marker')
+              records = [line.strip() for line in text.splitlines()
+                         if line.strip().startswith(('PHASE_REFERENCE_', 'FRP_PHASE_REFERENCE_'))]
+              require(records == expected, f'Incorrect semantic records: {records}')
+              return '\n'.join(records) + '\n'
+
+          def run(argv, name, limit):
+              path = evidence / name
+              entry = dict(argv=argv, log=name, status='RUNNING')
+              report['commands'].append(entry)
+              started = time.monotonic()
+              process = None
+              save()
+              try:
+                  with path.open('w') as log:
+                      process = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT,
+                                                 start_new_session=True)
+                      while True:
+                          remaining = limit - (time.monotonic() - started)
+                          require(remaining > 0, f'{name}: timeout')
+                          try:
+                              code = process.wait(timeout=min(30, remaining))
+                              break
+                          except subprocess.TimeoutExpired:
+                              print(f'{name}: elapsed={time.monotonic()-started:.0f}s', flush=True)
+                  entry['returncode'] = code
+                  require(code == 0, f'{name}: exit {code}')
+                  entry['status'] = 'PASS'
+              except BaseException:
+                  entry['status'] = 'FAIL'
+                  if process is not None and process.poll() is None:
+                      os.killpg(process.pid, signal.SIGKILL)
+                      process.wait()
+                  if path.exists():
+                      print(path.read_text(errors='replace')[-12000:], flush=True)
+                  raise
+              finally:
+                  entry['seconds'] = round(time.monotonic() - started, 3)
+                  save()
+
+          try:
+              build.mkdir(parents=True, exist_ok=True)
+              run([
+                  'verilator-cli', '--binary', '--output-groups', '0',
+                  '--timing', '--assert', '-Wno-fatal', '-j', '2', '-CFLAGS', '-std=c++20',
+                  '-MAKEFLAGS', 'OPT_FAST=-Os', '-MAKEFLAGS', 'VK_PCH_I_FAST=',
+                  '-MAKEFLAGS', 'VK_PCH_I_SLOW=', '--top-module', top,
+                  f'-GCELLS={n}', '--Mdir', str(build), '-Irtl/m31', f'rtl/m31/{top}.sv',
+              ], 'compile.log', 3600)
+              compile_log = (evidence / 'compile.log').read_text(errors='replace')
+              require(not re.search(r'%Error|%Warning-(PINMISSING|IMPLICIT|MULTIDRIVEN)\b', compile_log),
+                      'Compile error or unexpected wiring warning')
+              executable = build / f'V{top}'
+              executable_hash = digest(executable)
+              (evidence / 'executable.sha256').write_text(f'{executable_hash}  V{top}\n')
+              replays = []
+              for replay in (1, 2):
+                  require(digest(executable) == executable_hash, 'Executable changed')
+                  name = f'run-{replay}.log'
+                  run([str(executable)], name, 600)
+                  semantic = collect(evidence / name)
+                  (evidence / f'run-{replay}.txt').write_text(semantic)
+                  replays.append(semantic)
+                  print(semantic, end='')
+              require(replays[0] == replays[1], 'Replay mismatch')
+              require(digest(executable) == executable_hash, 'Executable changed')
+              run(['sha256sum', '--check', '--strict', str(evidence / 'sources.sha256')],
+                  'source-final-check.log', 30)
+              report.update(status='PASS', replays=2, replay_equal=True,
+                            semantic_records=25, executable_sha256=executable_hash,
+                            semantic_sha256=hashlib.sha256(replays[0].encode()).hexdigest(),
+                            **total)
+              summary = (f'### FRP 81: Phase reference - {n} cells - PASS\n\n'
+                         'One build; two process replays; 24 profiles per replay.\n\n'
+                         'Eight phase offsets; free, 7/1 and 1/7 cadence; loads and pauses.\n\n'
+                         'Quarter-turn profiles compare every multiscale coherence output.\n\n'
+                         '```text\n' + replays[0] + '```\n')
+              (evidence / 'summary.md').write_text(summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write(summary)
+          except BaseException as error:
+              report.update(status='FAIL', error=str(error))
+              raise
+          finally:
+              save()
+          PYTHON
+
+      - name: Recheck qualified sources
+        if: always()
+        run: |
+          set -euo pipefail
+          sha256sum --check --strict "$FRP81_EVIDENCE/sources.sha256" \
+            | tee "$FRP81_EVIDENCE/source-recheck.log"
+
+      - name: Hash qualification evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          python - <<'PYTHON'
+          import hashlib
+          import os
+          from pathlib import Path
+          root = Path(os.environ['FRP81_EVIDENCE'])
+          files = sorted(p for p in root.rglob('*') if p.is_file() and p.name != 'evidence.sha256')
+          (root / 'evidence.sha256').write_text(''.join(
+              f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(root)}\n'
+              for p in files))
+          PYTHON
+
+      - name: Upload qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp-81-phase-reference-${{ matrix.cells }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-81-evidence/
+          if-no-files-found: error
+          retention-days: 30
