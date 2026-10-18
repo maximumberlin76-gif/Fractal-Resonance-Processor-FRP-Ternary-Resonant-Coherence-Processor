@@ -1,0 +1,230 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 80 - FRP M31 Integer Square Root Boundary Regression
+run-name: "80 - FRP Integer Square Root | 607552 vectors and deterministic replay @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-80-isqrt-boundary-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    name: M31 integer square root boundaries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Initialize evidence directory
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/frp-80-evidence"
+          printf 'commit=%s\nrun=%s\nattempt=%s\n' \
+            "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$RUNNER_TEMP/frp-80-evidence/context.txt"
+          printf '%s\n' '{"status":"NOT_COMPLETED"}' \
+            > "$RUNNER_TEMP/frp-80-evidence/qualification.json"
+          echo "FRP80_EVIDENCE=$RUNNER_TEMP/frp-80-evidence" >> "$GITHUB_ENV"
+
+      - name: Check out dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify manual execution and qualified sources
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          cat > "$FRP80_EVIDENCE/sources.sha256" <<'SHA'
+          cbb5a531283164d1d54d59ec748b97bf84e172704854bf5eb7c6bda2c502f7c7  rtl/m31/frp_m31_isqrt_u64.sv
+          e2a68304ef14f5f0097205859283b3212bb5f1342d56b8c422b95b6719751423  rtl/m31/frp_m31_isqrt_boundary_tb.sv
+          SHA
+          sha256sum .github/workflows/frp-80-m31-isqrt-boundary-regression.yml \
+            >> "$FRP80_EVIDENCE/sources.sha256"
+          sha256sum --check --strict "$FRP80_EVIDENCE/sources.sha256" \
+            | tee "$FRP80_EVIDENCE/source-check.log"
+
+      - name: Install and record toolchain
+        run: |
+          set -euo pipefail
+          {
+            python -m pip install --disable-pip-version-check \
+              verilator==5.48.0 systemc==3.0.2.1
+            python -m pip check
+            verilator-cli --version
+            g++ --version
+            make --version
+          } 2>&1 | tee "$FRP80_EVIDENCE/toolchain.log"
+          python -m pip freeze > "$FRP80_EVIDENCE/packages.txt"
+
+      - name: Build once and qualify two full replays
+        run: |
+          set -euo pipefail
+          python - <<'PYTHON'
+          import hashlib
+          import json
+          import os
+          import re
+          import signal
+          import subprocess
+          import time
+          from pathlib import Path
+
+          evidence = Path(os.environ['FRP80_EVIDENCE']).resolve()
+          build = Path(os.environ['RUNNER_TEMP']) / 'frp-80-build'
+          top = 'frp_m31_isqrt_boundary_tb'
+          report = dict(status='RUNNING', commit=os.environ['GITHUB_SHA'], commands=[])
+          counts = [65536, 262144, 262144, 576, 16384, 768]
+          expected = [f'FRP_ISQRT_FAMILY family={i} vectors={n}'
+                      for i, n in enumerate(counts)] + [
+              'FRP_ISQRT_COVERAGE exact=131468 upper=262628 wide=135325 replay=256',
+              'FRP_ISQRT_PASS vectors=607552 signature=6f1266ced27f03b3',
+          ]
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          def save():
+              (evidence / 'qualification.json').write_text(json.dumps(report, indent=2) + '\n')
+
+          def collect(path):
+              text = path.read_text()
+              require(not re.search(r'%Error|%Fatal|Assertion failed|Aborting|^FAIL\b', text, re.M),
+                      'Simulation failure marker')
+              records = [line.strip() for line in text.splitlines()
+                         if line.strip().startswith('FRP_ISQRT_')]
+              require(records == expected, f'Incorrect semantic records: {records}')
+              return '\n'.join(records) + '\n'
+
+          def run(argv, name, limit):
+              path = evidence / name
+              entry = dict(argv=argv, log=name, status='RUNNING')
+              report['commands'].append(entry)
+              started = time.monotonic()
+              process = None
+              save()
+              try:
+                  with path.open('w') as log:
+                      process = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT,
+                                                 start_new_session=True)
+                      while True:
+                          remaining = limit - (time.monotonic() - started)
+                          require(remaining > 0, f'{name}: timeout')
+                          try:
+                              code = process.wait(timeout=min(30, remaining))
+                              break
+                          except subprocess.TimeoutExpired:
+                              print(f'{name}: elapsed={time.monotonic()-started:.0f}s', flush=True)
+                  entry['returncode'] = code
+                  require(code == 0, f'{name}: exit {code}')
+                  entry['status'] = 'PASS'
+              except BaseException:
+                  entry['status'] = 'FAIL'
+                  if process is not None and process.poll() is None:
+                      os.killpg(process.pid, signal.SIGKILL)
+                      process.wait()
+                  if path.exists():
+                      print(path.read_text(errors='replace')[-12000:], flush=True)
+                  raise
+              finally:
+                  entry['seconds'] = round(time.monotonic() - started, 3)
+                  save()
+
+          try:
+              build.mkdir(parents=True, exist_ok=True)
+              run([
+                  'verilator-cli', '--binary', '--output-groups', '0',
+                  '--timing', '--assert', '-j', '2', '-CFLAGS', '-std=c++20',
+                  '-MAKEFLAGS', 'OPT_FAST=-Os', '-MAKEFLAGS', 'VK_PCH_I_FAST=',
+                  '-MAKEFLAGS', 'VK_PCH_I_SLOW=', '--top-module', top,
+                  '--Mdir', str(build), '-Irtl/m31', f'rtl/m31/{top}.sv',
+              ], 'compile.log', 600)
+              executable = build / f'V{top}'
+              executable_hash = digest(executable)
+              (evidence / 'executable.sha256').write_text(f'{executable_hash}  V{top}\n')
+              replays = []
+              for replay in (1, 2):
+                  require(digest(executable) == executable_hash, 'Executable changed')
+                  name = f'run-{replay}.log'
+                  run([str(executable)], name, 120)
+                  semantic = collect(evidence / name)
+                  (evidence / f'run-{replay}.txt').write_text(semantic)
+                  replays.append(semantic)
+                  print(semantic, end='')
+              require(replays[0] == replays[1], 'Replay mismatch')
+              require(digest(executable) == executable_hash, 'Executable changed')
+              run(['sha256sum', '--check', '--strict', str(evidence / 'sources.sha256')],
+                  'source-final-check.log', 30)
+              report.update(status='PASS', vectors_per_replay=607552, replays=2,
+                            replay_equal=True, semantic_records=8,
+                            signature='6f1266ced27f03b3', executable_sha256=executable_hash,
+                            semantic_sha256=hashlib.sha256(replays[0].encode()).hexdigest())
+              summary = ('### FRP 80: Integer square root boundaries - PASS\n\n'
+                         'One build; two process replays; 607552 vectors per replay.\n\n'
+                         '```text\n' + replays[0] + '```\n')
+              (evidence / 'summary.md').write_text(summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write(summary)
+          except BaseException as error:
+              report.update(status='FAIL', error=str(error))
+              raise
+          finally:
+              save()
+          PYTHON
+
+      - name: Recheck qualified sources
+        if: always()
+        run: |
+          set -euo pipefail
+          sha256sum --check --strict "$FRP80_EVIDENCE/sources.sha256" \
+            | tee "$FRP80_EVIDENCE/source-recheck.log"
+
+      - name: Hash qualification evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          python - <<'PYTHON'
+          import hashlib
+          import os
+          from pathlib import Path
+          root = Path(os.environ['FRP80_EVIDENCE'])
+          files = sorted(p for p in root.rglob('*') if p.is_file() and p.name != 'evidence.sha256')
+          (root / 'evidence.sha256').write_text(''.join(
+              f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(root)}\n'
+              for p in files))
+          PYTHON
+
+      - name: Upload qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp-80-isqrt-boundary-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-80-evidence/
+          if-no-files-found: error
+          retention-days: 30
