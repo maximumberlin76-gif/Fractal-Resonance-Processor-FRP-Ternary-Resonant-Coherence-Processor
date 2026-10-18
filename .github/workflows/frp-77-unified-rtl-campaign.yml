@@ -1,0 +1,419 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist)
+name: 77 - FRP Unified RTL Campaign
+run-name: "77 - FRP Unified RTL Campaign @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-77-rtl-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FRP77_ROOT: ${{ github.workspace }}/source
+  FRP77_PLAN: ${{ runner.temp }}/frp-77-plan
+  FRP77_EVIDENCE: ${{ runner.temp }}/frp-77-evidence
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONUNBUFFERED: '1'
+
+jobs:
+  plan:
+    name: Inventory and campaign matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install workflow parser
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.2
+
+      - name: Create campaign runner and inventory
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$FRP77_PLAN"
+          cat > "$FRP77_PLAN/campaign.py" <<'FRP77_PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+          import sys
+
+          SUITES = [52, 53, 54, 55, 56, 58, 62, 64, 65, 67, 69, 70,
+                    71, 72, 73, 74, 75, 76]
+          COMBINED = {52, 53, 54, 55, 56, 58}
+          ROOT = Path(os.environ['FRP77_ROOT'])
+          PLAN = Path(os.environ['FRP77_PLAN'])
+          OUT = Path(os.environ['FRP77_EVIDENCE'])
+
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+          def save(path, value):
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_text(json.dumps(value, indent=2, sort_keys=True) + '\n')
+
+
+          def git(*args):
+              return subprocess.check_output(['git', '-C', str(ROOT), *args])
+
+
+          def checkout_check():
+              require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch', 'Manual run required')
+              require(os.environ['GITHUB_REF'] == 'refs/heads/main', 'Select main')
+              require(git('rev-parse', 'HEAD').decode().strip() == os.environ['GITHUB_SHA'],
+                      'Dispatched commit mismatch')
+              require(not git('status', '--porcelain').strip(), 'Working tree is not clean')
+
+
+          def snapshot():
+              files = git('ls-files', '-z').decode().split('\0')
+              return {name: digest(ROOT / name) if (ROOT / name).is_file() else None
+                      for name in files if name}
+
+
+          def read_job(path):
+              import yaml
+              data = yaml.safe_load(path.read_text())
+              require(not data.get('env'), f'Unsupported workflow environment: {path.name}')
+              require(len(data['jobs']) == 1, f'Expected one job: {path.name}')
+              job = next(iter(data['jobs'].values()))
+              require(set(job) <= {'name', 'runs-on', 'timeout-minutes', 'strategy',
+                                   'defaults', 'env', 'steps'}, 'Unsupported job field')
+              require(job['runs-on'] == 'ubuntu-24.04', 'Runner changed')
+              require(job['defaults'] == {'run': {'shell': 'bash'}}, 'Shell defaults changed')
+              require(0 < job['timeout-minutes'] <= 350, 'Invalid suite timeout')
+              actions = []
+              for step in job['steps']:
+                  if 'run' in step:
+                      require(set(step) <= {'name', 'run', 'if'}, 'Unsupported run step field')
+                      require(step.get('if') in (None, 'always()'), 'Unsupported step condition')
+                      require('${{' not in step['run'], 'Unexpected expression in shell script')
+                  else:
+                      action = step['uses'].split('@')[0]
+                      require(action in {'actions/checkout', 'actions/setup-python',
+                                         'actions/upload-artifact'}, 'Unsupported action')
+                      actions.append(action)
+                      if action == 'actions/checkout':
+                          require(step['with'] == {'ref': '${{ github.sha }}', 'fetch-depth': 1,
+                                                   'persist-credentials': False},
+                                  'Checkout contract changed')
+                      if action == 'actions/setup-python':
+                          require(step['with'] == {'python-version': '3.12'},
+                                  'Python version changed')
+              require(sorted(actions) == sorted(['actions/checkout', 'actions/setup-python',
+                                                'actions/upload-artifact']), 'Action set changed')
+              return job
+
+
+          def scan_pins(path):
+              text = path.read_text()
+              prefix = r'(?:rtl/|formal/|fpga/|verification/|frp_prototype_)'
+              pairs = [(p, h) for h, p in re.findall(
+                  rf'^\s*([0-9a-f]{{64}})\s+({prefix}[^\s]+)\s*$', text, re.M)]
+              pairs += re.findall(
+                  rf'''['"]({prefix}[^'"\n]+)['"]\s*:\s*['"]([0-9a-f]{{64}})['"]''', text)
+              pairs += re.findall(
+                  rf'''['"]({prefix}[^'"\n]+)['"]\s*:\s*\{{[^{{}}]*?['"]sha256['"]\s*:\s*['"]([0-9a-f]{{64}})['"]''', text)
+              mismatches = []
+              for name, expected in sorted(set(pairs)):
+                  source = ROOT / name
+                  actual = digest(source) if source.is_file() else None
+                  if actual != expected:
+                      mismatches.append(dict(path=name, expected=expected, actual=actual))
+              return dict(workflow=path.name, extracted_pins=len(set(pairs)), mismatches=mismatches)
+
+
+          def make_plan():
+              checkout_check()
+              directory = ROOT / '.github/workflows'
+              inventory = [scan_pins(p) for p in sorted(directory.glob('frp-*.yml'))
+                           if re.match(r'frp-\d+-', p.name) and not p.name.startswith('frp-77-')]
+              save(PLAN / 'pin-inventory.json', dict(
+                  scan='Literal SHA256 lines and path-keyed dictionaries; scripts are not evaluated.',
+                  workflows=inventory))
+              entries = []
+              for number in SUITES:
+                  paths = list(directory.glob(f'frp-{number}-*.yml'))
+                  require(len(paths) == 1, f'Expected one workflow for suite {number}')
+                  path = paths[0]
+                  job = read_job(path)
+                  require(not scan_pins(path)['mismatches'], f'Source pins mismatch: {path.name}')
+                  matrix = job.get('strategy', {}).get('matrix', {})
+                  expected = {} if number in COMBINED else {
+                      'cells': [8, 16, 32] if number == 65 else [8, 16, 32, 64]}
+                  require(matrix == expected, f'Cell matrix changed: {path.name}')
+                  for cells in matrix.get('cells', [0]):
+                      label = str(cells) if cells else ('8-16-32-64' if number == 53 else '8-16-32')
+                      entries.append(dict(
+                          key=f'{number}-{label}', suite=number, cells=cells, label=label,
+                          workflow=str(path.relative_to(ROOT)), workflow_sha256=digest(path),
+                          minutes=job['timeout-minutes'], job_minutes=job['timeout-minutes'] + 10))
+              require(len(entries) == 53, 'Campaign configuration count changed')
+              save(PLAN / 'plan.json', dict(commit=os.environ['GITHUB_SHA'],
+                   suites=SUITES, include=entries, removed_checks=[],
+                   scope='Selected RTL regressions with their existing acceptance checks.',
+                   excluded='Formal, post-synthesis and unselected regressions are not qualified by this campaign.'))
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+                  stream.write('matrix=' + json.dumps({'include': entries}, separators=(',', ':')) + '\n')
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write('18 RTL suites; 53 jobs; original matrices and replay counts.\n\n')
+                  stream.write('| Workflow | Extracted pin mismatches |\n|---|---:|\n')
+                  for item in inventory:
+                      if item['mismatches']:
+                          stream.write(f"| {item['workflow']} | {len(item['mismatches'])} |\n")
+
+
+          def prepare():
+              import yaml
+              checkout_check()
+              plan = json.loads((PLAN / 'plan.json').read_text())
+              require(plan['commit'] == os.environ['GITHUB_SHA'], 'Plan commit mismatch')
+              entry = next(x for x in plan['include'] if x['key'] == os.environ['FRP77_KEY'])
+              path = ROOT / entry['workflow']
+              require(digest(path) == entry['workflow_sha256'], 'Workflow snapshot mismatch')
+              job = read_job(path)
+              environment = {}
+              for key, value in job.get('env', {}).items():
+                  value = str(value).replace('${{ matrix.cells }}', str(entry['cells']))
+                  require('${{' not in value, 'Unsupported environment expression')
+                  environment[key] = value
+              steps = []
+              for source_step in job['steps']:
+                  if 'run' not in source_step:
+                      continue
+                  step = dict(source_step, shell='bash', env=environment,
+                              **{'working-directory': str(ROOT)})
+                  steps.append(step)
+              action = dict(name=f"FRP retained suite {entry['suite']}",
+                            description='Execute the existing shell steps and acceptance checks.',
+                            runs=dict(using='composite', steps=steps))
+              target = Path(os.environ['GITHUB_WORKSPACE']) / 'frp77-action'
+              target.mkdir(parents=True, exist_ok=True)
+              action_text = yaml.safe_dump(action, sort_keys=False, width=120)
+              require([s['run'] for s in yaml.safe_load(action_text)['runs']['steps']] ==
+                      [s['run'] for s in job['steps'] if 'run' in s], 'Shell script changed')
+              (target / 'action.yml').write_text(action_text)
+              save(OUT / 'source-snapshot.json', snapshot())
+              save(OUT / 'selection.json', entry)
+              (OUT / 'action.yml').write_text(action_text)
+              (OUT / path.name).write_bytes(path.read_bytes())
+              print(f"Prepared {entry['key']}: {len(steps)} unchanged shell steps")
+
+
+          def recheck():
+              before = json.loads((OUT / 'source-snapshot.json').read_text())
+              after = snapshot()
+              changed = [p for p in sorted(before.keys() | after.keys())
+                         if before.get(p) != after.get(p)]
+              save(OUT / 'source-recheck.json', dict(changed=changed))
+              require(not changed, f'Source snapshot changed: {changed}')
+              checkout_check()
+
+
+          def summarize():
+              plan = json.loads((PLAN / 'plan.json').read_text())
+              inventory = json.loads((PLAN / 'pin-inventory.json').read_text())
+              records = {}
+              for path in (OUT / 'statuses').glob('*.json'):
+                  row = json.loads(path.read_text())
+                  require(row['key'] not in records, 'Duplicate result key')
+                  records[row['key']] = row
+              expected = {x['key'] for x in plan['include']}
+              require(set(records) <= expected, 'Unexpected result key')
+              rows = []
+              for entry in plan['include']:
+                  row = records.get(entry['key'], dict(key=entry['key'], status='missing'))
+                  if row.get('commit') != plan['commit']:
+                      row = dict(row, status='missing_or_wrong_commit')
+                  rows.append(row)
+              passed = sum(row['status'] == 'passed' for row in rows)
+              result = dict(commit=plan['commit'], scope=plan['scope'], excluded=plan['excluded'],
+                            suites=plan['suites'], expected_jobs=len(rows), passed_jobs=passed,
+                            matrix_result=os.environ['FRP77_MATRIX_RESULT'], results=rows,
+                            pin_inventory=inventory)
+              save(OUT / 'campaign-results.json', result)
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write(f"Commit: `{plan['commit']}`\n\n")
+                  stream.write(f"RTL campaign: {passed}/{len(rows)} jobs passed.\n\n")
+                  stream.write('| Suite / cells | Result |\n|---|---|\n')
+                  for row in rows:
+                      stream.write(f"| {row['key']} | {row['status']} |\n")
+                  stream.write('\n' + plan['excluded'] + '\n\n')
+                  stream.write('Detected historical source-pin mismatches:\n\n')
+                  for item in inventory['workflows']:
+                      if item['mismatches']:
+                          stream.write(f"- `{item['workflow']}`: {len(item['mismatches'])}\n")
+              require(passed == len(rows) and os.environ['FRP77_MATRIX_RESULT'] == 'success',
+                      'Campaign contains failed, cancelled or missing jobs')
+
+
+          if __name__ == '__main__':
+              {'plan': make_plan, 'prepare': prepare, 'recheck': recheck,
+               'summarize': summarize}[sys.argv[1]]()
+          FRP77_PY
+          python "$FRP77_PLAN/campaign.py" plan
+
+      - name: Upload plan and source-pin inventory
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp77-plan
+          path: ${{ env.FRP77_PLAN }}/
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
+
+  qualify:
+    name: RTL ${{ matrix.suite }} / ${{ matrix.label }} cells
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ matrix.job_minutes }}
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      FRP77_KEY: ${{ matrix.key }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: frp77-plan
+          path: ${{ env.FRP77_PLAN }}
+
+      - name: Install workflow parser
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.2
+
+      - name: Prepare unchanged suite steps
+        id: prepare
+        run: python "$FRP77_PLAN/campaign.py" prepare
+
+      - name: Execute retained acceptance checks
+        id: suite
+        timeout-minutes: ${{ matrix.minutes }}
+        uses: ./frp77-action
+
+      - name: Recheck complete source snapshot
+        id: recheck
+        if: always() && steps.prepare.outcome == 'success'
+        run: python "$FRP77_PLAN/campaign.py" recheck
+
+      - name: Upload suite evidence
+        id: evidence
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp77-evidence-${{ matrix.key }}
+          path: |
+            ${{ env.FRP77_EVIDENCE }}/
+            ${{ runner.temp }}/frp-${{ matrix.suite }}-evidence/
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
+
+      - name: Record matrix result
+        if: always()
+        env:
+          PREPARE_RESULT: ${{ steps.prepare.outcome }}
+          SUITE_RESULT: ${{ steps.suite.outcome }}
+          RECHECK_RESULT: ${{ steps.recheck.outcome }}
+          EVIDENCE_RESULT: ${{ steps.evidence.outcome }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          outcomes = {name: os.environ[name] for name in
+                      ('PREPARE_RESULT', 'SUITE_RESULT', 'RECHECK_RESULT', 'EVIDENCE_RESULT')}
+          key = os.environ['FRP77_KEY']
+          result = dict(key=key, commit=os.environ['GITHUB_SHA'],
+                        attempt=os.environ['GITHUB_RUN_ATTEMPT'], outcomes=outcomes,
+                        status='passed' if all(v == 'success' for v in outcomes.values()) else 'failed')
+          directory = Path(os.environ['RUNNER_TEMP']) / 'frp77-status'
+          directory.mkdir(parents=True, exist_ok=True)
+          (directory / f'{key}.json').write_text(json.dumps(result, indent=2) + '\n')
+          PY
+
+      - name: Upload matrix result
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp77-status-${{ matrix.key }}
+          path: ${{ runner.temp }}/frp77-status/
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
+
+  report:
+    name: Campaign result
+    needs: [plan, qualify]
+    if: always() && needs.plan.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: frp77-plan
+          path: ${{ env.FRP77_PLAN }}
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: frp77-status-*
+          path: ${{ env.FRP77_EVIDENCE }}/statuses
+          merge-multiple: true
+
+      - name: Require all scheduled results
+        if: always()
+        env:
+          FRP77_MATRIX_RESULT: ${{ needs.qualify.result }}
+        run: python "$FRP77_PLAN/campaign.py" summarize
+
+      - name: Upload campaign report
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp77-report
+          path: ${{ env.FRP77_EVIDENCE }}/
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
