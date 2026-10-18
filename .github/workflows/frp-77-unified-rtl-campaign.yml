@@ -14,8 +14,8 @@ concurrency:
 
 env:
   FRP77_ROOT: ${{ github.workspace }}/source
-  FRP77_PLAN: ${{ runner.temp }}/frp-77-plan
-  FRP77_EVIDENCE: ${{ runner.temp }}/frp-77-evidence
+  FRP77_PLAN: ${{ github.workspace }}/frp-77-plan
+  FRP77_EVIDENCE: ${{ github.workspace }}/frp-77-evidence
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONUNBUFFERED: '1'
 
@@ -62,6 +62,11 @@ jobs:
           ROOT = Path(os.environ['FRP77_ROOT'])
           PLAN = Path(os.environ['FRP77_PLAN'])
           OUT = Path(os.environ['FRP77_EVIDENCE'])
+          EXPR_OPEN = '$' + '{{'
+
+
+          def expression(name):
+              return EXPR_OPEN + ' ' + name + ' }}'
 
 
           def require(ok, message):
@@ -112,14 +117,14 @@ jobs:
                   if 'run' in step:
                       require(set(step) <= {'name', 'run', 'if'}, 'Unsupported run step field')
                       require(step.get('if') in (None, 'always()'), 'Unsupported step condition')
-                      require('${{' not in step['run'], 'Unexpected expression in shell script')
+                      require(EXPR_OPEN not in step['run'], 'Unexpected expression in shell script')
                   else:
                       action = step['uses'].split('@')[0]
                       require(action in {'actions/checkout', 'actions/setup-python',
                                          'actions/upload-artifact'}, 'Unsupported action')
                       actions.append(action)
                       if action == 'actions/checkout':
-                          require(step['with'] == {'ref': '${{ github.sha }}', 'fetch-depth': 1,
+                          require(step['with'] == {'ref': expression('github.sha'), 'fetch-depth': 1,
                                                    'persist-credentials': False},
                                   'Checkout contract changed')
                       if action == 'actions/setup-python':
@@ -199,8 +204,8 @@ jobs:
               job = read_job(path)
               environment = {}
               for key, value in job.get('env', {}).items():
-                  value = str(value).replace('${{ matrix.cells }}', str(entry['cells']))
-                  require('${{' not in value, 'Unsupported environment expression')
+                  value = str(value).replace(expression('matrix.cells'), str(entry['cells']))
+                  require(EXPR_OPEN not in value, 'Unsupported environment expression')
                   environment[key] = value
               steps = []
               for source_step in job['steps']:
