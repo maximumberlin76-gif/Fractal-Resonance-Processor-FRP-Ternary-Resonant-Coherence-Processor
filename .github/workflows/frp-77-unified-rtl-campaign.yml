@@ -33,14 +33,11 @@ jobs:
           path: source
           fetch-depth: 1
           persist-credentials: false
-
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-
       - name: Install workflow parser
         run: python -m pip install --disable-pip-version-check PyYAML==6.0.2
-
       - name: Create campaign runner and inventory
         id: plan
         shell: bash
@@ -195,6 +192,11 @@ jobs:
 
           def prepare():
               import yaml
+
+              class ActionDumper(yaml.SafeDumper):
+                  def ignore_aliases(self, data):
+                      return True
+
               checkout_check()
               plan = json.loads((PLAN / 'plan.json').read_text())
               require(plan['commit'] == os.environ['GITHUB_SHA'], 'Plan commit mismatch')
@@ -219,7 +221,11 @@ jobs:
                             runs=dict(using='composite', steps=steps))
               target = Path(os.environ['GITHUB_WORKSPACE']) / 'frp77-action'
               target.mkdir(parents=True, exist_ok=True)
-              action_text = yaml.safe_dump(action, sort_keys=False, width=120)
+              action_text = yaml.dump(action, Dumper=ActionDumper, sort_keys=False,
+                                      default_flow_style=False, width=120)
+              require(not any(isinstance(token, (yaml.tokens.AnchorToken, yaml.tokens.AliasToken))
+                              for token in yaml.scan(action_text)), 'Action YAML contains anchors or aliases')
+              require(yaml.safe_load(action_text) == action, 'Action manifest changed during serialization')
               require([s['run'] for s in yaml.safe_load(action_text)['runs']['steps']] ==
                       [s['run'] for s in job['steps'] if 'run' in s], 'Shell script changed')
               (target / 'action.yml').write_text(action_text)
@@ -282,7 +288,6 @@ jobs:
                'summarize': summarize}[sys.argv[1]]()
           FRP77_PY
           python "$FRP77_PLAN/campaign.py" plan
-
       - name: Upload plan and source-pin inventory
         if: always()
         uses: actions/upload-artifact@v6.0.0
@@ -311,33 +316,26 @@ jobs:
           path: source
           fetch-depth: 1
           persist-credentials: false
-
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-
       - uses: actions/download-artifact@v8
         with:
           name: frp77-plan
           path: ${{ env.FRP77_PLAN }}
-
       - name: Install workflow parser
         run: python -m pip install --disable-pip-version-check PyYAML==6.0.2
-
       - name: Prepare unchanged suite steps
         id: prepare
         run: python "$FRP77_PLAN/campaign.py" prepare
-
       - name: Execute retained acceptance checks
         id: suite
         timeout-minutes: ${{ matrix.minutes }}
         uses: ./frp77-action
-
       - name: Recheck complete source snapshot
         id: recheck
         if: always() && steps.prepare.outcome == 'success'
         run: python "$FRP77_PLAN/campaign.py" recheck
-
       - name: Upload suite evidence
         id: evidence
         if: always()
@@ -350,7 +348,6 @@ jobs:
           if-no-files-found: error
           overwrite: true
           retention-days: 30
-
       - name: Record matrix result
         if: always()
         env:
@@ -374,7 +371,6 @@ jobs:
           directory.mkdir(parents=True, exist_ok=True)
           (directory / f'{key}.json').write_text(json.dumps(result, indent=2) + '\n')
           PY
-
       - name: Upload matrix result
         if: always()
         uses: actions/upload-artifact@v6.0.0
@@ -395,24 +391,20 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-
       - uses: actions/download-artifact@v8
         with:
           name: frp77-plan
           path: ${{ env.FRP77_PLAN }}
-
       - uses: actions/download-artifact@v8
         with:
           pattern: frp77-status-*
           path: ${{ env.FRP77_EVIDENCE }}/statuses
           merge-multiple: true
-
       - name: Require all scheduled results
         if: always()
         env:
           FRP77_MATRIX_RESULT: ${{ needs.qualify.result }}
         run: python "$FRP77_PLAN/campaign.py" summarize
-
       - name: Upload campaign report
         if: always()
         uses: actions/upload-artifact@v6.0.0
