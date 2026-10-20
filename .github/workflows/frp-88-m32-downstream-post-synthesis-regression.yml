@@ -1,0 +1,318 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 88 - FRP M32 Downstream Post-Synthesis Regression
+run-name: "88 - FRP Downstream Post-Synthesis | 79 outputs, three tests, 8/16/32/64 cells and deterministic replay @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-88-downstream-post-synthesis-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    name: M32 downstream post-synthesis - ${{ matrix.cells }} cells
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        cells: [8, 16, 32, 64]
+    defaults:
+      run:
+        shell: bash
+    env:
+      CELLS: ${{ matrix.cells }}
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Initialize evidence directory
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/frp-88-evidence"
+          printf 'commit=%s\ncells=%s\nrun=%s\nattempt=%s\n' \
+            "$GITHUB_SHA" "$CELLS" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$RUNNER_TEMP/frp-88-evidence/context.txt"
+          printf '%s\n' '{"status":"NOT_COMPLETED"}' \
+            > "$RUNNER_TEMP/frp-88-evidence/qualification.json"
+          echo "FRP88_EVIDENCE=$RUNNER_TEMP/frp-88-evidence" >> "$GITHUB_ENV"
+
+      - name: Check out dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify manual execution and qualified sources
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          cat > "$FRP88_EVIDENCE/sources.sha256" <<'SHA'
+          762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94  rtl/m31/frp_m31_pkg.sv
+          765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0  rtl/m31/frp_m31_active_neutral.sv
+          d0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123  rtl/m31/frp_m31_capacity_guard.sv
+          ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90  rtl/m31/frp_m31_state_update.sv
+          951859d7343d739bdec9a1b2e2f1335143f757ba1a8b7506cb9284ec96b7acdc  rtl/m32/frp_m32_downstream_contract_tb.sv
+          e9692084160b40b256e596903b78b79bac90de6221aefb7250072908c876e15b  rtl/m32/frp_m32_downstream_post_synthesis_tb.sv
+          SHA
+          sha256sum .github/workflows/frp-88-m32-downstream-post-synthesis-regression.yml \
+            >> "$FRP88_EVIDENCE/sources.sha256"
+          sha256sum --check --strict "$FRP88_EVIDENCE/sources.sha256" \
+            | tee "$FRP88_EVIDENCE/source-check.log"
+
+      - name: Install and record toolchain
+        run: |
+          set -euo pipefail
+          {
+            python -m pip install --disable-pip-version-check \
+              verilator==5.48.0 systemc==3.0.2.1 pyosys==0.68
+            python -m pip check
+            verilator-cli --version
+            g++ --version
+            make --version
+          } 2>&1 | tee "$FRP88_EVIDENCE/toolchain.log"
+          python -m pip freeze > "$FRP88_EVIDENCE/packages.txt"
+
+      - name: Synthesize and qualify three downstream contracts
+        run: |
+          set -euo pipefail
+          python - <<'PYTHON'
+          import concurrent.futures
+          import hashlib
+          import json
+          import os
+          import re
+          import signal
+          import subprocess
+          import sys
+          import time
+          from pathlib import Path
+
+          evidence = Path(os.environ['FRP88_EVIDENCE']).resolve()
+          n = int(os.environ['CELLS'])
+          top = 'frp_m32_downstream_post_synthesis_tb'
+          build = Path(os.environ['RUNNER_TEMP']) / f'frp-88-build-{n}'
+          report = dict(status='RUNNING', commit=os.environ['GITHUB_SHA'], cells=n)
+          golden = {8: '93545f2e9260fbcc602e8d514cfe93c3787b76fcdf08d9ba9a12a0ade226da20', 16: '460072109332735629c8dd26dde2f856d31ef721a97dd76495ccc4d581aef173', 32: '4375421eb935fe47b56849c231ba8dd26fa4423f06a797e46fa5c919c1ac52e9', 64: 'c8423ebcc255f6ba67bf8ecd16e09e6bc61ac64b5a02897f6f19cf9ab3950b0a'}
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          def execute(args, log, timeout):
+              started = time.monotonic()
+              with log.open('w') as stream:
+                  stream.write(json.dumps(args) + '\n')
+                  stream.flush()
+                  with subprocess.Popen(args, stdout=stream, stderr=subprocess.STDOUT,
+                                        start_new_session=True) as process:
+                      try:
+                          code = process.wait(timeout=timeout)
+                      except BaseException:
+                          os.killpg(process.pid, signal.SIGKILL)
+                          process.wait()
+                          raise
+              require(code == 0, f'{log.name}: exit {code}; inspect the artifact')
+              return round(time.monotonic() - started, 3)
+
+          def check_sources():
+              for row in (evidence / 'sources.sha256').read_text().splitlines():
+                  expected, path = row.split(None, 1)
+                  require(digest(Path(path)) == expected, f'Source changed: {path}')
+
+          def check_netlist(path, extra):
+              modules = json.loads(path.read_text())['modules']
+              name = f'frp_m32_downstream_bundle_net{extra}'
+              require(set(modules) == {name}, 'Unexpected netlist hierarchy')
+              module = modules[name]
+              lanes, index = n // 4, (n.bit_length() - 1) + extra
+              widths = dict(clk=1, rst_n=1, tick=1, sched=3,
+                            state_in=2*n, pending=2*n, candidate=2*n,
+                            accept=lanes, neutral=lanes, indices=lanes*index,
+                            targets=2*lanes, classes=4*lanes,
+                            complete=n, routed=n, capacity=n, changed=n, reserved=n, direct=n,
+                            active_outputs=12*n+328, capacity_outputs=2*lanes+3*n+267,
+                            writeback_outputs=10*n+329)
+              require(set(module['ports']) == set(widths), 'Netlist port set changed')
+              for name, width in widths.items():
+                  port = module['ports'][name]
+                  direction = 'output' if name.endswith('_outputs') else 'input'
+                  require(port['direction'] == direction and len(port['bits']) == width,
+                          f'Incorrect port: {name}')
+              cells = list(module['cells'].values())
+              require(cells and all(c['type'].startswith('$') for c in cells),
+                      'Unresolved netlist module')
+              require(not any('latch' in c['type'].lower() or
+                              c['type'] in ('$shiftx', '$bwmux') for c in cells),
+                      'Latch or unmapped selection cell')
+              registers = [c for c in cells if 'ff' in c['type'].lower()]
+              require(len(registers) == 1 and registers[0]['type'] == '$adffe' and
+                      len(registers[0]['connections']['Q']) == 2*n,
+                      'State register structure changed')
+              return len(cells)
+
+          def collect(path):
+              text = path.read_text()
+              require(not re.search(r'%Error|%Fatal|Assertion failed|Aborting|^FAIL\b', text, re.M),
+                      f'Simulation failure marker: {path.name}')
+              rows = sorted(line.strip() for line in text.splitlines()
+                            if line.strip().startswith(('PASS', 'DOWNSTREAM_', 'NETLIST_')))
+              require(len(rows) == 23 and len(set(rows)) == 23, 'Missing or duplicate records')
+              semantic = '\n'.join(rows) + '\n'
+              require(hashlib.sha256(semantic.encode()).hexdigest() == golden[n],
+                      'Result differs from the qualified counts, bins, histories or signatures')
+              checks = dict(oracle=0, netlist=0)
+              for extra in (0, 1):
+                  lanes = n // 4
+                  probes = (8192*n + 2*n*lanes*(lanes-1) + 32*n*lanes*extra + 4096,
+                            4096*n + 32*n*lanes*extra + 2*n*(n+1) + 4096,
+                            12306*n + 9778)
+                  samples = sum(probes) + 4*n + 4866 + 1
+                  for test, bits in enumerate((12*n+328, 2*lanes+3*n+267, 10*n+329)):
+                      words = (bits + 31) // 32
+                      for category, prefix, count in (
+                          ('oracle', 'DOWNSTREAM', probes[test]*words),
+                          ('netlist', 'DOWNSTREAM_NETLIST', samples*words)
+                      ):
+                          key = f'PASS {prefix} cells={n} extra={extra} test={test} '
+                          matches = [row for row in rows if row.startswith(key)]
+                          require(len(matches) == 1, f'Missing result: {key}')
+                          fields = dict(re.findall(r'(\w+)=(\w+)', matches[0]))
+                          require(int(fields['checks']) == count, 'Incomplete word comparisons')
+                          checks[category] += count
+              return semantic, checks
+
+          try:
+              require(n in (8, 16, 32, 64), 'Unsupported cell count')
+              check_sources()
+              synthesis = []
+              for extra in (0, 1):
+                  hashes = []
+                  for replay in (1, 2):
+                      stem = evidence / f'net-{extra}-{replay}'
+                      script = (
+                          'read_slang -j 1 --std 1800-2017 --ignore-assertions '
+                          f'-G N={n} -G EXTRA={extra} --top frp_m32_downstream_bundle '
+                          f'-Irtl/m31 -Irtl/m32 rtl/m32/{top}.sv; '
+                          'synth -top frp_m32_downstream_bundle -flatten -run begin:coarse; '
+                          'techmap -map +/techmap.v t:$shiftx t:$bwmux; opt -full; '
+                          'opt_clean -purge; '
+                          f'rename frp_m32_downstream_bundle frp_m32_downstream_bundle_net{extra}; '
+                          'check -assert; scc -expect 0; '
+                          'select -assert-none t:$dlatch t:$adlatch t:$shiftx t:$bwmux; '
+                          f'write_json {stem}.json; write_verilog -noattr {stem}.v'
+                      )
+                      stem.with_suffix('.ys').write_text(script + '\n')
+                      seconds = execute([
+                          sys.executable, '-c',
+                          'from pyosys import libyosys as ys; import sys; '
+                          'ys.run_pass(open(sys.argv[1]).read())', str(stem.with_suffix('.ys'))
+                      ], stem.with_suffix('.log'), 900)
+                      require('Found and expected 0 SCCs.' in stem.with_suffix('.log').read_text(),
+                              'Missing combinational cycle check')
+                      cells = check_netlist(stem.with_suffix('.json'), extra)
+                      hashes.append(digest(stem.with_suffix('.v')))
+                      synthesis.append(dict(extra=extra, replay=replay, cells=cells,
+                                            seconds=seconds, sha256=hashes[-1], sccs=0))
+                      print(f'Synthesis PASS cells={n} extra={extra} replay={replay}', flush=True)
+                  require(hashes[0] == hashes[1], 'Synthesis replay differs')
+              report['synthesis'] = synthesis
+              optimization = '-O2' if n == 64 else '-Os'
+              args = [
+                  'verilator-cli', '--binary', '--output-groups', '0', '--unroll-count', '1',
+                  '--timing', '--assert', '-Wno-fatal', '-j', '2', '-CFLAGS', '-std=c++20',
+                  '-MAKEFLAGS', f'OPT_FAST={optimization}',
+                  '-MAKEFLAGS', 'VK_PCH_I_FAST=', '-MAKEFLAGS', 'VK_PCH_I_SLOW=',
+                  '--top-module', top, f'-GCELLS={n}', '--Mdir', str(build),
+                  '-Irtl/m31', '-Irtl/m32', f'rtl/m32/{top}.sv',
+                  str(evidence / 'net-0-1.v'), str(evidence / 'net-1-1.v')
+              ]
+              report['compile_seconds'] = execute(args, evidence / 'compile.log', 2400)
+              compilation = (evidence / 'compile.log').read_text()
+              require(not re.search(r'%Error|%Warning-(PINMISSING|PINCONNECTEMPTY|IMPLICIT|MULTIDRIVEN)\b',
+                                    compilation), 'Compile error or wiring warning')
+              binary = build / ('V' + top)
+              binary_hash = digest(binary)
+              print(f'Build PASS cells={n}; starting two simulation processes', flush=True)
+
+              def simulate(replay):
+                  log = evidence / f'run-{replay}.log'
+                  seconds = execute([str(binary)], log, 1800)
+                  semantic, checks = collect(log)
+                  (evidence / f'semantic-{replay}.txt').write_text(semantic)
+                  print(f'Simulation PASS cells={n} replay={replay} seconds={seconds}', flush=True)
+                  return semantic, checks, seconds
+
+              with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                  replays = list(executor.map(simulate, (1, 2)))
+              require(replays[0][:2] == replays[1][:2], 'Simulation replay differs')
+              require(digest(binary) == binary_hash, 'Executable changed during replay')
+              check_sources()
+              report.update(status='PASS', tests=3, outputs=79, address_modes=2,
+                            synthesis_replays=2, simulation_replays=2,
+                            optimization=optimization, semantic_sha256=golden[n],
+                            executable_sha256=binary_hash,
+                            netlist_word_comparisons=2*replays[0][1]['netlist'],
+                            oracle_word_comparisons=2*replays[0][1]['oracle'],
+                            simulation_seconds=[r[2] for r in replays])
+              summary = (
+                  f'### FRP 88: Downstream post-synthesis - {n} cells - PASS\n\n'
+                  'Active-neutral: 29 outputs; capacity: 24; writeback: 26.\n\n'
+                  'Two address modes, two synthesis processes per mode and two simulation replays.\n\n'
+                  'All 23 semantic records match the qualified baseline.\n\n'
+                  f'Netlist/RTL word comparisons: {report["netlist_word_comparisons"]:,}.\n\n'
+                  f'Independent-oracle word comparisons: {report["oracle_word_comparisons"]:,}.\n\n'
+                  'Synthesis checks: zero combinational SCCs; no latches; retained state width verified.\n\n'
+                  '```text\n' + replays[0][0] + '```\n'
+              )
+              (evidence / 'summary.md').write_text(summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write(summary)
+          except BaseException as error:
+              report.update(status='FAIL', error=str(error))
+              raise
+          finally:
+              (evidence / 'qualification.json').write_text(json.dumps(report, indent=2) + '\n')
+          PYTHON
+
+      - name: Hash qualification evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          python - <<'PYTHON'
+          import hashlib
+          import os
+          from pathlib import Path
+          root = Path(os.environ['FRP88_EVIDENCE'])
+          files = sorted(p for p in root.rglob('*') if p.is_file() and p.name != 'evidence.sha256')
+          (root / 'evidence.sha256').write_text(''.join(
+              f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(root)}\n'
+              for p in files))
+          PYTHON
+
+      - name: Upload qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp-88-downstream-post-synthesis-${{ matrix.cells }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-88-evidence/
+          if-no-files-found: error
+          retention-days: 14
