@@ -1,0 +1,319 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 91 - FRP M32 Full-Core Post-Synthesis Regression
+run-name: "91 - FRP Full Core | 103 outputs, stress, 8/16/32/64 cells and deterministic replay @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-91-full-core-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    name: M32 full-core netlist - ${{ matrix.cells }} cells
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        cells: [8, 16, 32, 64]
+    defaults:
+      run:
+        shell: bash
+    env:
+      CELLS: ${{ matrix.cells }}
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Initialize evidence
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/frp-91-evidence"
+          printf 'commit=%s\ncells=%s\nrun=%s\nattempt=%s\n' \
+            "$GITHUB_SHA" "$CELLS" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$RUNNER_TEMP/frp-91-evidence/context.txt"
+          printf '%s\n' '{"status":"NOT_COMPLETED"}' \
+            > "$RUNNER_TEMP/frp-91-evidence/qualification.json"
+          echo "FRP91_EVIDENCE=$RUNNER_TEMP/frp-91-evidence" >> "$GITHUB_ENV"
+
+      - name: Check out dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify manual run and source contract
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          cat > "$FRP91_EVIDENCE/sources.sha256" <<'SHA'
+          765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0  rtl/m31/frp_m31_active_neutral.sv
+          d0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123  rtl/m31/frp_m31_capacity_guard.sv
+          e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92  rtl/m31/frp_m31_execution_core.sv
+          6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24  rtl/m31/frp_m31_fixed_point_pkg.sv
+          df058d4e3671ba1d7c9d0403a6bb1b8c9750a0a967905b5f91cca455c1dddb83  rtl/m31/frp_m31_global_stability.sv
+          cbb5a531283164d1d54d59ec748b97bf84e172704854bf5eb7c6bda2c502f7c7  rtl/m31/frp_m31_isqrt_u64.sv
+          478882d4f6a2986f5079c88b444c7b007d68145d61e5150209cb0637f35b2ec0  rtl/m31/frp_m31_local_gamma_drift.sv
+          6e10f738f94c43ac9748ec7a033adde16243beea59e2f7f2973a3ab51c2e5e04  rtl/m31/frp_m31_local_thermal_attenuation.sv
+          cb97c1bfeabbb2acaebf2f9644d484b2f7c5e995dbf1b70777f6bc2e7df9368e  rtl/m31/frp_m31_local_thermal_field.sv
+          18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411  rtl/m31/frp_m31_pending_routes.sv
+          7ac3572ef2bf9feef509e7dc43c662d92d23fa3eb0563efbfa8dba7c28157746  rtl/m31/frp_m31_phase_interference.sv
+          fa78bcfe965270cc74855908aa392989d857575a2097a126539aabb1aab8990d  rtl/m31/frp_m31_phase_request_adapter.sv
+          762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94  rtl/m31/frp_m31_pkg.sv
+          32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109  rtl/m31/frp_m31_request_lanes.sv
+          fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f  rtl/m31/frp_m31_scheduler.sv
+          adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d  rtl/m31/frp_m31_sin_q30.mem
+          69c06833e6dfbb28e25b74a5787dcd03756dddf0f66726de3ea47c1ad2931931  rtl/m31/frp_m31_stability.sv
+          ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90  rtl/m31/frp_m31_state_update.sv
+          34df4ebfc5dfad8e3e5e454e560404585de5c881e6f75abaae367d3bd9fb11bd  rtl/m31/frp_m31_thermal_proxy.sv
+          0be6c5ee28ee4a23baf6110143eec309f387200c1c2c80e3016353d5d4107541  rtl/m32/frp_m32_core.sv
+          ae840b73a80778b350ff0eaa0578ec4dea9702fd495a13da0690218ea0784151  rtl/m32/frp_m32_full_state_oracle_tb.sv
+          9626474b49d32b411e107d7ccc8ee5aa7f42728e9a6f70d634d16d3f2a414c5e  rtl/m32/frp_m32_registered_target_boundary.sv
+          02250069a68737f055a419cd67bf2d439b3f63b3f6a7a245f40e9bf29d1958eb  rtl/m32/frp_m32_registered_target_request_path.sv
+          12706454e2714e128ebe908e8633c243cad4372757299273e21c9955da40b230  rtl/m32/frp_m32_stress_scaling_tb.sv
+          SHA
+          python - <<'PYTHON'
+          import hashlib
+          from pathlib import Path
+          path = Path('rtl/m32/frp_m32_full_core_post_synthesis_tb.sv')
+          lines = path.read_text().splitlines()
+          canonical = ('\n'.join(line for line in lines if line.strip()) + '\n').encode()
+          expected = '58324027cd7158761818014e473c0719a941018b880d5bdebddfd7aae72a477f'
+          if hashlib.sha256(canonical).hexdigest() != expected:
+              raise SystemExit('Full-core testbench differs from the supplied file')
+          PYTHON
+          sha256sum rtl/m32/frp_m32_full_core_post_synthesis_tb.sv \
+            .github/workflows/frp-91-m32-full-core-post-synthesis-regression.yml \
+            >> "$FRP91_EVIDENCE/sources.sha256"
+          sha256sum --check --strict "$FRP91_EVIDENCE/sources.sha256" \
+            | tee "$FRP91_EVIDENCE/source-check.log"
+
+      - name: Install and record toolchain
+        run: |
+          set -euo pipefail
+          {
+            python -m pip install --disable-pip-version-check \
+              verilator==5.48.0 systemc==3.0.2.1 pyosys==0.68
+            python -m pip check
+            python --version
+            verilator-cli --version
+            g++ --version
+            make --version
+          } 2>&1 | tee "$FRP91_EVIDENCE/toolchain.log"
+          python -m pip freeze > "$FRP91_EVIDENCE/packages.txt"
+
+      - name: Synthesize, compare all outputs and replay
+        run: |
+          set -euo pipefail
+          python - <<'PYTHON'
+          import hashlib, json, os, re, shlex, shutil, signal, subprocess, sys, time
+          from pathlib import Path
+          from concurrent.futures import ThreadPoolExecutor
+
+          root = Path.cwd()
+          evidence = Path(os.environ['FRP91_EVIDENCE'])
+          work = Path(os.environ['RUNNER_TEMP']) / 'frp-91-build'
+          n = int(os.environ['CELLS'])
+          top = 'frp_m32_full_core_post_synthesis_tb'
+          bench = Path('rtl/m32') / (top + '.sv')
+          known = {
+              8: (8125, 'bba3902a630c3792188010358eea6d718f7b8d08117eba73b2ecbfa51453a254'),
+              16: (14537, 'ba4d184ed63f5dc042337502e9e1f305156bd95c2ddda5fff3148a9bda09ad5a'),
+              32: (27241, '7a0ec8835510b3a4b56e03f8c39fc5866f49197097c1d4e9de015ad834c2d8d4'),
+              64: (52537, '541e02a9b1d0edd758b37fb97916bb3ffad5b8cf9deed5a47cd96748b3e24b39'),
+          }
+          report = {'status': 'FAIL', 'commit': os.environ['GITHUB_SHA'], 'cells': n, 'timings': {}}
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          def digest(path):
+              with Path(path).open('rb') as stream:
+                  return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+          def run(label, command, cwd=root, limit=1800):
+              started = time.monotonic()
+              print(label, flush=True)
+              with (evidence / (label + '.log')).open('w') as log:
+                  log.write(shlex.join(map(str, command)) + '\n'); log.flush()
+                  process = subprocess.Popen(command, cwd=cwd, stdout=log,
+                                             stderr=subprocess.STDOUT, start_new_session=True)
+                  try:
+                      code = process.wait(timeout=limit)
+                  except subprocess.TimeoutExpired:
+                      os.killpg(process.pid, signal.SIGKILL); process.wait()
+                      raise RuntimeError(label + ' timed out')
+              report['timings'][label] = round(time.monotonic() - started, 3)
+              require(code == 0, label + ' failed; inspect its artifact log')
+
+          def check_sources():
+              for row in (evidence / 'sources.sha256').read_text().splitlines():
+                  expected, name = row.split(None, 1)
+                  require(digest(root / name) == expected, 'Source changed: ' + name)
+
+          def collect(path):
+              text = path.read_text()
+              require(not re.search(r'%Error|Assertion failed|Aborting|^FAIL\b', text, re.M),
+                      'Failure marker in simulation log')
+              rows = [line for line in text.splitlines()
+                      if line.startswith(('PASS ', 'FULL_STATE_'))]
+              require(len(rows) == 14, 'Expected exactly 14 result records')
+              baseline = hashlib.sha256('\n'.join(rows[:12]).encode()).hexdigest()
+              require(baseline == known[n][1], 'Independent oracle or stress results changed')
+              pattern = (r'PASS FULL_CORE_NETLIST cells=(\d+) ports=(\d+) bits=(\d+) '
+                         r'words=(\d+) samples=(\d+) checks=(\d+) reset=(\d+) '
+                         r'enabled=(\d+) held=(\d+) signature=([0-9a-f]{16})')
+              match = re.fullmatch(pattern, rows[12])
+              require(match is not None, 'Malformed netlist result')
+              values = list(map(int, match.groups()[:9]))
+              cells, ports, bits, words, samples, checks, reset, enabled, held = values
+              require((cells, ports, bits) == (n, 103, known[n][0]), 'Output contract mismatch')
+              require(words == (bits + 31) // 32 and samples == 143137 + 50*n,
+                      'Incomplete sampling')
+              require(checks == samples*words and reset + enabled + held == samples,
+                      'Incorrect comparison or history totals')
+              require(min(reset, enabled, held) > 0, 'Missing history class')
+              require(rows[13] == f'PASS FULL_CORE_NETLIST_ALL cells={n} tests=3 '
+                      'scaling_cases=6 source_cross=12 traffic_cross=96', 'Incomplete campaign')
+              return rows, dict(zip(('cells', 'ports', 'bits', 'words', 'samples', 'checks',
+                                    'reset', 'enabled', 'held'), values), signature=match[10])
+
+          def structure(path):
+              modules = json.loads(path.read_text())['modules']
+              require(set(modules) == {'frp_m32_core_netlist'}, 'Expected one flattened module')
+              module = modules['frp_m32_core_netlist']
+              source = (root / bench).read_text()
+              for direction, expression, count in (
+                  ('input', r'\.(\w+)\(reference_test\.model\.', 19),
+                  ('output', r'\.(\w+)\(net_outputs\.', 103)):
+                  expected = set(re.findall(expression, source))
+                  actual = {key for key, value in module['ports'].items()
+                            if value['direction'] == direction}
+                  require(len(expected) == count and actual == expected, direction + ' ports differ')
+              output_bits = sum(len(v['bits']) for v in module['ports'].values()
+                                if v['direction'] == 'output')
+              require(output_bits == known[n][0], 'Incorrect netlist output widths')
+              types = [cell['type'] for cell in module['cells'].values()]
+              require(all(t.startswith('$') for t in types), 'Unresolved module')
+              require(not set(types) & {'$dlatch', '$adlatch', '$shiftx', '$bwmux', '$memwr_v2'},
+                      'Unexpected latch, memory write or unmapped operator')
+              require('$adffe' in types and '$memrd_v2' in types, 'Missing state or ROM')
+              return {'inputs': 19, 'outputs': 103, 'output_bits': output_bits,
+                      'cell_types': {t: types.count(t) for t in sorted(set(types))}}
+
+          def main():
+              require(n in known, 'Unsupported cell count')
+              check_sources()
+              work.mkdir(parents=True, exist_ok=False)
+              view = work / 'synthesis'
+              for row in (evidence / 'sources.sha256').read_text().splitlines():
+                  name = row.split(None, 1)[1]
+                  if name.startswith('rtl/'):
+                      destination = view / name
+                      destination.parent.mkdir(parents=True, exist_ok=True)
+                      shutil.copy2(root / name, destination)
+              phase = view / 'rtl/m31/frp_m31_phase_interference.sv'
+              original = phase.read_text()
+              # Only the synthesis copy omits these four initial diagnostic checks.
+              # The unchanged RTL still checks the ROM during simulation.
+              pattern = (r'    if \(sin_lut\[(?:0|1024|2048|3072)\][^\n]+\n'
+                         r'      \$fatal\(1, "FRP M31 sine LUT [^\n]+\n')
+              normalized, count = re.subn(pattern, '', original)
+              require(count == 4 and '$readmemh(SIN_LUT_FILE, sin_lut);' in normalized,
+                      'Unexpected sine ROM initialization')
+              phase.write_text(normalized)
+              report['synthesis_view_sha256'] = digest(phase)
+              hashes = []
+              for replay in (1, 2):
+                  stem = work / f'net-{replay}'
+                  script = (
+                      f'read_slang -j 1 --std 1800-2017 --ignore-assertions -G CELLS={n} '
+                      '--top frp_m32_core -Irtl/m31 -Irtl/m32 rtl/m32/frp_m32_core.sv; '
+                      'synth -top frp_m32_core -flatten -run begin:coarse; '
+                      'techmap -map +/techmap.v t:$shiftx t:$bwmux; opt -full; opt_clean -purge; '
+                      'rename frp_m32_core frp_m32_core_netlist; check -assert; scc -expect 0; '
+                      'select -assert-none t:$dlatch t:$adlatch t:$shiftx t:$bwmux; '
+                      f'write_json {stem}.json; write_verilog -noattr {stem}.v')
+                  ys = evidence / f'synthesis-{replay}.ys'
+                  ys.write_text(script + '\n')
+                  run(f'synthesis-{replay}', [sys.executable, '-c',
+                      'from pyosys import libyosys as y; import sys; y.run_pass(open(sys.argv[1]).read())',
+                      str(ys)], cwd=view)
+                  result = structure(stem.with_suffix('.json'))
+                  hashes.append({ext: digest(stem.with_suffix('.' + ext)) for ext in ('v', 'json')})
+              require(hashes[0] == hashes[1], 'Synthesis replay differs')
+              report.update(structure=result, netlist_sha256=hashes[0])
+              build = work / 'build'
+              run('compile', ['verilator-cli', '--binary', '--output-groups', '0',
+                  '--unroll-count', '1', '--timing', '--assert', '-Wno-fatal',
+                  '-j', '1' if n == 64 else '2', '-CFLAGS', '-std=c++20',
+                  '-MAKEFLAGS', 'OPT_FAST=-O2', '-MAKEFLAGS', 'VK_PCH_I_FAST=',
+                  '-MAKEFLAGS', 'VK_PCH_I_SLOW=', '--top-module', top, f'-GCELLS={n}',
+                  '--Mdir', str(build), '-Irtl/m31', '-Irtl/m32', str(bench),
+                  str(work / 'net-1.v')], limit=5400)
+              binary = build / ('V' + top)
+              binary_hash = digest(binary)
+              records = []
+              # Independent replay processes share only read-only sources and the binary.
+              with ThreadPoolExecutor(max_workers=2) as pool:
+                  futures = [pool.submit(run, f'run-{replay}', [str(binary)], limit=1200)
+                             for replay in (1, 2)]
+                  for future in futures:
+                      future.result()
+              for replay in (1, 2):
+                  rows, metrics = collect(evidence / f'run-{replay}.log')
+                  records.append(rows)
+              require(records[0] == records[1], 'Simulation replay differs')
+              require(digest(binary) == binary_hash, 'Simulation binary changed after replay')
+              require(digest(work / 'net-1.v') == hashes[0]['v'], 'Netlist changed during simulation')
+              check_sources()
+              report.update(status='PASS', binary_sha256=binary_hash, metrics=metrics,
+                            records=records[0], comparisons_two_replays=2*metrics['checks'])
+
+          if __name__ == '__main__':
+              try:
+                  main()
+              except Exception as error:
+                  report['error'] = str(error)
+                  raise
+              finally:
+                  (evidence / 'qualification.json').write_text(json.dumps(report, indent=2) + '\n')
+                  summary = (f'## FRP 91: {n} cells — {report["status"]}\n\n'
+                             f'Commit: `{report["commit"]}`\n\n'
+                             'Scope: 103 outputs, independent oracle, stress, reset storm, '
+                             'six scaling cases; two syntheses and two simulations.\n\n'
+                             'Generic post-synthesis functional comparison.\n\n'
+                             '```json\n' + json.dumps(report.get('metrics', report.get('error', {})), indent=2)
+                             + '\n```\n\nStage durations (seconds):\n```json\n'
+                             + json.dumps(report['timings'], indent=2) + '\n```\n')
+                  (evidence / 'summary.md').write_text(summary)
+                  if os.environ.get('GITHUB_STEP_SUMMARY'):
+                      with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as output:
+                          output.write(summary)
+          PYTHON
+
+      - name: Upload qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp-91-full-core-${{ matrix.cells }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-91-evidence
+          if-no-files-found: error
+          retention-days: 14
