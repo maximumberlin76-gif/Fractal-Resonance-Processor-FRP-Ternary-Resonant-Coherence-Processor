@@ -1,0 +1,186 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# Referenced dependencies retain their existing licenses.
+name: 95 - FRP M31 Global Stability History Formal
+run-name: "95 - FRP Stability History | 8/16/32/64 cells @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-95-global-stability-history-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  prove:
+    name: "Formal contracts - ${{ matrix.cells }} cells"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        cells: [8, 16, 32, 64]
+    defaults:
+      run:
+        shell: bash
+    env:
+      CELLS: ${{ matrix.cells }}
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install pinned formal tool
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pyosys==0.68
+      - name: Prove contracts, reach scenarios, and detect reset mutation
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import shutil
+          import subprocess
+          import sys
+
+          n = int(os.environ['CELLS'])
+          assert n in (8, 16, 32, 64)
+          e = Path('.frp95-evidence') / f'n{n}'
+          e.mkdir(parents=True, exist_ok=False)
+          top = 'frp_m31_global_stability_history_formal'
+          harness = Path('formal/m31') / (top + '.sv')
+          rtl = Path('rtl/m31/frp_m31_global_stability.sv')
+          pkg = Path('rtl/m31/frp_m31_fixed_point_pkg.sv')
+          expected = {
+              str(harness): '383ae28b3b63f47c3632831d1251e2405e714ade82cf76d25df1ea3ab01fdf09',
+              str(rtl): 'df058d4e3671ba1d7c9d0403a6bb1b8c9750a0a967905b5f91cca455c1dddb83',
+              str(pkg): '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24',
+          }
+          digest = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
+          result = {
+              'schema': 'frp.m31.global_stability_history.formal.v1',
+              'commit': os.environ['GITHUB_SHA'],
+              'attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'cells': n, 'status': 'failed',
+              'scope': 'Sampled register/history and pressure/margin contracts',
+          }
+          (e / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
+          before = {p: digest(p) for p in expected}
+          (e / 'sources.json').write_text(json.dumps(before, indent=2) + '\n')
+          assert before == expected, 'Source hash mismatch; inspect the changed file'
+          assert importlib.metadata.version('pyosys') == '0.68'
+          (e / 'packages.txt').write_text(subprocess.check_output(
+              [sys.executable, '-m', 'pip', 'freeze'], text=True))
+
+          cuts = ['mean_heat_q16', 'next_coherence_compression_q30',
+                  'next_effective_coherence_q30', 'next_coherence_capacity_q16']
+          selection = ' '.join('w:' + name for name in cuts)
+          worker = 'from pyosys import libyosys as y; import sys; y.run_pass(sys.argv[1])'
+
+          def run(label, commands, timeout=180, success=True):
+              (e / (label + '.ys')).write_text(commands + '\n')
+              with (e / (label + '.log')).open('w') as log:
+                  p = subprocess.run([sys.executable, '-u', '-c', worker, commands],
+                                     stdout=log, stderr=subprocess.STDOUT, timeout=timeout)
+              text = (e / (label + '.log')).read_text()
+              if success:
+                  assert p.returncode == 0, f'{label}: see its log'
+              return p.returncode, text
+
+          def prepare(source, prefix, save_full):
+              commands = (
+                  f'read_slang --std 1800-2017 --unroll-limit 10000 '
+                  f'-I rtl/m31 -G CELLS={n} --top {top} {source}; '
+                  f'prep -top {top} -flatten; async2sync; opt; memory_map; opt; '
+                  'select -assert-count 10 t:$assert; select -assert-count 1 t:$assume; '
+              )
+              if save_full:
+                  commands += f'write_rtlil {e}/full.il; '
+              commands += (
+                  f'select -assert-count 4 {selection}; cutpoint {selection}; '
+                  'delete w:observed_outputs; opt_clean; chformal -lower; '
+                  'select -assert-count 4 t:$anyseq; '
+                  f'check -assert; write_rtlil {e}/{prefix}.il'
+              )
+              run('prepare-' + prefix, commands)
+
+          prepare(harness, 'contract', True)
+          proof = ('sat -seq 2 -tempinduct -maxsteps 6 -set-assumes '
+                   '-prove-asserts -verify -timeout 30')
+          for attempt in (1, 2):
+              _, log = run(f'induction-{attempt}', f'read_rtlil {e}/contract.il; {proof}', 240)
+              assert 'Induction step proven: SUCCESS!' in log, 'Induction was not completed'
+
+          # Reachability uses the uncut design, with assertion cells removed.
+          # Pruning removes only logic irrelevant to the six control predicates.
+          reach_commands = (
+              f'read_rtlil {e}/full.il; delete w:observed_outputs; '
+              'chformal -assert -remove; opt_clean; '
+              'select -assert-none t:$anyseq; check -assert; '
+          )
+          for bit in range(6):
+              reach_commands += (
+                  f'sat -seq 4 -set-assumes -set-at 4 reach[{bit}] 1 '
+                  f'-show-ports -dump_json {e}/reach-{bit}.json -timeout 15; '
+              )
+          _, log = run('reachability', reach_commands)
+          assert log.count('SAT solving finished - model found:') == 6
+          for bit in range(6):
+              witness = json.loads((e / f'reach-{bit}.json').read_text())
+              signal = next(s for s in witness['signal'] if s['name'] == 'reach')
+              assert int(signal['data'][-1], 2) & (1 << bit), f'Invalid witness {bit}'
+
+          # Check that a real reset defect is detected through the same proof path.
+          mutant = e / 'mutant'
+          mutant.mkdir()
+          shutil.copyfile(harness, mutant / harness.name)
+          original = rtl.read_text()
+          old = "previous_margin_q16 <= 32'sd39322;"
+          assert original.count(old) == 1
+          (mutant / rtl.name).write_text(original.replace(old, "previous_margin_q16 <= 32'sd39323;"))
+          prepare(mutant / harness.name, 'mutant-contract', False)
+          code, log = run('negative-control', f'read_rtlil {e}/mutant-contract.il; {proof}',
+                          240, success=False)
+          assert code != 0 and 'model found for base case: FAIL!' in log, 'Reset mutation was not detected'
+          assert {p: digest(p) for p in expected} == before, 'Checked sources changed'
+
+          result.update(status='passed', assertions=10, induction_runs=2,
+                        reachable_scenarios=6, detected_mutations=1,
+                        cutpoints=cuts, replay='both independent induction runs passed')
+          (e / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
+          print(json.dumps(result, indent=2))
+          summary = (
+              f'### FRP 95 — {n} cells\n\n'
+              '| Check | Result |\n|---|---|\n'
+              '| Contract assertions | 10 proven by induction |\n'
+              '| Independent proof runs | 2 passed |\n'
+              '| Reachable control scenarios | 6 of 6 |\n'
+              '| Reset mutation | Detected |\n\n'
+              'Model: sampled rising edges after async2sync; initial reset assumed.\n\n'
+              'Four unrestricted computation boundaries: ' + ', '.join(cuts) + '.\n\n'
+              'Preserved logic: registers, reset/tick, pressure/margin saturation, stable threshold.\n'
+          )
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
+              out.write(summary)
+          PY
+      - name: Upload formal evidence
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp95-n${{ matrix.cells }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: .frp95-evidence/n${{ matrix.cells }}/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
