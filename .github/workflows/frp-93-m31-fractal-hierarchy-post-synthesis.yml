@@ -1,0 +1,388 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 93 - FRP M31 Fractal Hierarchy Post-Synthesis
+run-name: "93 - FRP Fractal Hierarchy Post-Synthesis | three tests, 14 outputs, 8/16/32/64 cells @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-93-fractal-hierarchy-post-synthesis-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    name: M31 hierarchy post-synthesis - ${{ matrix.cells }} cells
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        cells: [8, 16, 32, 64]
+    defaults:
+      run:
+        shell: bash
+    env:
+      CELLS: ${{ matrix.cells }}
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Initialize evidence
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/frp-93-evidence"
+          printf 'commit=%s\ncells=%s\nrun=%s\nattempt=%s\n' \
+            "$GITHUB_SHA" "$CELLS" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$RUNNER_TEMP/frp-93-evidence/context.txt"
+          printf '%s\n' '{"status":"NOT_COMPLETED"}' \
+            > "$RUNNER_TEMP/frp-93-evidence/qualification.json"
+          echo "FRP93_EVIDENCE=$RUNNER_TEMP/frp-93-evidence" >> "$GITHUB_ENV"
+
+      - name: Check out dispatched commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Require manual execution on main
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+
+      - name: Prepare memory for 64-cell compilation
+        if: matrix.cells == 64
+        run: |
+          set -euo pipefail
+          {
+            free -h
+            df -h "$RUNNER_TEMP"
+            # Reclaim unused SDKs only on this disposable hosted runner.
+            available_kib=$(df -Pk "$RUNNER_TEMP" | awk 'NR==2 {print $4}')
+            if (( available_kib < 25165824 )); then
+              sudo rm -rf /usr/local/lib/android /usr/share/dotnet
+            fi
+            available_kib=$(df -Pk "$RUNNER_TEMP" | awk 'NR==2 {print $4}')
+            if (( available_kib < 25165824 )); then
+              echo "Insufficient disk: need 24 GiB free for swap and build."
+              exit 1
+            fi
+            swap_path="$RUNNER_TEMP/frp-93.swap"
+            test ! -e "$swap_path"
+            sudo fallocate -l 16G "$swap_path"
+            sudo chmod 600 "$swap_path"
+            sudo mkswap "$swap_path"
+            sudo swapon "$swap_path"
+            free -h
+            swapon --show
+            df -h "$RUNNER_TEMP"
+          } 2>&1 | tee "$FRP93_EVIDENCE/resources.log"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install and record toolchain
+        run: |
+          set -euo pipefail
+          {
+            python -m pip install --disable-pip-version-check \
+              verilator==5.48.0 systemc==3.0.2.1 pyosys==0.68
+            python -m pip check
+            verilator-cli --version
+            g++ --version
+            make --version
+          } 2>&1 | tee "$FRP93_EVIDENCE/toolchain.log"
+          python -m pip freeze > "$FRP93_EVIDENCE/packages.txt"
+
+      - name: Qualify hierarchy before and after synthesis
+        run: |
+          set -euo pipefail
+          python - <<'PYTHON'
+          import gzip
+          import hashlib
+          import json
+          import os
+          import re
+          import shutil
+          import signal
+          import subprocess
+          import sys
+          import time
+          from pathlib import Path
+
+          root = Path.cwd()
+          evidence = Path(os.environ['FRP93_EVIDENCE']).resolve()
+          work = Path(os.environ['RUNNER_TEMP']) / 'frp-93-work'
+          n = int(os.environ['CELLS'])
+          top = 'frp_m31_fractal_hierarchy_post_synthesis_tb'
+          bench = Path('rtl/m31') / (top + '.sv')
+          workflow = Path('.github/workflows/frp-93-m31-fractal-hierarchy-post-synthesis.yml')
+          report = dict(status='RUNNING', commit=os.environ['GITHUB_SHA'], cells=n, commands=[])
+          pins = {
+              'frp_m31_phase_interference.sv': '7ac3572ef2bf9feef509e7dc43c662d92d23fa3eb0563efbfa8dba7c28157746',
+              'frp_m31_pkg.sv': '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94',
+              'frp_m31_fixed_point_pkg.sv': '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24',
+              'frp_m31_isqrt_u64.sv': 'cbb5a531283164d1d54d59ec748b97bf84e172704854bf5eb7c6bda2c502f7c7',
+              'frp_m31_sin_q30.mem': 'adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d',
+          }
+          canonical_pins = {
+              'frp_m31_fractal_hierarchy_tb.sv': 'a24c8392e7c9e25e8b9b4fbabeed5d69c006630904becfdeedeee13dabf8114c',
+              top + '.sv': '808047972f2ed21ba95df1033db5d24511195df5fac349be45de7812e2ec462c',
+          }
+          known = {
+              8: (317729, '9d08d5749098af39', 'ccfc041a119e0b53', '3d631fe45456cb1f'),
+              16: (774205, 'ae1530c84c6d0296', '1326ef1705570185', '47872b5c84c6236e'),
+              32: (2175817, 'a78e454de14cb6e4', 'd8fc40a62a293ff5', '31ef4c9f2edcf134'),
+              64: (6946613, '984a22de80925af4', '2c12794211233981', None),
+          }
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def digest(path):
+              h = hashlib.sha256()
+              with path.open('rb') as stream:
+                  for block in iter(lambda: stream.read(1048576), b''):
+                      h.update(block)
+              return h.hexdigest()
+
+          def canonical(path):
+              # Ignore blank lines only; retain every nonempty line exactly.
+              text = '\n'.join(s for s in path.read_text().splitlines() if s.strip()) + '\n'
+              return hashlib.sha256(text.encode()).hexdigest()
+
+          def checkpoint():
+              (evidence / 'qualification.json').write_text(json.dumps(report, indent=2) + '\n')
+
+          def execute(label, args, timeout, cwd=root):
+              log = evidence / (label + '.log')
+              record = dict(label=label, argv=list(map(str, args)), cwd=str(cwd))
+              report['commands'].append(record)
+              checkpoint()
+              started = time.monotonic()
+              print(f'START {label} cells={n}', flush=True)
+              with log.open('w') as stream:
+                  with subprocess.Popen(args, cwd=cwd, stdout=stream, stderr=subprocess.STDOUT,
+                                        start_new_session=True) as process:
+                      try:
+                          code = process.wait(timeout=timeout)
+                      except BaseException:
+                          if process.poll() is None:
+                              os.killpg(process.pid, signal.SIGKILL)
+                          process.wait()
+                          record['interrupted'] = True
+                          checkpoint()
+                          raise
+              record.update(exit_code=code, seconds=round(time.monotonic()-started, 3))
+              checkpoint()
+              require(code == 0, f'{label}: exit {code}; inspect {log.name}')
+              print(f'PASS {label} seconds={record["seconds"]}', flush=True)
+
+          def unchanged():
+              for name, expected in report['sources'].items():
+                  require(digest(root / name) == expected, f'Source changed: {name}')
+
+          def collect(path):
+              text = path.read_text()
+              require('$finish' in text, 'Missing normal simulation completion')
+              require(not re.search(r'%Error|%Fatal|Assertion failed|Aborting|^\s*FAIL\b', text, re.M),
+                      'Simulation failure marker')
+              rows = [s.strip() for s in text.splitlines() if s.strip().startswith('PASS')]
+              require(len(rows) == 6 and len(set(rows)) == 6, 'Missing or duplicate PASS records')
+              depth = n.bit_length()-1
+              checks, signature, anchor, net_signature = known[n]
+              expected = [
+                  f'PASS HIERARCHY_PERMUTATIONS cells={n} swaps={6*(n-1)} compositions=96 snapshots={10*(6*(n-1)+96)}',
+                  f'PASS HIERARCHY_NESTING cells={n} cases={8*(n-1)+1} negative_controls=1',
+                  f'PASS HIERARCHY_SCALING cells={n} anchor=8 motifs=128 levels={depth} groups={n-1}',
+                  f'PASS FRACTAL_HIERARCHY_ALL cells={n} checks={checks} anchor_checks=32319 signature={signature} anchor_signature={anchor}',
+              ]
+              require(rows[:4] == expected, 'Reference campaign differs from qualified #92')
+              bits = 162*n+96+128*depth
+              words = (bits+31)//32
+              samples = 4382+228*n
+              enabled = 144*(n+16)
+              prefix = (f'PASS HIERARCHY_NETLIST cells={n} ports=14 bits={bits} words={words} '
+                        f'samples={samples} checks={samples*words} reset=1 enabled={enabled} '
+                        f'held={samples-1-enabled} signature=')
+              require(re.fullmatch(re.escape(prefix) + r'[0-9a-f]{16}', rows[4]) is not None,
+                      'Incomplete netlist comparison, history or signature')
+              if net_signature is not None:
+                  require(rows[4] == prefix+net_signature, 'Known netlist signature changed')
+              require(rows[5] == f'PASS HIERARCHY_NETLIST_ALL cells={n} tests=3 states=5 motifs=128 negative_controls=1',
+                      'Incomplete hierarchy campaign')
+              return rows
+
+          structure_code = r'''
+          import json, sys
+          from collections import Counter
+          from pathlib import Path
+          path, size, output = sys.argv[1:]
+          n = int(size)
+          d = n.bit_length()-1
+          def require(ok, message):
+              if not ok: raise RuntimeError(message)
+          modules = json.loads(Path(path).read_text())['modules']
+          require(set(modules) == {'frp_m31_phase_interference_netlist'}, 'Netlist hierarchy')
+          module = modules['frp_m31_phase_interference_netlist']
+          inputs = dict(clk=1, rst_n=1, tick_enable=1, load_valid=1, phase_load=32*n,
+                        frequency_load_q16=32*n, gamma_effective_word=32*n,
+                        thermal_node_factor_q30=32*n, retained_state=2*n,
+                        switch_activity=n, scheduler_state=3)
+          outputs = dict(phase_word_q=32*n, frequency_current_q16=32*n,
+                         coupling_field_q16=32*n, phase_projection_q30=32*n,
+                         phase_target=2*n, pair_coherence_q30=32, cluster_coherence_q30=32,
+                         global_coherence_q30=32, organization_dispersion_q30=32,
+                         group_coherence_q30=32*(n-1), level_mean_coherence_q30=32*d,
+                         level_min_coherence_q30=32*d, level_max_coherence_q30=32*d,
+                         level_dispersion_q30=32*d)
+          require(set(module['ports']) == set(inputs) | set(outputs), 'Netlist ports')
+          for direction, widths in [('input', inputs), ('output', outputs)]:
+              for name, width in widths.items():
+                  port = module['ports'][name]
+                  require(port['direction'] == direction and len(port['bits']) == width,
+                          'Netlist port width/direction: '+name)
+          types = Counter(c['type'] for c in module['cells'].values())
+          require(types and all(t.startswith('$') for t in types), 'Unresolved cell')
+          require(not any('latch' in t.lower() or t.startswith('$memwr') or
+                          t in ('$shiftx', '$bwmux') for t in types), 'Unexpected storage/operator')
+          require('$adffe' in types and '$memrd_v2' in types, 'Missing retained state or ROM')
+          Path(output).write_text(json.dumps(dict(inputs=11, outputs=14,
+              output_bits=sum(outputs.values()), cell_types=dict(sorted(types.items()))), indent=2)+'\n')
+          '''
+
+          try:
+              require(n in known, 'Unsupported CELLS')
+              sources = {}
+              for name, expected in pins.items():
+                  path = Path('rtl/m31') / name
+                  require(digest(path) == expected, f'Qualified dependency changed: {path}')
+                  sources[str(path)] = digest(path)
+              for name, expected in canonical_pins.items():
+                  path = Path('rtl/m31') / name
+                  require(canonical(path) == expected, f'Qualified testbench changed: {path}')
+                  sources[str(path)] = digest(path)
+              sources[str(workflow)] = digest(workflow)
+              report.update(sources=sources, canonical_pins=canonical_pins)
+              checkpoint()
+              work.mkdir(parents=True, exist_ok=False)
+              view = work / 'synthesis'
+              for name in pins:
+                  destination = view / 'rtl/m31' / name
+                  destination.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copy2(root / 'rtl/m31' / name, destination)
+              phase = view / 'rtl/m31/frp_m31_phase_interference.sv'
+              pattern = (r'    if \(sin_lut\[(?:0|1024|2048|3072)\][^\n]+\n'
+                         r'      \$fatal\(1, "FRP M31 sine LUT [^\n]+\n')
+              normalized, count = re.subn(pattern, '', phase.read_text())
+              require(count == 4 and '$readmemh(SIN_LUT_FILE, sin_lut);' in normalized,
+                      'Unexpected ROM initialization')
+              # Only the synthesis copy omits four initial ROM diagnostic checks.
+              phase.write_text(normalized)
+              report['synthesis_view_sha256'] = digest(phase)
+              checker = evidence / 'check_netlist.py'
+              checker.write_text(structure_code)
+              hashes = []
+              for replay in (1, 2):
+                  stem = work / f'net-{replay}'
+                  script = (
+                      f'read_slang -j 1 --std 1800-2017 --ignore-assertions -G CELLS={n} '
+                      '--top frp_m31_phase_interference -Irtl/m31 rtl/m31/frp_m31_phase_interference.sv; '
+                      'synth -top frp_m31_phase_interference -flatten -run begin:coarse; '
+                      'techmap -map +/techmap.v t:$shiftx t:$bwmux; opt -full; opt_clean -purge; '
+                      'rename frp_m31_phase_interference frp_m31_phase_interference_netlist; '
+                      'check -assert; scc -expect 0; '
+                      'select -assert-none t:$dlatch t:$adlatch t:$shiftx t:$bwmux; '
+                      f'write_json {stem}.json; write_verilog -noattr {stem}.v')
+                  ys = evidence / f'synthesis-{replay}.ys'
+                  ys.write_text(script+'\n')
+                  execute(f'synthesis-{replay}', [sys.executable, '-c',
+                      'from pyosys import libyosys as y; import sys; y.run_pass(open(sys.argv[1]).read())',
+                      str(ys)], 1800, view)
+                  require('Found and expected 0 SCCs.' in (evidence / f'synthesis-{replay}.log').read_text(),
+                          'Missing zero-cycle structural check')
+                  # Parse large JSON in a separate process; release its memory before compiling.
+                  execute(f'structure-{replay}', [sys.executable, str(checker), str(stem)+'.json',
+                      str(n), str(evidence / f'structure-{replay}.json')], 300)
+                  hashes.append({ext: digest(stem.with_suffix('.'+ext)) for ext in ('v', 'json')})
+                  report['netlists'] = hashes
+                  checkpoint()
+              require(hashes[0] == hashes[1], 'Synthesis replay differs')
+              with (work / 'net-1.v').open('rb') as source:
+                  with gzip.open(evidence / 'phase-netlist.v.gz', 'wb') as target:
+                      shutil.copyfileobj(source, target, 1048576)
+              unchanged()
+              build = work / 'build'
+              args = ['verilator-cli', '--binary', '--output-groups', '0', '--unroll-count', '1',
+                  '--timing', '--assert', '-Wno-fatal', '-j', '1' if n == 64 else '2',
+                  '-CFLAGS', '-std=c++20', '-MAKEFLAGS', 'OPT_FAST=-O2',
+                  '-MAKEFLAGS', 'VK_PCH_I_FAST=', '-MAKEFLAGS', 'VK_PCH_I_SLOW=',
+                  '--top-module', top, f'-GCELLS={n}', '--Mdir', str(build),
+                  '-Irtl/m31', str(bench), str(work / 'net-1.v')]
+              if n == 8:
+                  args.append('--flatten')
+              execute('compile', args, 7200)
+              require(not re.search(r'%Error|%Warning-(PINMISSING|IMPLICIT|MULTIDRIVEN)',
+                                   (evidence / 'compile.log').read_text()), 'Unsafe compile diagnostics')
+              binary = build / ('V'+top)
+              binary_hash = digest(binary)
+              report['binary_sha256'] = binary_hash
+              records = []
+              for replay in (1, 2):
+                  unchanged()
+                  require(digest(binary) == binary_hash, 'Executable changed')
+                  execute(f'run-{replay}', [str(binary)], 900)
+                  records.append(collect(evidence / f'run-{replay}.log'))
+              require(records[0] == records[1], 'Simulation replay differs')
+              require(digest(binary) == binary_hash, 'Executable changed after replay')
+              unchanged()
+              report.update(status='PASS', records=records[0], replays=2,
+                            netlist_signature_pinned=n != 64)
+              (evidence / 'semantic.txt').write_text('\n'.join(records[0])+'\n')
+              print('\n'.join(records[0]))
+          except BaseException as error:
+              report.update(status='FAIL', error=str(error))
+              raise
+          finally:
+              checkpoint()
+              with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as stream:
+                  stream.write(f'### FRP #93 — {n} cells: {report["status"]}\n\n')
+                  stream.write(f'Commit: `{report["commit"]}`\n\n')
+                  if report['status'] == 'PASS':
+                      stream.write('Two matching syntheses; two matching simulation replays.\n\n')
+                      stream.write('```text\n'+'\n'.join(report['records'])+'\n```\n')
+                  else:
+                      stream.write('Inspect qualification.json and stage logs in the evidence artifact.\n')
+          PYTHON
+
+      - name: Upload qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp-93-hierarchy-${{ matrix.cells }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-93-evidence/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Release added swap
+        if: always() && matrix.cells == 64
+        run: |
+          set -euo pipefail
+          swap_path="$RUNNER_TEMP/frp-93.swap"
+          if [[ -f "$swap_path" ]]; then
+            if swapon --show=NAME --noheadings | grep -Fxq "$swap_path"; then
+              sudo swapoff "$swap_path"
+            fi
+            sudo rm -f "$swap_path"
+          fi
