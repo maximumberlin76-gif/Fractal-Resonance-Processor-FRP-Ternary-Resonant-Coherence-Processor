@@ -1,0 +1,353 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# Referenced dependencies retain their existing licenses.
+name: 99 - FRP M32 Feedback Ingress Formal
+run-name: "99 - FRP Feedback Ingress | 124 configurations, 992 witnesses @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-99-feedback-ingress-formal-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  prove:
+    name: "Feedback ingress contracts - ${{ matrix.cells }} cells"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        cells: [8, 16, 32, 64]
+    defaults:
+      run:
+        shell: bash
+    env:
+      CELLS: ${{ matrix.cells }}
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install pinned formal tools
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pyosys==0.68 z3-solver==4.15.4.0
+      - name: Prove contracts, witnesses and negative controls
+        run: |
+          set -euo pipefail
+          cat > .frp99-runner.py <<'PY'
+          from pathlib import Path
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import shutil
+          import subprocess
+          import sys
+
+          TOP = 'frp_m32_feedback_ingress_formal'
+          HARNESS = 'formal/m32/' + TOP + '.sv'
+          CORE = 'rtl/m32/frp_m32_core.sv'
+          FIXED = 'rtl/m31/frp_m31_fixed_point_pkg.sv'
+          EXPECTED = {
+              'formal/m32/frp_m32_feedback_ingress_formal.sv': '23f0fe31af35bc3fd1cf328b47fd417a2bf828b15a13c2f9e2c2d2d61cbe2565',
+              'rtl/m32/frp_m32_core.sv': '0be6c5ee28ee4a23baf6110143eec309f387200c1c2c80e3016353d5d4107541',
+              'rtl/m31/frp_m31_global_stability.sv': 'df058d4e3671ba1d7c9d0403a6bb1b8c9750a0a967905b5f91cca455c1dddb83',
+              'rtl/m31/frp_m31_fixed_point_pkg.sv': '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24',
+              'rtl/m31/frp_m31_stability.sv': '69c06833e6dfbb28e25b74a5787dcd03756dddf0f66726de3ea47c1ad2931931',
+              'rtl/m31/frp_m31_local_thermal_attenuation.sv': '6e10f738f94c43ac9748ec7a033adde16243beea59e2f7f2973a3ab51c2e5e04',
+              'rtl/m31/frp_m31_local_gamma_drift.sv': '478882d4f6a2986f5079c88b444c7b007d68145d61e5150209cb0637f35b2ec0',
+              'rtl/m31/frp_m31_local_thermal_field.sv': 'cb97c1bfeabbb2acaebf2f9644d484b2f7c5e995dbf1b70777f6bc2e7df9368e',
+              'rtl/m31/frp_m31_thermal_proxy.sv': '34df4ebfc5dfad8e3e5e454e560404585de5c881e6f75abaae367d3bd9fb11bd',
+              'rtl/m32/frp_m32_registered_target_request_path.sv': '02250069a68737f055a419cd67bf2d439b3f63b3f6a7a245f40e9bf29d1958eb',
+              'rtl/m31/frp_m31_phase_request_adapter.sv': 'fa78bcfe965270cc74855908aa392989d857575a2097a126539aabb1aab8990d',
+              'rtl/m31/frp_m31_pkg.sv': '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94',
+              'rtl/m32/frp_m32_registered_target_boundary.sv': '9626474b49d32b411e107d7ccc8ee5aa7f42728e9a6f70d634d16d3f2a414c5e',
+              'rtl/m31/frp_m31_phase_interference.sv': '7ac3572ef2bf9feef509e7dc43c662d92d23fa3eb0563efbfa8dba7c28157746',
+              'rtl/m31/frp_m31_isqrt_u64.sv': 'cbb5a531283164d1d54d59ec748b97bf84e172704854bf5eb7c6bda2c502f7c7',
+              'rtl/m31/frp_m31_execution_core.sv': 'e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92',
+              'rtl/m31/frp_m31_state_update.sv': 'ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90',
+              'rtl/m31/frp_m31_capacity_guard.sv': 'd0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123',
+              'rtl/m31/frp_m31_active_neutral.sv': '765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0',
+              'rtl/m31/frp_m31_pending_routes.sv': '18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411',
+              'rtl/m31/frp_m31_request_lanes.sv': '32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109',
+              'rtl/m31/frp_m31_scheduler.sv': 'fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f',
+          }
+          CHILDREN = {
+              'u_execution': 'frp_m31_execution_core',
+              'u_phase_interference': 'frp_m31_phase_interference',
+              'u_registered_target_request_path': 'frp_m32_registered_target_request_path',
+              'u_local_thermal_field': 'frp_m31_local_thermal_field',
+              'u_local_gamma_drift': 'frp_m31_local_gamma_drift',
+              'u_local_thermal_attenuation': 'frp_m31_local_thermal_attenuation',
+              'u_thermal_proxy': 'frp_m31_thermal_proxy',
+              'u_stability': 'frp_m31_stability',
+              'u_global_stability': 'frp_m31_global_stability',
+          }
+          BINDINGS = [
+              ('frequency_current_q16', 'frequency_probe', 32, 'u_phase_interference', 'frequency_current_q16'),
+              ('state_out', 'state_probe', 2, 'u_execution', 'state_out'),
+              ('accepted_change_mask', 'switch_probe', 1, 'u_execution', 'accepted_change_mask'),
+              ('local_next_gamma_effective_word', 'gamma_candidate_probe', 32,
+               'u_local_gamma_drift', 'next_gamma_effective_word'),
+              ('local_next_thermal_node_factor_q30', 'thermal_candidate_probe', 32,
+               'u_local_thermal_attenuation', 'next_thermal_node_factor_q30'),
+          ]
+          OUTPUTS = 'w:local_frequency_lag_q16 w:phase_gamma_effective_word w:phase_thermal_node_factor_q30'
+
+          def digest(path):
+              return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+          def write_json(path, value):
+              Path(path).write_text(json.dumps(value, indent=2) + '\n')
+
+          def hashes():
+              return {name: digest(name) for name in EXPECTED}
+
+          def worker():
+              from pyosys import libyosys as y
+              import z3
+              n, cell, profile = map(int, sys.argv[2:5])
+              negative = sys.argv[5] != 'positive'
+              before, stage = hashes(), 0
+
+              def run(commands):
+                  nonlocal stage
+                  for command in commands.split(';'):
+                      command = command.strip()
+                      if not command:
+                          continue
+                      stage += 1
+                      with open('commands.ys', 'a') as log:
+                          log.write(command + '\n')
+                      y.run_pass(f'tee -q -o stage-{stage:03d}.log {command}')
+                      y.log_flush()
+
+              def load_model(name, model):
+                  write_json(name + '.json', {'modules': {TOP: model}})
+                  run(f'design -reset; read_json {name}.json')
+
+              flags = ' '.join('--blackboxed-module ' + name for name in CHILDREN.values())
+              run(f'read_slang --std 1800-2017 --unroll-limit 20000 -I rtl/m31 -I rtl/m32 '
+                  f'-G CELLS={n} -G SELECTED_CELL={cell} -G PROFILE={profile} '
+                  f'{flags} --top {TOP} {HARNESS}; chformal -lower; flatten; '
+                  f'select -assert-count {11 if profile == 0 else 7} t:$assert; '
+                  'select -assert-none t:$assume t:$anyseq t:$anyconst; '
+                  'opt_expr; opt_clean; write_json initial.json')
+              design = json.loads(Path('initial.json').read_text())
+              model = design['modules'][TOP]
+              removed = {}
+              for key, item in model['cells'].items():
+                  if item['type'].startswith('$'):
+                      continue
+                  assert key.startswith('dut.')
+                  child = key[4:]
+                  assert child in CHILDREN and item['type'] == CHILDREN[child], key
+                  assert int(design['modules'][item['type']]['attributes']['blackbox'], 2) == 1
+                  removed[key] = item
+              mapping, binding_evidence = {}, []
+              for wire, probe, width, child, port in BINDINGS:
+                  old = model['netnames']['dut.' + wire]['bits']
+                  new = model['ports'][probe]['bits']
+                  driver = removed['dut.' + child]
+                  assert driver['port_directions'][port] == 'output'
+                  assert old == driver['connections'][port]
+                  assert len(old) == len(new) == n*width
+                  assert len(set(old)) == len(old) and len(set(new)) == len(new)
+                  assert all(isinstance(b, int) for b in old + new)
+                  assert not set(old) & set(new)
+                  for a, b in zip(old, new):
+                      assert a not in mapping
+                      mapping[a] = b
+                  binding_evidence.append({'wire': wire, 'probe': probe, 'bits': n*width,
+                                           'driver': child + '.' + port})
+              assert not set(mapping) & set(mapping.values())
+              model['cells'] = {key: item for key, item in model['cells'].items() if key not in removed}
+              for item in model['cells'].values():
+                  for port, bits in item['connections'].items():
+                      item['connections'][port] = [mapping.get(b, b) for b in bits]
+              for field in ('netnames', 'ports'):
+                  for item in model[field].values():
+                      item['bits'] = [mapping.get(b, b) for b in item['bits']]
+              for wire, probe, width, child, port in BINDINGS:
+                  assert model['netnames']['dut.' + wire]['bits'] == model['ports'][probe]['bits']
+              write_json('bindings.json', {'bindings': binding_evidence,
+                                         'removed_children': {key: c['type'] for key, c in removed.items()}})
+              load_model('bound', model)
+              run(f'opt_clean; design -save full; delete -output w:reach {OUTPUTS}; '
+                  'opt -full; wreduce; opt -full; check -assert; '
+                  'select -assert-any t:$assert; select -assert-none t:$assume; write_json proof.json')
+              proof = json.loads(Path('proof.json').read_text())['modules'][TOP]
+              if profile == 0 and not negative:
+                  multipliers = [(key, c) for key, c in proof['cells'].items() if c['type'] == '$mul']
+                  assert len(multipliers) == 1
+                  key, product = multipliers[0]
+                  for parameter, value in [('A_WIDTH', 33), ('B_WIDTH', 16), ('Y_WIDTH', 49),
+                                           ('A_SIGNED', 1), ('B_SIGNED', 1)]:
+                      assert int(product['parameters'][parameter], 2) == value
+                  a, b, output = [product['connections'][port] for port in ('A', 'B', 'Y')]
+                  reference = proof['netnames']['arithmetic.difference']['bits']
+                  actual = proof['netnames'][f'dut.g_local_frequency_lag[{cell}].difference_q16']['bits']
+                  assert actual == reference == a + [a[-1]]*31
+                  assert b == list(reversed(f'{19661:016b}'))
+                  assert len(set(output)) == 49 and all(isinstance(bit, int) for bit in output)
+                  assert proof['netnames']['arithmetic.product']['bits'] == output + [output[-1]]*15
+                  write_json('shared-product.json', {'cell': key, 'original': product,
+                             'difference_bits_equal': True, 'reference_product_bits_equal': True})
+                  proof['cells'][key] = {
+                      'type': '$anyseq', 'attributes': {}, 'parameters': {'WIDTH': 49},
+                      'port_directions': {'Y': 'output'}, 'connections': {'Y': output}}
+                  load_model('shared-product-model', proof)
+                  run('opt -full; check -assert')
+              run('select -assert-any t:$assert; select -assert-none t:$assume; write_smt2 -wires proof.smt2')
+              query = (Path('proof.smt2').read_text() +
+                       f'\n(declare-fun state () |{TOP}_s|)\n'
+                       f'(assert (|{TOP}_h| state))\n(assert (|{TOP}_u| state))\n'
+                       f'(assert (not (|{TOP}_a| state)))\n')
+              Path('query.smt2').write_text(query + '(check-sat)\n')
+              solver = z3.Solver()
+              solver.set(timeout=60000)
+              solver.add(z3.parse_smt2_string(query))
+              status = solver.check()
+              write_json('solver.json', {'status': str(status),
+                         'reason_unknown': solver.reason_unknown() if status == z3.unknown else ''})
+              assert status == (z3.sat if negative else z3.unsat), str(status)
+              if negative:
+                  Path('counterexample.txt').write_text(str(solver.model()))
+              else:
+                  run(f'design -load full; chformal -assert -remove; delete -output {OUTPUTS}; '
+                      'opt -full; check -assert; select -assert-none t:$anyseq t:$assume')
+                  for bit in range(8):
+                      path = Path(f'reach-{bit}.json')
+                      assert not path.exists()
+                      run(f'sat -set reach[{bit}] 1 -show-ports -dump_json {path} -timeout 30')
+                      signal = next(s for s in json.loads(path.read_text())['signal'] if s['name'] == 'reach')
+                      value = next(v for v in signal['data'] if v and set(v) <= {'0', '1'})
+                      assert int(value, 2) & (1 << bit), str(path)
+              assert hashes() == before
+              write_json('receipt.json', {
+                  'status': 'mutation_detected' if negative else 'passed',
+                  'cells': n, 'selected_cell': cell, 'profile': profile,
+                  'case': sys.argv[5], 'solver': str(status), 'source_hashes': before,
+                  'witnesses': 0 if negative else 8,
+              })
+
+          def campaign():
+              n = int(os.environ['CELLS'])
+              assert n in (8, 16, 32, 64)
+              root, script = Path.cwd(), Path(__file__).resolve()
+              evidence = root / '.frp99-evidence' / f'n{n}'
+              evidence.mkdir(parents=True, exist_ok=False)
+              result = {'status': 'failed', 'cells': n, 'commit': os.environ['GITHUB_SHA'],
+                        'configurations': [], 'mutations': []}
+              save = lambda: write_json(evidence / 'result.json', result)
+              save()
+              before = hashes()
+              write_json(evidence / 'sources.json', before)
+              assert before == EXPECTED, 'Source hash mismatch: inspect changed files'
+              for name, version in [('pyosys', '0.68'), ('z3-solver', '4.15.4.0')]:
+                  assert importlib.metadata.version(name) == version
+              shutil.copyfile(script, evidence / 'runner.py')
+              (evidence / 'packages.txt').write_text(subprocess.check_output(
+                  [sys.executable, '-m', 'pip', 'freeze'], text=True))
+              for name in EXPECTED:
+                  target = evidence / 'sources' / name
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(name, target)
+              write_json(evidence / 'scope.json', {
+                  'method': 'Combinational M32 interface contracts with five explicit probe buses',
+                  'arithmetic': 'All selected-cell signed frequency inputs and unsigned lag outputs',
+                  'selection': 'Full gamma and thermal banks with unrestricted source enables',
+                  'product': 'One identical signed product shared by DUT and reference; 49-bit abstraction',
+                  'witnesses': 'Local interface domain with original multiplication',
+                  'negative_controls': 'Original multiplication; an actual counterexample is required',
+              })
+
+              def execute(cell, profile, label, mutation=None):
+                  work = evidence / label
+                  work.mkdir()
+                  expected = before.copy()
+                  for name in EXPECTED:
+                      target = work / name
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      shutil.copyfile(root / name, target)
+                  if mutation:
+                      name, old, new = mutation
+                      target = work / name
+                      source = target.read_text()
+                      assert source.count(old) == 1, label
+                      target.write_text(source.replace(old, new))
+                      expected[name] = digest(target)
+                      write_json(work / 'mutation.json', {'path': name, 'old': old, 'new': new})
+                  print(f'RUN n={n} {label}', flush=True)
+                  case = label if mutation else 'positive'
+                  with (work / 'worker.log').open('w') as log:
+                      completed = subprocess.run(
+                          [sys.executable, '-u', str(script), '--worker', str(n), str(cell), str(profile), case],
+                          cwd=work, stdout=log, stderr=subprocess.STDOUT, timeout=180)
+                  assert completed.returncode == 0, str(work / 'worker.log')
+                  receipt = json.loads((work / 'receipt.json').read_text())
+                  assert receipt['status'] == ('mutation_detected' if mutation else 'passed')
+                  assert receipt['solver'] == ('sat' if mutation else 'unsat')
+                  assert receipt['source_hashes'] == expected
+                  assert (receipt['cells'], receipt['selected_cell'], receipt['profile']) == (n, cell, profile)
+                  assert receipt['witnesses'] == (0 if mutation else 8)
+                  return dict(label=label, **receipt)
+
+              for cell, profile in [(cell, 0) for cell in range(n)] + [(0, 1)]:
+                  result['configurations'].append(execute(cell, profile, f'p{profile}-cell{cell}'))
+                  save()
+              if n == 8:
+                  mutations = [
+                      ('load-priority', 0, CORE, 'if (phase_load_valid)', 'if (!phase_load_valid)'),
+                      ('lag-sign', 0, CORE, 'if (residual_q16 < 0)', "if (1'b0)"),
+                      ('gamma-selection', 1, CORE, '= local_gamma_enable', '= !local_gamma_enable'),
+                      ('thermal-selection', 1, CORE, '= local_thermal_enable', '= !local_thermal_enable'),
+                      ('rounding-tie', 0, FIXED, '(value + half_value) >>> shift',
+                       "(value + half_value - 64'sd1) >>> shift"),
+                  ]
+                  for name, profile, path, old, new in mutations:
+                      result['mutations'].append(execute(0, profile, 'mutation-' + name, (path, old, new)))
+                      save()
+              assert hashes() == before, 'Repository sources changed'
+              assert len(result['configurations']) == n + 1
+              assert len(result['mutations']) == (5 if n == 8 else 0)
+              witnesses = sum(r['witnesses'] for r in result['configurations'])
+              assert witnesses == 8*(n+1)
+              result.update(status='passed', witnesses=witnesses)
+              save()
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
+                  out.write(f'### FRP 99: {n} cells\n\n'
+                            f'- Proven configurations: {n+1}\n- Local witnesses: {witnesses}\n'
+                            f'- Detected mutations: {len(result["mutations"])}\n\n'
+                            'Signed frequency correction, rounding, load priority, unsigned lag bounds, '
+                            'and full-bank gamma/thermal selection. Witnesses use the original multiplier '
+                            'within the explicitly bound local interface domain.\n')
+              print(f'PASS n={n}: {n+1} configurations, {witnesses} witnesses', flush=True)
+
+          if __name__ == '__main__':
+              if len(sys.argv) > 1 and sys.argv[1] == '--worker':
+                  worker()
+              else:
+                  campaign()
+          PY
+          python .frp99-runner.py
+      - name: Upload formal evidence
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp99-n${{ matrix.cells }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: .frp99-evidence/n${{ matrix.cells }}/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
