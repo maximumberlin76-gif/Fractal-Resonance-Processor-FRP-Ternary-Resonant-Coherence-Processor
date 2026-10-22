@@ -1,0 +1,313 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# Referenced dependencies retain their existing licenses.
+name: 97 - FRP M31 Fractal Hierarchy Formal
+run-name: "97 - FRP Fractal Hierarchy | 62 configurations, 496 witnesses @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-97-fractal-formal-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  prove:
+    name: "Hierarchy contracts - ${{ matrix.cells }} cells"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        cells: [8, 16, 32, 64]
+    defaults:
+      run:
+        shell: bash
+    env:
+      CELLS: ${{ matrix.cells }}
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install pinned formal tools
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pyosys==0.68 z3-solver==4.15.4.0
+      - name: Prove contracts, witnesses and negative controls
+        run: |
+          set -euo pipefail
+          cat > .frp97-runner.py <<'PY'
+          from pathlib import Path
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          import sys
+
+          TOP = 'frp_m31_fractal_hierarchy_formal'
+          PHASE = 'rtl/m31/frp_m31_phase_interference.sv'
+          EXPECTED = {
+              'formal/m31/' + TOP + '.sv': '9a7fbe04d7c002ac8c74f82cc5500bc35fdce945a3cf517b2558ef0d205c9084',
+              PHASE: '7ac3572ef2bf9feef509e7dc43c662d92d23fa3eb0563efbfa8dba7c28157746',
+              'rtl/m31/frp_m31_isqrt_u64.sv': 'cbb5a531283164d1d54d59ec748b97bf84e172704854bf5eb7c6bda2c502f7c7',
+              'rtl/m31/frp_m31_pkg.sv': '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94',
+              'rtl/m31/frp_m31_fixed_point_pkg.sv': '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24',
+              'rtl/m31/frp_m31_sin_q30.mem': 'adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d',
+          }
+
+          def digest(path):
+              return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+          def write_json(path, data):
+              Path(path).write_text(json.dumps(data, indent=2) + '\n')
+
+          def worker():
+              from pyosys import libyosys as y
+              n, p, level = map(int, sys.argv[2:5])
+              negative = sys.argv[5] == 'negative'
+              stage = 0
+              proofs = []
+
+              def run(commands):
+                  nonlocal stage
+                  text = ''
+                  for command in commands.split(';'):
+                      command = command.strip()
+                      if not command:
+                          continue
+                      stage += 1
+                      log = Path(f'stage-{stage:03d}.log')
+                      with open('commands.ys', 'a') as out:
+                          out.write(command + '\n')
+                      y.run_pass(f'tee -q -o {log} {command}')
+                      y.log_flush()
+                      text = log.read_text()
+                      if command.startswith('sat ') and '-verify' in command:
+                          assert 'SAT proof finished - no model found: SUCCESS!' in text, str(log)
+                          proofs.append(str(log))
+                  return text
+
+              count, depth = n >> level, n.bit_length() - 1
+              assertions = [count * (2 if level == 1 else 4), 2*(n-1),
+                            2*(n-1)+3, n-1+3+(2 if count > 1 else 0),
+                            2*(n-1)+4+2*depth][p]
+              run(f'read_slang --std 1800-2017 --unroll-limit 20000 -I rtl/m31 '
+                  f'-G CELLS={n} -G PROFILE={p} -G LEVEL={level} --top {TOP} {TOP}.sv; '
+                  'chformal -lower; flatten; '
+                  f'select -assert-count {assertions} t:$assert; '
+                  'select -assert-none t:$assume t:$cover t:$check t:$anyseq t:$anyconst; '
+                  'opt_expr; opt_clean')
+              wires = {0: ['dut.sine_q30', 'dut.cosine_q30'],
+                       1: ['dut.coherence_magnitude_q30'],
+                       2: ['dut.coherence_value_q30'],
+                       3: ['dut.coherence_value_q30'],
+                       4: ['dut.coherence_value_q30', 'dut.level_deviation_q30']}[p]
+              for wire in wires:
+                  run(f'select -assert-count 1 w:{wire}')
+              if p in (2, 3, 4):
+                  target = 'endpoint_values' if p == 3 else 'domain_values'
+                  run('cutpoint w:dut.coherence_value_q30; '
+                      'select -assert-any t:$anyseq; '
+                      f'delete t:$anyseq; connect -set dut.coherence_value_q30 {target}')
+                  if p == 4:
+                      run('cutpoint w:dut.level_deviation_q30')
+              else:
+                  run('cutpoint ' + ' '.join('w:' + wire for wire in wires))
+              run('opt_clean; design -save full; write_rtlil full.il; '
+                  'delete -output w:reach w:endpoint_values w:domain_values; '
+                  'opt -full; memory_map; opt -full; opt_clean; '
+                  'select -assert-any t:$assert; select -assert-none t:$assume t:$anyconst; '
+                  'check -assert; write_rtlil proof.il')
+              if p == 0:
+                  import z3
+                  run('write_smt2 -wires proof.smt2')
+                  query = (Path('proof.smt2').read_text() +
+                           f'\n(declare-fun state () |{TOP}_s|)\n'
+                           f'(assert (|{TOP}_h| state))\n(assert (|{TOP}_u| state))\n'
+                           f'(assert (not (|{TOP}_a| state)))\n')
+                  Path('query.smt2').write_text(query + '(check-sat)\n')
+                  solver = z3.Solver()
+                  solver.set(timeout=60000)
+                  solver.add(z3.parse_smt2_string(query))
+                  status = solver.check()
+                  Path('solver-result.txt').write_text(str(status) + '\n')
+                  assert status == (z3.sat if negative else z3.unsat), str(status)
+                  if negative:
+                      Path('counterexample.txt').write_text(str(solver.model()))
+              else:
+                  run('wreduce; opt -full')
+                  if negative:
+                      partition = '-set statistics.high_count 16 ' if p == 3 else ''
+                      text = run('sat ' + partition + '-prove-asserts '
+                                 '-dump_json counterexample.json -timeout 60')
+                      assert 'SAT proof finished - model found: FAIL!' in text, 'Mutation escaped'
+                      assert Path('counterexample.json').is_file(), 'Missing counterexample'
+                  elif p == 3:
+                      run('sat -prove statistics.count_valid 1 -verify -timeout 30')
+                      for k in range(count + 1):
+                          run(f'sat -set statistics.high_count {k} -prove-asserts -verify -timeout 30')
+                  else:
+                      run('sat -prove-asserts -verify -timeout 60')
+              if not negative:
+                  run('design -load full; '
+                      'delete -output w:endpoint_values w:domain_values; '
+                      'chformal -assert -remove; opt -full; opt_clean; '
+                      'select -assert-none t:$assert t:$assume; check -assert')
+                  for bit in range(8):
+                      target = f'witness-{bit}.json'
+                      run(f'sat -set reach[{bit}] 1 -show-ports -dump_json {target} -timeout 15')
+                      witness = json.loads(Path(target).read_text())
+                      signal = next(s for s in witness['signal'] if s['name'] == 'reach')
+                      value = next(v for v in signal['data'] if v and set(v) <= {'0', '1'})
+                      assert int(value, 2) & (1 << bit), target
+              write_json('receipt.json', {
+                  'cells': n, 'profile': p, 'level': level,
+                  'status': 'mutation_detected' if negative else 'passed',
+                  'source_assertions': assertions, 'sat_proofs': proofs,
+                  'witnesses': 0 if negative else 8,
+                  'harness_sha256': digest(TOP + '.sv'),
+                  'private_rtl_sha256': digest(PHASE),
+              })
+
+          def campaign():
+              n = int(os.environ['CELLS'])
+              assert n in (8, 16, 32, 64)
+              root = Path.cwd()
+              script = Path(__file__).resolve()
+              evidence = root / '.frp97-evidence' / f'n{n}'
+              evidence.mkdir(parents=True, exist_ok=False)
+              result = {'schema': 'frp.fractal.formal.v1', 'status': 'failed', 'cells': n,
+                        'commit': os.environ['GITHUB_SHA'], 'profiles': [], 'mutations': [],
+                        'scope': 'Local combinational hierarchy contracts; endpoint-only variance'}
+              save = lambda: write_json(evidence / 'result.json', result)
+              save()
+              before = {p: digest(p) for p in EXPECTED}
+              write_json(evidence / 'sources.json', before)
+              assert before == EXPECTED, 'Source hash mismatch; inspect the changed file'
+              for package, version in [('pyosys', '0.68'), ('z3-solver', '4.15.4.0')]:
+                  assert importlib.metadata.version(package) == version
+              (evidence / 'packages.txt').write_text(subprocess.check_output(
+                  [sys.executable, '-m', 'pip', 'freeze'], text=True))
+              for source in EXPECTED:
+                  destination = evidence / 'sources' / source
+                  destination.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(source, destination)
+              original = Path(PHASE).read_text()
+              private, guards = re.subn(
+                  r'    if \(sin_lut\[[^\n]+\n      \$fatal\(1, "FRP M31 sine LUT [^\n]+\n',
+                  '', original)
+              assert guards == 4, 'ROM guard sites changed'
+              start = '  for (genvar cell_index ='
+              end = '  for (genvar level ='
+              assert private.count(start) == private.count(end) == 1
+              first, last = private.index(start), private.index(end)
+              replacement = (
+                  '  for (genvar cell_index = 0; cell_index < CELLS; cell_index++) begin : g_phase_cut\n'
+                  '    assign sine_q30[cell_index] = $signed(phase_load[32*cell_index +: 32]);\n'
+                  '    assign cosine_q30[cell_index] = $signed(frequency_load_q16[32*cell_index +: 32]);\n'
+                  '  end\n\n')
+              private = private[:first] + replacement + private[last:]
+              assert private[private.index(end):] == original[original.index(end):]
+              a = '  for (genvar group_index ='
+              b = '  function automatic logic signed [31:0] phase_weight_q30'
+              assert private[private.index(a):private.index(b)] == original[original.index(a):original.index(b)]
+              write_json(evidence / 'abstraction.json', {
+                  'removed_rom_simulation_guards': guards,
+                  'upstream_phasors': 'Independent input words replace g_phase_cell in private copies',
+                  'hierarchy_and_root_blocks': 'Byte-identical to checked source',
+                  'private_sha256': hashlib.sha256(private.encode()).hexdigest(),
+                  'excluded': ['ROM contents', 'integer-root recurrence', 'full-domain variance',
+                               'sequential phase dynamics'],
+              })
+
+              def execute(label, p, level, source, negative=False):
+                  work = evidence / label
+                  work.mkdir()
+                  for item in EXPECTED:
+                      relative = Path(item).name if item.startswith('formal/') else item
+                      target = work / relative
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      shutil.copyfile(root / item, target)
+                  (work / PHASE).write_text(source)
+                  print(f'RUN n={n} {label}', flush=True)
+                  with (work / 'worker.log').open('w') as log:
+                      completed = subprocess.run(
+                          [sys.executable, '-u', str(script), '--worker', str(n), str(p), str(level),
+                           'negative' if negative else 'positive'], cwd=work,
+                          stdout=log, stderr=subprocess.STDOUT, timeout=900)
+                  assert completed.returncode == 0, str(work / 'worker.log')
+                  receipt = json.loads((work / 'receipt.json').read_text())
+                  assert receipt['status'] == ('mutation_detected' if negative else 'passed')
+                  assert (receipt['cells'], receipt['profile'], receipt['level']) == (n, p, level)
+                  assert receipt['harness_sha256'] == EXPECTED['formal/m31/' + TOP + '.sv']
+                  assert receipt['private_rtl_sha256'] == hashlib.sha256(source.encode()).hexdigest()
+                  return dict(label=label, **receipt)
+
+              for p in range(5):
+                  levels = range(1, n.bit_length()) if p in (0, 2, 3) else [1]
+                  for level in levels:
+                      result['profiles'].append(execute(f'p{p}-l{level}', p, level, private))
+                      save()
+              mutations = [
+                  ('membership', 8, 0, '(group << level)+member', 'member', 2),
+                  ('clipping', 8, 1, '? FRP_M31_Q30_ONE :', "? 32'sd1073741823 :", 1),
+                  ('rounding', 8, 2, 'half_denominator = denominator / 2;',
+                   'half_denominator = denominator / 4;', 1),
+                  ('unsigned', 64, 3, "square_sum_q60 / 64'(CELLS >> level)",
+                   "$signed(square_sum_q60) / $signed(64'(CELLS >> level))", 1),
+                  ('global', 8, 4, 'global_coherence_q30 = coherence_value_q30[GROUPS-1];',
+                   'global_coherence_q30 = coherence_value_q30[0];', 1),
+              ]
+              for name, size, p, old, new, occurrences in mutations:
+                  if size != n:
+                      continue
+                  assert private.count(old) == occurrences, 'Mutation site changed: ' + name
+                  mutated = private.replace(old, new)
+                  result['mutations'].append(execute('mutation-' + name, p, 1, mutated, True))
+                  save()
+              assert {p: digest(p) for p in EXPECTED} == before, 'Repository sources changed'
+              assert len(result['profiles']) == 3*(n.bit_length()-1)+2
+              assert len(result['mutations']) == (4 if n == 8 else 1 if n == 64 else 0)
+              witnesses = sum(r['witnesses'] for r in result['profiles'])
+              assert witnesses == 8*len(result['profiles'])
+              result.update(status='passed', witnesses=witnesses)
+              save()
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
+                  out.write(f'### FRP 97: {n} cells\n\n'
+                            f'- Proven configurations: {len(result["profiles"])}\n'
+                            f'- Checked local witnesses: {witnesses}\n'
+                            f'- Detected mutations: {len(result["mutations"])}\n\n'
+                            'Means and extrema cover the full coherence domain. Variance covers '
+                            'every assignment of 0/2^30 endpoints, partitioned by proven population count. '
+                            'Witnesses describe local cut domains, not end-to-end reachable states. '
+                            'ROM contents and integer-root recurrence are outside this workflow.\n')
+              print(f'PASS n={n}: {len(result["profiles"])} configurations, {witnesses} witnesses', flush=True)
+
+          if __name__ == '__main__':
+              if len(sys.argv) > 1 and sys.argv[1] == '--worker':
+                  worker()
+              else:
+                  campaign()
+          PY
+          python .frp97-runner.py
+      - name: Upload formal evidence
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp97-n${{ matrix.cells }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: .frp97-evidence/n${{ matrix.cells }}/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
