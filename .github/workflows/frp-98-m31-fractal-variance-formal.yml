@@ -1,0 +1,434 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# Referenced dependencies retain their existing licenses.
+name: 98 - FRP M31 Fractal Variance Formal
+run-name: "98 - FRP Fractal Variance | 54 configurations, 432 witnesses @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-98-fractal-formal-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  prove:
+    name: "Variance contracts - ${{ matrix.cells }} cells"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        cells: [8, 16, 32, 64]
+    defaults:
+      run:
+        shell: bash
+    env:
+      CELLS: ${{ matrix.cells }}
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install pinned formal tools
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pyosys==0.68 z3-solver==4.15.4.0
+      - name: Prove contracts, witnesses and negative controls
+        run: |
+          set -euo pipefail
+          cat > .frp98-runner.py <<'PY'
+          from pathlib import Path
+          import copy
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          import sys
+
+          TOP = 'frp_m31_fractal_variance_formal'
+          PHASE = 'rtl/m31/frp_m31_phase_interference.sv'
+          EXPECTED = {
+              'formal/m31/' + TOP + '.sv': '5bec6ef55e39ae27901562a02ce986fcbed7e6dc81e0587281348f69f7914cf5',
+              PHASE: '7ac3572ef2bf9feef509e7dc43c662d92d23fa3eb0563efbfa8dba7c28157746',
+              'rtl/m31/frp_m31_isqrt_u64.sv': 'cbb5a531283164d1d54d59ec748b97bf84e172704854bf5eb7c6bda2c502f7c7',
+              'rtl/m31/frp_m31_pkg.sv': '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94',
+              'rtl/m31/frp_m31_fixed_point_pkg.sv': '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24',
+              'rtl/m31/frp_m31_sin_q30.mem': 'adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d',
+          }
+
+          def digest(path):
+              return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+          def write_json(path, data):
+              Path(path).write_text(json.dumps(data, indent=2) + '\n')
+
+          def worker():
+              from pyosys import libyosys as y
+              import z3
+              n, p, level = map(int, sys.argv[2:5])
+              negative = sys.argv[5]
+              expected_failure = {'mean_tie': 'operands', 'variance_rounding': 'result',
+                                  'deviation_bias': 'native'}.get(negative)
+              assert negative == 'positive' or expected_failure
+              hashes = {s: digest(s) for s in [TOP + '.sv', PHASE]}
+              stage, proofs = 0, []
+
+              def run(commands):
+                  nonlocal stage
+                  text = ''
+                  for command in commands.split(';'):
+                      command = command.strip()
+                      if not command:
+                          continue
+                      stage += 1
+                      log = Path(f'stage-{stage:03d}.log')
+                      with open('commands.ys', 'a') as out:
+                          out.write(command + '\n')
+                      y.run_pass(f'tee -q -o {log} {command}')
+                      y.log_flush()
+                      text = log.read_text()
+                      if command.startswith('sat ') and '-verify' in command:
+                          assert 'SAT proof finished - no model found: SUCCESS!' in text, str(log)
+                  return text
+
+              def finish(detected=False):
+                  assert {s: digest(s) for s in hashes} == hashes
+                  write_json('receipt.json', {
+                      'cells': n, 'profile': p, 'level': level,
+                      'status': 'mutation_detected' if detected else 'passed',
+                      'mutation': negative, 'proofs': proofs,
+                      'witnesses': 0 if detected else 8,
+                      'harness_sha256': hashes[TOP + '.sv'],
+                      'private_rtl_sha256': hashes[PHASE],
+                  })
+
+              def smt(label):
+                  run('select -assert-any t:$assert; select -assert-none t:$assume; '
+                      f'write_smt2 -wires {label}.smt2')
+                  query = (Path(label + '.smt2').read_text() +
+                           f'\n(declare-fun state () |{TOP}_s|)\n'
+                           f'(assert (|{TOP}_h| state))\n(assert (|{TOP}_u| state))\n'
+                           f'(assert (not (|{TOP}_a| state)))\n')
+                  Path(label + '-query.smt2').write_text(query + '(check-sat)\n')
+                  solver = z3.Solver()
+                  solver.set(timeout=60000)
+                  solver.add(z3.parse_smt2_string(query))
+                  status = solver.check()
+                  write_json(label + '-status.json', {'status': str(status),
+                             'reason_unknown': solver.reason_unknown() if status == z3.unknown else ''})
+                  proofs.append({'stage': label, 'status': str(status)})
+                  if label == expected_failure:
+                      assert status == z3.sat, 'Mutation escaped or solver did not finish'
+                      Path(label + '-counterexample.txt').write_text(str(solver.model()))
+                      finish(True)
+                      return True
+                  assert status == z3.unsat, (label, str(status))
+                  return False
+
+              count = n >> level
+              run(f'read_slang --std 1800-2017 --unroll-limit 20000 -I rtl/m31 '
+                  f'-G CELLS={n} -G LEVEL={level} -G PROFILE={p} --top {TOP} {TOP}.sv; '
+                  'chformal -lower; flatten; '
+                  f'select -assert-count {n+1} t:$assert; '
+                  'select -assert-none t:$assume t:$cover t:$check t:$anyseq t:$anyconst; '
+                  'opt_expr; opt_clean; select -assert-count 1 w:dut.coherence_value_q30; '
+                  'cutpoint w:dut.coherence_value_q30; select -assert-any t:$anyseq; '
+                  'delete t:$anyseq; connect -set dut.coherence_value_q30 domain_values; '
+                  'opt_clean; design -save full; delete -output w:reach w:domain_values; '
+                  'opt -full; memory_map; opt -full; check -assert; write_json raw.json')
+              m = json.loads(Path('raw.json').read_text())['modules'][TOP]
+
+              def load_model(name, model):
+                  write_json(name + '.json', {'modules': {TOP: model}})
+                  run(f'design -reset; read_json {name}.json; opt -full; opt_clean; check -assert')
+
+              if p in (0, 2) and count > 1:
+                  muls = {k: c for k, c in m['cells'].items() if c['type'] == '$mul'}
+                  assert muls
+                  subs = {tuple(c['connections']['Y']): c['connections']['A']
+                          for c in m['cells'].values() if c['type'] == '$sub'}
+                  for c in muls.values():
+                      assert c['connections']['A'] == c['connections']['B']
+                      for key, value in [('A_WIDTH', 64), ('B_WIDTH', 64), ('Y_WIDTH', 64),
+                                         ('A_SIGNED', 1), ('B_SIGNED', 1)]:
+                          assert int(c['parameters'][key], 2) == value, key
+                  fresh = max(b for c in m['cells'].values() for bs in c['connections'].values()
+                              for b in bs if isinstance(b, int)) + 1
+                  bridge = copy.deepcopy(m)
+                  bridge['cells'] = {k: c for k, c in bridge['cells'].items() if c['type'] != '$assert'}
+
+                  def equality(a, b):
+                      nonlocal fresh
+                      bit = fresh
+                      fresh += 1
+                      bridge['cells'][f'eq_{bit}'] = {
+                          'type': '$eq', 'attributes': {},
+                          'parameters': {'A_WIDTH': 64, 'B_WIDTH': 64, 'Y_WIDTH': 1,
+                                         'A_SIGNED': 0, 'B_SIGNED': 0},
+                          'port_directions': {'A': 'input', 'B': 'input', 'Y': 'output'},
+                          'connections': {'A': a, 'B': b, 'Y': [bit]}}
+                      bridge['cells'][f'assert_{bit}'] = {
+                          'type': '$assert', 'parameters': {}, 'attributes': {},
+                          'port_directions': {'A': 'input', 'EN': 'input'},
+                          'connections': {'A': [bit], 'EN': ['1']}}
+
+                  pairs, constants = [], {}
+                  if p == 0:
+                      refs = {k: c for k, c in muls.items()
+                              if TOP + '.sv' in c['attributes'].get('src', '')}
+                      duts = {k: c for k, c in muls.items() if k not in refs}
+                      assert len(refs) == len(duts) == count
+                      for rk, rc in refs.items():
+                          matches = [dk for dk, dc in duts.items()
+                                     if subs[tuple(dc['connections']['A'])] == subs[tuple(rc['connections']['A'])]]
+                          assert len(matches) == 1
+                          dk = matches[0]
+                          assert rc['parameters'] == duts[dk]['parameters']
+                          pairs.append((dk, rk))
+                          for port in ('A', 'B'):
+                              equality(duts[dk]['connections'][port], rc['connections'][port])
+                      assert len({dk for dk, rk in pairs}) == count
+                  else:
+                      inputs = m['netnames']['value']['bits']
+                      for k, c in muls.items():
+                          a = subs[tuple(c['connections']['A'])]
+                          groups = [g for g in range(count)
+                                    if a[:32] == inputs[32*(count-1-g):32*(count-g)]]
+                          assert groups and len({g % 2 for g in groups}) == 1
+                          delta = groups[0] % 2 - 1
+                          constants[k] = delta * delta
+                          bits = list(reversed(f'{delta & ((1 << 64)-1):064b}'))
+                          for port in ('A', 'B'):
+                              equality(c['connections'][port], bits)
+                  write_json('composition.json', {'pairs': pairs, 'constant_squares': constants})
+                  load_model('bridge', bridge)
+                  run('select -assert-none t:$mul')
+                  if smt('operands'):
+                      return
+                  reduced, mapping = copy.deepcopy(m), {}
+
+                  def replace_product(key, bits):
+                      outputs = reduced['cells'].pop(key)['connections']['Y']
+                      assert len(outputs) == len(set(outputs)) == 64
+                      assert all(isinstance(b, int) for b in outputs)
+                      for old, new in zip(outputs, bits):
+                          assert old not in mapping
+                          mapping[old] = new
+
+                  for i, (dk, rk) in enumerate(pairs):
+                      bits = list(range(fresh, fresh + 64))
+                      fresh += 64
+                      replace_product(dk, bits)
+                      replace_product(rk, bits)
+                      reduced['cells'][f'product_{i}'] = {
+                          'type': '$anyseq', 'parameters': {'WIDTH': 64}, 'attributes': {},
+                          'port_directions': {'Y': 'output'}, 'connections': {'Y': bits}}
+                  for key, square in constants.items():
+                      replace_product(key, list(reversed(f'{square:064b}')))
+                  for c in reduced['cells'].values():
+                      for port, bits in c['connections'].items():
+                          c['connections'][port] = [mapping.get(b, b) for b in bits]
+                  for field in ('netnames', 'ports'):
+                      for item in reduced[field].values():
+                          item['bits'] = [mapping.get(b, b) for b in item['bits']]
+                  load_model('products', reduced)
+                  if smt('result'):
+                      return
+              else:
+                  run('wreduce; opt -full; check -assert; select -assert-any t:$assert')
+                  if expected_failure:
+                      assert expected_failure == 'native'
+                      text = run('sat -prove-asserts -show-ports -dump_json counterexample.json -timeout 60')
+                      assert 'SAT proof finished - model found: FAIL!' in text, 'Mutation escaped'
+                      assert json.loads(Path('counterexample.json').read_text())['signal']
+                      proofs.append({'stage': 'native', 'status': 'sat'})
+                      finish(True)
+                      return
+                  run('sat -prove-asserts -verify -timeout 60')
+                  proofs.append({'stage': 'native', 'status': 'unsat'})
+              assert not expected_failure, 'Expected mutation was not detected'
+              run('design -load full; delete -output w:domain_values; chformal -assert -remove; '
+                  'opt -full; opt_clean; check -assert')
+              for bit in range(8):
+                  path = Path(f'reach{bit}.json')
+                  run(f'sat -set reach[{bit}] 1 -show-ports -dump_json {path} -timeout 15')
+                  signal = next(s for s in json.loads(path.read_text())['signal'] if s['name'] == 'reach')
+                  value = next(v for v in signal['data'] if v and set(v) <= {'0', '1'})
+                  assert int(value, 2) & (1 << bit)
+              finish()
+
+          def arithmetic(folder):
+              import z3
+              folder.mkdir()
+              bound, center = 1 << 30, 1 << 29
+              x, mean, total = z3.Ints('x mean total')
+              results = []
+
+              def prove(name, preconditions, goal):
+                  solver = z3.Solver()
+                  solver.set(timeout=10000)
+                  solver.add(*preconditions, z3.Not(goal))
+                  (folder / (name + '.smt2')).write_text(solver.to_smt2())
+                  status = solver.check()
+                  write_json(folder / (name + '.json'), {'status': str(status)})
+                  assert status == z3.unsat, (name, str(status))
+                  results.append(name)
+
+              prove('centered_term_bound', [x >= 0, x <= bound], (x-center)**2 <= center**2)
+              prove('difference_and_square', [x >= 0, x <= bound, mean >= 0, mean <= bound],
+                    z3.And(x-mean >= -bound, x-mean <= bound, (x-mean)**2 <= bound**2))
+              for count in (1, 2, 4, 8, 16, 32):
+                  pre = [total >= 0, total <= count*bound,
+                         count*mean <= total + count//2, total + count//2 < count*(mean+1)]
+                  delta, factor = mean-center, count*(mean+center)-2*total
+                  prove(f'n{count}_mean_domain', pre, z3.And(mean >= 0, mean <= bound))
+                  prove(f'n{count}_positive_delta', pre + [delta >= 1], factor <= 0)
+                  prove(f'n{count}_negative_delta', pre + [delta <= -1], factor >= 0)
+                  prove(f'n{count}_minimal_center', pre, delta*factor <= 0)
+                  values = z3.Ints(' '.join(f'x{count}_{i}' for i in range(count)))
+                  identity = (sum((a-mean)**2-(a-center)**2 for a in values)
+                              - (mean-center)*(count*(mean+center)-2*sum(values)))
+                  assert z3.is_true(z3.simplify(identity == 0, som=True, som_blowup=1000))
+                  assert count*center**2 <= 1 << 63
+                  name = f'n{count}_sum_identity_and_u64_bound'
+                  (folder / (name + '.txt')).write_text(str(identity) + '\n= 0\n')
+                  results.append(name)
+              assert len(results) == 32
+              write_json(folder / 'result.json', {'status': 'passed', 'lemmas': results,
+                         'max_square': bound**2, 'max_sum': 32*center**2})
+              return len(results)
+
+          def campaign():
+              n = int(os.environ['CELLS'])
+              assert n in (8, 16, 32, 64)
+              root, script = Path.cwd(), Path(__file__).resolve()
+              evidence = root / '.frp98-evidence' / f'n{n}'
+              evidence.mkdir(parents=True, exist_ok=False)
+              result = {'status': 'failed', 'cells': n, 'commit': os.environ['GITHUB_SHA'],
+                        'profiles': [], 'mutations': [], 'arithmetic_lemmas': 0}
+              save = lambda: write_json(evidence / 'result.json', result)
+              save()
+              before = {p: digest(p) for p in EXPECTED}
+              write_json(evidence / 'sources.json', before)
+              assert before == EXPECTED, 'Source hash mismatch: inspect the changed source'
+              for package, version in [('pyosys', '0.68'), ('z3-solver', '4.15.4.0')]:
+                  assert importlib.metadata.version(package) == version
+              shutil.copyfile(script, evidence / 'runner.py')
+              (evidence / 'packages.txt').write_text(subprocess.check_output(
+                  [sys.executable, '-m', 'pip', 'freeze'], text=True))
+              for source in EXPECTED:
+                  target = evidence / 'sources' / source
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(source, target)
+              original = Path(PHASE).read_text()
+              private, guards = re.subn(
+                  r'    if \(sin_lut\[[^\n]+\n      \$fatal\(1, "FRP M31 sine LUT [^\n]+\n', '', original)
+              assert guards == 4, 'ROM guard sites changed'
+              start, end = '  for (genvar cell_index =', '  for (genvar level ='
+              assert private.count(start) == private.count(end) == 1
+              replacement = (
+                  '  for (genvar cell_index = 0; cell_index < CELLS; cell_index++) begin : g_phase_cut\n'
+                  '    assign sine_q30[cell_index] = $signed(phase_load[32*cell_index +: 32]);\n'
+                  '    assign cosine_q30[cell_index] = $signed(frequency_load_q16[32*cell_index +: 32]);\n'
+                  '  end\n\n')
+              private = private[:private.index(start)] + replacement + private[private.index(end):]
+              assert private[private.index(end):] == original[original.index(end):]
+              a = '  for (genvar group_index ='
+              b = '  function automatic logic signed [31:0] phase_weight_q30'
+              assert private[private.index(a):private.index(b)] == original[original.index(a):original.index(b)]
+              write_json(evidence / 'abstraction.json', {
+                  'removed_rom_simulation_guards': guards,
+                  'upstream_phasors': 'Independent input words in private proof copies',
+                  'coherence_domain': 'Every integer from 0 through 2^30 inclusive',
+                  'hierarchy_and_root_blocks': 'Byte-identical to checked source',
+                  'products': 'Reduced only after proving both signed operands',
+                  'excluded': ['ROM contents', 'root recurrence', 'sequential phase reachability'],
+              })
+
+              def execute(label, p, level, source, mutation='positive'):
+                  work = evidence / label
+                  work.mkdir()
+                  for item in EXPECTED:
+                      target = work / (Path(item).name if item.startswith('formal/') else item)
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      shutil.copyfile(root / item, target)
+                  (work / PHASE).write_text(source)
+                  print(f'RUN n={n} {label}', flush=True)
+                  with (work / 'worker.log').open('w') as log:
+                      completed = subprocess.run(
+                          [sys.executable, '-u', str(script), '--worker', str(n), str(p), str(level), mutation],
+                          cwd=work, stdout=log, stderr=subprocess.STDOUT, timeout=900)
+                  assert completed.returncode == 0, str(work / 'worker.log')
+                  receipt = json.loads((work / 'receipt.json').read_text())
+                  assert receipt['status'] == ('passed' if mutation == 'positive' else 'mutation_detected')
+                  assert (receipt['cells'], receipt['profile'], receipt['level']) == (n, p, level)
+                  assert receipt['harness_sha256'] == EXPECTED['formal/m31/' + TOP + '.sv']
+                  assert receipt['private_rtl_sha256'] == hashlib.sha256(source.encode()).hexdigest()
+                  assert receipt['witnesses'] == (8 if mutation == 'positive' else 0)
+                  return dict(label=label, **receipt)
+
+              for p in range(3):
+                  for level in range(1, n.bit_length()):
+                      result['profiles'].append(execute(f'p{p}-l{level}', p, level, private))
+                      save()
+              if n == 8:
+                  result['arithmetic_lemmas'] = arithmetic(evidence / 'arithmetic')
+                  mutations = [
+                      ('mean_tie', 2, 'half_denominator = denominator / 2;',
+                       'half_denominator = denominator / 4;'),
+                      ('variance_rounding', 2, "square_sum_q60 / 64'(CELLS >> level)",
+                       "(square_sum_q60 + 64'((CELLS >> level)/2)) / 64'(CELLS >> level)"),
+                      ('deviation_bias', 1, ' - mean_q30;', " - mean_q30 + 64'sd1;"),
+                  ]
+                  for name, p, old, new in mutations:
+                      assert private.count(old) == 1, 'Mutation site changed: ' + name
+                      result['mutations'].append(execute('mutation-' + name, p, 1,
+                                                         private.replace(old, new), name))
+                      save()
+              assert {p: digest(p) for p in EXPECTED} == before, 'Repository sources changed'
+              assert len(result['profiles']) == 3*(n.bit_length()-1)
+              assert len(result['mutations']) == (3 if n == 8 else 0)
+              assert result['arithmetic_lemmas'] == (32 if n == 8 else 0)
+              witnesses = sum(r['witnesses'] for r in result['profiles'])
+              assert witnesses == 8*len(result['profiles'])
+              result.update(status='passed', witnesses=witnesses)
+              save()
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
+                  out.write(f'### FRP 98: {n} cells\n\n'
+                            f'- Proven configurations: {len(result["profiles"])}\n'
+                            f'- Local witnesses: {witnesses}\n'
+                            f'- Detected mutations: {len(result["mutations"])}\n'
+                            f'- Exact arithmetic lemmas: {result["arithmetic_lemmas"]}\n\n'
+                            'Full-domain, uniform and balanced adjacent-code variance contracts. '
+                            'Witnesses describe local coherence domains; singleton bins can repeat. '
+                            'Sequential phase reachability and integer-root recurrence are outside this proof.\n')
+              print(f'PASS n={n}: {len(result["profiles"])} configurations, {witnesses} witnesses', flush=True)
+
+          if __name__ == '__main__':
+              if len(sys.argv) > 1 and sys.argv[1] == '--worker':
+                  worker()
+              else:
+                  campaign()
+          PY
+          python .frp98-runner.py
+      - name: Upload formal evidence
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp98-n${{ matrix.cells }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: .frp98-evidence/n${{ matrix.cells }}/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
