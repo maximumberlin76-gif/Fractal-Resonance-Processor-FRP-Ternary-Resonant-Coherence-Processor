@@ -1,0 +1,394 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+# Referenced dependencies retain their existing licenses.
+name: 100 - FRP M31 Pending Progress Formal
+run-name: "100 - FRP Pending Progress | 8/16/32/64 cells @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-100-pending-progress-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prove:
+    name: "Pending progress - ${{ matrix.cells }} cells"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        cells: [8, 16, 32, 64]
+    defaults:
+      run:
+        shell: bash
+    env:
+      CELLS: ${{ matrix.cells }}
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned formal tool
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pyosys==0.68
+
+      - name: Prove progress, reach scenarios and detect mutations
+        run: |
+          set -euo pipefail
+          cat > .frp100-runner.py <<'PY'
+          from pathlib import Path
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import shutil
+          import subprocess
+          import sys
+          import time
+
+          TOP = 'frp_m31_pending_progress_formal'
+          HARNESS = 'formal/m31/' + TOP + '.sv'
+          EXPECTED = {
+              HARNESS: 'e17afd74e6fb14917982f9e4355019d4e49e70a216d1824e3707dbe5054bc6c1',
+              'rtl/m31/frp_m31_execution_core.sv': 'e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92',
+              'rtl/m31/frp_m31_pkg.sv': '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94',
+              'rtl/m31/frp_m31_scheduler.sv': 'fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f',
+              'rtl/m31/frp_m31_request_lanes.sv': '32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109',
+              'rtl/m31/frp_m31_pending_routes.sv': '18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411',
+              'rtl/m31/frp_m31_active_neutral.sv': '765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0',
+              'rtl/m31/frp_m31_capacity_guard.sv': 'd0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123',
+              'rtl/m31/frp_m31_state_update.sv': 'ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90',
+          }
+
+          N = int(os.environ['CELLS'])
+          assert N in (8, 16, 32, 64)
+          ROOT = Path.cwd()
+          E = ROOT / '.frp100-evidence' / f'n{N}'
+          E.mkdir(parents=True, exist_ok=False)
+
+          WORKER = 'from pyosys import libyosys as y; import sys; y.run_pass(sys.argv[1])'
+          RESULT = {
+              'schema': 'frp.m31.pending_progress.formal.v1',
+              'status': 'failed',
+              'cells': N,
+              'lanes': N // 4,
+              'drain_service_ticks': 4,
+              'commit': os.environ['GITHUB_SHA'],
+              'proof': None,
+              'witnesses': [],
+              'mutations': [],
+          }
+
+          def save(name, value):
+              (E / name).write_text(json.dumps(value, indent=2) + '\n')
+
+          def checkpoint():
+              save('result.json', RESULT)
+
+          def hashes(directory):
+              return {
+                  p: hashlib.sha256((directory / p).read_bytes()).hexdigest()
+                  for p in EXPECTED
+              }
+
+          def run(label, commands, directory=ROOT, timeout=900, required=True):
+              (E / (label + '.ys')).write_text(commands + '\n')
+              print('RUN', N, label, flush=True)
+              start = time.monotonic()
+              with (E / (label + '.log')).open('w') as log:
+                  try:
+                      p = subprocess.run(
+                          [sys.executable, '-u', '-c', WORKER, commands],
+                          cwd=directory,
+                          stdout=log,
+                          stderr=subprocess.STDOUT,
+                          timeout=timeout,
+                      )
+                  except subprocess.TimeoutExpired:
+                      save(label + '-process.json', {
+                          'status': 'timeout',
+                          'seconds': timeout,
+                      })
+                      raise
+
+              text = (E / (label + '.log')).read_text()
+              save(label + '-process.json', {
+                  'returncode': p.returncode,
+                  'seconds': round(time.monotonic() - start, 3),
+              })
+              if required and p.returncode != 0:
+                  print(text[-6000:], flush=True)
+                  raise RuntimeError(label + ': see preserved log')
+              return p.returncode, text
+
+          def prepare(label, directory=ROOT, cells=N):
+              model = E / (label + '.il')
+              commands = (
+                  f'read_slang --std 1800-2017 --unroll-limit 20000 -I rtl/m31 '
+                  f'-G CELLS={cells} --top {TOP} {HARNESS}; '
+                  f'prep -top {TOP} -flatten; async2sync; opt -full; memory_map; '
+                  'opt -full; chformal -lower; '
+                  f'select -assert-count {10*cells+11} t:$assert; '
+                  'select -assert-count 1 t:$assume; '
+                  'select -assert-none t:$anyseq t:$anyconst; '
+                  'wreduce; opt -full; techmap; opt -full; '
+                  + (
+                      f'abc -g simple -script {E}/mapping.abc; '
+                      if cells == 64 else 'abc -g simple; '
+                  )
+                  + 'opt_clean; check -assert; select -assert-any t:$assert; '
+                  'select -assert-count 1 t:$assume; '
+                  f'stat; write_rtlil {model}'
+              )
+              run('prepare-' + label, commands, directory, timeout=1200)
+              return model
+
+          checkpoint()
+          (E / 'mapping.abc').write_text('strash\ndc2\nmap\n')
+          before = hashes(ROOT)
+          save('sources.json', before)
+          assert before == EXPECTED, 'Source hash mismatch: inspect changed files'
+          assert importlib.metadata.version('pyosys') == '0.68'
+
+          (E / 'packages.txt').write_text(subprocess.check_output(
+              [sys.executable, '-m', 'pip', 'freeze'], text=True
+          ))
+          shutil.copyfile(__file__, E / 'runner.py')
+
+          for name in EXPECTED:
+              target = E / 'sources' / name
+              target.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copyfile(ROOT / name, target)
+
+          save('scope.json', {
+              'method': 'Reset base and temporal induction on the complete execution-core cone',
+              'time': 'Sampled rising edges after async2sync',
+              'assumptions': 'One initial-reset assumption from the unchanged harness',
+              'proof_inputs': 'Unrestricted after initial reset, including all scheduler-mode encodings',
+              'witnesses': '64-cell stimuli expand 8-cell witnesses and are checked on the full native model',
+              'drain': 'At most four enabled service ticks in a quiet interval; pauses do not consume budget',
+              'mapping': 'Combinational techmap and ABC optimization before SAT',
+              'witness_depth': 12,
+          })
+
+          model = prepare('canonical')
+          proof = (
+              'sat -seq 1 -tempinduct -initsteps 1 -maxsteps 6 -set-assumes '
+              f'-prove-asserts -verify -timeout {1800 if N == 64 else 300}'
+          )
+          _, log = run(
+              'induction',
+              f'read_rtlil {model}; delete -output w:reach; opt_clean; {proof}',
+              timeout=6000 if N == 64 else 2400,
+          )
+          assert 'Induction step proven: SUCCESS!' in log
+          assert 'Base case for induction length' in log
+          RESULT['proof'] = 'passed'
+          checkpoint()
+
+          reach_model = E / 'reach.il'
+          run(
+              'prepare-reach',
+              f'read_rtlil {model}; chformal -assert -remove; '
+              'delete -output w:state_out w:pending_route_out w:pending_count w:quiet_budget; '
+              'opt_clean; select -assert-none t:$assert t:$anyseq t:$anyconst; '
+              f'select -assert-count 1 t:$assume; check -assert; write_rtlil {reach_model}',
+          )
+
+          def reach_check(model_path, bit, label, settings=''):
+              witness = E / (label + '.json')
+              _, log = run(
+                  label,
+                  f'read_rtlil {model_path}; '
+                  f'sat -seq 12 -set-assumes -set-at 12 reach[{bit}] 1 '
+                  f'{settings} -show-ports -dump_json {witness} -timeout 120',
+                  timeout=360,
+              )
+              assert 'SAT solving finished - model found:' in log
+              signals = {
+                  s['name']: s
+                  for s in json.loads(witness.read_text())['signal']
+              }
+              assert int(signals['reach']['data'][-1], 2) & (1 << bit)
+              return signals
+
+          def samples(signal):
+              data, value, out = iter(signal.get('data', [])), None, []
+              for symbol in signal['wave']:
+                  if symbol in '01':
+                      value = int(symbol)
+                  elif symbol == '.':
+                      pass
+                  elif symbol in '=23456789':
+                      item = next(data, '')
+                      value = int(item, 2) if item else None
+                  else:
+                      raise ValueError('Unexpected waveform symbol: ' + symbol)
+                  out.append(value)
+              assert len(out) == 13 and all(v is not None for v in out[1:])
+              return out[1:]
+
+          def expand(name, value):
+              factor = N // 8
+              fields = {
+                  'target_bank': (8, 2),
+                  'request_valid': (2, 1),
+                  'request_target': (2, 2),
+              }
+              if name in fields:
+                  count, width = fields[name]
+                  return sum(
+                      ((value >> (width*i)) & ((1 << width)-1))
+                      << (width*(i*factor+j))
+                      for i in range(count) for j in range(factor)
+                  )
+              if name == 'request_cell_index':
+                  return sum(
+                      (((value >> (3*i)) & 7)*factor+j)
+                      << ((N.bit_length()-1)*(i*factor+j))
+                      for i in range(2) for j in range(factor)
+                  )
+              return value
+
+          if N == 64:
+              seed = prepare('seed8', cells=8)
+              seed_reach = E / 'seed8-reach.il'
+              run(
+                  'prepare-seed8-reach',
+                  f'read_rtlil {seed}; chformal -assert -remove; '
+                  'delete -output w:state_out w:pending_route_out w:pending_count w:quiet_budget; '
+                  'opt_clean; select -assert-none t:$assert t:$anyseq t:$anyconst; '
+                  f'select -assert-count 1 t:$assume; check -assert; write_rtlil {seed_reach}',
+              )
+              widths = {
+                  'clk': 1,
+                  'rst_n': 1,
+                  'tick_enable': 1,
+                  'clear_counters': 1,
+                  'scheduler_mode': 2,
+                  'request_valid': N//4,
+                  'request_target': N//2,
+                  'request_cell_index': (N//4)*(N.bit_length()-1),
+                  'target_bank': 2*N,
+              }
+
+          for bit in range(16):
+              settings = []
+              if N == 64:
+                  seed_signals = reach_check(seed_reach, bit, f'seed8-reach-{bit}')
+                  stimulus = {}
+                  for name, width in widths.items():
+                      stimulus[name] = [
+                          expand(name, v) for v in samples(seed_signals[name])
+                      ]
+                      for step, value in enumerate(stimulus[name], 1):
+                          assert 0 <= value < (1 << width)
+                          settings.append(f"-set-at {step} {name} {width}'d{value}")
+                  save(f'reach-{bit}-stimulus.json', stimulus)
+
+              reach_check(reach_model, bit, f'reach-{bit}', ' '.join(settings))
+              RESULT['witnesses'].append(bit)
+              checkpoint()
+
+          if N == 8:
+              mutations = [
+                  ('reset-route', "pending_route_q <= '0;", "pending_route_q <= '1;"),
+                  (
+                      'route-polarity',
+                      'element_index_int,\n                        requested_target',
+                      "element_index_int,\n                        requested_target ^ 2'b10",
+                  ),
+                  (
+                      'completion-clear',
+                      'element_index,\n                    FRP_STATE_ZERO',
+                      'element_index,\n                    pending_value',
+                  ),
+              ]
+              path = 'rtl/m31/frp_m31_pending_routes.sv'
+
+              for label, old, new in mutations:
+                  directory = E / label
+                  for name in EXPECTED:
+                      target = directory / name
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      shutil.copyfile(ROOT / name, target)
+
+                  source = (directory / path).read_text()
+                  assert source.count(old) == 1, label + ': mutation target changed'
+                  (directory / path).write_text(source.replace(old, new))
+                  save(label + '-mutation.json', {
+                      'path': path,
+                      'old': old,
+                      'new': new,
+                      'source_hashes': hashes(directory),
+                  })
+
+                  mutant = prepare(label, directory)
+                  counterexample = E / (label + '-counterexample.json')
+                  code, log = run(
+                      label + '-check',
+                      f'read_rtlil {mutant}; '
+                      'delete -output w:reach; opt_clean; '
+                      'sat -seq 6 -set-assumes -prove-asserts -verify '
+                      f'-show-ports -dump_json {counterexample} -timeout 120',
+                      timeout=360,
+                      required=False,
+                  )
+                  assert code != 0 and 'model found: FAIL!' in log
+                  assert counterexample.exists()
+                  assert json.loads(counterexample.read_text())['signal']
+                  RESULT['mutations'].append(label)
+                  checkpoint()
+
+          assert hashes(ROOT) == before, 'Repository sources changed'
+          assert RESULT['witnesses'] == list(range(16))
+          assert len(RESULT['mutations']) == (3 if N == 8 else 0)
+          RESULT['status'] = 'passed'
+          checkpoint()
+
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
+              out.write(
+                  f'### FRP 100: {N} cells\n\n'
+                  f'- Temporal induction: PASS\n- Reachable scenarios: 16/16\n'
+                  f'- Detected mutations: {len(RESULT["mutations"])}\n'
+                  f'- Native request lanes: {N//4}\n'
+                  '- Quiet drain bound: 4 service ticks\n\n'
+                  'Initial reset assumed; later proof inputs unrestricted. '
+                  'Full execution-core cone; sampled rising edges after async2sync.\n'
+              )
+
+          print(
+              'PASS', N, 'induction, 16 witnesses,',
+              len(RESULT['mutations']), 'mutations',
+              flush=True,
+          )
+          PY
+          python .frp100-runner.py
+
+      - name: Upload formal evidence
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp100-n${{ matrix.cells }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: .frp100-evidence/n${{ matrix.cells }}/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
