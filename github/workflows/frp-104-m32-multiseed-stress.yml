@@ -1,0 +1,339 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 104 - FRP M32 Multiseed Stress
+run-name: "104 - FRP Multiseed Stress | 4 sizes, 8 seeds, 64 runs @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-104-multiseed-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    name: "Multiseed stress - ${{ matrix.cells }} cells"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        cells: [8, 16, 32, 64]
+    defaults:
+      run:
+        shell: bash
+    env:
+      CELLS: ${{ matrix.cells }}
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Initialize evidence and install pinned tools
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/frp-104-evidence"
+          printf '%s\n' '{"status":"NOT_COMPLETED"}' > "$RUNNER_TEMP/frp-104-evidence/qualification.json"
+          python -m pip install --disable-pip-version-check verilator==5.48.0 systemc==3.0.2.1
+          python -m pip check
+          verilator-cli --version | tee "$RUNNER_TEMP/frp-104-evidence/toolchain.txt"
+          g++ --version >> "$RUNNER_TEMP/frp-104-evidence/toolchain.txt"
+          make --version >> "$RUNNER_TEMP/frp-104-evidence/toolchain.txt"
+
+      - name: Build once and verify all seeds and replays
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/frp104-runner.py" <<'PY'
+          from pathlib import Path
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import resource
+          import shutil
+          import signal
+          import subprocess
+          import sys
+          import time
+
+          TOP = 'frp_m32_multiseed_stress_tb'
+          SEEDS = ['90c0ffee', '00000001', 'deadbeef', '12345678',
+                   '80000000', 'ffffffff', '6d2b79f5', 'a5a5a5a5']
+          TICKS = 32768
+          WORDS = {8: 254, 16: 455, 32: 852, 64: 1642}
+          EXPECTED = {
+              'rtl/m31/frp_m31_active_neutral.sv': '765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0',
+              'rtl/m31/frp_m31_capacity_guard.sv': 'd0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123',
+              'rtl/m31/frp_m31_execution_core.sv': 'e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92',
+              'rtl/m31/frp_m31_fixed_point_pkg.sv': '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24',
+              'rtl/m31/frp_m31_global_stability.sv': 'df058d4e3671ba1d7c9d0403a6bb1b8c9750a0a967905b5f91cca455c1dddb83',
+              'rtl/m31/frp_m31_isqrt_u64.sv': 'cbb5a531283164d1d54d59ec748b97bf84e172704854bf5eb7c6bda2c502f7c7',
+              'rtl/m31/frp_m31_local_gamma_drift.sv': '478882d4f6a2986f5079c88b444c7b007d68145d61e5150209cb0637f35b2ec0',
+              'rtl/m31/frp_m31_local_thermal_attenuation.sv': '6e10f738f94c43ac9748ec7a033adde16243beea59e2f7f2973a3ab51c2e5e04',
+              'rtl/m31/frp_m31_local_thermal_field.sv': 'cb97c1bfeabbb2acaebf2f9644d484b2f7c5e995dbf1b70777f6bc2e7df9368e',
+              'rtl/m31/frp_m31_pending_routes.sv': '18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411',
+              'rtl/m31/frp_m31_phase_interference.sv': '7ac3572ef2bf9feef509e7dc43c662d92d23fa3eb0563efbfa8dba7c28157746',
+              'rtl/m31/frp_m31_phase_request_adapter.sv': 'fa78bcfe965270cc74855908aa392989d857575a2097a126539aabb1aab8990d',
+              'rtl/m31/frp_m31_pkg.sv': '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94',
+              'rtl/m31/frp_m31_request_lanes.sv': '32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109',
+              'rtl/m31/frp_m31_scheduler.sv': 'fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f',
+              'rtl/m31/frp_m31_sin_q30.mem': 'adbb4b94fcf8fa0bfc981d654679fd7518a5c4c9c97b611a35cd8accaf28233d',
+              'rtl/m31/frp_m31_stability.sv': '69c06833e6dfbb28e25b74a5787dcd03756dddf0f66726de3ea47c1ad2931931',
+              'rtl/m31/frp_m31_state_update.sv': 'ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90',
+              'rtl/m31/frp_m31_thermal_proxy.sv': '34df4ebfc5dfad8e3e5e454e560404585de5c881e6f75abaae367d3bd9fb11bd',
+              'rtl/m32/frp_m32_core.sv': '0be6c5ee28ee4a23baf6110143eec309f387200c1c2c80e3016353d5d4107541',
+              'rtl/m32/frp_m32_full_state_oracle_tb.sv': 'ae840b73a80778b350ff0eaa0578ec4dea9702fd495a13da0690218ea0784151',
+              'rtl/m32/frp_m32_registered_target_boundary.sv': '9626474b49d32b411e107d7ccc8ee5aa7f42728e9a6f70d634d16d3f2a414c5e',
+              'rtl/m32/frp_m32_registered_target_request_path.sv': '02250069a68737f055a419cd67bf2d439b3f63b3f6a7a245f40e9bf29d1958eb',
+              'rtl/m32/frp_m32_multiseed_stress_tb.sv': '78001bcbcb1f88983ffe9db711b76a7032b41dacb4e79b2f70173df157aa2046',
+          }
+          BASELINE = {
+              8: 'a321336477f0baa70d559e8cffc34f7b450bc2bb29f055854da48d1e84262746',
+              16: 'e832834ab892f8927e165a162aca472bb5fb9f18b7824154d50c3ba321c94647',
+              32: '541fd322c47e572a676d63a64c22fc7b3967b3d316505f88f4780b875ed2df28',
+              64: 'c2abb9ae839d168410f4290961139d971eeb6888159dff8f67ad5288285098cd',
+          }
+          ROOT = Path.cwd()
+          N = int(os.environ['CELLS'])
+          E = Path(os.environ['RUNNER_TEMP']) / 'frp-104-evidence'
+          BUILD = Path(os.environ['RUNNER_TEMP']) / f'frp-104-build-{N}'
+          E.mkdir(parents=True, exist_ok=True)
+          REPORT = dict(status='FAILED', commit=os.environ['GITHUB_SHA'], cells=N,
+                        seeds=SEEDS, ticks_per_mode=TICKS, commands=[], profiles=[], rejected_inputs=[])
+          resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+          def save():
+              (E / 'qualification.json').write_text(json.dumps(REPORT, indent=2) + '\n')
+
+
+          def run(args, label, limit, negative=False):
+              entry = dict(label=label, argv=args, status='RUNNING')
+              REPORT['commands'].append(entry)
+              save()
+              print('RUN', N, label, flush=True)
+              start = time.monotonic()
+              process = None
+              try:
+                  with (E / (label + '.log')).open('w') as log:
+                      process = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT,
+                                                 start_new_session=True)
+                      while True:
+                          remaining = limit - (time.monotonic() - start)
+                          require(remaining > 0, label + ': timeout')
+                          try:
+                              code = process.wait(timeout=min(30, remaining))
+                              break
+                          except subprocess.TimeoutExpired:
+                              print(label, 'elapsed', round(time.monotonic() - start), flush=True)
+                  text = (E / (label + '.log')).read_text()
+                  entry['returncode'] = code
+                  if negative:
+                      require(code != 0 and '%Fatal:' in text and 'PASS ' not in text,
+                              label + ': invalid input was not rejected')
+                      require(any(x in text for x in ('Invalid runtime', 'Expected +FRP_',
+                              'Unsupported stress/scaling configuration')), label + ': unexpected failure')
+                  else:
+                      require(code == 0, label + ': nonzero exit; see log')
+                  entry['status'] = 'PASS'
+                  return text
+              except BaseException:
+                  entry['status'] = 'FAIL'
+                  if process is not None and process.poll() is None:
+                      os.killpg(process.pid, signal.SIGKILL)
+                      process.wait()
+                  if (E / (label + '.log')).exists():
+                      print((E / (label + '.log')).read_text()[-6000:], flush=True)
+                  raise
+              finally:
+                  entry['seconds'] = round(time.monotonic() - start, 3)
+                  save()
+
+
+          def collect(text, seed):
+              require(not re.search(r'%Error|%Fatal|Assertion failed|Aborting|^FAIL\b', text, re.M),
+                      'Simulator reported failure')
+              require(text.count('Verilog $finish') == 1, 'Missing or duplicate simulator finish')
+              rows = [line.strip() for line in text.splitlines()
+                      if line.startswith(('MULTISEED_CONFIG ', 'FULL_STATE_', 'PASS'))]
+              prefixes = ['MULTISEED_CONFIG ', 'FULL_STATE_STABILITY ', 'PASS FULL_STATE ',
+                          'FULL_STATE_EVENTS ', 'PASS MULTISEED_CONTROLS ', 'PASS STRESS ',
+                          'PASS RESET_STORM '] + ['PASS SCALING '] * 6 + [
+                          'PASS MULTISEED_STRESS_ALL ', 'PASS MULTISEED_REPLAY ']
+              require(len(rows) == len(prefixes) and all(row.startswith(prefix)
+                      for row, prefix in zip(rows, prefixes)), 'Incomplete or reordered records')
+              require(hashlib.sha256('\n'.join(rows[1:4]).encode()).hexdigest() == BASELINE[N],
+                      'Independent oracle baseline changed')
+              fields = [dict(item.split('=', 1) for item in row.split() if '=' in item) for row in rows]
+              require(all(int(row['cells']) == N for row in fields), 'Wrong cell count')
+              config, control, stress, reset, total, replay = (fields[i] for i in (0, 4, 5, 6, 13, 14))
+              for row in (config, replay):
+                  require(row['seed'] == seed and int(row['ticks_per_mode']) == TICKS,
+                          'Seed or duration mismatch')
+              require(stress['seed'] == seed, 'Stress seed mismatch')
+              require([int(control[k]) for k in ('bins', 'edges', 'resets')] == [192, 192, 0],
+                      'Control sweep or retained history incomplete')
+              held = 22 * (TICKS // 2048)
+              require([int(stress[k]) for k in ('enabled', 'held', 'longest')] == [3*TICKS, held, 2048],
+                      'Stress duration or pauses changed')
+              require(int(stress['offered']) == int(stress['accepted']) + int(stress['rejected'])
+                      and int(stress['accepted']) > 0 and int(stress['rejected']) > 0,
+                      'Request accounting mismatch')
+              require(int(stress['routes']) == int(stress['completions']) > 0, 'Route imbalance')
+              require(int(stress['checks']) == WORDS[N]*(12*TICKS + 3*held + 613),
+                      'Missing stress comparisons')
+              require([int(reset[k]) for k in ('cases', 'resets', 'checks')] == [64, 128, 4410*WORDS[N]],
+                      'Reset storm incomplete')
+              for index, row in enumerate(fields[7:13]):
+                  mode, polarity = index//2, (-1, 1)[index%2]
+                  cycles = (4, 28, 29)[mode]
+                  expected = dict(lanes=N//4, mode=mode, polarity=polarity, completed=N,
+                                  service_edges=4, enabled_edges=cycles, held_edges=2*cycles,
+                                  total_edges=14+3*cycles, checks=WORDS[N]*(50+9*cycles))
+                  require(all(int(row[k]) == v for k, v in expected.items()), 'Scaling mismatch')
+              expected = dict(ports=103, tests=4, scaling_cases=6, saturation_edges=280,
+                              steps=3*TICKS+held+1867, checks=WORDS[N]*(12*TICKS+3*held+6421))
+              require(all(int(total[k]) == v for k, v in expected.items()), 'Campaign incomplete')
+              draws = N*(433 + 3*TICKS//4 + 3*((TICKS+12)//13) + 3*((TICKS+16)//17))
+              require([int(replay[k]) for k in ('traffic_bins', 'control_bins', 'draws')] == [96, 192, draws],
+                      'Stimulus coverage or random stream length mismatch')
+              for row, key in ((total, 'signature'), (total, 'oracle_signature'), (replay, 'stimulus_signature')):
+                  require(re.fullmatch('[0-9a-f]{16}', row[key]), 'Invalid signature')
+              return '\n'.join(rows) + '\n', fields
+
+
+          def main():
+              save()
+              require(N in WORDS, 'Unsupported cell count')
+              require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch'
+                      and os.environ['GITHUB_REF'] == 'refs/heads/main', 'Manual main run required')
+              require(subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+                      == os.environ['GITHUB_SHA'], 'Checkout commit mismatch')
+              require(not subprocess.check_output(['git', 'status', '--porcelain']), 'Checkout is not clean')
+              require({p: digest(ROOT / p) for p in EXPECTED} == EXPECTED, 'Source hash mismatch')
+              for package, version in [('verilator', '5.48.0'), ('systemc', '3.0.2.1')]:
+                  require(importlib.metadata.version(package) == version, 'Tool package version mismatch')
+              shutil.copyfile(__file__, E / 'runner.py')
+              workflow = ROOT / '.github/workflows/frp-104-m32-multiseed-stress.yml'
+              workflow_hash = digest(workflow)
+              shutil.copyfile(workflow, E / workflow.name)
+              (E / 'sources.json').write_text(json.dumps(EXPECTED, indent=2) + '\n')
+              for p in EXPECTED:
+                  target = E / 'sources' / p
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(ROOT / p, target)
+              (E / 'packages.txt').write_text(subprocess.check_output(
+                  [sys.executable, '-m', 'pip', 'freeze'], text=True))
+              BUILD.mkdir(parents=True, exist_ok=False)
+              compile_log = run([
+                  'verilator-cli', '--binary', '--output-groups', '0', '--unroll-count', '1',
+                  '--timing', '--assert', '-Wno-fatal', '-j', '1' if N == 64 else '2',
+                  '-CFLAGS', '-std=c++20', '-MAKEFLAGS', 'OPT_FAST=-O2',
+                  '-MAKEFLAGS', 'VK_PCH_I_FAST=', '-MAKEFLAGS', 'VK_PCH_I_SLOW=',
+                  '--top-module', TOP, f'-GCELLS={N}', '--Mdir', str(BUILD),
+                  '-Irtl/m31', '-Irtl/m32', f'rtl/m32/{TOP}.sv'], 'compile', 5400)
+              require(not re.search(r'%Error|%Warning-(PINMISSING|IMPLICIT|MULTIDRIVEN)\b', compile_log),
+                      'Compile error or unexpected wiring warning')
+              binary = BUILD / ('V' + TOP)
+              binary_hash = digest(binary)
+              for seed in SEEDS:
+                  records = []
+                  for replay in (1, 2):
+                      require(digest(binary) == binary_hash, 'Executable changed')
+                      label = f'seed-{seed}-replay-{replay}'
+                      text = run([str(binary), f'+FRP_SEED={seed}', f'+FRP_TICKS={TICKS}'], label, 900)
+                      semantic, fields = collect(text, seed)
+                      (E / (label + '.txt')).write_text(semantic)
+                      records.append(semantic)
+                  require(records[0] == records[1], 'Deterministic replay mismatch: ' + seed)
+                  REPORT['profiles'].append(dict(seed=seed, replays=2,
+                      semantic_sha256=hashlib.sha256(records[0].encode()).hexdigest(),
+                      stimulus_signature=fields[14]['stimulus_signature'],
+                      oracle_signature=fields[13]['oracle_signature'],
+                      comparisons_per_replay=int(fields[13]['checks']), records=fields))
+                  save()
+              require(len({p['stimulus_signature'] for p in REPORT['profiles']}) == 8,
+                      'Different seeds produced duplicate stimulus signatures')
+              if N == 8:
+                  invalid = ['+FRP_SEED=00000000', '+FRP_SEED=zzzzzzzz', '+FRP_SEED=1', '+FRP_SEED',
+                             '+FRP_TICKS=8192oops', '+FRP_TICKS=4096', '+FRP_TICKS=8193', '+FRP_TICKS=65537']
+                  for i, argument in enumerate(invalid):
+                      run([str(binary), argument], f'invalid-{i}', 60, negative=True)
+                      REPORT['rejected_inputs'].append(argument)
+                      save()
+              require([p['seed'] for p in REPORT['profiles']] == SEEDS, 'Missing seed')
+              require(len(REPORT['rejected_inputs']) == (8 if N == 8 else 0), 'Missing input rejection')
+              require(digest(binary) == binary_hash and digest(workflow) == workflow_hash, 'Files changed')
+              require({p: digest(ROOT / p) for p in EXPECTED} == EXPECTED, 'Sources changed during run')
+              REPORT.update(status='PASS', builds=1, replays=16, executable_sha256=binary_hash,
+                            enabled_stress_ticks=16*3*TICKS,
+                            extra_word_comparisons=sum(2*p['comparisons_per_replay'] for p in REPORT['profiles']))
+              save()
+              summary = (f'### FRP 104 — {N} cells\n\n'
+                         f'1 build; 8 seeds; 16 runs; {TICKS} enabled stress ticks per mode.\n\n'
+                         '103 outputs checked by the independent oracle; 192 control and 96 traffic bins per run.\n\n'
+                         '| Seed | Identical replay | Word comparisons per replay |\n|---|---|---:|\n')
+              for p in REPORT['profiles']:
+                  summary += f"| {p['seed']} | PASS | {p['comparisons_per_replay']} |\n"
+              (E / 'summary.md').write_text(summary)
+              with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as stream:
+                  stream.write(summary)
+              print('PASS', N, '8 seeds, 16 runs, one build', flush=True)
+
+
+          if __name__ == '__main__':
+              try:
+                  main()
+              except BaseException as error:
+                  REPORT.update(status='FAILED', error=str(error))
+                  save()
+                  raise
+          PY
+          python "$RUNNER_TEMP/frp104-runner.py"
+
+      - name: Hash evidence
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import os
+          root = Path(os.environ['RUNNER_TEMP']) / 'frp-104-evidence'
+          root.mkdir(parents=True, exist_ok=True)
+          files = sorted(p for p in root.rglob('*') if p.is_file() and p.name != 'evidence.sha256')
+          (root / 'evidence.sha256').write_text(''.join(
+              f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(root)}\n' for p in files))
+          PY
+
+      - name: Preserve qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp-104-n${{ matrix.cells }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-104-evidence/
+          if-no-files-found: error
+          retention-days: 14
