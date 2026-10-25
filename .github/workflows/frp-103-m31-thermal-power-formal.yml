@@ -1,0 +1,261 @@
+# Copyright (c) 2026 Maksym Marnov. All rights reserved.
+# Referenced dependencies retain their existing licenses.
+name: 103 - FRP M31 Thermal Power Formal
+run-name: "103 - FRP Thermal Power | 120 cells, 1920 witnesses @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-103-thermal-power-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prove:
+    name: "Thermal power - ${{ matrix.cells }} cells - shard ${{ matrix.shard }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        cells: [8, 16, 32, 64]
+        shard: [0, 1, 2, 3]
+    defaults:
+      run:
+        shell: bash
+    env:
+      CELLS: ${{ matrix.cells }}
+      SHARD: ${{ matrix.shard }}
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONHASHSEED: "0"
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned formal tool
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pyosys==0.68
+
+      - name: Prove every assigned cell and collect reach witnesses
+        run: |
+          set -euo pipefail
+          cat > .frp103-runner.py <<'PY'
+          from pathlib import Path
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          import shutil
+          import subprocess
+          import sys
+          import time
+
+          TOP = 'frp_m31_thermal_power_formal'
+          HARNESS = 'formal/m31/' + TOP + '.sv'
+          DUT = 'rtl/m31/frp_m31_local_thermal_field.sv'
+          EXPECTED = {
+              HARNESS: 'c56f2a03b6f1925d1616eb66c3b197150c98214b6659b6b797b9e682c8dad4c6',
+              DUT: 'cb97c1bfeabbb2acaebf2f9644d484b2f7c5e995dbf1b70777f6bc2e7df9368e',
+              'rtl/m31/frp_m31_fixed_point_pkg.sv': '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24',
+          }
+          ROOT = Path.cwd()
+          N = int(os.environ['CELLS'])
+          SHARD = int(os.environ['SHARD'])
+          assert N in (8, 16, 32, 64) and SHARD in range(4)
+          PROBES = list(range(SHARD, N, 4))
+          E = ROOT / '.frp103-evidence' / f'n{N}-s{SHARD}'
+          E.mkdir(parents=True, exist_ok=False)
+          WORKER = 'from pyosys import libyosys as y; import sys; y.run_pass(sys.argv[1])'
+          RESULT = {
+              'schema': 'frp.m31.thermal_power.formal.v1',
+              'status': 'failed', 'commit': os.environ['GITHUB_SHA'],
+              'cells': N, 'shard': SHARD, 'required_probes': PROBES,
+              'proofs': [], 'witnesses': [], 'mutations': [],
+          }
+
+
+          def save(name, value):
+              (E / name).write_text(json.dumps(value, indent=2) + '\n')
+
+
+          def checkpoint():
+              save('result.json', RESULT)
+
+
+          def hashes(directory):
+              return {p: hashlib.sha256((directory / p).read_bytes()).hexdigest() for p in EXPECTED}
+
+
+          def run(label, commands, directory, timeout=600, required=True):
+              (E / (label + '.ys')).write_text(commands + '\n')
+              print('RUN', N, SHARD, label, flush=True)
+              start = time.monotonic()
+              with (E / (label + '.log')).open('w') as log:
+                  try:
+                      proc = subprocess.run(
+                          [sys.executable, '-u', '-c', WORKER, commands], cwd=directory,
+                          stdout=log, stderr=subprocess.STDOUT, timeout=timeout,
+                      )
+                  except subprocess.TimeoutExpired:
+                      save(label + '-process.json', {'status': 'timeout', 'seconds': timeout})
+                      raise
+              log = (E / (label + '.log')).read_text()
+              save(label + '-process.json', {
+                  'returncode': proc.returncode,
+                  'seconds': round(time.monotonic() - start, 3),
+              })
+              if required and proc.returncode:
+                  print(log[-6000:], flush=True)
+                  raise RuntimeError(label + ': see evidence log')
+              return proc.returncode, log
+
+
+          def copy_sources(label, mutation=None):
+              directory = E / label
+              for name in EXPECTED:
+                  target = directory / name
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(ROOT / name, target)
+              assert hashes(directory) == EXPECTED
+              if mutation:
+                  old, new = mutation
+                  path = directory / DUT
+                  source = path.read_text()
+                  assert source.count(old) == 1, 'Mutation target must be unique'
+                  path.write_text(source.replace(old, new))
+                  assert hashes(directory)[DUT] != EXPECTED[DUT]
+              save(label + '-sources.json', hashes(directory))
+              return directory
+
+
+          def prepare(label, directory, probe):
+              model = E / (label + '.il')
+              run(label + '-prepare',
+                  'read_slang --std 1800-2017 --unroll-limit 20000 -I rtl/m31 '
+                  f'-G CELLS={N} -G PROBE_CELL={probe} --top {TOP} {HARNESS}; '
+                  f'opt_clean; prep -top {TOP} -flatten; async2sync; opt -full; chformal -lower; '
+                  'select -assert-none a:blackbox t:$anyseq t:$anyconst; '
+                  'select -assert-count 1 t:$assume; select -assert-count 7 t:$assert; '
+                  'wreduce; opt -full; techmap; opt -full; abc -g simple; opt_clean; '
+                  f'check -assert; stat; write_rtlil {model}', directory)
+              return model
+
+
+          checkpoint()
+          assert hashes(ROOT) == EXPECTED, 'Source hash mismatch: inspect changed files'
+          assert importlib.metadata.version('pyosys') == '0.68'
+          shutil.copyfile(__file__, E / 'runner.py')
+          (E / 'packages.txt').write_text(subprocess.check_output(
+              [sys.executable, '-m', 'pip', 'freeze'], text=True))
+          save('sources.json', EXPECTED)
+          save('scope.json', {
+              'sizes': [8, 16, 32, 64], 'total_probes': 120, 'total_witnesses': 1920,
+              'partition': 'Each cell is checked once: probe modulo 4 equals shard',
+              'method': 'Reset base and temporal induction, sampled edges after async2sync',
+              'inputs': 'One initial-reset assumption; subsequent unsigned lag words and controls free',
+              'observed_cone': 'Generated-power register and its complete arithmetic and control logic',
+              'preparation': 'Native full-size RTL; ordinary unused-cone reduction; no cut points',
+              'canonical_sources': 'Exact copies; no source edits or generated replacement modules',
+              'formula': '118 + round(unsigned_lag * 1180 / 65536) + 3408 * switch',
+              'rounding': 'Nearest, half upward; maximum generated power is 77336006',
+              'witness_depth': 6, 'witness_constraints': 'Initial reset and final reach bit only',
+          })
+          canonical = copy_sources('canonical')
+          for probe in PROBES:
+              label = f'cell-{probe:02d}'
+              model = prepare(label, canonical, probe)
+              _, log = run(label + '-proof',
+                  f'read_rtlil {model}; delete -output w:reach; opt_clean; '
+                  'sat -seq 1 -tempinduct -initsteps 1 -maxsteps 4 -set-assumes '
+                  '-prove-asserts -verify -timeout 120', canonical, timeout=900)
+              assert 'Induction step proven: SUCCESS!' in log
+              assert 'Base case for induction length' in log
+              RESULT['proofs'].append(probe)
+              checkpoint()
+              commands = (
+                  f'read_rtlil {model}; chformal -assert -remove; '
+                  'delete -output w:power_now w:expected_power_next; '
+                  'opt_clean; select -assert-none t:$assert t:$anyseq t:$anyconst a:blackbox; '
+                  'select -assert-count 1 t:$assume; '
+              )
+              for bit in range(16):
+                  commands += (
+                      f'sat -seq 6 -set-assumes -set-at 6 reach[{bit}] 1 -show-ports '
+                      f'-dump_json {E}/{label}-reach-{bit:02d}.json -timeout 60; '
+                  )
+              _, log = run(label + '-reach', commands, canonical, timeout=1200)
+              assert log.count('SAT solving finished - model found:') == 16
+              for bit in range(16):
+                  path = E / f'{label}-reach-{bit:02d}.json'
+                  signals = {s['name']: s for s in json.loads(path.read_text())['signal']}
+                  assert int(signals['reach']['data'][-1], 2) & (1 << bit)
+                  RESULT['witnesses'].append({'probe': probe, 'bit': bit})
+              checkpoint()
+
+          if N == 8 and SHARD == 0:
+              mutations = [
+                  ('unsigned-lag',
+                   "lag_extended = $signed({32'd0, frequency_lag_q16[cell_index*32 +: 32]});",
+                   'lag_extended = $signed(frequency_lag_q16[cell_index*32 +: 32]);'),
+                  ('switch-power', "SWITCH_POWER_Q16 = 32'sd3408",
+                   "SWITCH_POWER_Q16 = 32'sd3409"),
+                  ('pause', 'end else if (tick_enable) begin',
+                   "end else if (1'b1) begin"),
+              ]
+              for label, old, new in mutations:
+                  label = 'mutant-' + label
+                  directory = copy_sources(label, (old, new))
+                  model = prepare(label, directory, 0)
+                  witness = E / (label + '-counterexample.json')
+                  rc, log = run(label + '-check',
+                      f'read_rtlil {model}; delete -output w:reach; opt_clean; '
+                      'sat -seq 4 -set-assumes -prove-asserts -verify -show-ports '
+                      f'-dump_json {witness} -timeout 120', directory, timeout=240, required=False)
+                  assert rc != 0 and 'model found: FAIL!' in log and witness.is_file()
+                  assert json.loads(witness.read_text())['signal']
+                  RESULT['mutations'].append(label)
+                  checkpoint()
+
+          assert RESULT['proofs'] == PROBES
+          assert len(RESULT['witnesses']) == 16 * len(PROBES)
+          assert len(RESULT['mutations']) == (3 if N == 8 and SHARD == 0 else 0)
+          assert hashes(canonical) == EXPECTED
+          assert hashes(ROOT) == EXPECTED, 'Repository sources changed during qualification'
+          RESULT['status'] = 'passed'
+          checkpoint()
+          with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as summary:
+              summary.write(
+                  f'### FRP 103 — {N} cells, shard {SHARD}\n\n'
+                  f'- Proven cell indices: {PROBES}\n'
+                  f'- Reach witnesses: {len(RESULT["witnesses"])}\n'
+                  f'- Detected mutations: {len(RESULT["mutations"])}\n'
+                  '- Source fingerprints verified; original files unchanged.\n'
+              )
+          print('PASS', json.dumps(RESULT), flush=True)
+          PY
+          python .frp103-runner.py
+
+      - name: Preserve formal evidence
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp-103-n${{ matrix.cells }}-s${{ matrix.shard }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: .frp103-evidence/n${{ matrix.cells }}-s${{ matrix.shard }}/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
