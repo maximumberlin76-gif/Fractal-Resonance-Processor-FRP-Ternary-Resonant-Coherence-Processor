@@ -1,0 +1,322 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 105 - FRP M32 Coverage Union
+run-name: '105 - FRP Coverage Union | 5 suites, 4 sizes, 40 replays @ ${{ github.sha }}'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    name: 'Suite ${{ matrix.suite }} / ${{ matrix.cells }} cells'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        suite: [83, 84, 85, 86, 87]
+        cells: [8, 16, 32, 64]
+    env:
+      SUITE: ${{ matrix.suite }}
+      CELLS: ${{ matrix.cells }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Prepare unchanged qualification steps
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check PyYAML==6.0.3
+          python - <<'PY'
+          import hashlib, json, os, re, subprocess
+          from pathlib import Path
+          import yaml
+
+          root = Path('source').resolve()
+          out = Path('bundle') / (os.environ['SUITE'] + '-' + os.environ['CELLS'])
+          out.mkdir(parents=True)
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+          def git(*args):
+              return subprocess.check_output(['git', '-C', str(root), *args]).decode().strip()
+          require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch', 'Manual run required')
+          require(os.environ['GITHUB_REF'] == 'refs/heads/main', 'Select main')
+          require(git('rev-parse', 'HEAD') == os.environ['GITHUB_SHA'], 'Commit mismatch')
+          require(not git('status', '--porcelain'), 'Working tree is not clean')
+          pins = {
+              83: '1eef9a16d51e46f73d90ef337f8d3776029b50f83e2af33ad6c309aa93999652',
+              84: '8abc5656d859bb86e97be819cb2ea40fa25617ec488c5127968cdf5f034567c3',
+              85: '7fcc18477c9d8131558c3f321ab5c1d02d3e03beda288c96d8ddec9fbc2b7d1d',
+              86: '6c30e512c690222dfb36f7ddfe9d0c93ddfc87b8562671d10f4dfe4e22a4af84',
+              87: '5d0baf0987b83cff9ed7883678dff50d8b7fe0396f9011c92aaa9a97e1c054c4',
+          }
+          analyzer = 'verification/m32/frp_m32_coverage_union.py'
+          require(digest(root / analyzer) ==
+              '9901d3faa1302ca0f19b6223e420bf6ef24b61666e3980b4995f8116d393d0f1',
+              'Coverage analyzer changed')
+          names = {analyzer, '.github/workflows/frp-105-m32-coverage-union.yml'}
+          names.update(git('ls-files', 'rtl/m31', 'rtl/m32').splitlines())
+          workflows = {}
+          for number, expected in pins.items():
+              paths = list((root / '.github/workflows').glob(f'frp-{number}-*.yml'))
+              require(len(paths) == 1 and digest(paths[0]) == expected, f'Suite {number} changed')
+              path = paths[0]
+              workflows[number] = path
+              names.add(path.relative_to(root).as_posix())
+              pairs = re.findall(r'^\s*([0-9a-f]{64})\s+(\S+)\s*$', path.read_text(), re.M)
+              require(pairs, 'Missing source pins')
+              for expected_hash, name in pairs:
+                  require(digest(root / name) == expected_hash, 'Source pin mismatch: ' + name)
+                  names.add(name)
+          sources = {name: digest(root / name) for name in sorted(names)}
+          (out / 'sources.json').write_text(json.dumps(sources, sort_keys=True))
+          document = yaml.safe_load(workflows[int(os.environ['SUITE'])].read_text())
+          require(not document.get('env') and len(document['jobs']) == 1, 'Workflow layout changed')
+          job = next(iter(document['jobs'].values()))
+          require(job['defaults'] == {'run': {'shell': 'bash'}}, 'Shell defaults changed')
+          require(job['strategy']['matrix'] == {'cells': [8, 16, 32, 64]}, 'Matrix changed')
+          expression = '$' + '{{ matrix.cells }}'
+          environment = {k: str(v).replace(expression, os.environ['CELLS'])
+                         for k, v in job['env'].items()}
+          require(all('$' + '{{' not in v for v in environment.values()), 'Unresolved expression')
+          steps = []
+          for original in job['steps']:
+              if 'run' not in original:
+                  require(original['uses'].split('@')[0] in {
+                      'actions/checkout', 'actions/setup-python', 'actions/upload-artifact'},
+                      'Unsupported action')
+                  continue
+              require(set(original) <= {'name', 'run', 'if'}, 'Unsupported shell step')
+              require(original.get('if') in (None, 'always()'), 'Unsupported condition')
+              require('$' + '{{' not in original['run'], 'Unexpected shell expression')
+              steps.append(dict(original, shell='bash', env=environment,
+                                **{'working-directory': str(root)}))
+          class Dumper(yaml.SafeDumper):
+              def ignore_aliases(self, data):
+                  return True
+          action = dict(name='Retained FRP qualification', description='Original acceptance checks',
+                        runs=dict(using='composite', steps=steps))
+          text = yaml.dump(action, Dumper=Dumper, sort_keys=False)
+          require(yaml.safe_load(text) == action, 'Action serialization changed')
+          Path('frp105-action').mkdir()
+          Path('frp105-action/action.yml').write_text(text)
+          (out / 'action.yml').write_text(text)
+          PY
+      - name: Execute original suite with all acceptance checks
+        uses: ./frp105-action
+      - name: Seal qualified coverage inputs
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, importlib.metadata, json, os, shutil, subprocess
+          from pathlib import Path
+          n, suite = int(os.environ['CELLS']), int(os.environ['SUITE'])
+          root = Path('source').resolve()
+          out = Path('bundle') / f'{suite}-{n}'
+          evidence = Path(os.environ['RUNNER_TEMP']) / f'frp-{suite}-evidence'
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+          sources = json.loads((out / 'sources.json').read_text())
+          for name, expected in sources.items():
+              require(digest(root / name) == expected, 'Source changed: ' + name)
+          require(not subprocess.check_output(['git', '-C', str(root), 'status', '--porcelain']),
+                  'Working tree changed')
+          q = json.loads((evidence / 'qualification.json').read_text())
+          require(q['status'] == 'PASS' and q['commit'] == os.environ['GITHUB_SHA']
+                  and q['cells'] == n and q['replays'] == 2 and q['replay_equal'] is True,
+                  'Incomplete qualification')
+          for replay in (1, 2):
+              require(digest(evidence / f'run-{replay}.dat') == q['coverage_sha256'],
+                      'Coverage differs from qualified replay')
+          shutil.copytree(evidence, out / 'evidence')
+          tool = {
+              'verilator_package': importlib.metadata.version('verilator'),
+              'systemc_package': importlib.metadata.version('systemc'),
+              'version': subprocess.check_output(['verilator-cli', '--version'], text=True).strip(),
+          }
+          require(tool['verilator_package'] == '5.48.0' and tool['systemc_package'] == '3.0.2.1',
+                  'Toolchain version mismatch')
+          seal = dict(commit=os.environ['GITHUB_SHA'], run=os.environ['GITHUB_RUN_ID'],
+                      attempt=os.environ['GITHUB_RUN_ATTEMPT'], cells=n, suite=suite,
+                      tool=json.dumps(tool, sort_keys=True, separators=(',', ':')),
+                      hashes={p.relative_to(out).as_posix(): digest(p)
+                              for p in sorted(out.rglob('*')) if p.is_file()})
+          (out / 'seal.json').write_text(json.dumps(seal, indent=2) + '\n')
+          PY
+      - name: Upload inputs and failure evidence
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp105-input-${{ matrix.suite }}-${{ matrix.cells }}
+          path: |
+            bundle/
+            ${{ runner.temp }}/frp-${{ matrix.suite }}-evidence/
+          if-no-files-found: error
+          retention-days: 14
+
+  report:
+    name: Qualified source coverage union
+    needs: collect
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      COLLECT_RESULT: ${{ needs.collect.result }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: frp105-input-*
+          path: downloads
+      - name: Verify all 20 qualifications and build manifest
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, importlib.util, json, os, re, shutil
+          from pathlib import Path
+          root = Path('source').resolve()
+          out = Path('coverage-inputs')
+          out.mkdir()
+          analyzer = root / 'verification/m32/frp_m32_coverage_union.py'
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+          require(os.environ['COLLECT_RESULT'] == 'success', 'Missing, failed or cancelled qualification')
+          require(digest(analyzer) ==
+              '9901d3faa1302ca0f19b6223e420bf6ef24b61666e3980b4995f8116d393d0f1',
+              'Coverage analyzer changed')
+          spec = importlib.util.spec_from_file_location('union', analyzer)
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          expected = {(suite, n) for suite in range(83, 88) for n in (8, 16, 32, 64)}
+          records, sources, tool = {}, None, None
+          for path in sorted(Path('downloads').rglob('seal.json')):
+              seal = module.read_json(path)
+              key = (seal['suite'], seal['cells'])
+              require(key in expected and key not in records, 'Unexpected or duplicate qualification')
+              require(seal['commit'] == os.environ['GITHUB_SHA']
+                      and seal['run'] == os.environ['GITHUB_RUN_ID']
+                      and seal['attempt'] == os.environ['GITHUB_RUN_ATTEMPT'], 'Wrong run provenance')
+              for name, h in seal['hashes'].items():
+                  module.verified_file(path.parent.resolve(), name, h)
+              current = module.read_json(path.parent / 'sources.json')
+              if sources is None:
+                  sources, tool = current, seal['tool']
+              require(current == sources and seal['tool'] == tool, 'Mixed sources or toolchains')
+              records[key] = path.parent
+          require(set(records) == expected, 'Expected exactly 20 qualifications')
+          for name, h in sources.items():
+              module.verified_file(root, name, h)
+          source_digest = module.sha(module.canonical(sources).encode())
+          selections = {
+              84: ['rtl/m31/frp_m31_phase_request_adapter.sv', 'rtl/m31/frp_m31_request_lanes.sv',
+                   'rtl/m32/frp_m32_registered_target_boundary.sv',
+                   'rtl/m32/frp_m32_registered_target_request_path.sv'],
+              85: ['rtl/m31/frp_m31_pending_routes.sv'],
+              86: ['rtl/m31/frp_m31_active_neutral.sv', 'rtl/m31/frp_m31_capacity_guard.sv',
+                   'rtl/m31/frp_m31_state_update.sv'],
+              87: ['rtl/m31/frp_m31_local_gamma_drift.sv',
+                   'rtl/m31/frp_m31_local_thermal_attenuation.sv', 'rtl/m31/frp_m31_global_stability.sv'],
+          }
+          tops = {83: 'full_state_oracle', 84: 'ingress_contract', 85: 'pending_contract',
+                  86: 'downstream_contract', 87: 'feedback_snapshot'}
+          configs = {83: {'profiles': 12},
+                     84: {'counter_bits_extra_index': [[1, 0], [4, 0], [32, 0], [4, 1]]},
+                     85: {'counter_bits': 32, 'extra_index': [0, 1]},
+                     86: {'tests': [0, 1, 2], 'extra_index': [0, 1]},
+                     87: {'tests': [0, 1, 2]}}
+          runs = []
+          for (suite, n), directory in sorted(records.items()):
+              q = module.read_json(directory / 'evidence/qualification.json')
+              require(q['status'] == 'PASS' and q['commit'] == os.environ['GITHUB_SHA']
+                      and q['cells'] == n and q['replays'] == 2 and q['replay_equal'] is True,
+                      'Qualification mismatch')
+              target = out / f'{suite}-{n}'
+              shutil.copytree(directory, target)
+              hierarchy = f'frp_m32_{tops[suite]}_tb.'
+              if suite == 83:
+                  hierarchy += 'checker_instance.dut.'
+              for replay in (1, 2):
+                  cov = target / f'evidence/run-{replay}.dat'
+                  log = target / f'evidence/run-{replay}.log'
+                  require(digest(cov) == q['coverage_sha256'], 'Unqualified coverage')
+                  selected = set(selections.get(suite, []))
+                  observed = set()
+                  for line in cov.read_text().splitlines():
+                      if not line.startswith("C '"):
+                          continue
+                      payload = line[3:].rsplit("' ", 1)[0]
+                      fields = dict(tuple(map(module.decode, x.split('\x02')))
+                                    for x in payload.split('\x01') if x)
+                      name = fields['f']
+                      if fields['t'] not in ('line', 'branch') or not module.rtl_source(name):
+                          continue
+                      if suite != 83 and name not in selected:
+                          continue
+                      require(fields['h'].startswith(hierarchy) or
+                              fields['h'] == hierarchy[:-1], 'Coverage outside qualified hierarchy')
+                      observed.add(name)
+                  if suite == 83:
+                      selected = observed
+                  require(selected and observed == selected, 'Missing selected RTL coverage')
+                  markers = [line for line in log.read_text().splitlines()
+                             if line.startswith('PASS ')]
+                  require(markers, 'Missing completion')
+                  runs.append(dict(id=f'{suite}-{n}-r{replay}', cells=n,
+                      domain='core-native' if suite == 83 else 'component-contract',
+                      configuration=dict(suite=suite, cells=n, replay=replay, **configs[suite]),
+                      files=sorted(selected), commit=os.environ['GITHUB_SHA'], tool=tool,
+                      source_digest=source_digest, coverage=cov.relative_to(out).as_posix(),
+                      coverage_sha256=digest(cov), log=log.relative_to(out).as_posix(),
+                      log_sha256=digest(log), completion=markers[-1]))
+          manifest = dict(schema='frp.m32.coverage_inputs.v1', commit=os.environ['GITHUB_SHA'],
+              tool=tool, sources=sources, required_runs=[r['id'] for r in runs], runs=runs)
+          require(len(runs) == 40, 'Expected 40 qualified replays')
+          (out / 'inputs.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          PY
+          python source/verification/m32/frp_m32_coverage_union.py \
+            --manifest coverage-inputs/inputs.json --source-root source --output coverage-union
+          cat coverage-union/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload coverage report and reproducible inputs
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: frp105-coverage-union
+          path: |
+            coverage-union/
+            coverage-inputs/
+          if-no-files-found: error
+          retention-days: 14
