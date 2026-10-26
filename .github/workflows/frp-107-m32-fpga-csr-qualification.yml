@@ -1,0 +1,703 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 107 - FRP M32 FPGA CSR Qualification
+run-name: "107 - FRP FPGA CSR | 4 sizes, 2 suites, 16 replays @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-107-fpga-csr-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Initialize one evidence bundle
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/frp-107-evidence"
+          echo "FRP107_EVIDENCE=$RUNNER_TEMP/frp-107-evidence" >> "$GITHUB_ENV"
+          printf '%s\n' '{"status":"NOT_COMPLETED"}' > "$RUNNER_TEMP/frp-107-evidence/qualification.json"
+          printf 'commit=%s\nrun=%s\nattempt=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$RUNNER_TEMP/frp-107-evidence/context.txt"
+
+      - name: Check out dispatched commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install and record toolchain
+        run: |
+          set -euo pipefail
+          {
+            python -m pip install --disable-pip-version-check verilator==5.48.0 systemc==3.0.2.1
+            python -m pip check
+            python --version
+            verilator-cli --version
+            g++ --version
+            make --version
+          } 2>&1 | tee "$FRP107_EVIDENCE/toolchain.log"
+          python -m pip freeze > "$FRP107_EVIDENCE/packages.txt"
+
+      - name: Qualify FPGA and CSR integration
+        run: |
+          set -euo pipefail
+          cat > "$FRP107_EVIDENCE/qualify.py" <<'PYTHON'
+          # Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+          from pathlib import Path
+          import hashlib, importlib.util, json, os, re, shutil, signal, subprocess, sys, time, traceback
+
+          root = Path(os.environ['GITHUB_WORKSPACE']).resolve()
+          base = Path(os.environ['FRP107_EVIDENCE']).resolve()
+          work = base.parent / 'frp-107-build'
+          source = 'rtl/m32/frp_m32_internal_gamma_core.sv'
+          reference = 'frp_prototype_v1_7_0.py'
+          pins = {
+              reference: '9de085915aa0fb8a73705c0927cc875b106480ef8a75a76f599be04440c0f099',
+              source: 'b56dfc038299792bee47a4bfc6e342edbe0f5a1aea8b24d51f2a2cc93adcc95d',
+              'rtl/m32/frp_m32_gamma_target_source.sv': '339b6e8c768cd8358c7dbe2dabb055251b98ead7dde231e2540daaf5e49fe039',
+              'fpga/m32/frp_m32_internal_gamma_fpga_top.sv': '7d4355fc89b7b8814fc808298b09aea4f6f650422b783b1b26b82e6b19e34e91',
+              'fpga/m32_csr/frp_m32_internal_gamma_csr_top.sv': '19a82fa2e5a8a35f133e9c9ed738ed0a5e8044e1caf49ed3c1f9bc8823cb3326',
+          }
+          report = dict(status='RUNNING', commit=os.environ['GITHUB_SHA'], scope='FPGA and CSR RTL integration',
+                        commands=[], suites=[dict(suite=k, cells=n, status='NOT_RUN', replays=0)
+                                             for n in (8,16,32,64) for k in ('fpga','csr')])
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          def save():
+              (base/'qualification.json').write_text(json.dumps(report,indent=2)+'\n')
+              rows=['# FRP 107 — FPGA and CSR qualification','',f"Status: **{report['status']}**",
+                    f"Commit: `{report['commit']}`",'', '| Suite | Cells | Status | Replays |','|---|---:|---|---:|']
+              rows += [f"| {s['suite']} | {s['cells']} | {s['status']} | {s['replays']} |" for s in report['suites']]
+              rows += ['', 'Scope: '+report['scope']+'.',
+                       'Profiles: 8/16/32/64 cells; scheduler modes: free, 7/1, 1/7.',
+                       'Checks: 114 core outputs, reset release, checkpoint loading, command handshakes,',
+                       'gamma cadence and Python targets, CSR reads/writes/errors and upper windows.']
+              if 'totals' in report:
+                  rows += ['', '```json',json.dumps(report['totals'],indent=2),'```']
+              if 'error' in report:
+                  rows += ['', 'Failure details: failure.txt and the corresponding command log.']
+              (base/'summary.md').write_text('\n'.join(rows)+'\n')
+
+          def command(args, log, timeout):
+              entry=dict(argv=[str(a) for a in args],log=str(log.relative_to(base)),timeout_seconds=timeout)
+              report['commands'].append(entry);save();start=time.monotonic()
+              with log.open('w') as stream:
+                  process=subprocess.Popen(args,cwd=root,stdout=stream,stderr=subprocess.STDOUT,start_new_session=True)
+                  try:
+                      code=process.wait(timeout=timeout)
+                  except subprocess.TimeoutExpired:
+                      os.killpg(process.pid,signal.SIGKILL);process.wait()
+                      entry.update(status='TIMEOUT',seconds=round(time.monotonic()-start,3));save()
+                      raise RuntimeError('Command timeout: '+entry['log'])
+              entry.update(returncode=code,seconds=round(time.monotonic()-start,3));save()
+              require(code==0,'Command failed: '+entry['log'])
+              return log.read_text(errors='replace')
+
+          def source_hashes():
+              paths=[root/reference]
+              for folder in ('rtl/m22','rtl/m31','rtl/m32','fpga/m32','fpga/m32_csr'):
+                  paths += [p for p in (root/folder).rglob('*') if p.is_file() and p.suffix in ('.sv','.svh','.mem')]
+              return {str(p.relative_to(root)):digest(p) for p in sorted(set(paths))}
+
+          def expected_metrics(kind,n):
+              if kind=='fpga':
+                  extra={8:(8269,11970),16:(8509,12226),32:(8989,12738),64:(9949,13762)}[n]
+                  return dict(cells=n,outputs=114,ticks=120,gamma_updates=15,resets=8,begin_transfers=18,
+                              word_transfers=8747,phase_transfers=15,blocked=extra[0],cycles=extra[1])
+              transfers,reads,waits,clocks={8:(24904,5139,46,26067),16:(28270,7560,118,29505),
+                                          32:(35101,12483,262,36480),64:(48862,22410,550,50529)}[n]
+              return dict(cells=n,outputs=114,ticks=120,updates=15,transfers=transfers,reads=reads,
+                          errors=12113,waits=waits,resets=6,upper_requests=4 if n==64 else 0,
+                          upper_masks=4 if n==64 else 0,clocks=clocks)
+
+          def validate_output(text,kind,n):
+              lines=[s for s in text.splitlines() if s.startswith('PASS ')]
+              require(len(lines)==1,'Expected exactly one PASS record')
+              line=lines[0];prefix='PASS INTERNAL_GAMMA_'+kind.upper()+' '
+              require(line.startswith(prefix),'Unexpected suite record')
+              fields=line[len(prefix):].split()
+              require(all(re.fullmatch(r'\w+=\d+',s) for s in fields),'Malformed PASS record')
+              pairs=[s.split('=') for s in fields]
+              metrics={k:int(v) for k,v in pairs}
+              require(len(metrics)==len(pairs),'Duplicate metric')
+              require(metrics==expected_metrics(kind,n),'Missing or unexpected execution coverage: '+line)
+              return line,metrics
+
+          def fpga_bench(ports):
+              outputs=[(n,p) for n,p in ports if p.startswith("output ")]
+              def declaration(p):
+               p=p.replace('input ','').replace('output logic ','wire ').replace('output wire ','wire ').replace('output ','wire ')
+               return p+';'
+              decls='\n'.join(declaration(p.replace('rst_n','rst_n_async') if n=='rst_n' else p) for n,p in ports)
+              golden='\n'.join(declaration(p[:-len(n)]+'gold_'+n) for n,p in outputs)
+              controls={'tick_valid','clear_counters','phase_load_valid','auto_target_enable','checkpoint_load_begin','checkpoint_load_valid'}
+              connections=[]
+              for n,p in ports:
+               value='gold_'+n if p.startswith('output ') else n
+               if n=='rst_n':value='rst_n_ref'
+               if n in controls:value=n+' && rst_n_ref'
+               if n=='external_request_valid':value='external_request_valid & {REQUEST_LANES{rst_n_ref}}'
+               connections.append('.'+n+'('+value+')')
+              checks='\n'.join(f'if({n} !== gold_{n})$fatal(1,"forward {n} n=%0d cycle=%0d",CELLS,cycles);' for n,_ in outputs)
+              tb='''`timescale 1ns/1ps
+          `include "frp_m32_internal_gamma_fpga_top.sv"
+          module tb #(parameter int CELLS=8);
+          import frp_m31_pkg::*;
+          localparam int REQUEST_LANES=CELLS/4,CELL_INDEX_BITS=$clog2(CELLS),COUNTER_BITS=32;
+          DECLS
+          GOLD
+          wire core_ready,checkpoint_begin_ready,checkpoint_begin_accepted,checkpoint_word_accepted;
+          int release_edges=0,cycles=0,logical_ticks=0,draws=0,total_ticks=0,updates=0;
+          int begin_transfers=0,word_transfers=0,phase_transfers=0,blocked=0,resets=0;
+          wire rst_n_ref = rst_n_async && release_edges==2;
+          logic [31:0] snapshot[0:624],expected[0:80*CELLS-1];
+          frp_m32_internal_gamma_fpga_top #(.CELLS(CELLS)) dut(.*);
+          frp_m32_internal_gamma_core #(.CELLS(CELLS)) gold(CONNECTIONS);
+          always @(negedge rst_n_async) release_edges=0;
+          event compare_event;
+          always @(compare_event) begin
+           CHECKS
+           if(core_ready!==rst_n_ref || checkpoint_begin_ready!==rst_n_ref)$fatal(1,"reset release");
+           if(checkpoint_begin_accepted!==(rst_n_ref&&checkpoint_load_begin))$fatal(1,"begin handshake");
+           if(checkpoint_word_accepted!==(checkpoint_load_valid&&gold_checkpoint_load_ready))$fatal(1,"word handshake");
+           if(tick_accepted!==(tick_valid&&gold_tick_ready))$fatal(1,"tick handshake");
+           if(phase_load_accepted!==(phase_load_valid&&gold_phase_load_ready))$fatal(1,"phase handshake");
+           if(gamma_tick_phase_q!==3'(logical_ticks%8))$fatal(1,"logical cadence");
+           if(actual_direct_events || reserved_state_events || queue_overflow_events)$fatal(1,"invariant");
+          end
+          task automatic compare;
+           ->compare_event;#0.01;
+          endtask
+          task automatic cycle;
+           bit fire,update;
+           #1;compare();fire=tick_accepted;update=gamma_update_accepted;
+           if(update!==(fire&&logical_ticks%8==0))$fatal(1,"update cadence");
+           if(checkpoint_begin_accepted)begin_transfers++;
+           if(checkpoint_word_accepted)word_transfers++;
+           if(phase_load_accepted)phase_transfers++;
+           if(tick_valid&&!fire)blocked++;
+           clk=1;#1;
+           if(rst_n_async && release_edges<2)release_edges++;
+           if(fire)begin logical_ticks++;total_ticks++;end
+           if(update)begin
+            for(int k=0;k<CELLS;k++)if(local_gamma_noise_target_q16[k*32+:32]!==expected[draws*CELLS+k])
+             $fatal(1,"Python gamma n=%0d draw=%0d lane=%0d",CELLS,draws,k);
+            draws++;updates++;
+           end
+           clk=0;#1;cycles++;compare();
+          endtask
+          task automatic idle_controls;
+           tick_valid=0;phase_load_valid=0;clear_counters=0;checkpoint_load_begin=0;checkpoint_load_valid=0;
+          endtask
+          task automatic assert_reset;
+           // Exercise assertion between clock edges, with no clock needed to clear ready.
+           rst_n_async=0;logical_ticks=0;draws=0;#0.2;compare();resets++;
+           if(core_ready || gamma_configured || gamma_bank_valid || tick_ready || checkpoint_load_ready || phase_load_ready)$fatal(1,"async reset");
+           cycle();
+          endtask
+          task automatic release_reset;
+           rst_n_async=1;cycle();if(core_ready)$fatal(1,"early release");
+           cycle();if(!core_ready)$fatal(1,"late release");
+          endtask
+          task automatic load_snapshot;
+           int before_words;
+           checkpoint_load_begin=1;checkpoint_index=10'(snapshot[624]);cycle();checkpoint_load_begin=0;draws=0;
+           before_words=word_transfers;
+           for(int i=0;i<624;i++)begin
+            checkpoint_load_word=snapshot[i];checkpoint_load_valid=1;
+            #0.1;if(!checkpoint_load_ready)$fatal(1,"load ready");cycle();
+            if(i%13==0)begin checkpoint_load_valid=0;cycle();end
+           end
+           checkpoint_load_valid=0;
+           if(word_transfers-before_words!=624 || !gamma_configured || gamma_load_error)$fatal(1,"checkpoint transfer");
+          endtask
+          task automatic accept_tick;
+           int before_ticks;
+           tick_valid=1;before_ticks=logical_ticks;
+           for(int t=0;t<2000&&logical_ticks==before_ticks;t++)cycle();
+           if(logical_ticks!=before_ticks+1)$fatal(1,"lost or duplicate tick");
+           tick_valid=0;phase_load_valid=0;clear_counters=0;
+          endtask
+          initial begin
+           clk=0;rst_n_async=1;idle_controls();scheduler_mode=FRP_MODE_FREE;
+           phase_load='0;frequency_load_q16={CELLS{32'd65536}};
+           auto_target_enable=1;external_request_valid='1;external_request_cell_index='0;
+           external_request_target='0;external_target_bank='0;checkpoint_index=0;checkpoint_load_word=0;
+           $readmemh("STATE_PATH",snapshot);$readmemh("TARGET_PATH",expected);
+           // Pulses confined to reset release must not become operations afterward.
+           assert_reset();checkpoint_load_begin=1;checkpoint_load_valid=1;phase_load_valid=1;tick_valid=1;clear_counters=1;
+           rst_n_async=1;cycle();idle_controls();cycle();cycle();
+           if(begin_transfers || word_transfers || phase_transfers || total_ticks || gamma_configured || checkpoint_load_ready)$fatal(1,"reset pulse leaked");
+           // Held controls first become eligible on the third release edge.
+           assert_reset();checkpoint_load_begin=1;checkpoint_load_valid=1;phase_load_valid=1;tick_valid=1;
+           checkpoint_index=10'(snapshot[624]);release_reset();
+           if(begin_transfers || word_transfers || phase_transfers || total_ticks)$fatal(1,"release edge consumed control");
+           cycle();if(begin_transfers!=1 || word_transfers || phase_transfers || total_ticks)$fatal(1,"held begin priority");
+           idle_controls();
+           // Reset in a partial load, then in generation, then with a completed bank.
+           checkpoint_load_valid=1;checkpoint_load_word=snapshot[0];repeat(11)cycle();assert_reset();idle_controls();release_reset();
+           load_snapshot();cycle();if(!gamma_source_busy)$fatal(1,"source did not start");assert_reset();idle_controls();release_reset();
+           load_snapshot();for(int t=0;!gamma_bank_valid&&t<2000;t++)cycle();
+           if(!gamma_bank_valid)$fatal(1,"bank timeout");assert_reset();idle_controls();release_reset();
+           for(int m=0;m<3;m++)begin
+            idle_controls();assert_reset();release_reset();scheduler_mode=frp_m31_scheduler_mode_e'(m);
+            for(int i=0;i<CELLS;i++)phase_load[i*32+:32]=32'(i*32'h13851cab+m*32'h01111000);
+            phase_load_valid=1;cycle();phase_load_valid=0;
+            if(phase_word_q!==phase_load || gamma_configured)$fatal(1,"phase-only before checkpoint");
+            tick_valid=1;load_snapshot();tick_valid=0;
+            for(int step=0;step<24;step++)begin
+             if(step==6)repeat(700)cycle();
+             if(step==8 || step==13)begin tick_valid=1;load_snapshot();tick_valid=0;end
+             if(step==17)begin
+              checkpoint_load_begin=1;checkpoint_index=625;tick_valid=1;cycle();checkpoint_load_begin=0;repeat(5)cycle();
+              if(!gamma_load_error || gamma_configured || tick_ready)$fatal(1,"invalid checkpoint accepted");
+              load_snapshot();tick_valid=0;
+             end
+             auto_target_enable=(step/4)%2==0;
+             for(int lane=0;lane<REQUEST_LANES;lane++)begin
+              external_request_cell_index[lane*CELL_INDEX_BITS+:CELL_INDEX_BITS]=CELL_INDEX_BITS'((step+lane)%CELLS);
+              external_request_target[lane*2+:2]=(step%3==0)?FRP_STATE_NEG:FRP_STATE_POS;
+             end
+             for(int i=0;i<CELLS;i++)external_target_bank[i*2+:2]=(step%3==0)?FRP_STATE_NEG:FRP_STATE_POS;
+             if(step%7==0)begin
+              phase_load_valid=1;
+              for(int i=0;i<CELLS;i++)begin
+               phase_load[i*32+:32]=32'(i*32'h13a5f123+step*32'h019abcde);
+               frequency_load_q16[i*32+:32]=32'(50000+step*130+i*71);
+              end
+             end
+             clear_counters=step%5==0;accept_tick();
+             if(logical_ticks!=step+1)$fatal(1,"logical tick count");
+             repeat(step%3)cycle();
+            end
+            // A continuously asserted valid performs one tick on each ready edge.
+            tick_valid=1;
+            for(int t=0;t<5000&&logical_ticks<40;t++)cycle();
+            tick_valid=0;
+            if(logical_ticks!=40)$fatal(1,"held tick stream");
+            repeat(3)cycle();
+           end
+           if(total_ticks!=120 || updates!=15 || blocked==0)$fatal(1,"coverage count");
+           $display("PASS INTERNAL_GAMMA_FPGA cells=%0d outputs=OUTPUT_COUNT ticks=%0d gamma_updates=%0d resets=%0d begin_transfers=%0d word_transfers=%0d phase_transfers=%0d blocked=%0d cycles=%0d",CELLS,total_ticks,updates,resets,begin_transfers,word_transfers,phase_transfers,blocked,cycles);
+           $finish;
+          end
+          initial begin #10000000;$fatal(1,"watchdog");end
+          endmodule
+          '''.replace('GOLD',golden).replace('DECLS',decls).replace('CONNECTIONS',',\n'.join(connections)).replace('CHECKS',checks).replace('OUTPUT_COUNT',str(len(outputs)))
+              return tb
+
+          def csr_bench(ports):
+              outs=[(n,p) for n,p in ports if p.startswith('output ')]
+              decls=[];conn=[]
+              for n,p in ports:
+               if n=='rst_n':continue
+               if n=='clk':conn.append('.clk(clk)');continue
+               pp=p.replace('input ','').replace('output logic ','wire ').replace('output wire ','wire ').replace('output ','wire ')
+               decls.append(pp[:-len(n)]+'g_'+n+';');conn.append('.'+n+'(g_'+n+')')
+              conn+=['.rst_n_async(rst_n_async)','.core_ready(g_core_ready)','.checkpoint_begin_ready()','.checkpoint_begin_accepted()','.checkpoint_word_accepted()']
+              check='\n'.join(f'if(dut.u_fpga.{n}!==g_{n})$fatal(1,"core output {n} cells=%0d clock=%0d",CELLS,clocks);' for n,p in outs)
+              snap=['request_accept','request_reject','accepted_cell_mask','neutral_routed_cell_mask','accepted_change_mask','accepted_changes','capacity_remaining','capacity_exhausted','switch_load_numerator','requested_direct_events','prevented_direct_events','neutral_routed_events','actual_direct_events','reserved_state_events','queue_overflow_events','invariant_flags','target_capture_accepted','target_capture_rejected','normalized_cycle_cost_q16','execution_target_bank']
+              snapdecl='\n'.join('logic [159:0] s_'+n+';' for n in snap)+ '\nlogic [159:0] s_phase_requests,s_execution_requests;'
+              save='\n'.join('s_'+n+'=160\'(g_'+n+');' for n in snap)+"\ns_phase_requests=160'({g_phase_request_target,g_phase_request_cell_index,g_phase_request_valid});\ns_execution_requests=160'({g_execution_request_target,g_execution_request_cell_index,g_execution_request_valid});"
+              clear='\n'.join('s_'+n+'=0;' for n in snap)+"\ns_invariant_flags=160'((1<<FRP_M31_INVARIANT_FLAGS)-1);s_phase_requests=0;s_execution_requests=0;"
+              # Register expectations are independent of the CSR implementation's case tables.
+              common={4:"32'(g_scheduler_mode)",8:'lane',12:"32'(g_external_request_cell_index[lane*IDX+:IDX])",16:"32'(g_external_request_target[lane*2+:2])",20:"32'(g_external_request_valid[lane])",24:'cell_index',32:"32'(g_scheduler_mode_q)",36:"32'(g_scheduler_state_q)",40:'g_ticks_recorded_q',44:"32'(s_request_accept)",48:"32'(s_request_reject)",52:"32'(g_state_out[cell_index*2+:2])",56:"32'(g_pending_route_out[cell_index*2+:2])"}
+              for a,n in zip(range(60,104,4),['accepted_changes','capacity_remaining','capacity_exhausted','switch_load_numerator','invariant_flags','requested_direct_events','prevented_direct_events','neutral_routed_events','actual_direct_events','reserved_state_events','queue_overflow_events']):common[a]=f"32'(s_{n})"
+              base={0x68:"32'(g_auto_target_enable)",0x6c:'g_phase_load[cell_index*32+:32]',0x70:'g_frequency_load_q16[cell_index*32+:32]',0x74:'g_phase_gamma_effective_word[cell_index*32+:32]',0x78:'g_phase_thermal_node_factor_q30[cell_index*32+:32]',0x7c:'g_phase_word_q[cell_index*32+:32]',0x80:'g_frequency_current_q16[cell_index*32+:32]',0x84:'g_coupling_field_q16[cell_index*32+:32]',0x88:'g_phase_projection_q30[cell_index*32+:32]',0x8c:"32'(g_phase_target_source[cell_index*2+:2])",0x90:"32'(g_registered_target_q[cell_index*2+:2])",0x94:"{26'd0,s_target_capture_rejected[0],s_target_capture_accepted[0],g_registered_request_enable,g_registered_target_domain_valid,g_phase_target_domain_valid,g_registered_target_valid_q}",0x98:'g_accepted_target_capture_events_q',0x9c:'g_rejected_target_capture_events_q'}
+              for a,n in zip(range(0xa0,0xc4,4),['scheduler_count_free_q','scheduler_count_balance_q','scheduler_count_commit_q','scheduler_count_excite_q','scheduler_count_neutralize_q','pair_coherence_q30','cluster_coherence_q30','global_coherence_q30','organization_dispersion_q30']):base[a]='g_'+n
+              base[0xc4]="32'(s_normalized_cycle_cost_q16)"
+              for a,n in zip(range(0xc8,0xe4,4),['temperature_proxy_q16','peak_temperature_proxy_q16','thermal_sample_count_q','coherence_capacity_q16','pressure_q16','stability_margin_q16','stable']):base[a]="32'(g_"+n+")"
+              for a,n in zip(range(0xe4,0xfc,4),['accepted_cell_mask','neutral_routed_cell_mask','accepted_change_mask','phase_requests','execution_requests','execution_target_bank']):base[a]='window(s_'+n+')'
+              local={0x68:'3'}
+              for a,n in zip(range(0x70,0xc8,4),['local_gamma_noise_target_q16','local_gamma_noise_state_q16','local_gamma_drift_word','local_gamma_effective_word','phase_gamma_effective_word','local_heat_q16','local_heat_peak_q16','local_generated_power_q16','local_thermal_dissipation_q16','local_thermal_diffusion_q16','local_thermal_overload_q16','local_thermal_node_factor_q30','local_frequency_lag_q16','local_mean_heat_q16','local_mean_heat_peak_q16','local_maximum_heat_peak_q16','local_next_heat_q16','local_next_overload_q16','local_next_gamma_drift_word','local_next_gamma_effective_word','local_next_thermal_node_factor_q30','phase_thermal_node_factor_q30']):local[a]='g_'+n+('' if a in [0xa4,0xa8,0xac] else '[cell_index*32+:32]')
+              stability={}
+              for a,n in zip(range(0x68,0xac,4),['local_coherence_compression_q30','local_effective_coherence_q30','local_coherence_capacity_q16','local_pressure_q16','local_stability_margin_q16','local_stable','local_previous_margin_q16','local_stability_valid_q','local_stability_sample_count_q','local_stability_raw_coherence_q30','local_stability_cluster_coherence_q30','local_stability_mean_heat_q16','local_stability_mean_overload_q16','local_stability_mean_lag_q16','local_stability_neutral_fraction_q30','local_stability_compression_arg_q16','local_stability_switch_load_q16']):stability[a]="32'(g_"+n+")"
+              for k in range(7):stability[0xac+4*k]=f'g_group_coherence_q30[{32*k}+:32]'
+              for start,n in [(0xc8,'mean'),(0xd4,'min'),(0xe0,'max'),(0xec,'dispersion')]:
+               for k in range(3):stability[start+4*k]=f'g_level_{n}_coherence_q30[{32*k}+:32]' if n!='dispersion' else f'g_level_dispersion_q30[{32*k}+:32]'
+              scale={0x68:'CELLS',0x6c:'LANES',0x70:'IDX',0x74:'32',0x78:'LEVELS',0x7c:'CELLS-1',0x80:'word_index',0x84:'group_index',0x88:'g_group_coherence_q30[group_index*32+:32]',0x8c:'level_index',0x90:'g_level_mean_coherence_q30[level_index*32+:32]',0x94:'g_level_min_coherence_q30[level_index*32+:32]',0x98:'g_level_max_coherence_q30[level_index*32+:32]',0x9c:'g_level_dispersion_q30[level_index*32+:32]',0xa0:'2<<level_index',0xa4:'LANES*(IDX+3)',0xa8:'CELLS*2',0xac:'window(s_execution_target_bank)',0xb0:"window(160'(g_state_out))",0xb4:"window(160'(g_pending_route_out))",0xb8:"window(160'(g_registered_target_q))",0xbc:"window(160'(g_phase_target_source))",0xc0:'window(s_phase_requests)',0xc4:'window(s_execution_requests)',0xc8:'cell_index',0xcc:'lane',0xd0:'WORDS',0xd4:'(CELLS*2+31)/32',0xd8:'(LANES*(IDX+3)+31)/32',0xdc:'(CELLS+31)/32'}
+              gamma={0x68:"{21'd0,g_gamma_tick_phase_q,1'b0,g_gamma_load_error,g_tick_ready,g_gamma_bank_valid,g_gamma_source_busy,g_checkpoint_load_ready,g_gamma_configured,g_core_ready}",0x6c:"32'(g_checkpoint_index)",0x74:'load_words',0x78:'624',0x7c:'8'}
+              def cases(d):return '\n'.join(f"8'h{a:02x}: expected_read={v};" for a,v in sorted(d.items()))
+              expect='''if(a<104)begin case(a)
+          '''+cases(common)+'''
+          8'h1c: expected_read={23'd0,(|s_queue_overflow_events),(|s_reserved_state_events),(|s_actual_direct_events),!( &s_invariant_flags[FRP_M31_INVARIANT_FLAGS-1:0]),(|g_pending_route_out),(|s_request_reject),(|s_request_accept),s_capacity_exhausted[0],g_core_ready};
+           default: expected_read=0;endcase end else if(a==252)begin
+           case(page) 0:expected_read='h46524701;1:expected_read='h46524702;2:expected_read='h46524703;4:expected_read='h46524704;5:expected_read='h46524705;default:expected_read=0;endcase
+           end else case(page)
+          '''+''.join(f'{p}:case(a)\n'+cases(d)+'\ndefault:expected_read=0;endcase\n' for p,d in [(0,base),(1,local),(2,stability),(4,scale),(5,gamma)])+'default:expected_read=0;endcase'
+              tb=r'''`timescale 1ns/1ps
+          `include "frp_m32_internal_gamma_csr_top.sv"
+          module tb #(parameter int CELLS=8);
+          import frp_m31_pkg::*;
+          localparam int LANES=CELLS/4,IDX=$clog2(CELLS),LEVELS=$clog2(CELLS);
+          localparam int REQUEST_LANES=LANES,CELL_INDEX_BITS=IDX,COUNTER_BITS=32;
+          localparam int WORDS=(LANES*(IDX+3)>CELLS*2)?(LANES*(IDX+3)+31)/32:(CELLS*2+31)/32;
+          logic clk=0,rst_n_async=1,csr_valid=0,csr_write=0;
+          logic [7:0] csr_addr=0;
+          logic [31:0] csr_wdata=0;
+          wire csr_ready,csr_error;
+          wire [31:0] csr_rdata;
+          DECLS
+          wire g_core_ready;
+          SNAPDECL
+          int page=0,lane=0,cell_index=0,word_index=0,group_index=0,level_index=0;
+          int load_words=0,clocks=0,ticks=0,updates=0,draws=0,logical_ticks=0;
+          int transfers=0,errors=0,reads=0,waits=0,resets=0,upper_request_hits=0,upper_mask_hits=0;
+          bit expected_error=0,transfer_done=0;
+          logic [31:0] state_words[0:624],targets[0:80*CELLS-1];
+          frp_m32_internal_gamma_csr_top #(.CELLS(CELLS)) dut(.*);
+          frp_m32_internal_gamma_fpga_top #(.CELLS(CELLS)) golden(CONNECTIONS);
+          wire valid_write=csr_valid&&csr_write&&!expected_error&&g_core_ready&&rst_n_async;
+          assign g_tick_valid=valid_write&&csr_addr==0&&csr_wdata==1&&g_gamma_configured;
+          assign g_clear_counters=valid_write&&csr_addr==0&&csr_wdata==2;
+          assign g_phase_load_valid=valid_write&&csr_addr==0&&csr_wdata==8;
+          assign g_checkpoint_load_begin=valid_write&&csr_addr==0&&csr_wdata=='h400;
+          assign g_checkpoint_load_valid=valid_write&&page==5&&csr_addr=='h70;
+          assign g_checkpoint_load_word=csr_wdata;
+          always_comb begin
+           g_external_target_bank=0;
+           for(int k=0;k<LANES;k++)if(g_external_request_valid[k])
+            g_external_target_bank[int'(g_external_request_cell_index[k*IDX+:IDX])*2+:2]=g_external_request_target[k*2+:2];
+          end
+          function automatic logic [31:0] window(input logic [159:0] v);
+           return v[word_index*32+:32];
+          endfunction
+          function automatic logic [31:0] expected_read(input logic[7:0] a);
+           EXPECT
+          endfunction
+          function automatic bit read_error(input int a);
+           if(a%4!=0 || a==0)return 1;
+           if(a<104 || a==252)return 0;
+           case(page)
+            0:return 0;
+            1:return a==108 || a>=200;
+            2:return a==248;
+            4:return a>=224;
+            5:return !(a==104 || a==108 || a==116 || a==120 || a==124);
+            default:return 1;
+           endcase
+          endfunction
+          event compare_event;
+          always @(compare_event)begin
+           CHECK
+           if(g_actual_direct_events || g_reserved_state_events || g_queue_overflow_events)$fatal(1,"invariant");
+           if(g_gamma_tick_phase_q!==3'(logical_ticks%8))$fatal(1,"cadence");
+          end
+          task automatic clear_snapshot;
+           CLEAR
+          endtask
+          task automatic reset_model;
+           page=0;lane=0;cell_index=0;word_index=0;group_index=0;level_index=0;
+           g_scheduler_mode=FRP_MODE_FREE;g_auto_target_enable=0;
+           g_external_request_valid=0;g_external_request_cell_index=0;g_external_request_target=0;
+           g_phase_load=0;g_frequency_load_q16=0;g_checkpoint_index=624;
+           load_words=0;draws=0;logical_ticks=0;clear_snapshot();
+          endtask
+          task automatic model_write;
+           if(csr_addr<104)begin
+            case(csr_addr)
+             0:case(csr_wdata)
+              1:g_external_request_valid=0;
+              2:clear_snapshot();
+              4:g_external_request_valid=0;
+              'h100:page=0;'h101:page=1;'h102:page=2;'h104:page=4;'h105:page=5;
+              'h400:begin load_words=0;draws=0;end
+              default:begin end
+             endcase
+             4:g_scheduler_mode=frp_m31_scheduler_mode_e'(csr_wdata[1:0]);
+             8:lane=int'(csr_wdata);
+             12:g_external_request_cell_index[lane*IDX+:IDX]=IDX'(csr_wdata);
+             16:g_external_request_target[lane*2+:2]=2'(csr_wdata);
+             20:g_external_request_valid[lane]=csr_wdata[0];
+             24:cell_index=int'(csr_wdata);
+             default:begin end
+            endcase
+           end else case(page)
+            0:case(csr_addr)
+             'h68:g_auto_target_enable=csr_wdata[0];
+             'h6c:g_phase_load[cell_index*32+:32]=csr_wdata;
+             'h70:g_frequency_load_q16[cell_index*32+:32]=csr_wdata;
+             default:begin end
+            endcase
+            4:case(csr_addr)
+             'h80:word_index=int'(csr_wdata);'h84:group_index=int'(csr_wdata);'h8c:level_index=int'(csr_wdata);
+             default:begin end
+            endcase
+            5:case(csr_addr)
+             'h6c:g_checkpoint_index=csr_wdata[9:0];'h70:load_words++;
+             default:begin end
+            endcase
+            default:begin end
+           endcase
+          endtask
+          event sample_event, retire_event;
+          bit ready_model,fire,update;
+          always @(sample_event)begin
+           ready_model=rst_n_async&&g_core_ready&&csr_valid;
+           if(g_tick_valid)ready_model=ready_model&&g_tick_ready;
+           if(csr_ready!==ready_model || csr_error!==(ready_model&&expected_error))
+            $fatal(1,"bus cells=%0d page=%0d addr=%h data=%h ready=%b expected=%b error=%b expected=%b",CELLS,page,csr_addr,csr_wdata,csr_ready,ready_model,csr_error,expected_error);
+           if(csr_valid&&!ready_model)waits++;
+           if(!ready_model || csr_write || expected_error)begin
+            if(csr_rdata!==0)$fatal(1,"idle/error/write data");
+           end else if(csr_rdata!==expected_read(csr_addr))
+            $fatal(1,"read cells=%0d page=%0d a=%h got=%h expected=%h",CELLS,page,csr_addr,csr_rdata,expected_read(csr_addr));
+           fire=g_tick_accepted;update=g_gamma_update_accepted;
+           if(fire)begin
+            SAVE
+           end
+          end
+          always @(retire_event)begin
+           if(fire)begin ticks++;logical_ticks++;end
+           if(update)begin
+            for(int k=0;k<CELLS;k++)if(g_local_gamma_noise_target_q16[k*32+:32]!==targets[draws*CELLS+k])$fatal(1,"Python target");
+            updates++;draws++;
+           end
+           if(!g_core_ready)reset_model();
+           if(ready_model)begin
+            transfers++;if(expected_error)errors++;else if(csr_write)model_write();else reads++;
+           end
+           transfer_done=ready_model;
+          end
+          task automatic cycle;
+           #1;->compare_event;#0.01;->sample_event;#0.01;
+           clk=1;#1;clk=0;->retire_event;
+           #1;clocks++;->compare_event;#0.01;
+          endtask
+          task automatic access(input bit wr,input int a,input logic[31:0] data,input bit err);
+           csr_valid=1;csr_write=wr;csr_addr=8'(a);csr_wdata=data;expected_error=err;transfer_done=0;
+           for(int t=0;!transfer_done&&t<3000;t++)cycle();
+           if(!transfer_done)$fatal(1,"transfer watchdog");
+           csr_valid=0;expected_error=0;
+          endtask
+          task automatic write_word(input int a,input logic[31:0] data);
+           access(1,a,data,0);
+          endtask
+          task automatic read_word(input int a);
+           access(0,a,0,read_error(a));
+          endtask
+          task automatic reset;
+           csr_valid=0;expected_error=0;rst_n_async=0;reset_model();#0.1;
+           if(csr_ready || csr_error || csr_rdata)$fatal(1,"async bus reset");
+           cycle();rst_n_async=1;cycle();cycle();cycle();resets++;
+           if(g_gamma_configured || g_gamma_bank_valid || g_tick_ready)$fatal(1,"reset configuration");
+           read_word(252);
+          endtask
+          task automatic checkpoint(input bit zeros);
+           write_word(0,'h105);write_word('h6c,state_words[624]);write_word(0,'h400);
+           for(int k=0;k<624;k++)begin
+            write_word('h70,zeros?0:state_words[k]);
+            if(k%47==0)begin cycle();read_word('h74);end
+            if(k==37)begin write_word('h6c,0);read_word('h6c);end
+           end
+           read_word('h74);
+           if(load_words!=624 || g_gamma_configured===zeros || g_gamma_load_error!==zeros)$fatal(1,"checkpoint completion");
+           access(1,'h70,123,1);
+          endtask
+          task automatic inspect;
+           int pg;
+           for(int p=0;p<5;p++)begin
+            pg=(p<3)?p:p+1;write_word(0,256+pg);
+            for(int a=0;a<256;a++)read_word(a);
+           end
+           write_word(0,'h100);
+           for(int c=0;c<CELLS;c++)begin
+            write_word(24,c);
+            for(int a='h6c;a<='h90;a+=4)read_word(a);
+            write_word(0,'h101);
+            for(int a='h70;a<='hc4;a+=4)read_word(a);
+            write_word(0,'h100);
+           end
+           write_word(0,'h104);
+           for(int g=0;g<CELLS-1;g++)begin write_word('h84,g);read_word('h88);end
+           for(int l=0;l<LEVELS;l++)begin
+            write_word('h8c,l);for(int a='h90;a<='ha0;a+=4)read_word(a);
+           end
+           for(int w=0;w<WORDS;w++)begin
+            write_word('h80,w);read_word('h80);
+            for(int a='hac;a<='hc4;a+=4)read_word(a);
+            write_word(0,'h100);
+            for(int a='he4;a<='hf8;a+=4)read_word(a);
+            if(CELLS==64&&w==4&&window(s_execution_requests)!=0)upper_request_hits++;
+            if(CELLS==64&&w==1&&window(s_accepted_cell_mask)!=0)upper_mask_hits++;
+            write_word(0,'h104);
+           end
+           access(1,'h80,WORDS,1);read_word('h80);
+           access(1,'h84,CELLS-1,1);read_word('h84);
+           access(1,'h8c,LEVELS,1);read_word('h8c);
+           write_word('h80,0);write_word(0,'h100);
+          endtask
+          initial begin
+           reset_model();$readmemh("STATE_PATH",state_words);$readmemh("TARGET_PATH",targets);
+           reset();access(1,0,1,1);access(1,0,'h200,1);access(1,4,3,1);
+           access(1,8,LANES,1);access(1,12,CELLS,1);access(1,24,CELLS,1);access(1,16,2,1);access(1,20,2,1);
+           write_word(0,'h105);access(1,'h6c,625,1);read_word('h6c);access(1,'h70,42,1);
+           checkpoint(1);access(1,0,1,1);checkpoint(0);
+           // Abort a waiting transaction before its accepting edge.
+           write_word(0,'h400);for(int k=0;k<624;k++)write_word('h70,state_words[k]);
+           csr_valid=1;csr_write=1;csr_addr=0;csr_wdata=1;expected_error=0;
+           repeat(3)begin cycle();if(transfer_done)$fatal(1,"expected initial source wait");end
+           csr_valid=0;repeat(900)cycle();if(logical_ticks!=0)$fatal(1,"withdrawn tick executed");
+           // Reset while a valid tick is waiting, then verify the host must reload.
+           write_word(0,'h400);for(int k=0;k<624;k++)write_word('h70,state_words[k]);
+           csr_valid=1;csr_write=1;csr_addr=0;csr_wdata=1;cycle();
+           reset();access(1,0,1,1);
+           // Partial checkpoint reset.
+           write_word(0,'h105);write_word(0,'h400);repeat(13)write_word('h70,123);reset();
+           for(int m=0;m<3;m++)begin
+            reset();write_word(4,m);cycle();
+            write_word(0,'h100);
+            for(int c=0;c<CELLS;c++)begin
+             write_word(24,c);write_word('h6c,32'(c*32'h13851cab+m*32'h01111000));write_word('h70,50000+c*71);
+            end
+            write_word(0,8);
+            if(g_phase_word_q!==g_phase_load)$fatal(1,"phase-only load");
+            checkpoint(0);write_word(0,'h100);
+            for(int t=0;t<24;t++)begin
+             if(t==13)checkpoint(0);
+             write_word(0,'h100);write_word('h68,t==0?0:(t/4)%2);
+             for(int l=0;l<LANES;l++)begin
+              write_word(8,l);write_word(12,CELLS-LANES+l);write_word(16,t%3==0?3:1);write_word(20,1);
+             end
+             write_word(0,1);cycle();
+             if(t==0 || t==23)inspect();
+             if(t==9)begin write_word(0,2);cycle();end
+            end
+            // Hold a valid tick command across ready and stalled edges.
+            csr_valid=1;csr_write=1;csr_addr=0;csr_wdata=1;expected_error=0;
+            for(int t=0;t<5000&&logical_ticks<40;t++)cycle();
+            csr_valid=0;if(logical_ticks!=40)$fatal(1,"held command count");
+            cycle();inspect();
+            for(int p=0;p<5;p++)begin
+             int pg;pg=p<3?p:p+1;write_word(0,256+pg);
+             for(int a=0;a<256;a++)if(a%4!=0)access(1,a,0,1);
+            end
+            write_word(0,'h101);access(1,'h68,0,1);access(1,'h6c,0,1);
+            write_word(0,'h100);access(1,'h74,0,1);access(1,'h78,0,1);access(1,0,3,1);
+           end
+           if(ticks!=120 || updates!=15 || waits==0)$fatal(1,"test coverage");
+           if(CELLS==64&&(upper_request_hits==0 || upper_mask_hits==0))$fatal(1,"upper windows not exercised");
+           $display("PASS INTERNAL_GAMMA_CSR cells=%0d outputs=114 ticks=%0d updates=%0d transfers=%0d reads=%0d errors=%0d waits=%0d resets=%0d upper_requests=%0d upper_masks=%0d clocks=%0d",CELLS,ticks,updates,transfers,reads,errors,waits,resets,upper_request_hits,upper_mask_hits,clocks);
+           $finish;
+          end
+          initial begin #10000000;$fatal(1,"watchdog");end
+          endmodule
+          '''
+              for k,v in [('DECLS','\n'.join(decls)),('SNAPDECL',snapdecl),('CONNECTIONS',',\n'.join(conn)),('CHECK',check),('CLEAR',clear),('SAVE',save),('EXPECT',expect)]:tb=tb.replace(k,v)
+              return tb
+
+          def main():
+              base.mkdir(parents=True,exist_ok=True);work.mkdir(exist_ok=True);active=None
+              try:
+                  require(sys.version_info[:2]==(3,12),'Python 3.12 required')
+                  require(command(['git','rev-parse','HEAD'],base/'head.txt',30).strip()==report['commit'],'Commit mismatch')
+                  require(not command(['git','status','--porcelain'],base/'status-before.txt',30).strip(),'Dirty checkout')
+                  before=source_hashes();report['source_sha256']=before
+                  for path,value in pins.items():require(before.get(path)==value,'Source pin mismatch: '+path)
+                  spec=importlib.util.spec_from_file_location('frp_reference',root/reference)
+                  ref=importlib.util.module_from_spec(spec);sys.modules[spec.name]=ref;spec.loader.exec_module(ref)
+                  header=(root/source).read_text().split('module frp_m32_internal_gamma_core #(',1)[1].split('\n);',1)[0].split(') (',1)[1]
+                  ports=[]
+                  for item in header.split(','):
+                      declaration=re.sub(r'\s+',' ',item).strip()
+                      ports.append((re.search(r'(\w+)$',declaration)[1],declaration))
+                  require(sum(p.startswith('output ') for _,p in ports)==114,'Core output inventory changed')
+                  templates=dict(fpga=fpga_bench(ports),csr=csr_bench(ports))
+                  verilator=shutil.which('verilator-cli');require(verilator is not None,'Missing Verilator')
+                  for active in report['suites']:
+                      kind,n=active['suite'],active['cells'];active['status']='RUNNING';save()
+                      print(f'RUN {kind} cells={n}',flush=True)
+                      out=base/f'{kind}-{n}';out.mkdir()
+                      processor=ref.QuantizedReferenceShadowProcessor(cells=n,seed=0)
+                      state=processor.random.getstate()[1];targets=[]
+                      require(len(state)==625,'Checkpoint size')
+                      for k in range(80):targets.extend(processor.generate_gamma_noise_targets(k*8)[1])
+                      (out/'state.mem').write_text(''.join(f'{v:08x}\n' for v in state))
+                      (out/'expected.mem').write_text(''.join(f'{v&0xffffffff:08x}\n' for v in targets))
+                      tb=templates[kind].replace('STATE_PATH',str(out/'state.mem')).replace('TARGET_PATH',str(out/'expected.mem'))
+                      (out/'tb.sv').write_text(tb)
+                      obj=work/f'{kind}-{n}'
+                      args=[verilator,'--binary','--timing','--assert','--unroll-count','1',
+                            '--output-groups','32','--output-split','10000','--output-split-cfuncs','100',
+                            '-Wno-fatal','-j','2','-MAKEFLAGS','VK_PCH_I_FAST=','-MAKEFLAGS','VK_PCH_I_SLOW=',
+                            '-MAKEFLAGS','OPT_FAST=-O1','--top-module','tb',f'-GCELLS={n}','--Mdir',str(obj)]
+                      args += ['-I'+p for p in ('rtl/m22','rtl/m31','rtl/m32','fpga/m32','fpga/m32_csr')]+[str(out/'tb.sv')]
+                      command(args,out/'build.log',1800)
+                      lines=[]
+                      for replay in (1,2):
+                          text=command([str(obj/'Vtb')],out/f'run{replay}.log',900)
+                          line,metrics=validate_output(text,kind,n);lines.append(line)
+                          active['replays']=replay;save()
+                      require(lines[0]==lines[1],'Replay mismatch')
+                      active.update(status='PASS',metrics=metrics,result=lines[0]);save()
+                      print(lines[0]+' replays=2',flush=True)
+                      shutil.rmtree(obj)
+                  require(source_hashes()==before,'Sources changed during qualification')
+                  require(not command(['git','status','--porcelain'],base/'status-after.txt',30).strip(),'Checkout changed')
+                  require(all(s['status']=='PASS' and s['replays']==2 for s in report['suites']),'Incomplete suite matrix')
+                  report.update(status='PASS',totals=dict(simulations=16,accepted_ticks=1920,gamma_updates=240,
+                                                        csr_bus_transfers=274274))
+              except Exception as exc:
+                  report.update(status='FAIL',error=str(exc))
+                  if active is not None and active['status']=='RUNNING':active.update(status='FAIL',error=str(exc))
+                  (base/'failure.txt').write_text(traceback.format_exc())
+                  raise
+              finally:
+                  save()
+                  manifest={str(p.relative_to(base)):digest(p) for p in sorted(base.rglob('*'))
+                            if p.is_file() and p.name!='evidence-sha256.json'}
+                  (base/'evidence-sha256.json').write_text(json.dumps(manifest,indent=2)+'\n')
+
+          if __name__=='__main__':
+              main()
+          PYTHON
+          python "$FRP107_EVIDENCE/qualify.py"
+
+      - name: Publish readable summary
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          if test -s "$FRP107_EVIDENCE/summary.md"; then
+            cat "$FRP107_EVIDENCE/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf '%s\n' '# FRP 107 — NOT COMPLETED' \
+              'Inspect the failed step and the evidence bundle.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload the single evidence artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-107-fpga-csr-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.FRP107_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 6
