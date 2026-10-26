@@ -1,0 +1,547 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 106 - FRP M32 Internal Gamma Qualification
+run-name: "106 - FRP Internal Gamma | 4 sizes, 3 suites, 24 replays @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-106-internal-gamma-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Initialize one evidence bundle
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/frp-106-evidence"
+          echo "FRP106_EVIDENCE=$RUNNER_TEMP/frp-106-evidence" >> "$GITHUB_ENV"
+          printf '%s\n' '{"status":"NOT_COMPLETED"}' > "$RUNNER_TEMP/frp-106-evidence/qualification.json"
+          printf 'commit=%s\nrun=%s\nattempt=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$RUNNER_TEMP/frp-106-evidence/context.txt"
+
+      - name: Check out dispatched commit
+        id: checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install and record toolchain
+        run: |
+          set -euo pipefail
+          {
+            python -m pip install --disable-pip-version-check \
+              verilator==5.48.0 systemc==3.0.2.1 pyosys==0.68
+            python -m pip check
+            python --version
+            verilator-cli --version
+            g++ --version
+            make --version
+          } 2>&1 | tee "$FRP106_EVIDENCE/toolchain.log"
+          python -m pip freeze > "$FRP106_EVIDENCE/packages.txt"
+
+      - name: Qualify RTL, synthesized source and integrated core
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          cat > "$FRP106_EVIDENCE/qualify.py" <<'PYTHON'
+          # Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+          from pathlib import Path
+          import hashlib, importlib.util, importlib.metadata, json, os, random, re
+          import shutil, signal, subprocess, sys, time, traceback
+
+          root = Path(os.environ['GITHUB_WORKSPACE']).resolve()
+          base = Path(os.environ['FRP106_EVIDENCE']).resolve()
+          base.mkdir(parents=True, exist_ok=True)
+          work = base.parent / 'frp-106-build'
+          work.mkdir(exist_ok=True)
+          verilator = shutil.which('verilator-cli')
+          source = 'rtl/m32/frp_m32_gamma_target_source.sv'
+          composition = 'rtl/m32/frp_m32_internal_gamma_core.sv'
+          reference = 'frp_prototype_v1_7_0.py'
+          anchor = '.github/workflows/frp-83-m32-full-state-oracle-regression.yml'
+          pins = {
+              anchor: '1eef9a16d51e46f73d90ef337f8d3776029b50f83e2af33ad6c309aa93999652',
+              source: '339b6e8c768cd8358c7dbe2dabb055251b98ead7dde231e2540daaf5e49fe039',
+              composition: 'b56dfc038299792bee47a4bfc6e342edbe0f5a1aea8b24d51f2a2cc93adcc95d',
+              reference: '9de085915aa0fb8a73705c0927cc875b106480ef8a75a76f599be04440c0f099',
+          }
+          report = dict(status='RUNNING', commit=os.environ['GITHUB_SHA'], commands=[], suites=[],
+                        scope='Gamma source RTL and post-synthesis simulation; integrated core RTL',
+                        excluded=['Full integrated-core netlist qualification',
+                                  'FPGA/CSR integration', 'Hardware boundary-event recorder'])
+          for n in (8, 16, 32, 64):
+              for kind in ('source_rtl', 'source_netlist', 'integration_rtl'):
+                  report['suites'].append(dict(cells=n, suite=kind, status='NOT_RUN', replays=0))
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          def save():
+              (base/'qualification.json').write_text(json.dumps(report, indent=2)+'\n')
+
+          def command(args, log, cwd, timeout):
+              entry = dict(argv=[str(a) for a in args], cwd=str(cwd), timeout=timeout,
+                           log=str(log.relative_to(base)), status='RUNNING')
+              report['commands'].append(entry)
+              save()
+              started = time.monotonic()
+              with log.open('w') as f:
+                  process = subprocess.Popen(args, cwd=cwd, stdout=f, stderr=subprocess.STDOUT,
+                                             start_new_session=True)
+                  try:
+                      code = process.wait(timeout=timeout)
+                  except subprocess.TimeoutExpired:
+                      os.killpg(process.pid, signal.SIGKILL)
+                      process.wait()
+                      entry.update(status='TIMEOUT', seconds=round(time.monotonic()-started, 2))
+                      save()
+                      raise RuntimeError(f'Timeout: {log}')
+              entry.update(returncode=code, seconds=round(time.monotonic()-started, 2),
+                           status='PASS' if code == 0 else 'FAIL')
+              save()
+              require(code == 0, f'Command failed: {log}\n{log.read_text()[-3000:]}')
+              return log.read_text()
+
+          def verify_sources():
+              for path, expected in pins.items():
+                  require(digest(root/path) == expected, f'Source changed: {path}')
+
+
+          def load_models():
+              global ref, common
+              spec = importlib.util.spec_from_file_location('reference', root/reference)
+              ref = importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(ref)
+              core = (root/'rtl/m32/frp_m32_core.sv').read_text()
+              header = core.split('module frp_m32_core #(', 1)[1].split('\n);', 1)[0]
+              ports = header.split(') (', 1)[1]
+              info = []
+              for port in ports.split(','):
+                  port = re.sub(r'\s+', ' ', port).strip().split(' = ')[0]
+                  info.append((re.search(r'(\w+)$', port)[1], port))
+              outputs=[(n,p) for n,p in info if p.startswith('output ')]
+              module=(root/composition).read_text();header=module.split(') (',1)[1].split('\n);',1)[0]
+              decls=[]
+              for p in header.split(','):
+               p=p.strip();p=re.sub(r'^input ', '',p);p=re.sub(r'^output (?:logic|wire) ', 'wire ',p);p=re.sub(r'^output ', 'wire ',p)
+               decls.append(p+';')
+              gold_decls=[]
+              for n,p in outputs:
+               p=p.replace('output logic ','wire ').replace('output wire ','wire ').replace('output ','wire ')
+               gold_decls.append(p[:-len(n)]+'gold_'+n+';')
+              connections=[]
+              replace={'tick_enable':'ref_tick','phase_load_valid':'ref_load','gamma_effective_word':"'0",'thermal_node_factor_q30':"{CELLS{32'h40000000}}",'local_gamma_enable':"1'b1",'local_thermal_enable':"1'b1",'gamma_update_valid':'ref_update','gamma_targets_q16':'ref_targets'}
+              for n,p in info:connections.append('.'+n+'('+('gold_'+n if p.startswith('output ') else replace.get(n,n))+')')
+              checks='\n'.join(f'if ({n} !== gold_{n}) $fatal(1,"output {n} cells=%0d clock=%0d tick=%0d",CELLS,cycles,logical_ticks);' for n,_ in outputs)
+              common='''`timescale 1ns/1ps
+              `include "frp_m32_internal_gamma_core.sv"
+              module tb #(parameter int CELLS=8);
+              import frp_m31_pkg::*;
+              localparam int REQUEST_LANES=CELLS/4,CELL_INDEX_BITS=$clog2(CELLS),COUNTER_BITS=32;
+              DECLS
+              GOLD_DECLS
+              logic [31:0] states[0:4*625-1],targets[0:4*64*CELLS-1];
+              logic [CELLS*32-1:0] ref_targets;
+              int logical_ticks=0,draws=0,source_case=0,cycles=0,total_ticks=0,updates=0,waits=0,loads=0,clears=0;
+              int mode_test=0;
+              wire ref_tick = rst_n && tick_valid && tick_ready;
+              wire ref_update = ref_tick && logical_ticks%8==0;
+              wire ref_load = rst_n && phase_load_valid && !checkpoint_load_begin && (!tick_valid || tick_ready);
+              always_comb begin
+               for(int i=0;i<CELLS;i++)ref_targets[i*32+:32]=targets[(source_case*64+draws)*CELLS+i];
+              end
+              frp_m32_internal_gamma_core #(.CELLS(CELLS)) dut(.*);
+              frp_m32_core #(.CELLS(CELLS)) reference_core(CONNECTIONS);
+              event compare_event;
+              always @(compare_event) begin
+               CHECKS
+              end
+              task automatic cycle;
+               bit fire,update;
+               #1;
+               if(tick_ready !== (rst_n && !checkpoint_load_begin && gamma_configured && (logical_ticks%8!=0 || gamma_bank_valid)))$fatal(1,"ready contract");
+               if(gamma_tick_phase_q !== 3'(logical_ticks%8))$fatal(1,"cadence before edge");
+               if(tick_accepted!==ref_tick || gamma_update_accepted!==ref_update || phase_load_accepted!==ref_load)$fatal(1,"handshake");
+               -> compare_event; #0.01;fire=ref_tick;update=ref_update;
+               clk=1;#1;clk=0;
+               if(fire)begin logical_ticks++;total_ticks++;end
+               if(update)begin draws++;updates++;end
+               if(tick_valid&&!fire)waits++;
+               if(clear_counters)clears++;
+               cycles++;#1;-> compare_event; #0.01;
+               if(gamma_tick_phase_q !== 3'(logical_ticks%8))$fatal(1,"cadence after edge");
+               if(actual_direct_events!=0 || reserved_state_events!=0 || queue_overflow_events!=0)$fatal(1,"ternary invariant");
+              endtask
+              task automatic reset;
+               tick_valid=0;phase_load_valid=0;clear_counters=0;checkpoint_load_begin=0;checkpoint_load_valid=0;
+               rst_n=0;logical_ticks=0;draws=0;source_case=0;#1;cycle();rst_n=1;cycle();
+               if(gamma_configured || gamma_bank_valid || tick_ready || gamma_tick_phase_q!=0)$fatal(1,"reset state");
+              endtask
+              task automatic load_snapshot(input int c);
+               checkpoint_index=10'(states[c*625+624]);checkpoint_load_begin=1;cycle();checkpoint_load_begin=0;
+               source_case=c;draws=0;
+               for(int i=0;i<624;i++)begin
+                checkpoint_load_valid=1;checkpoint_load_word=states[c*625+i];
+                #1;if(!checkpoint_load_ready || tick_ready)$fatal(1,"load isolation");cycle();
+                if(i%23==0)begin checkpoint_load_valid=0;cycle();end
+               end
+               checkpoint_load_valid=0;loads++;
+               if(!gamma_configured || gamma_load_error)$fatal(1,"checkpoint rejected");
+              endtask
+              task automatic accept_tick;
+               int before_count;
+               before_count=logical_ticks;tick_valid=1;
+               for(int t=0;t<2000 && logical_ticks==before_count;t++)cycle();
+               if(logical_ticks!=before_count+1)$fatal(1,"tick lost/duplicated");
+               tick_valid=0;phase_load_valid=0;clear_counters=0;
+              endtask
+              initial begin
+               clk=0;rst_n=1;tick_valid=0;clear_counters=0;scheduler_mode=FRP_MODE_FREE;
+               phase_load_valid=0;phase_load=0;frequency_load_q16={CELLS{32'd65536}};
+               auto_target_enable=1;external_request_valid=0;external_request_cell_index=0;
+               external_request_target=0;external_target_bank=0;
+               checkpoint_load_begin=0;checkpoint_index=0;checkpoint_load_valid=0;checkpoint_load_word=0;
+               $readmemh("STATE_PATH",states);$readmemh("TARGET_PATH",targets);
+               reset();checkpoint_load_begin=1;checkpoint_index=624;cycle();checkpoint_load_begin=0;
+               checkpoint_load_valid=1;checkpoint_load_word=123;repeat(13)cycle();reset();
+               for(int c=0;c<4;c++)for(int m=0;m<3;m++)begin
+                reset();mode_test=m;scheduler_mode=frp_m31_scheduler_mode_e'(m);
+                // A phase-only load is independent of gamma configuration.
+                for(int i=0;i<CELLS;i++)phase_load[i*32+:32]=32'(i*32'h13851cab+c*32'h01111000);
+                phase_load_valid=1;cycle();phase_load_valid=0;
+                tick_valid=1;load_snapshot(c);tick_valid=0;
+                for(int step=0;step<128;step++)begin
+                 // Resume with a replacement stream at a non-update logical position.
+                 if(step==45 || step==80)begin tick_valid=1;load_snapshot((c+1)%4);tick_valid=0;end
+                 if(step==61)begin
+                  tick_valid=1;checkpoint_load_begin=1;checkpoint_index=625;cycle();checkpoint_load_begin=0;
+                  repeat(9)cycle();if(!gamma_load_error || gamma_configured || tick_ready)$fatal(1,"invalid reload");
+                  load_snapshot(c);tick_valid=0;
+                 end
+                 if(step==12)repeat(700)cycle();
+                 repeat(step%4)cycle();
+                 // Exercise source selection and retained routes through the original core.
+                 auto_target_enable=(step/16)%2==0;
+                 external_request_valid='1;
+                 for(int lane=0;lane<REQUEST_LANES;lane++)begin
+                  external_request_cell_index[lane*CELL_INDEX_BITS+:CELL_INDEX_BITS]=CELL_INDEX_BITS'((step+lane)%CELLS);
+                  external_request_target[lane*2+:2]=(step%3==0)?FRP_STATE_NEG:FRP_STATE_POS;
+                 end
+                 for(int i=0;i<CELLS;i++)external_target_bank[i*2+:2]=(step%3==0)?FRP_STATE_NEG:FRP_STATE_POS;
+                 if(step==0 || step==31 || step==66)begin
+                  phase_load_valid=1;
+                  for(int i=0;i<CELLS;i++)begin
+                   phase_load[i*32+:32]=32'(i*32'h13a5f123+step*32'h019abcde);
+                   frequency_load_q16[i*32+:32]=32'(50000+step*130+i*71);
+                  end
+                 end
+                 clear_counters=step%17==0;
+                 accept_tick();
+                 if(logical_ticks!=step+1)$fatal(1,"logical count");
+                end
+                repeat(3)cycle();
+                // Reset while the prefetched source is in flight.
+                reset();load_snapshot(c);repeat(3)cycle();reset();
+               end
+               $display("PASS INTERNAL_GAMMA cells=%0d core_outputs=OUTPUT_COUNT ticks=%0d updates=%0d loads=%0d waits=%0d clears=%0d cycles=%0d",CELLS,total_ticks,updates,loads,waits,clears,cycles);
+               $finish;
+              end
+              initial begin #100000000;$fatal(1,"watchdog");end
+              endmodule
+              '''.replace('GOLD_DECLS','\n'.join(gold_decls)).replace('DECLS','\n'.join(decls)).replace('CONNECTIONS',',\n'.join(connections)).replace('CHECKS',checks).replace('OUTPUT_COUNT',str(len(outputs)))
+              require(len(outputs) == 103, 'Expected 103 original-core outputs')
+
+          def undo_right(y,s):
+           x=y
+           for _ in range(32):x=y^(x>>s)
+           return x&0xffffffff
+          def undo_left(y,s,mask):
+           x=y
+           for _ in range(32):x=y^((x<<s)&mask)
+           return x&0xffffffff
+          def untemper(y):return undo_right(undo_left(undo_left(undo_right(y,18),15,0xefc60000),7,0x9d2c5680),11)
+          def source_vectors(n, out):
+           cases=[]
+           for seed in [0,1,76,0xdeadbeef]:
+            frp=ref.QuantizedReferenceShadowProcessor(cells=n,seed=seed)
+            state=frp.random.getstate()[1]
+            targets=[]
+            for event in range(80):targets.extend(frp.generate_gamma_noise_targets(event*8)[1])
+            cases.append((state,targets))
+           # Both halves of a 53-bit draw cross a twist boundary for index 623.
+           for index in [0,1,226,227,396,397,622,623,624]:
+            rng=random.Random(17);s=list(rng.getstate()[1]);s[-1]=index;rng.setstate((3,tuple(s),None))
+            targets=[ref.quantize_q16(rng.uniform(-1,1)) for _ in range(80*n)]
+            cases.append((s,targets))
+           # Values at and around positive/negative half ties, zero and both endpoints.
+           fractions=[0,(1<<53)-1,(1<<52), (1<<52)+(1<<35)-1,(1<<52)+(1<<35),(1<<52)+(1<<35)+1,(1<<52)-(1<<35)-1,(1<<52)-(1<<35),(1<<52)-(1<<35)+1]
+           words=[]
+           for k in range(312):
+            v=fractions[k%len(fractions)];words.extend([untemper((v>>26)<<5),untemper((v&((1<<26)-1))<<6)])
+           rng=random.Random();state=words+[0];rng.setstate((3,tuple(state),None));targets=[ref.quantize_q16(rng.uniform(-1,1)) for _ in range(80*n)];cases.append((state,targets))
+           (out/'state.mem').write_text(''.join(f'{w:08x}\n' for s,_ in cases for w in s))
+           (out/'expected.mem').write_text(''.join(f'{v&0xffffffff:08x}\n' for _,vs in cases for v in vs))
+           tb='''`timescale 1ns/1ps
+          `include "frp_m32_gamma_target_source.sv"
+          module tb;
+          localparam int N=CELLS_VALUE, CASES=CASES_VALUE, BANKS=80;
+          logic clk=0,rst_n=1,load_begin=0,load_valid=0,request_valid=0,bank_ready=0;
+          logic [9:0] checkpoint_index=0;
+          logic [31:0] load_word=0;
+          wire load_ready,configured,load_error,request_ready,busy,bank_valid;
+          wire [N*32-1:0] gamma_targets_q16;
+          logic [31:0] snapshots[0:CASES*625-1], expected_words[0:CASES*BANKS*N-1];
+          logic [N*32-1:0] saved_bank;
+          int checks=0;
+          frp_m32_gamma_target_source #(.CELLS(N)) dut(.*);
+          task automatic cycle;
+           #1;clk=1;#1;clk=0;#1;
+          endtask
+          task automatic reset;
+           rst_n=0;#1;
+           if(configured || bank_valid || request_ready || load_ready || gamma_targets_q16!='0) $fatal(1,"reset");
+           cycle();rst_n=1;cycle();
+          endtask
+          task automatic load_snapshot(input int c);
+           load_begin=1;checkpoint_index=10'(snapshots[c*625+624]);cycle();load_begin=0;
+           for(int i=0;i<624;i++) begin
+            load_word=snapshots[c*625+i];load_valid=1;
+            #1;if(!load_ready) $fatal(1,"load ready");cycle();
+            if(i%17==0) begin load_valid=0;cycle();end
+           end
+           load_valid=0;
+           if(!configured || load_error || !request_ready) $fatal(1,"configuration");
+          endtask
+          initial begin
+           $readmemh("state.mem",snapshots);$readmemh("expected.mem",expected_words);reset();
+           // Invalid index and zero state must never enable requests.
+           checkpoint_index=625;load_begin=1;cycle();load_begin=0;cycle();
+           if(!load_error || configured || load_ready || request_ready) $fatal(1,"bad index");
+           checkpoint_index=0;load_begin=1;cycle();load_begin=0;load_valid=1;load_word=0;
+           repeat(624) cycle();load_valid=0;
+           if(!load_error || configured || request_ready) $fatal(1,"zero state");
+           for(int c=0;c<CASES;c++) begin
+            load_snapshot(c);
+            for(int b=0;b<BANKS;b++) begin
+             saved_bank=gamma_targets_q16;request_valid=1;cycle();request_valid=0;
+             for(int t=0;!bank_valid && t<2000;t++) begin
+              if(gamma_targets_q16!==saved_bank || request_ready) $fatal(1,"partial bank");
+              cycle();
+             end
+             if(!bank_valid || busy) $fatal(1,"timeout");
+             for(int lane=0;lane<N;lane++) begin
+              if(gamma_targets_q16[lane*32+:32]!==expected_words[(c*BANKS+b)*N+lane])
+               $fatal(1,"oracle n=%0d c=%0d b=%0d lane=%0d got=%h expected=%h",N,c,b,lane,gamma_targets_q16[lane*32+:32],expected_words[(c*BANKS+b)*N+lane]);
+              checks++;
+             end
+             saved_bank=gamma_targets_q16;request_valid=1;
+             repeat(1+b%7) begin cycle();if(!bank_valid || request_ready || gamma_targets_q16!==saved_bank) $fatal(1,"stalled bank");end
+             bank_ready=1;cycle();bank_ready=0;request_valid=0;
+             if(bank_valid || !request_ready) $fatal(1,"consume");
+            end
+           end
+           // Abort an active generator, restore, and reproduce the first bank.
+           load_snapshot(0);request_valid=1;cycle();request_valid=0;repeat(3)cycle();
+           load_snapshot(0);request_valid=1;cycle();request_valid=0;
+           for(int t=0;!bank_valid && t<2000;t++)cycle();
+           if(!bank_valid) $fatal(1,"abort restore timeout");
+           for(int lane=0;lane<N;lane++)if(gamma_targets_q16[lane*32+:32]!==expected_words[lane])$fatal(1,"abort restore");
+           reset();load_begin=1;checkpoint_index=624;cycle();load_begin=0;load_valid=1;
+           repeat(13)cycle();reset();load_valid=0;
+           if(request_ready) $fatal(1,"partial load survived reset");
+           $display("PASS GAMMA_SOURCE cells=%0d checkpoints=%0d banks=%0d checked_targets=%0d",N,CASES,CASES*BANKS,checks);$finish;
+          end
+          initial begin #10000000;$fatal(1,"watchdog");end
+          endmodule
+          '''.replace('CELLS_VALUE',str(n)).replace('CASES_VALUE',str(len(cases)))
+           (out/'tb.sv').write_text(tb)
+
+          def integration_vectors(n, out):
+           cases=[]
+           for seed in [0,76,0xdeadbeef]:
+            frp=ref.QuantizedReferenceShadowProcessor(cells=n,seed=seed)
+            s=frp.random.getstate()[1];vs=[]
+            for k in range(64):vs.extend(frp.generate_gamma_noise_targets(k*8)[1])
+            cases.append((s,vs))
+           rng=random.Random(17);s=list(rng.getstate()[1]);s[-1]=623;rng.setstate((3,tuple(s),None))
+           cases.append((s,[ref.quantize_q16(rng.uniform(-1,1)) for k in range(64*n)]))
+           (out/'state.mem').write_text(''.join(f'{w:08x}\n' for s,v in cases for w in s))
+           (out/'target.mem').write_text(''.join(f'{w&0xffffffff:08x}\n' for s,v in cases for w in v))
+           (out/'tb.sv').write_text(common.replace('STATE_PATH',str(out/'state.mem')).replace('TARGET_PATH',str(out/'target.mem')))
+
+
+          def simulate(n, kind, out, expected):
+              build = work/f'{kind}-{n}'
+              args = [verilator, '--binary', '--timing', '--assert', '--unroll-count', '1',
+                      '--output-groups', '32', '--output-split', '10000',
+                      '--output-split-cfuncs', '100', '-Wno-fatal', '-j', '2',
+                      '-MAKEFLAGS', 'VK_PCH_I_FAST=', '-MAKEFLAGS', 'VK_PCH_I_SLOW=',
+                      '-MAKEFLAGS', 'OPT_FAST=-O1', '--top-module', 'tb', '--Mdir', str(build),
+                      '-I'+str(root/'rtl/m31'), '-I'+str(root/'rtl/m32'), '-I'+str(out)]
+              if kind == 'integration_rtl':
+                  args.append(f'-GCELLS={n}')
+              args.append(str(out/'tb.sv'))
+              command(args, out/'build.log', root, 1800)
+              lines = []
+              for replay in (1, 2):
+                  text = command([str(build/'Vtb')], out/f'run{replay}.log',
+                                 root if kind == 'integration_rtl' else out, 1200)
+                  passed = [line for line in text.splitlines() if line.startswith('PASS ')]
+                  require(passed == [expected], f'Incomplete or unexpected result: {kind}/{n}')
+                  lines.append(passed[0])
+              require(lines[0] == lines[1], f'Replay mismatch: {kind}/{n}')
+              shutil.rmtree(build)
+              return lines[0]
+
+          def synthesize(n, out):
+              script = (
+                  f'read_slang --std 1800-2017 --top frp_m32_gamma_target_source '
+                  f'-G CELLS={n} {source}; '
+                  'hierarchy -check -top frp_m32_gamma_target_source; proc; opt; memory_collect; '
+                  'techmap -map +/techmap.v t:$shiftx t:$bwmux; opt; check -assert; '
+                  'select -assert-none t:$dlatch t:$adlatch t:$shiftx t:$bwmux; '
+                  'rename frp_m32_gamma_target_source gamma_netlist; '
+                  f'write_verilog -noattr {json.dumps(str(out/"gamma_netlist.v"))}; stat')
+              (out/'synthesis.ys').write_text(script+'\n')
+              log = command([sys.executable, str(base/'yosys_worker.py'), script],
+                            out/'synthesis.log', root, 600)
+              require('YOSYS_SCRIPT_COMPLETE' in log, 'Synthesis did not finish')
+              require((out/'gamma_netlist.v').stat().st_size > 0, 'Empty netlist')
+
+
+          def main():
+              active = None
+              try:
+                  verify_sources()
+                  inherited = re.findall(r'^\s*([0-9a-f]{64})\s+(\S+)\s*$',
+                                         (root/anchor).read_text(), re.M)
+                  require(len(inherited) == 23, 'Expected 23 pinned baseline dependencies')
+                  pins.update({path: sha for sha, path in inherited})
+                  verify_sources()
+                  (base/'sources.sha256').write_text(''.join(f'{sha}  {p}\n' for p,sha in sorted(pins.items())))
+                  require(verilator is not None, 'verilator-cli is missing')
+                  report['packages'] = {p: importlib.metadata.version(p)
+                                        for p in ('verilator', 'systemc', 'pyosys')}
+                  require(report['packages'] == {'verilator':'5.48.0', 'systemc':'3.0.2.1', 'pyosys':'0.68'},
+                          'Unexpected toolchain packages')
+                  command([verilator, '--version'], base/'verilator-version.log', root, 30)
+                  (base/'yosys_worker.py').write_text(
+                      'from pyosys import libyosys as y\nimport sys\n'
+                      'y.run_pass(sys.argv[1])\ny.log_flush()\n'
+                      'print("YOSYS_SCRIPT_COMPLETE", flush=True)\n')
+                  load_models()
+                  counters = {8:(39552,2172,59802), 16:(42168,2364,62418),
+                              32:(47928,2748,68178), 64:(74424,3516,94674)}
+                  for active in report['suites']:
+                      n, kind = active['cells'], active['suite']
+                      active['status'] = 'RUNNING'
+                      save()
+                      out = base/f'{kind}-{n}'
+                      out.mkdir()
+                      print(f'RUN {kind} cells={n}', flush=True)
+                      if kind.startswith('source_'):
+                          source_vectors(n, out)
+                          if kind == 'source_netlist':
+                              synthesize(n, out)
+                              tb = (out/'tb.sv').read_text()
+                              tb = tb.replace('`include "frp_m32_gamma_target_source.sv"',
+                                              '`include "gamma_netlist.v"')
+                              tb = tb.replace('frp_m32_gamma_target_source #(.CELLS(N)) dut',
+                                              'gamma_netlist dut')
+                              (out/'tb.sv').write_text(tb)
+                          expected = (f'PASS GAMMA_SOURCE cells={n} checkpoints=14 banks=1120 '
+                                      f'checked_targets={1120*n}')
+                      else:
+                          integration_vectors(n, out)
+                          waits, clears, cycles = counters[n]
+                          expected = (f'PASS INTERNAL_GAMMA cells={n} core_outputs=103 ticks=1536 '
+                                      f'updates=192 loads=60 waits={waits} clears={clears} cycles={cycles}')
+                      line = simulate(n, kind, out, expected)
+                      active.update(status='PASS', replays=2, result=line)
+                      save()
+                      print(line+' replays=2', flush=True)
+                  verify_sources()
+                  require(all(s['status']=='PASS' and s['replays']==2 for s in report['suites']),
+                          'Not every required suite completed')
+                  status = command(['git', 'status', '--porcelain'], base/'checkout-status.txt', root, 30)
+                  require(not status.strip(), 'Qualification changed the checkout')
+                  report['status'] = 'PASS'
+                  report['totals'] = dict(simulations=24, source_target_comparisons=537600,
+                                          integrated_logical_ticks=12288, integrated_gamma_updates=1536)
+              except Exception as exc:
+                  report.update(status='FAIL', error=str(exc))
+                  if active is not None and active['status'] == 'RUNNING':
+                      active.update(status='FAIL', error=str(exc))
+                  (base/'failure.txt').write_text(traceback.format_exc())
+                  raise
+              finally:
+                  save()
+                  rows = ['# FRP 106 — Internal gamma qualification', '',
+                          f"Status: **{report['status']}**", f"Commit: `{report['commit']}`", '',
+                          '| Suite | Cells | Result | Replays |', '|---|---:|---|---:|']
+                  rows += [f"| {s['suite']} | {s['cells']} | {s['status']} | {s['replays']} |"
+                           for s in report['suites']]
+                  rows += ['', 'Scope: '+report['scope']+'.',
+                           'Outside this gate: '+', '.join(report['excluded'])+'.',
+                           'These counts are test executions, not a processor-completeness percentage.']
+                  if 'error' in report:
+                      rows += ['', 'See failure.txt and the matching command log.']
+                  (base/'summary.md').write_text('\n'.join(rows)+'\n')
+                  manifest = {str(p.relative_to(base)):digest(p) for p in sorted(base.rglob('*'))
+                              if p.is_file() and p.name != 'evidence-sha256.json'}
+                  (base/'evidence-sha256.json').write_text(json.dumps(manifest, indent=2)+'\n')
+
+          if __name__ == '__main__':
+              main()
+          PYTHON
+          python "$FRP106_EVIDENCE/qualify.py"
+
+      - name: Publish readable summary
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          if test -s "$FRP106_EVIDENCE/summary.md"; then
+            cat "$FRP106_EVIDENCE/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf '%s\n' '# FRP 106 — NOT COMPLETED' \
+              'Qualification did not finish; inspect the failed step and the evidence bundle.' \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload the single evidence artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-106-internal-gamma-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.FRP106_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 6
