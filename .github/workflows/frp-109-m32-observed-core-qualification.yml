@@ -1,0 +1,218 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 109 - FRP M32 Observed Core Qualification
+run-name: '109 - FRP Observed Core | 4 sizes, 8 replays @ ${{ github.sha }}'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    name: Observed core / 8, 16, 32, 64 cells
+    runs-on: ubuntu-24.04
+    timeout-minutes: 200
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUNBUFFERED: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install simulation tools
+        run: |
+          set -euo pipefail
+          mkdir -p bundle
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential
+          python -m pip install --disable-pip-version-check 'verilator==5.48.0'
+          {
+            python --version
+            python -m pip show verilator
+            verilator-cli --version
+            g++ --version
+            make --version
+          } > bundle/toolchain.txt 2>&1
+
+      - name: Build four sizes and verify eight replays
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import shlex
+          import shutil
+          import subprocess
+          import time
+          from pathlib import Path
+
+          root = Path('source').resolve()
+          out = Path('bundle').resolve()
+          out.mkdir(exist_ok=True)
+          build_root = Path(os.environ['RUNNER_TEMP']) / 'frp-observed-109'
+          build_root.mkdir(exist_ok=True)
+          top = 'frp_m32_observed_core_tb'
+          sizes = (8, 16, 32, 64)
+          expected = dict(accepted=840, recorded=837, dropped=3, crossings=3,
+                          resets=9, clears=138, phase_only=12, comparisons=1050)
+          pattern = re.compile(
+              r'PASS OBSERVED_CORE cells=(\d+) accepted=(\d+) recorded=(\d+) '
+              r'dropped=(\d+) crossings=(\d+) resets=(\d+) clears=(\d+) '
+              r'phase_only=(\d+) comparisons=(\d+) first_legs=(\d+) '
+              r'second_legs=(\d+) signature=([0-9a-f]{16})'
+          )
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          def parse_pass(text, cells):
+              lines = [s for s in text.splitlines()
+                       if s.startswith('PASS OBSERVED_CORE ')]
+              require(len(lines) == 1, 'Expected exactly one PASS record')
+              match = pattern.fullmatch(lines[0])
+              require(match is not None, 'Malformed PASS record')
+              values = [int(s) for s in match.groups()[:-1]]
+              require(values[0] == cells, 'Cell count mismatch')
+              record = dict(zip(expected, values[1:9]))
+              require(record == expected, 'Scenario counters mismatch')
+              require(values[9] > 0 and values[10] > 0,
+                      'Both active-zero route legs must occur')
+              require(record['accepted'] == record['recorded'] + record['dropped'],
+                      'Sample conservation mismatch')
+              record.update(cells=cells, first_legs=values[9],
+                            second_legs=values[10], signature=match[12])
+              return lines[0], record
+
+          require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch',
+                  'Manual execution required')
+          sha = subprocess.check_output(
+              ['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
+          require(sha == os.environ['GITHUB_SHA'], 'Checked-out commit mismatch')
+          for name in ('frp_m32_core.sv', 'frp_m32_boundary_recorder.sv',
+                       'frp_m32_observed_core.sv', top + '.sv'):
+              require((root / 'rtl/m32' / name).is_file(), 'Missing source: ' + name)
+          sources = sorted(p for directory in ('rtl/m31', 'rtl/m32')
+                           for p in (root / directory).rglob('*') if p.is_file())
+          hashes = {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
+                    for p in sources}
+          (out / 'source_sha256.json').write_text(json.dumps(hashes, indent=2) + '\n')
+          report = {'schema': 'frp.m32.observed_core.qualification.v1',
+                    'commit': sha, 'sizes': list(sizes), 'replays_per_size': 2,
+                    'scheduler_modes': ['free', '7/1', '1/7'], 'profiles': []}
+
+          def save_report():
+              (out / 'results.json').write_text(json.dumps(report, indent=2) + '\n')
+
+          save_report()
+          for cells in sizes:
+              profile = {'cells': cells, 'status': 'RUNNING', 'replays': []}
+              report['profiles'].append(profile)
+              save_report()
+              obj = build_root / ('obj' + str(cells))
+              started = time.monotonic()
+              print(f'::group::{cells} cells: build and two replays', flush=True)
+              try:
+                  command = [
+                      'timeout', '--kill-after=30s', '2700s',
+                      'verilator-cli', '--binary', '--timing', '--assert',
+                      '--unroll-count', '1', '--verilate-jobs', '1',
+                      '--output-groups', '32', '--output-split', '10000',
+                      '--output-split-cfuncs', '100', '--top-module', top,
+                      f'-GCELLS={cells}', '-j', '2', '-Wno-fatal',
+                      '-MAKEFLAGS', 'VK_PCH_I_FAST=',
+                      '-MAKEFLAGS', 'VK_PCH_I_SLOW=',
+                      '-MAKEFLAGS', 'OPT_FAST=-O0',
+                      '-I' + str(root / 'rtl/m31'), '-I' + str(root / 'rtl/m32'),
+                      '--Mdir', str(obj), str(root / 'rtl/m32' / (top + '.sv'))
+                  ]
+                  with (out / f'build-{cells}.log').open('w') as log:
+                      log.write(shlex.join(command) + '\n')
+                      log.flush()
+                      subprocess.run(command, cwd=root, stdout=log,
+                                     stderr=subprocess.STDOUT, check=True)
+                  records = []
+                  for replay in (1, 2):
+                      log_path = out / f'run-{cells}-{replay}.log'
+                      with log_path.open('w') as log:
+                          subprocess.run(
+                              ['timeout', '--kill-after=10s', '180s', str(obj / ('V' + top))],
+                              cwd=root, stdout=log, stderr=subprocess.STDOUT, check=True)
+                      line, record = parse_pass(log_path.read_text(), cells)
+                      profile['replays'].append(record)
+                      records.append(line)
+                      print(line, flush=True)
+                  require(records[0] == records[1], 'Deterministic replay mismatch')
+                  profile['status'] = 'PASS'
+              except Exception as error:
+                  profile['status'] = 'FAIL'
+                  profile['error'] = str(error)
+                  print(f'::error::{cells}-cell qualification failed; see bundle logs')
+              finally:
+                  profile['elapsed_seconds'] = round(time.monotonic() - started, 3)
+                  save_report()
+                  if obj.exists():
+                      shutil.rmtree(obj)
+                  print('::endgroup::', flush=True)
+
+          passed = sum(p['status'] == 'PASS' for p in report['profiles'])
+          report['status'] = 'PASS' if passed == len(sizes) else 'FAIL'
+          report['passed_profiles'] = passed
+          report['verified_replays'] = 2 * passed
+          save_report()
+          summary = [
+              '## FRP M32 Observed Core Qualification', '',
+              f"Commit: `{sha}`", '',
+              f"Result: **{report['status']}**; profiles: **{passed}/4**; "
+              f"verified replays: **{2 * passed}/8**.", '',
+              'Schedulers: free, 7/1, 1/7.', '',
+              'Each replay checks 103 core outputs and 22 observation outputs.',
+              'Scenario: 840 accepted ticks, 837 recorded samples, 3 reset-discarded samples,',
+              '3 boundary crossings, 9 resets, 138 counter clears, 12 phase-only loads,',
+              '1050 complete output comparisons and both active-zero route legs.', '',
+              '| Cells | Result | Matching replays | Trajectory signature |',
+              '| --- | --- | --- | --- |'
+          ]
+          for profile in report['profiles']:
+              ok = profile['status'] == 'PASS'
+              signature = profile['replays'][0]['signature'] if ok else '-'
+              summary.append(f"| {profile['cells']} | {profile['status']} | "
+                             f"{2 if ok else 0}/2 | `{signature}` |")
+          summary += ['', 'Artifact: logs, toolchain versions, source SHA-256 manifest and JSON results.', '']
+          (out / 'summary.md').write_text('\n'.join(summary))
+          require(report['status'] == 'PASS', 'Observed-core qualification failed')
+          PY
+
+      - name: Publish Actions summary
+        if: always()
+        run: |
+          if [ -f bundle/summary.md ]; then
+            cat bundle/summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            mkdir -p bundle
+            printf '%s\n' 'Qualification stopped before the final report; inspect the step logs.' > bundle/summary.md
+            cat bundle/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload one combined artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-109-observed-core-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bundle/
+          if-no-files-found: error
+          retention-days: 14
