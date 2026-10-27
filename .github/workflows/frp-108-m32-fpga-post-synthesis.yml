@@ -1,0 +1,348 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 108 - FRP M32 FPGA Post-Synthesis Comparison
+run-name: "108 - FRP FPGA Netlist | 4 sizes, 8 replays @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frp-108-fpga-netlist-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    defaults:
+      run:
+        shell: bash
+    env:
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Initialize one evidence bundle
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/frp-108-evidence"
+          echo "FRP108_EVIDENCE=$RUNNER_TEMP/frp-108-evidence" >> "$GITHUB_ENV"
+          printf '%s\n' '{"status":"NOT_COMPLETED"}' > "$RUNNER_TEMP/frp-108-evidence/qualification.json"
+          printf 'commit=%s\nrun=%s\nattempt=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$RUNNER_TEMP/frp-108-evidence/context.txt"
+
+      - name: Check out dispatched commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install and record toolchain
+        run: |
+          set -euo pipefail
+          {
+            python -m pip install --disable-pip-version-check pyosys==0.68 verilator==5.48.0 systemc==3.0.2.1
+            python -m pip check
+            python --version
+            verilator-cli --version
+            g++ --version
+            make --version
+            free -h
+          } 2>&1 | tee "$FRP108_EVIDENCE/toolchain.log"
+          python -m pip freeze > "$FRP108_EVIDENCE/packages.txt"
+
+      - name: Synthesize and compare all four sizes
+        run: |
+          set -euo pipefail
+          cat > "$FRP108_EVIDENCE/qualify.py" <<'PYTHON'
+          # Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+          from pathlib import Path
+          import hashlib, importlib.util, json, os, re, shutil, signal, subprocess, sys, time, traceback
+
+          root = Path(os.environ['GITHUB_WORKSPACE']).resolve()
+          base = Path(os.environ['FRP108_EVIDENCE']).resolve()
+          work = base.parent / 'frp-108-build'
+          view = work / 'synthesis-view'
+          top = 'frp_m32_internal_gamma_fpga_top'
+          bench = 'frp_m32_internal_gamma_fpga_post_synthesis_tb'
+          reference = 'frp_prototype_v1_7_0.py'
+          pins = {
+              reference: '9de085915aa0fb8a73705c0927cc875b106480ef8a75a76f599be04440c0f099',
+              'rtl/m32/frp_m32_core.sv': '0be6c5ee28ee4a23baf6110143eec309f387200c1c2c80e3016353d5d4107541',
+              'rtl/m32/frp_m32_internal_gamma_core.sv': 'b56dfc038299792bee47a4bfc6e342edbe0f5a1aea8b24d51f2a2cc93adcc95d',
+              'rtl/m32/frp_m32_gamma_target_source.sv': '339b6e8c768cd8358c7dbe2dabb055251b98ead7dde231e2540daaf5e49fe039',
+              'fpga/m32/frp_m32_internal_gamma_fpga_top.sv': '7d4355fc89b7b8814fc808298b09aea4f6f650422b783b1b26b82e6b19e34e91',
+          }
+          report = dict(status='RUNNING', commit=os.environ['GITHUB_SHA'], commands=[],
+                        scope='Full FPGA generic netlist versus RTL; functional simulation, no timing annotation',
+                        profiles=[dict(cells=n, status='NOT_RUN', replays=0) for n in (8,16,32,64)])
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          def save():
+              (base/'qualification.json').write_text(json.dumps(report, indent=2)+'\n')
+              rows=['# FRP 108 — Full FPGA post-synthesis comparison', '',
+                    f"Status: **{report['status']}**", f"Commit: `{report['commit']}`", '',
+                    '| Cells | Status | Replays |', '|---:|---|---:|']
+              rows += [f"| {p['cells']} | {p['status']} | {p['replays']} |" for p in report['profiles']]
+              rows += ['', report['scope']+'.',
+                       'Checks: 114 core outputs and four FPGA boundary outputs; scheduler modes free, 7/1, 1/7;',
+                       'reset release, checkpoint loading/restoration, invalid index, backpressure,',
+                       'phase loads, counter clears, held tick valid and independent Python gamma targets.',
+                       'Two deterministic replays per size. This is not an all-state formal equivalence proof.']
+              if 'error' in report:
+                  rows += ['', 'Failure: '+report['error']]
+              (base/'summary.md').write_text('\n'.join(rows)+'\n')
+
+          def command(args, log, timeout, cwd=None):
+              entry=dict(argv=list(map(str,args)), cwd=str(cwd or root),
+                         log=str(log.relative_to(base)), timeout_seconds=timeout)
+              report['commands'].append(entry); save(); started=time.monotonic()
+              with log.open('w') as stream:
+                  process=subprocess.Popen(args, cwd=cwd or root, stdout=stream,
+                                           stderr=subprocess.STDOUT, start_new_session=True)
+                  try:
+                      code=process.wait(timeout=timeout)
+                  except subprocess.TimeoutExpired:
+                      os.killpg(process.pid,signal.SIGKILL); process.wait()
+                      entry.update(status='TIMEOUT',seconds=round(time.monotonic()-started,3)); save()
+                      raise RuntimeError('Timeout: '+entry['log'])
+              entry.update(returncode=code, seconds=round(time.monotonic()-started,3)); save()
+              if code!=0:
+                  print(log.read_text(errors='replace')[-6000:],flush=True)
+              require(code==0,f'Command failed (exit {code}): '+entry['log'])
+              return log.read_text(errors='replace')
+
+          def source_hashes():
+              paths=[root/reference]
+              for folder in ('rtl/m31','rtl/m32','fpga/m32'):
+                  paths += [p for p in (root/folder).rglob('*')
+                            if p.is_file() and p.suffix in ('.sv','.svh','.mem')]
+              return {str(p.relative_to(root)):digest(p) for p in sorted(set(paths))}
+
+          def prepare_view():
+              # Remove only simulation-time LUT checks from an isolated synthesis copy.
+              # The RTL reference retains these checks; LUT initialization is unchanged.
+              for folder in ('rtl/m31','rtl/m32','fpga/m32'):
+                  shutil.copytree(root/folder,view/folder)
+              relative='rtl/m31/frp_m31_phase_interference.sv'
+              path=view/relative; original=path.read_text(); modified=original
+              checks=[("0", "32'sd0", 'zero-point'),
+                      ("1024", 'FRP_M31_Q30_ONE', 'quarter-cycle'),
+                      ("2048", "32'sd0", 'half-cycle'),
+                      ("3072", '-FRP_M31_Q30_ONE', 'three-quarter-cycle')]
+              for index,value,label in checks:
+                  fragment=(f'    if (sin_lut[{index}] !== {value})\n'
+                            f'      $fatal(1, "FRP M31 sine LUT {label} mismatch");\n')
+                  require(modified.count(fragment)==1,'Unexpected LUT check: '+label)
+                  modified=modified.replace(fragment,'\n' if index=='3072' else '',1)
+              require('$readmemh(SIN_LUT_FILE, sin_lut);' in modified,'Missing LUT initialization')
+              path.write_text(modified)
+              differences=[str(p.relative_to(view)) for p in view.rglob('*')
+                           if p.is_file() and digest(p)!=digest(root/p.relative_to(view))]
+              require(differences==[relative],'Unexpected synthesis-view changes')
+              shutil.copy2(path,base/'synthesis-phase-interference.sv')
+              report['synthesis_view_patch']=dict(path=relative, before=digest(root/relative), after=digest(path),
+                  reason='Remove four simulation-only LUT $fatal checks; retain readmemh and all datapath logic')
+
+          def validate_output(text,n):
+              lines=[line for line in text.splitlines() if line.startswith('PASS ')]
+              require(len(lines)==1,'Expected exactly one PASS record')
+              line=lines[0]; prefix='PASS INTERNAL_GAMMA_FPGA_NETLIST '
+              require(line.startswith(prefix),'Wrong testbench result')
+              fields=line[len(prefix):].split()
+              require(all(re.fullmatch(r'\w+=\d+',s) for s in fields),'Malformed PASS record')
+              pairs=[s.split('=') for s in fields]; metrics={k:int(v) for k,v in pairs}
+              blocked,cycles={8:(8269,11970),16:(8509,12226),32:(8989,12738),64:(9949,13762)}[n]
+              expected=dict(cells=n,outputs=114,ticks=120,gamma_updates=15,resets=8,
+                            begin_transfers=18,word_transfers=8747,phase_transfers=15,
+                            blocked=blocked,cycles=cycles)
+              require(len(metrics)==len(pairs) and metrics==expected,'Execution coverage mismatch: '+line)
+              return line,metrics
+
+          def normalize_netlist(path):
+              # Slang's hierarchy names cannot contain whitespace from escaped instance names.
+              # Rename identifiers consistently; leave comments, strings and all logic intact.
+              original=path.read_text(); mapping={}; prefix='frp108_net_'
+              require(prefix not in original,'Netlist rename prefix collision')
+              lexical=r'//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|\\[^\s]+|[A-Za-z_$][\w$]*'
+              def rename(match):
+                  token=match[0]
+                  if not token.startswith('\\'):
+                      return token
+                  if token not in mapping:
+                      mapping[token]=prefix+str(len(mapping))
+                  return mapping[token]
+              normalized=re.sub(lexical,rename,original)
+              inverse={value:key for key,value in mapping.items()}
+              restored=re.sub(lexical,lambda m:inverse.get(m[0],m[0]),normalized)
+              require(restored==original,'Identifier normalization changed non-identifier content')
+              path.with_name('netlist-original.v').write_text(original)
+              path.with_name('netlist-names.json').write_text(json.dumps(mapping,indent=2)+'\n')
+              path.write_text(normalized)
+
+          CHECKER = r'''from pyosys import libyosys as y
+          import ctypes, sys
+
+          d=y.Design()
+          def run(command):
+              y.run_pass(command,d)
+              y.log_flush()
+              ctypes.CDLL(None).malloc_trim(0)
+
+          run('read_slang -j 1 --std 1800-2017 --best-effort-hierarchy --ignore-assertions '
+              '--top frp_m32_internal_gamma_fpga_netlist '+sys.argv[1])
+          run('hierarchy -check -top frp_m32_internal_gamma_fpga_netlist')
+          run('proc; opt_clean -purge; select -assert-none t:$dlatch t:$adlatch')
+          inventory=sorted((module.cells_size(),name.str()) for name,module in d.modules_.items())
+          assert inventory
+          for count,name in inventory:
+              run('select -module '+name)
+              run('check -assert')
+              print('MODULE_CHECK_PASS',name,'cells='+str(count),flush=True)
+              # Release already-checked internals; retain ports for the remaining modules' checks.
+              run('blackbox')
+              run('select -clear')
+          print('ALL_MODULES_CHECKED',len(inventory),flush=True)
+          '''
+
+          def main():
+              base.mkdir(parents=True,exist_ok=True); work.mkdir(); active=None
+              try:
+                  require(sys.version_info[:2]==(3,12),'Python 3.12 required')
+                  require(command(['git','rev-parse','HEAD'],base/'head.txt',30).strip()==report['commit'],
+                          'Commit mismatch')
+                  require(not command(['git','status','--porcelain'],base/'status-before.txt',30).strip(),
+                          'Dirty checkout')
+                  before=source_hashes(); report['source_sha256']=before
+                  for path,value in pins.items():
+                      require(before.get(path)==value,'Source pin mismatch: '+path)
+                  tb=root/f'fpga/m32/{bench}.sv'
+                  require(tb.is_file(),'Missing committed post-synthesis testbench')
+                  require('frp_m32_internal_gamma_fpga_netlist dut(.*);' in tb.read_text(),
+                          'Testbench must instantiate the synthesized DUT')
+                  shutil.copy2(tb,base/tb.name)
+                  prepare_view()
+                  spec=importlib.util.spec_from_file_location('frp_reference',root/reference)
+                  ref=importlib.util.module_from_spec(spec); sys.modules[spec.name]=ref; spec.loader.exec_module(ref)
+                  worker=base/'yosys_worker.py'
+                  worker.write_text('from pyosys import libyosys as y\nimport sys\n'
+                                    'for step in sys.argv[1].split(";"):\n'
+                                    ' if step.strip(): y.run_pass(step); y.log_flush()\n'
+                                    'print("YOSYS_SCRIPT_COMPLETE",flush=True)\n')
+                  verilator=shutil.which('verilator-cli'); require(verilator is not None,'Missing Verilator')
+                  for active in report['profiles']:
+                      n=active['cells']; active['status']='RUNNING'; save()
+                      print(f'SYNTHESIZE full FPGA cells={n}',flush=True)
+                      out=base/f'cells-{n}'; out.mkdir(); netlist=out/'netlist.v'
+                      # Avoid repeated large MUX merges for the 64-cell composition.
+                      # All profiles retain the same structural and simulation checks.
+                      optimize=('opt_expr; opt_merge -nomux; opt_dff; opt_clean -purge' if n==64 else 'opt -fast')
+                      finish_opt=('opt_expr; opt_clean -purge' if n==64 else 'opt -fast')
+                      structural=('' if n==64 else 'check -assert; ')
+                      script=(f'read_slang -j 1 --std 1800-2017 --best-effort-hierarchy --ignore-assertions '
+                              f'--unroll-limit 20000 -G CELLS={n} --top {top} '
+                              f'-Irtl/m31 -Irtl/m32 -Ifpga/m32 fpga/m32/{top}.sv; '
+                              f'hierarchy -check -top {top}; proc; {optimize}; memory_collect; '
+                              f'techmap -map +/techmap.v t:$shiftx t:$bwmux; {finish_opt}; '
+                              'select -assert-none t:$dlatch t:$adlatch t:$shiftx t:$bwmux; '
+                              f'{structural}rename -top frp_m32_internal_gamma_fpga_netlist; '
+                              f'write_verilog -noattr {netlist}; stat')
+                      (out/'synthesis.ys').write_text(script+'\n')
+                      log=command([sys.executable,str(worker),script],out/'synthesis.log',1800,cwd=view)
+                      require('YOSYS_SCRIPT_COMPLETE' in log and netlist.is_file(),'Incomplete synthesis')
+                      require('module frp_m32_internal_gamma_fpga_netlist(' in netlist.read_text(),
+                              'Missing synthesized top')
+                      if n==64:
+                          # Release synthesis memory before checking the exported design.
+                          normalize_netlist(netlist)
+                          checker=base/'check_modules.py'; checker.write_text(CHECKER)
+                          checked=command([sys.executable,str(checker),str(netlist)],out/'netlist-check.log',900)
+                          totals=re.findall(r'^ALL_MODULES_CHECKED (\d+)$',checked,re.M)
+                          passed=re.findall(r'^MODULE_CHECK_PASS ',checked,re.M)
+                          require(len(totals)==1 and int(totals[0])>0 and len(passed)==int(totals[0]),
+                                  'Incomplete exported-netlist module checks')
+                          active['structural_modules_checked']=int(totals[0])
+                      active['netlist_sha256']=digest(netlist); save()
+                      processor=ref.QuantizedReferenceShadowProcessor(cells=n,seed=0)
+                      state=processor.random.getstate()[1]; targets=[]
+                      require(len(state)==625,'Checkpoint length')
+                      for k in range(80):
+                          targets.extend(processor.generate_gamma_noise_targets(k*8)[1])
+                      (out/'state.mem').write_text(''.join(f'{v:08x}\n' for v in state))
+                      (out/'expected.mem').write_text(''.join(f'{v&0xffffffff:08x}\n' for v in targets))
+                      obj=work/f'obj-{n}'
+                      args=[verilator,'--binary','--timing','--assert','--unroll-count','1',
+                            '--output-groups','32','--output-split','10000','--output-split-cfuncs','100',
+                            '-Wno-fatal','-j','2','-MAKEFLAGS','VK_PCH_I_FAST=','-MAKEFLAGS','VK_PCH_I_SLOW=',
+                            '-MAKEFLAGS','OPT_FAST=-O1','--top-module',bench,f'-GCELLS={n}',
+                            f'-GSTATE_FILE="{out}/state.mem"',f'-GTARGET_FILE="{out}/expected.mem"',
+                            '--Mdir',str(obj),'-Irtl/m31','-Irtl/m32','-Ifpga/m32',str(netlist),str(tb)]
+                      command(args,out/'build.log',1800)
+                      lines=[]
+                      for replay in (1,2):
+                          text=command([str(obj/('V'+bench))],out/f'run{replay}.log',600)
+                          line,metrics=validate_output(text,n); lines.append(line)
+                          active['replays']=replay; save()
+                      require(lines[0]==lines[1],'Deterministic replay mismatch')
+                      active.update(status='PASS',metrics=metrics,result=lines[0]); save()
+                      print(lines[0]+' replays=2',flush=True)
+                      shutil.rmtree(obj)
+                  require(source_hashes()==before,'Sources changed during qualification')
+                  require(not command(['git','status','--porcelain'],base/'status-after.txt',30).strip(),
+                          'Checkout changed')
+                  require(all(p['status']=='PASS' and p['replays']==2 for p in report['profiles']),
+                          'Incomplete profile matrix')
+                  report.update(status='PASS',totals=dict(simulations=8,accepted_ticks=960,gamma_updates=120))
+              except Exception as exc:
+                  report.update(status='FAIL',error=str(exc))
+                  if active is not None and active['status']=='RUNNING':
+                      active.update(status='FAIL',error=str(exc))
+                  (base/'failure.txt').write_text(traceback.format_exc())
+                  raise
+              finally:
+                  save()
+                  manifest={str(p.relative_to(base)):digest(p) for p in sorted(base.rglob('*'))
+                            if p.is_file() and p.name!='evidence-sha256.json'}
+                  (base/'evidence-sha256.json').write_text(json.dumps(manifest,indent=2)+'\n')
+
+          if __name__=='__main__':
+              main()
+          PYTHON
+          python "$FRP108_EVIDENCE/qualify.py"
+
+      - name: Publish readable summary
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          if test -s "$FRP108_EVIDENCE/summary.md"; then
+            cat "$FRP108_EVIDENCE/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf '%s\n' '# FRP 108 — NOT COMPLETED' \
+              'Inspect the failed step and the evidence bundle.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload the single evidence artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-108-fpga-netlist-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.FRP108_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 6
