@@ -1,5 +1,6 @@
 // Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
-// Real observed-core -> atomic snapshot CSR integration qualification.
+// Production observed CSR core integration qualification.
+// Exercises frp_m32_observed_csr_core through its public ports.
 // Profiles: CELLS=8/16/32/64, COUNT_BITS=3 or 64; +seed=<unsigned>.
 // The CSR scoreboard freezes public recorder fields before an accepted edge.
 // Every bus response is checked before and after that edge; no CSR internals
@@ -13,7 +14,7 @@
 `ifndef FRP_M32_OBSERVED_SNAPSHOT_CSR_TB_SV
 `define FRP_M32_OBSERVED_SNAPSHOT_CSR_TB_SV
 `timescale 1ns/1ps
-`include "frp_m32_observed_core.sv"
+`include "frp_m32_observed_csr_core.sv"
 `include "frp_m32_boundary_snapshot_csr.sv"
 
 module frp_m32_observed_snapshot_csr_tb #(
@@ -60,7 +61,7 @@ module frp_m32_observed_snapshot_csr_tb #(
   sample_t live = '0, held = '0;
   bit held_valid = 0;
 
-  frp_m32_observed_core #(
+  frp_m32_observed_csr_core #(
     .CELLS(CELLS), .RECORDER_COUNT_BITS(COUNT_BITS)
   ) core (
     .clk(clk), .rst_n(rst_n), .tick_enable(tick_enable),
@@ -94,31 +95,14 @@ module frp_m32_observed_snapshot_csr_tb #(
     .boundary_pressure_q16(live.pressure), .boundary_mean_heat_q16(live.heat),
     .boundary_switch_load_q16(live.switches),
     .boundary_retained_state_q(live.retained), .boundary_pending_route_q(live.pending),
-    .record_alignment_error_q(live.alignment_error)
-  );
-
-  frp_m32_boundary_snapshot_csr #(
-    .CELLS(CELLS), .RECORDER_COUNT_BITS(COUNT_BITS)
-  ) snapshot (
-    .clk(clk), .rst_n(rst_n), .csr_valid(csr_valid), .csr_write(csr_write),
-    .csr_addr(csr_addr), .csr_wdata(csr_wdata),
-    .csr_ready(csr_ready), .csr_error(csr_error), .csr_rdata(csr_rdata),
-    .record_sample_seen_q(live.seen), .record_sample_count_q(live.count),
-    .record_count_overflow_q(live.overflow),
-    .record_previous_margin_q16(live.previous_margin),
-    .record_minimum_margin_q16(live.minimum_margin),
-    .record_minimum_margin_tick_q(live.minimum_tick),
-    .record_peak_switch_load_q16(live.peak_switch),
-    .record_peak_switch_load_tick_q(live.peak_tick),
-    .boundary_valid_q(live.boundary_valid), .boundary_pulse_q(live.boundary_pulse),
-    .boundary_tick_q(live.boundary_tick), .boundary_scheduler_mode_q(live.mode),
-    .boundary_scheduler_state_q(live.state),
-    .boundary_previous_margin_q16(live.boundary_previous),
-    .boundary_margin_q16(live.boundary_margin), .boundary_capacity_q16(live.capacity),
-    .boundary_pressure_q16(live.pressure), .boundary_mean_heat_q16(live.heat),
-    .boundary_switch_load_q16(live.switches),
-    .boundary_retained_state_q(live.retained), .boundary_pending_route_q(live.pending),
-    .record_alignment_error_q(live.alignment_error)
+    .record_alignment_error_q(live.alignment_error),
+    .csr_valid(csr_valid),
+    .csr_write(csr_write),
+    .csr_addr(csr_addr),
+    .csr_wdata(csr_wdata),
+    .csr_ready(csr_ready),
+    .csr_error(csr_error),
+    .csr_rdata(csr_rdata)
   );
 
   int unsigned seed=76, random_state;
