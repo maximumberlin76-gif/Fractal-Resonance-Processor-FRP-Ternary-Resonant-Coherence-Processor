@@ -1,0 +1,328 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 115 - FRP M32 Internal Gamma Host CDC Qualification
+run-name: '115 - FRP Internal Gamma Host CDC | 5 profiles, 28 replays, 3 mutations @ ${{ github.sha }}'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUNBUFFERED: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install simulation tools
+        run: |
+          set -euo pipefail
+          mkdir -p bundle
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential
+          python -m pip install --disable-pip-version-check 'verilator==5.48.0'
+          {
+            python --version
+            python -m pip show verilator
+            verilator-cli --version
+            g++ --version
+            make --version
+          } > bundle/toolchain.txt 2>&1
+
+      - name: Qualify host CDC, replay and reset recovery
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import shlex
+          import shutil
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+          root = Path('source').resolve()
+          out = Path('bundle').resolve()
+          out.mkdir(exist_ok=True)
+          profiles = ((8, 3), (8, 64), (16, 64), (32, 64), (64, 64))
+          clocks = ((5, 7, 1), (3, 11, 4), (13, 2, 3))
+          seeds = (0, 76)
+          top = 'frp_m32_internal_gamma_observed_csr_cdc_tb'
+          tb_name = top + '.sv'
+          dut_name = 'frp_m32_internal_gamma_observed_csr_cdc_top.sv'
+          directories = ('rtl/m22', 'rtl/m23', 'rtl/m31', 'rtl/m32', 'fpga/m32', 'fpga/m32_csr')
+          keys = {'cells', 'bits', 'full', 'host_half', 'core_half', 'phase', 'checks',
+                  'launches', 'completions', 'core_completions', 'aborts', 'aborts_after_core',
+                  'ticks', 'stalls', 'resets', 'seed', 'captures', 'releases', 'errors',
+                  'frozen', 'signature'}
+          report = {'schema': 'frp.m32.internal_gamma_host_cdc.qualification.v1',
+                    'status': 'RUNNING', 'profiles': profiles, 'clock_profiles': clocks,
+                    'seeds': seeds, 'runs': [], 'transport_runs': [],
+                    'replay_pairs': 0, 'clock_signature_checks': 0, 'mutations': []}
+
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+
+          def save():
+              (out / 'results.json').write_text(json.dumps(report, indent=2) + '\n')
+
+
+          def execute(command, log_name, seconds, expect_success=True):
+              command = ['timeout', '--kill-after=15s', f'{seconds}s'] + command
+              path = out / log_name
+              with path.open('w') as log:
+                  log.write(shlex.join(command) + '\n')
+                  log.flush()
+                  result = subprocess.run(command, cwd=root, stdout=log, stderr=subprocess.STDOUT)
+              text = path.read_text(errors='replace')
+              if expect_success:
+                  require(result.returncode == 0, f'{log_name}: exit {result.returncode}')
+              return result.returncode, text
+
+
+          def parse(text, cells, bits, seed, clock, full):
+              prefix = 'PASS HOST_CDC '
+              lines = [line for line in text.splitlines() if line.startswith('PASS ')]
+              require(len(lines) == 1 and lines[0].startswith(prefix),
+                      'Missing, duplicate or unexpected PASS record')
+              tokens = lines[0][len(prefix):].split()
+              fields = dict(token.split('=', 1) for token in tokens)
+              require(set(fields) == keys and len(tokens) == len(keys), 'PASS field set mismatch')
+              for key, value in fields.items():
+                  pattern = r'[0-9a-f]{16}' if key == 'signature' else r'[0-9]+'
+                  require(re.fullmatch(pattern, value), 'Invalid field: ' + key)
+              record = {k: (v if k == 'signature' else int(v)) for k, v in fields.items()}
+              expected = dict(zip(('host_half', 'core_half', 'phase'), clock))
+              expected.update(cells=cells, bits=bits, seed=seed, full=full,
+                              aborts=2, aborts_after_core=1, resets=8, errors=484, releases=1)
+              if full == 1:
+                  expected.update(checks=6447, launches=1286, completions=1284,
+                                  core_completions=1285, ticks=24, captures=6, frozen=26)
+                  require(record['stalls'] > 0, 'Missing gamma backpressure')
+              else:
+                  require(full == 0, 'Invalid execution mode')
+                  expected.update(checks=2902, launches=572, completions=570,
+                                  core_completions=571, ticks=0, stalls=0, captures=4, frozen=0)
+              require(all(record[k] == value for k, value in expected.items()),
+                      'Profile, scenario counter or transaction accounting mismatch')
+              return record
+
+
+          def mutation_diagnostic(code, text, pattern):
+              diagnostic = re.search(pattern, text)
+              require(code in (1, 134, -6) and diagnostic is not None and
+                      not any(line.startswith('PASS ') for line in text.splitlines()),
+                      'Mutation did not produce the expected runtime failure')
+              return diagnostic[0]
+
+
+          def source_hashes():
+              return {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
+                      for directory in directories for p in sorted((root / directory).rglob('*'))
+                      if p.is_file() and p.suffix in ('.sv', '.svh', '.v', '.mem')}
+
+
+          save()
+          try:
+              require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch', 'Manual execution required')
+              sha = subprocess.check_output(
+                  ['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
+              require(sha == os.environ['GITHUB_SHA'], 'Checked-out commit mismatch')
+              report['commit'] = sha
+              hashes = source_hashes()
+              (out / 'source_sha256.json').write_text(json.dumps(hashes, indent=2) + '\n')
+              tb = (root / 'fpga/m32_csr' / tb_name).read_text()
+              original = (root / 'fpga/m32_csr' / dut_name).read_text()
+              (out / tb_name).write_text(tb)
+              (out / dut_name).write_text(original)
+
+              with tempfile.TemporaryDirectory(prefix='frp115-', dir=os.environ['RUNNER_TEMP']) as temporary:
+                  scratch = Path(temporary)
+
+                  def build(cells, bits, tag, mutation=None):
+                      directory = scratch / tag
+                      directory.mkdir()
+                      (directory / tb_name).write_text(tb)
+                      if mutation is not None:
+                          (directory / dut_name).write_text(mutation)
+                      obj = directory / 'obj'
+                      command = [
+                          'verilator-cli', '--binary', '--timing', '--assert',
+                          '--unroll-count', '1', '--output-groups', '32',
+                          '--output-split', '10000', '--output-split-cfuncs', '0',
+                          '--top-module', top, '-j', '2', '--verilate-jobs', '1',
+                          '-Wno-fatal', '-MAKEFLAGS', 'VK_PCH_I_FAST=',
+                          '-MAKEFLAGS', 'VK_PCH_I_SLOW=', '-MAKEFLAGS', 'OPT_FAST=-O0',
+                          '-I' + str(directory)
+                      ]
+                      command += ['-I' + str(root / item) for item in directories]
+                      command += ['--Mdir', str(obj), f'-GCELLS={cells}',
+                                  f'-GCOUNT_BITS={bits}', str(directory / tb_name)]
+                      execute(command, tag + '-build.log', 1800)
+                      return directory, str(obj / ('V' + top))
+
+                  def run(binary, tag, cells, bits, seed, clock, full):
+                      h, c, phase = clock
+                      _, text = execute([binary, f'+seed={seed}', f'+FULL={full}',
+                                         f'+HOST_HALF={h}', f'+CORE_HALF={c}', f'+PHASE={phase}'],
+                                        tag + '.log', 1200)
+                      return parse(text, cells, bits, seed, clock, full)
+
+                  for cells, bits in profiles:
+                      tag = f'cells-{cells}-bits-{bits}'
+                      directory, binary = build(cells, bits, tag)
+                      signatures = {}
+                      selected_clocks = clocks if (cells, bits) == (8, 3) else clocks[:1]
+                      for clock in selected_clocks:
+                          timing = '-'.join(map(str, clock))
+                          for seed in seeds:
+                              repeated = []
+                              for replay in (1, 2):
+                                  label = f'{tag}-clock-{timing}-seed-{seed}-replay-{replay}'
+                                  record = run(binary, label, cells, bits, seed, clock, 1)
+                                  repeated.append(record)
+                                  report['runs'].append({'replay': replay, 'record': record})
+                                  save()
+                              require(repeated[0] == repeated[1], 'Replay mismatch: ' + label)
+                              report['replay_pairs'] += 1
+                              if seed in signatures:
+                                  require(signatures[seed] == repeated[0]['signature'],
+                                          'Clock-dependent functional signature: ' + label)
+                                  report['clock_signature_checks'] += 1
+                              else:
+                                  signatures[seed] = repeated[0]['signature']
+                              save()
+                              print(f'PASS {label}: identical replays', flush=True)
+                      if (cells, bits) == (8, 3):
+                          for seed in seeds:
+                              record = run(binary, f'{tag}-transport-seed-{seed}',
+                                           cells, bits, seed, clocks[0], 0)
+                              report['transport_runs'].append(record)
+                              save()
+                      shutil.rmtree(directory)
+
+                  mutations = (
+                      ('drop_bank_bit', 'request_addr_hold_q <= csr_addr;',
+                       "request_addr_hold_q <= {1'b0, csr_addr[7:0]};", 0,
+                       r'CORE_PAYLOAD'),
+                      ('response_bit', 'response_rdata_hold_q <= core_csr_rdata;',
+                       "response_rdata_hold_q <= core_csr_rdata ^ 32'h1;", 0,
+                       r'CDC changed the response payload'),
+                      ('ignore_target_wait', 'if (core_csr_valid && core_csr_ready) begin',
+                       'if (core_csr_valid) begin', 1,
+                       r'M32_IG_CDC_A13_CORE_REQUEST_STABLE_WHILE_WAITING|'
+                       r'Host response without a corresponding core completion')
+                  )
+                  for name, before, after, full, pattern in mutations:
+                      require(original.count(before) == 1, 'Mutation anchor mismatch: ' + name)
+                      changed = original.replace(before, after)
+                      (out / (name + '.sv')).write_text(changed)
+                      directory, binary = build(8, 3, name, changed)
+                      code, text = execute([binary, '+seed=76', f'+FULL={full}',
+                                            '+HOST_HALF=5', '+CORE_HALF=7', '+PHASE=1'],
+                                           name + '-run.log', 1200, expect_success=False)
+                      item = {'name': name, 'detected': False, 'exit_code': code,
+                              'source_sha256': hashlib.sha256(changed.encode()).hexdigest()}
+                      report['mutations'].append(item)
+                      save()
+                      item['diagnostic'] = mutation_diagnostic(code, text, pattern)
+                      item['detected'] = True
+                      save()
+                      print('DETECTED ' + name, flush=True)
+                      shutil.rmtree(directory)
+
+              require(source_hashes() == hashes, 'Original RTL, testbench or lookup data changed')
+              records = [item['record'] for item in report['runs']] + report['transport_runs']
+              report['executions'] = len(records)
+              report['comparisons'] = sum(r['checks'] for r in records)
+              report['completed_requests'] = sum(r['completions'] for r in records)
+              report['accepted_ticks'] = sum(r['ticks'] for r in records)
+              require(len(report['runs']) == 28 and len(report['transport_runs']) == 2 and
+                      report['replay_pairs'] == 14 and report['clock_signature_checks'] == 4 and
+                      report['comparisons'] == 186320 and report['completed_requests'] == 37092 and
+                      report['accepted_ticks'] == 672 and len(report['mutations']) == 3 and
+                      all(item['detected'] for item in report['mutations']),
+                      'Qualification totals mismatch')
+              report['status'] = 'PASS'
+          except Exception as error:
+              report['status'] = 'FAIL'
+              report['error'] = str(error)
+              print('::error::Internal gamma host CDC qualification failed; inspect bundle logs')
+          finally:
+              save()
+              summary = [
+                  '## FRP M32 Internal Gamma Host CDC Qualification', '',
+                  f"Result: **{report['status']}**", '',
+                  f"Commit: `{report.get('commit', 'unavailable')}`", '',
+                  'Profiles (cells / counter bits): 8/3, 8/64, 16/64, 32/64, 64/64.',
+                  'Clock half periods / core phase (ns): 5/7/1 for all profiles;',
+                  '3/11/4 and 13/2/3 additionally for 8/3.',
+                  'Seeds: 0 and 76; two full replays per timing case and seed.', '',
+                  f"Full executions: {len(report['runs'])}/28.",
+                  f"Transport-only executions: {len(report['transport_runs'])}/2.",
+                  f"Matching replay pairs: {report['replay_pairs']}/14.",
+                  f"Cross-clock signature comparisons: {report['clock_signature_checks']}/4.", '',
+                  'Checks: 42 request bits, 33 response bits, completion accounting,',
+                  'all 256 snapshot byte addresses for reads and invalid writes,',
+                  '26 payload words against captured recorder outputs, frozen snapshots,',
+                  '624 checkpoint words and 24 accepted ticks per full execution,',
+                  'free / 7/1 / 1/7 modes, gamma backpressure, clock stops,',
+                  'held/busy/early request rejection and reset-aborted transactions.',
+                  'The resets counter records eight reset_dut recovery sequences;',
+                  'the before-ready scenario also asserts reset separately.', '',
+                  '| Mutation | Expected runtime failure detected |',
+                  '| --- | --- |'
+              ]
+              for item in report['mutations']:
+                  summary.append(f"| {item['name']} | {item['detected']} |")
+              if report['status'] == 'PASS':
+                  summary += ['', f"Comparisons: {report['comparisons']}.",
+                              f"Completed requests: {report['completed_requests']}.",
+                              f"Accepted ticks: {report['accepted_ticks']}."]
+              if 'error' in report:
+                  summary += ['', 'Failure details: results.json and the named artifact log.']
+              summary += ['', 'Artifact: logs, toolchain, source hashes, tested top and testbench,',
+                          'mutation copies and JSON results.', '']
+              (out / 'summary.md').write_text('\n'.join(summary))
+          require(report['status'] == 'PASS', 'Internal gamma host CDC qualification failed')
+          PY
+
+      - name: Publish Actions summary
+        if: always()
+        run: |
+          mkdir -p bundle
+          if [ ! -f bundle/summary.md ]; then
+            printf '%s\n' 'Qualification stopped before the final report; inspect the step logs.' > bundle/summary.md
+          fi
+          cat bundle/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload one combined artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-115-internal-gamma-host-cdc-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bundle/
+          if-no-files-found: error
+          retention-days: 14
