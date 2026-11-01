@@ -1,0 +1,317 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 117 - FRP M32 Gamma Source Qualification
+run-name: '117 - FRP Gamma Source | 2 suites, 32 replays, 6 mutations @ ${{ github.sha }}'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUNBUFFERED: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install simulation tools
+        run: |
+          set -euo pipefail
+          mkdir -p bundle
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential
+          python -m pip install --disable-pip-version-check 'verilator==5.48.0'
+          {
+            python --version
+            python -m pip show verilator
+            verilator-cli --version
+            g++ --version
+            make --version
+          } > bundle/toolchain.txt 2>&1
+
+      - name: Qualify source arbitration and sequence partitioning
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import json
+          import math
+          import os
+          import random
+          import re
+          import shlex
+          import shutil
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+          root = Path('source').resolve()
+          out = Path('bundle').resolve()
+          out.mkdir(exist_ok=True)
+          cells_list, seeds = (8, 16, 32, 64), (0, 76)
+          tops = {'arbitration': 'frp_m32_gamma_source_arbitration_tb',
+                  'partition': 'frp_m32_gamma_sequence_partition_tb'}
+          prefixes = {'arbitration': 'PASS GAMMA_SOURCE_ARBITRATION ',
+                      'partition': 'PASS GAMMA_SEQUENCE_PARTITION '}
+          fields = {
+              'arbitration': set('cells seed sweeps twist_cuts draw_cuts reset_cuts partial_restarts invalid_indices requests published consumed cancelled dropped begins words resets targets idle_collisions loading_collisions final_word_collisions held_cycles checks cycles oracle_signature signature'.split()),
+              'partition': set('cells seed indices targets_per_source small_banks wide_banks words_per_source model_twists split_twists cross_checks small_stalls wide_stalls small_gaps wide_gaps checks cycles oracle_signature small_signature wide_signature'.split())
+          }
+          report = {'schema': 'frp.m32.gamma_source.qualification.v1', 'status': 'RUNNING',
+                    'sha': os.environ['GITHUB_SHA'], 'cells': cells_list, 'seeds': seeds,
+                    'runs': [], 'replay_pairs': 0, 'cross_size_checks': 0, 'mutations': []}
+
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+
+          def save():
+              (out / 'results.json').write_text(json.dumps(report, indent=2) + '\n')
+
+
+          def execute(command, name, seconds, success=True):
+              command = ['timeout', '--kill-after=15s', f'{seconds}s'] + command
+              with (out / name).open('w') as log:
+                  log.write(shlex.join(command) + '\n')
+                  log.flush()
+                  result = subprocess.run(command, cwd=root, stdout=log, stderr=subprocess.STDOUT)
+              text = (out / name).read_text(errors='replace')
+              if success:
+                  require(result.returncode == 0, f'{name}: exit {result.returncode}')
+              return result.returncode, text
+
+
+          def parse(text, suite, cells, seed, gold):
+              lines = [line for line in text.splitlines() if line.startswith('PASS ')]
+              prefix = prefixes[suite]
+              require(len(lines) == 1 and lines[0].startswith(prefix), 'Missing or duplicate PASS')
+              tokens = lines[0][len(prefix):].split()
+              record = {}
+              for token in tokens:
+                  require(token.count('=') == 1, 'Malformed field')
+                  key, value = token.split('=')
+                  require(key in fields[suite] and key not in record, 'Unexpected or duplicate field')
+                  is_hash = key.endswith('signature')
+                  require(re.fullmatch(r'[0-9a-f]{16}' if is_hash else r'0|[1-9][0-9]*', value),
+                          f'Invalid value: {token}')
+                  record[key] = value if is_hash else int(value)
+              require(set(record) == fields[suite], 'Missing field')
+              expected = {'cells': cells, 'seed': seed, 'oracle_signature': gold}
+              if suite == 'arbitration':
+                  sweeps = 2 * (624 + 2 * cells)
+                  expected.update(sweeps=sweeps, twist_cuts=1248, draw_cuts=4*cells,
+                                  reset_cuts=10, partial_restarts=4, invalid_indices=399,
+                                  requests=3*sweeps+48, published=2*sweeps+38,
+                                  consumed=2*sweeps+36, cancelled=sweeps+10, dropped=2,
+                                  begins=2*sweeps+434, words=1248*sweeps+20279, resets=12,
+                                  targets=cells*(2*sweeps+38), idle_collisions=sweeps+17,
+                                  loading_collisions=4, final_word_collisions=2*sweeps+31)
+                  positive = ('held_cycles', 'checks', 'cycles')
+                  require(record['requests'] == record['published'] + record['cancelled'] and
+                          record['published'] == record['consumed'] + record['dropped'], 'Ledger mismatch')
+              else:
+                  expected.update(indices=625, targets_per_source=640000, small_banks=80000,
+                                  wide_banks=640000//cells, words_per_source=390000,
+                                  model_twists=2051, split_twists=1024, cross_checks=640000,
+                                  small_signature=gold, wide_signature=gold)
+                  positive = ('small_stalls', 'wide_stalls', 'small_gaps', 'wide_gaps', 'checks', 'cycles')
+              for key, value in expected.items():
+                  require(record[key] == value, f'{suite}: {key} expected {value}, got {record[key]}')
+              require(all(record[key] > 0 for key in positive), 'Missing activity')
+              return record
+
+
+          def scramble(value):
+              value &= 0xffffffff
+              value ^= (value << 13) & 0xffffffff
+              value ^= value >> 17
+              return (value ^ (value << 5)) & 0xffffffff
+
+
+          def mix(signature, value):
+              return ((signature ^ (value & 0xffffffff)) * 0x100000001b3) & 0xffffffffffffffff
+
+
+          def draw(generator):
+              value = generator.uniform(-1.0, 1.0) * 65536.0
+              return math.floor(value + 0.5) if value >= 0 else math.ceil(value - 0.5)
+
+
+          def oracle():
+              gold = {'arbitration': {}, 'partition': {},
+                      'method': 'CPython Random.setstate, uniform(-1,1), half-away Q16.16, FNV64 word mixing'}
+              for seed in seeds:
+                  words = [scramble(seed ^ 0x2468ace1 ^ ((w*0x85ebca6b) & 0xffffffff))
+                           for w in range(624)]
+                  words[0] |= 0x80000000
+                  for cells in cells_list:
+                      generator = random.Random(0)
+                      generator.setstate((3, tuple(words + [0]), None))
+                      signature = 0xcbf29ce484222325
+                      for _ in range(2*cells):
+                          signature = mix(signature, draw(generator))
+                      gold['arbitration'][f'{cells}/{seed}'] = f'{signature:016x}'
+                  signature = 0xcbf29ce484222325
+                  for index in range(625):
+                      words = [scramble(seed ^ 0xa341316c ^ ((index*0x9e3779b9) & 0xffffffff)
+                                        ^ ((w*0x85ebca6b) & 0xffffffff)) for w in range(624)]
+                      words[0] |= 0x80000000
+                      generator = random.Random(0)
+                      generator.setstate((3, tuple(words + [index]), None))
+                      signature = mix(signature, index)
+                      for _ in range(1024):
+                          signature = mix(signature, draw(generator))
+                  gold['partition'][str(seed)] = f'{signature:016x}'
+              (out / 'oracle.json').write_text(json.dumps(gold, indent=2) + '\n')
+              return gold
+
+
+          def build(suite, cells, stage, work, label):
+              top = tops[suite]
+              obj = work / label
+              command = ['verilator-cli', '--binary', '--timing', '--assert', '--top-module', top,
+                         '-j', '2', '-Wno-fatal', '-MAKEFLAGS', 'VK_PCH_I_FAST=',
+                         '-MAKEFLAGS', 'VK_PCH_I_SLOW=', '-MAKEFLAGS', 'OPT_FAST=-O1',
+                         '-I' + str(stage), '--Mdir', str(obj), f'-GCELLS={cells}',
+                         str(stage / (top + '.sv'))]
+              execute(command, label + '.build.log', 600)
+              return obj / ('V' + top)
+
+
+          def main():
+              source = root / 'rtl/m32'
+              names = [top + '.sv' for top in tops.values()] + ['frp_m32_gamma_target_source.sv']
+              snapshots = {name: (source / name).read_bytes() for name in names}
+              archived = out / 'sources'
+              archived.mkdir(exist_ok=True)
+              for name, data in snapshots.items():
+                  (archived / name).write_bytes(data)
+              workflow = root / '.github/workflows/frp-117-m32-gamma-source-qualification.yml'
+              shutil.copy2(workflow, archived / workflow.name)
+              (out / 'source-sha256.json').write_text(json.dumps(
+                  {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(archived.iterdir())},
+                  indent=2) + '\n')
+              gold = oracle()
+              cross_size = {}
+              with tempfile.TemporaryDirectory(prefix='frp117-') as temporary:
+                  work = Path(temporary)
+                  for suite in tops:
+                      for cells in cells_list:
+                          label = f'{suite}-{cells}'
+                          binary = build(suite, cells, archived, work, label)
+                          for seed in seeds:
+                              expected = gold[suite][f'{cells}/{seed}' if suite == 'arbitration' else str(seed)]
+                              previous = None
+                              for replay in (1, 2):
+                                  name = f'{label}-seed{seed}-replay{replay}.log'
+                                  _, text = execute([str(binary), f'+seed={seed}'], name, 300)
+                                  record = parse(text, suite, cells, seed, expected)
+                                  if previous is not None:
+                                      require(record == previous, 'Replay mismatch')
+                                      report['replay_pairs'] += 1
+                                  previous = record
+                                  report['runs'].append({'suite': suite, 'replay': replay,
+                                                         'log': name, 'record': record})
+                                  save()
+                                  print(f'PASS {name}', flush=True)
+                              if suite == 'partition':
+                                  signature = previous['wide_signature']
+                                  if seed in cross_size:
+                                      require(signature == cross_size[seed], 'Cross-size mismatch')
+                                      report['cross_size_checks'] += 1
+                                  cross_size[seed] = signature
+                  before = 'end else if (load_begin) begin'
+                  mutations = [
+                      ('arbitration', 'ignore_begin_mid_twist', before,
+                       "end else if (load_begin && !(state_q == TWIST && twist_q == 10'd227)) begin"),
+                      ('arbitration', 'ignore_begin_at_publication', before,
+                       "end else if (load_begin && !(state_q == DRAW && half_q && lane_q == $clog2(CELLS)'(CELLS-1))) begin"),
+                      ('arbitration', 'ignore_begin_with_held_bank', before,
+                       'end else if (load_begin && !bank_valid) begin'),
+                      ('partition', 'discard_fraction_half_at_twist',
+                       "if (twist_q == 10'd623) begin\n            index_q <= 10'd0;",
+                       "if (twist_q == 10'd623) begin\n            fraction_high_q <= '0;\n            index_q <= 10'd0;"),
+                      ('partition', 'advance_index_while_stalled',
+                       "if (bank_valid && bank_ready) bank_valid <= 1'b0;",
+                       "if (bank_valid && bank_ready) bank_valid <= 1'b0;\n      if (bank_valid && !bank_ready) index_q <= index_q + 10'd1;"),
+                      ('partition', 'restart_index_each_bank',
+                       "IDLE: if (request_valid && request_ready) begin\n          pending_bank_q <= '0;",
+                       "IDLE: if (request_valid && request_ready) begin\n          index_q <= 10'd0;\n          pending_bank_q <= '0;")
+                  ]
+                  original = snapshots['frp_m32_gamma_target_source.sv'].decode()
+                  for suite, label, before, after in mutations:
+                      require(original.count(before) == 1, f'{label}: mutation anchor changed')
+                      stage = out / 'mutants' / label
+                      stage.mkdir(parents=True)
+                      (stage / 'frp_m32_gamma_target_source.sv').write_text(original.replace(before, after))
+                      shutil.copy2(archived / (tops[suite] + '.sv'), stage)
+                      binary = build(suite, 8, stage, work, label)
+                      code, text = execute([str(binary), '+seed=76'], label + '.log', 300, success=False)
+                      diagnostic = 'BEGIN_CLEARS_WORK' if suite == 'arbitration' else 'BANK_ORACLE'
+                      require(code in (1, 134, -6) and re.search(r'\b' + diagnostic + r'\b', text)
+                              and not any(line.startswith('PASS ') for line in text.splitlines())
+                              and 'WATCHDOG' not in text and 'TIMEOUT' not in text,
+                              f'{label}: expected runtime diagnostic absent, exit {code}')
+                      report['mutations'].append({'name': label, 'suite': suite, 'cells': 8, 'seed': 76,
+                                                  'exit_code': code, 'diagnostic': diagnostic, 'detected': True})
+                      save()
+                      print(f'DETECTED {label}', flush=True)
+              require(len(report['runs']) == 32 and report['replay_pairs'] == 16 and
+                      report['cross_size_checks'] == 6 and len(report['mutations']) == 6, 'Incomplete matrix')
+              require(all((source / name).read_bytes() == data for name, data in snapshots.items()),
+                      'Repository sources changed during qualification')
+              report['checks'] = sum(row['record']['checks'] for row in report['runs'])
+              report['status'] = 'PASS'
+
+
+          save()
+          try:
+              main()
+          except BaseException as error:
+              report['status'] = 'FAIL'
+              report['error'] = f'{type(error).__name__}: {error}'
+              raise
+          finally:
+              save()
+              summary = (f"# FRP 117 Gamma Source Qualification: {report['status']}\n\n"
+                         f"Commit: `{report['sha']}`\n\n"
+                         f"Runs: {len(report['runs'])}/32; replay pairs: {report['replay_pairs']}/16; "
+                         f"cross-size checks: {report['cross_size_checks']}/6; "
+                         f"detected mutations: {len(report['mutations'])}/6.\n\n"
+                         "Two source-level suites; CELLS 8/16/32/64; seeds 0/76.\n"
+                         "CPython checkpoint oracle and independent bank timing.\n")
+              if 'error' in report:
+                  summary += '\nError: ' + report['error'] + '\n'
+              (out / 'summary.md').write_text(summary)
+              if os.environ.get('GITHUB_STEP_SUMMARY'):
+                  with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                      stream.write(summary)
+          PY
+
+      - name: Upload qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-117-gamma-source-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bundle/
+          if-no-files-found: error
+          retention-days: 30
