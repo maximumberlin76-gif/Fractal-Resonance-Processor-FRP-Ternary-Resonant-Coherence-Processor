@@ -1,0 +1,347 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 118 - FRP M32 Gamma CDC Stream Qualification
+run-name: '118 - FRP Gamma CDC Stream | 2 suites, 58 executions, 6 mutations @ ${{ github.sha }}'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUNBUFFERED: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install simulation tools
+        run: |
+          set -euo pipefail
+          mkdir -p bundle
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential
+          python -m pip install --disable-pip-version-check 'verilator==5.48.0'
+          {
+            python --version
+            python -m pip show verilator
+            verilator-cli --version
+            g++ --version
+            make --version
+          } > bundle/toolchain.txt 2>&1
+
+      - name: Qualify stream integration and interruption recovery
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import shlex
+          import shutil
+          import subprocess
+          import tempfile
+          import zipfile
+          from pathlib import Path
+
+          root = Path('source').resolve()
+          out = Path('bundle').resolve()
+          out.mkdir(exist_ok=True)
+          profiles = ((8, 3), (8, 64), (16, 64), (32, 64), (64, 64))
+          clocks = ((5, 7, 1), (3, 11, 4), (13, 2, 3))
+          seeds = (0, 76)
+          tops = {'integration': 'frp_m32_internal_gamma_observed_csr_cdc_stream_tb',
+                  'recovery': 'frp_m32_internal_gamma_cdc_stream_interruption_tb'}
+          directories = ('rtl/m22', 'rtl/m23', 'rtl/m31', 'rtl/m32', 'fpga/m32', 'fpga/m32_csr')
+          workflow = '.github/workflows/frp-118-m32-gamma-cdc-stream-qualification.yml'
+          common = set('cells bits seed host_half core_half phase checks requests forwarded responses core_responses aborts ticks simultaneous stalls errors resets signature'.split())
+          fields = {
+              'integration': common | set('aborts_after_core snapshot_reads snapshot_writes captures releases modes frozen walking_words burst_responses'.split()),
+              'recovery': common | set('rounds published abort_issued abort_core dropped cuts early_offers gamma_waits checkpoint_words'.split())
+          }
+          prefixes = {'integration': 'PASS HOST_CDC_STREAM ', 'recovery': 'PASS STREAM_RECOVERY '}
+          report = {'schema': 'frp.m32.gamma_cdc_stream.qualification.v1', 'status': 'RUNNING',
+                    'profiles': profiles, 'clocks': clocks, 'seeds': seeds,
+                    'runs': [], 'edge_runs': [], 'replay_pairs': 0, 'clock_signature_checks': 0, 'mutations': []}
+
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+
+          def save():
+              (out / 'results.json').write_text(json.dumps(report, indent=2) + '\n')
+
+
+          def execute(command, name, seconds, success=True):
+              command = ['timeout', '--kill-after=15s', f'{seconds}s'] + command
+              with (out / name).open('w') as log:
+                  log.write(shlex.join(command) + '\n')
+                  log.flush()
+                  result = subprocess.run(command, cwd=root, stdout=log, stderr=subprocess.STDOUT)
+              text = (out / name).read_text(errors='replace')
+              if success:
+                  require(result.returncode == 0, f'{name}: exit {result.returncode}')
+              return result.returncode, text
+
+
+          def parse(text, suite, cells, bits, seed, clock, rounds=3):
+              lines = [line for line in text.splitlines() if line.startswith('PASS ')]
+              prefix = prefixes[suite]
+              require(len(lines) == 1 and lines[0].startswith(prefix), 'Missing or duplicate PASS record')
+              record = {}
+              for token in lines[0][len(prefix):].split():
+                  require(token.count('=') == 1, 'Malformed field')
+                  key, value = token.split('=')
+                  require(key in fields[suite] and key not in record, 'Unexpected or duplicate field')
+                  pattern = r'[0-9a-f]{16}' if key == 'signature' else r'0|[1-9][0-9]*'
+                  require(re.fullmatch(pattern, value), 'Invalid field: ' + key)
+                  record[key] = value if key == 'signature' else int(value)
+              require(set(record) == fields[suite], 'Missing field')
+              expected = dict(zip(('host_half', 'core_half', 'phase'), clock))
+              expected.update(cells=cells, bits=bits, seed=seed)
+              if suite == 'integration':
+                  expected.update(requests=1374, forwarded=1374, responses=1372, core_responses=1373,
+                                  aborts=2, aborts_after_core=1, ticks=24, simultaneous=64, errors=548,
+                                  snapshot_reads=256, snapshot_writes=256, captures=2, releases=1,
+                                  resets=3, modes=7, frozen=26, walking_words=64, burst_responses=64)
+                  require(record['core_responses'] == record['responses'] + record['aborts_after_core'],
+                          'Integration core ledger mismatch')
+              else:
+                  expected.update(rounds=rounds, requests=1284+41*rounds, forwarded=1284+39*rounds,
+                                  responses=1282+33*rounds, core_responses=1283+37*rounds,
+                                  published=1283+35*rounds, aborts=8*rounds+2, abort_issued=6*rounds+2,
+                                  abort_core=4*rounds+1, dropped=2*rounds+1, resets=8*rounds+5,
+                                  simultaneous=rounds, ticks=1, errors=2, cuts=8*rounds,
+                                  early_offers=2, gamma_waits=2, checkpoint_words=1248)
+                  require(record['forwarded'] == record['responses'] + record['abort_issued'] and
+                          record['core_responses'] == record['responses'] + record['abort_core'] and
+                          record['published'] == record['responses'] + record['dropped'], 'Recovery ledger mismatch')
+              for key, value in expected.items():
+                  require(record[key] == value, f'{suite}: {key} expected {value}, got {record[key]}')
+              require(record['requests'] == record['responses'] + record['aborts'], 'Request ledger mismatch')
+              require(record['checks'] > 0 and record['stalls'] > 0, 'Missing comparison or backpressure activity')
+              return record
+
+
+          def source_hashes():
+              paths = [root / workflow]
+              paths += [p for directory in directories for p in (root / directory).rglob('*')
+                        if p.is_file() and p.suffix in ('.sv', '.svh', '.v', '.mem')]
+              return {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(paths)}
+
+
+          def build(scratch, suite, cells, bits, tag, mutation=None):
+              directory = scratch / tag
+              directory.mkdir()
+              top = tops[suite]
+              tb = top + '.sv'
+              shutil.copyfile(root / 'fpga/m32_csr' / tb, directory / tb)
+              if mutation is not None:
+                  path, changed = mutation
+                  (directory / Path(path).name).write_text(changed)
+              obj = directory / 'obj'
+              command = ['verilator-cli', '--binary', '--timing', '--assert', '--unroll-count', '1',
+                         '--output-groups', '32', '--output-split', '10000', '--output-split-cfuncs', '0',
+                         '--top-module', top, '-j', '2', '--verilate-jobs', '1', '-Wno-fatal',
+                         '-MAKEFLAGS', 'VK_PCH_I_FAST=', '-MAKEFLAGS', 'VK_PCH_I_SLOW=',
+                         '-MAKEFLAGS', 'OPT_FAST=-O0', '-I' + str(directory)]
+              command += ['-I' + str(root / item) for item in directories]
+              command += ['--Mdir', str(obj), f'-GCELLS={cells}', f'-GCOUNT_BITS={bits}', str(directory / tb)]
+              execute(command, tag + '-build.log', 1800)
+              binary = obj / ('V' + top)
+              binary.chmod(binary.stat().st_mode | 0o111)
+              return directory, str(binary)
+
+
+          def arguments(binary, seed, clock, rounds=3):
+              h, c, phase = clock
+              return [binary, f'+seed={seed}', f'+ROUNDS={rounds}',
+                      f'+HOST_HALF={h}', f'+CORE_HALF={c}', f'+PHASE={phase}']
+
+
+          def main():
+              require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch', 'Manual execution required')
+              sha = subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
+              require(sha == os.environ['GITHUB_SHA'], 'Checked-out commit mismatch')
+              report['commit'] = sha
+              hashes = source_hashes()
+              (out / 'source_sha256.json').write_text(json.dumps(hashes, indent=2) + '\n')
+              with zipfile.ZipFile(out / 'tested_sources.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
+                  for path in hashes:
+                      archive.write(root / path, path)
+              with tempfile.TemporaryDirectory(prefix='frp118-', dir=os.environ['RUNNER_TEMP']) as temporary:
+                  scratch = Path(temporary)
+                  for suite in tops:
+                      for cells, bits in profiles:
+                          tag = f'{suite}-cells-{cells}-bits-{bits}'
+                          directory, binary = build(scratch, suite, cells, bits, tag)
+                          signatures = {}
+                          selected_clocks = clocks if (cells, bits) == (8, 3) else clocks[:1]
+                          for clock in selected_clocks:
+                              timing = '-'.join(map(str, clock))
+                              for seed in seeds:
+                                  repeated = []
+                                  for replay in (1, 2):
+                                      label = f'{tag}-clock-{timing}-seed-{seed}-replay-{replay}'
+                                      _, text = execute(arguments(binary, seed, clock), label + '.log', 1200)
+                                      record = parse(text, suite, cells, bits, seed, clock)
+                                      repeated.append(record)
+                                      report['runs'].append({'suite': suite, 'replay': replay,
+                                                             'log': label + '.log', 'record': record})
+                                      save()
+                                  require(repeated[0] == repeated[1], 'Replay mismatch: ' + label)
+                                  report['replay_pairs'] += 1
+                                  if seed in signatures:
+                                      require(signatures[seed] == repeated[0]['signature'],
+                                              'Clock-dependent functional signature: ' + label)
+                                      report['clock_signature_checks'] += 1
+                                  else:
+                                      signatures[seed] = repeated[0]['signature']
+                                  save()
+                                  print('PASS ' + label + ': identical replays', flush=True)
+                          if suite == 'recovery' and (cells, bits) == (8, 3):
+                              for rounds, clock in ((1, (5, 5, 0)), (16, (13, 2, 3))):
+                                  label = f'recovery-rounds-{rounds}'
+                                  _, text = execute(arguments(binary, 76, clock, rounds), label + '.log', 1200)
+                                  record = parse(text, suite, cells, bits, 76, clock, rounds)
+                                  report['edge_runs'].append({'suite': suite, 'log': label + '.log', 'record': record})
+                                  save()
+                                  print('PASS ' + label, flush=True)
+                          shutil.rmtree(directory)
+
+                  stream = 'fpga/m32_csr/frp_m32_internal_gamma_observed_csr_cdc_stream_top.sv'
+                  bridge = 'fpga/m32_csr/frp_m32_internal_gamma_observed_csr_cdc_top.sv'
+                  mutations = (
+                      ('truncate_address_bank', 'integration', stream,
+                       '.csr_addr(request_addr_q),', ".csr_addr({1'b0,request_addr_q[7:0]}),",
+                       r'REQUEST_PAYLOAD'),
+                      ('discard_response_error', 'integration', stream,
+                       'rsp_error <= bridge_error;', "rsp_error <= 1'b0;", r'RESPONSE_ERROR'),
+                      ('consume_stalled_response', 'integration', stream,
+                       'if (rsp_ready)\n            state_q <= IDLE;', 'state_q <= IDLE;',
+                       r'READY_DURING_STALL|HELD_RESPONSE|M32_IG_STREAM_A01_STALLED_RESPONSE_STABLE'),
+                      ('retain_issue_on_reset', 'recovery', stream,
+                       'if (!host_reset_released) begin\n      state_q <= IDLE;',
+                       'if (!host_reset_released) begin\n      state_q <= (state_q == ISSUE) ? ISSUE : IDLE;',
+                       r'CDC_ISSUE_PAYLOAD|STALE_AFTER_RESET'),
+                      ('retain_core_valid_on_reset', 'recovery', bridge,
+                       "core_csr_valid <= 1'b0;\n        core_csr_write <= 1'b0;",
+                       "core_csr_valid <= core_csr_valid;\n        core_csr_write <= 1'b0;", r'ASYNC_RESET_PAYLOAD'),
+                      ('retain_response_on_reset', 'recovery', stream,
+                       "rsp_rdata <= '0;", 'rsp_rdata <= rsp_rdata;', r'ASYNC_RESET_PAYLOAD')
+                  )
+                  for name, suite, path, before, after, pattern in mutations:
+                      original = (root / path).read_text()
+                      require(original.count(before) == 1, 'Mutation anchor mismatch: ' + name)
+                      changed = original.replace(before, after)
+                      (out / (name + '.sv')).write_text(changed)
+                      directory, binary = build(scratch, suite, 8, 3, name, (path, changed))
+                      code, text = execute(arguments(binary, 76, clocks[0]), name + '-run.log', 1200, False)
+                      item = {'name': name, 'suite': suite, 'detected': False, 'exit_code': code,
+                              'source': path, 'source_sha256': hashlib.sha256(changed.encode()).hexdigest()}
+                      report['mutations'].append(item)
+                      save()
+                      match = re.search(r'\b(?:' + pattern + r')\b', text)
+                      require(code in (1, 134, -6) and match is not None and
+                              not any(line.startswith('PASS ') for line in text.splitlines()) and
+                              'TIMEOUT' not in text and 'WATCHDOG' not in text,
+                              'Expected runtime diagnostic absent: ' + name)
+                      item.update(diagnostic=match[0], detected=True)
+                      save()
+                      print('DETECTED ' + name, flush=True)
+                      shutil.rmtree(directory)
+
+              require(source_hashes() == hashes, 'Original sources changed')
+              require(len(report['runs']) == 56 and
+                      all(sum(x['suite'] == suite for x in report['runs']) == 28 for suite in tops) and
+                      len(report['edge_runs']) == 2 and report['replay_pairs'] == 28 and
+                      report['clock_signature_checks'] == 8 and len(report['mutations']) == 6 and
+                      all(x['detected'] for x in report['mutations']), 'Qualification matrix incomplete')
+              records = [item['record'] for item in report['runs'] + report['edge_runs']]
+              report.update(comparisons=sum(r['checks'] for r in records),
+                            accepted_requests=sum(r['requests'] for r in records),
+                            completed_responses=sum(r['responses'] for r in records),
+                            accepted_ticks=sum(r['ticks'] for r in records))
+              require(report['accepted_requests'] == 81133 and report['completed_responses'] == 80209 and
+                      report['accepted_ticks'] == 702, 'Qualification totals mismatch')
+              report['status'] = 'PASS'
+
+
+          save()
+          try:
+              main()
+          except BaseException as error:
+              report['status'] = 'FAIL'
+              report['error'] = f'{type(error).__name__}: {error}'
+              raise
+          finally:
+              save()
+              summary = [
+                  '## FRP M32 Gamma CDC Stream Qualification', '',
+                  f"Result: **{report['status']}**", '', f"Commit: `{report.get('commit', 'unavailable')}`", '',
+                  'Two suites: stream integration and stream interruption/recovery.',
+                  'Profiles (cells / counter bits): 8/3, 8/64, 16/64, 32/64, 64/64.',
+                  'Clock half periods / phase (ns): 5/7/1 for every profile;',
+                  '3/11/4 and 13/2/3 additionally for 8/3.',
+                  'Seeds: 0 and 76; two identical replays per suite/profile/timing/seed.',
+                  'Recovery edges: ROUNDS=1 at 5/5/0; ROUNDS=16 at 13/2/3; cells/bits=8/3, seed=76.', '',
+                  f"Matrix executions: {len(report['runs'])}/56; edge executions: {len(report['edge_runs'])}/2.",
+                  f"Matching replay pairs: {report['replay_pairs']}/28.",
+                  f"Cross-clock signature comparisons: {report['clock_signature_checks']}/8.", '',
+                  'Integration: 42 request bits, 33 response bits, all 256 snapshot byte addresses,',
+                  'walking data bits, 64-request bursts, same-edge response/request handoffs,',
+                  'checkpoint loading, 24 ticks across free/7/1/1/7 modes and frozen snapshots.',
+                  'Recovery: eight transaction cut points, independently stopped clocks,',
+                  'early held-valid offers, gamma wait cancellation/resumption and reset ledgers.', '',
+                  '| Mutation | Runtime failure detected |', '| --- | --- |'
+              ]
+              for item in report['mutations']:
+                  summary.append(f"| {item['name']} | {item['detected']} |")
+              if report['status'] == 'PASS':
+                  summary += ['', f"Comparisons: {report['comparisons']}.",
+                              f"Accepted requests: {report['accepted_requests']}.",
+                              f"Completed responses: {report['completed_responses']}.",
+                              f"Accepted ticks: {report['accepted_ticks']}."]
+              if 'error' in report:
+                  summary += ['', 'Failure details: results.json and the named artifact log.']
+              summary += ['', 'One artifact contains logs, toolchain, source hashes, tested sources,',
+                          'mutation copies, JSON results and this summary.', '']
+              (out / 'summary.md').write_text('\n'.join(summary))
+          PY
+
+      - name: Publish Actions summary
+        if: always()
+        run: |
+          mkdir -p bundle
+          if [ ! -f bundle/summary.md ]; then
+            printf '%s\n' 'Qualification stopped before the final report; inspect the step logs.' > bundle/summary.md
+          fi
+          cat bundle/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload one combined artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-118-gamma-cdc-stream-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bundle/
+          if-no-files-found: error
+          retention-days: 14
