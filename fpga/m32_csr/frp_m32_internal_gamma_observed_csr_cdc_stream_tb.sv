@@ -231,7 +231,6 @@ module frp_m32_internal_gamma_observed_csr_cdc_stream_tb #(parameter int CELLS=8
     while(!rsp_valid)begin
       @(negedge host_clk);watchdog++;
       if(watchdog>20000)$fatal(1,"RESPONSE_TIMEOUT");
-");
     end
   endtask
   task automatic collect(input bit reject=0,input int hold_cycles=3);
