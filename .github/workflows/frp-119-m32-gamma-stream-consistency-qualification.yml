@@ -1,0 +1,354 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 119 - FRP M32 Gamma Stream Consistency Qualification
+run-name: '119 - FRP Gamma Stream Consistency | 2 suites, 64 executions, 6 mutations @ ${{ github.sha }}'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUNBUFFERED: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install simulation tools
+        run: |
+          set -euo pipefail
+          mkdir -p bundle
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential
+          python -m pip install --disable-pip-version-check 'verilator==5.48.0'
+          {
+            python --version
+            python -m pip show verilator
+            verilator-cli --version
+            g++ --version
+            make --version
+          } > bundle/toolchain.txt 2>&1
+
+      - name: Qualify stream equivalence and snapshot isolation
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import shlex
+          import shutil
+          import subprocess
+          import tempfile
+          import zipfile
+          from pathlib import Path
+
+          root = Path('source').resolve()
+          out = Path('bundle').resolve()
+          out.mkdir(exist_ok=True)
+          profiles = {'equivalence': ((8, 3), (8, 64), (16, 64), (32, 64), (64, 64)),
+                      'isolation': ((8, 3), (8, 1), (8, 64), (16, 64), (32, 64), (64, 64))}
+          clocks = ((5, 7, 1), (3, 11, 4), (13, 2, 3))
+          seeds = (0, 76)
+          tops = {'equivalence': 'frp_m32_gamma_stream_equivalence_tb',
+                  'isolation': 'frp_m32_gamma_stream_snapshot_isolation_tb'}
+          directories = ('rtl/m22', 'rtl/m23', 'rtl/m31', 'rtl/m32', 'fpga/m32', 'fpga/m32_csr')
+          workflow = '.github/workflows/frp-119-m32-gamma-stream-consistency-qualification.yml'
+          common = set('cells bits seed host_half core_half phase max_stall checks ticks modes states errors captures frozen_reads resets signature'.split())
+          fields = {
+              'equivalence': common | set('transactions manual_ticks auto_ticks held_cycles checkpoints words page_reads cell_reads window_reads group_reads level_reads lane_programs'.split()),
+              'isolation': common | set('requests responses forwarded simultaneous stalls releases empty_reads invalid_writes interleaved_reads changed_captures stalled_capture stalled_release words'.split())
+          }
+          prefixes = {'equivalence': 'PASS GAMMA_STREAM_EQ ', 'isolation': 'PASS STREAM_SNAPSHOT_ISOLATION '}
+          report = {'schema': 'frp.m32.gamma_stream_consistency.qualification.v1', 'status': 'RUNNING',
+                    'profiles': profiles, 'clocks': clocks, 'seeds': seeds, 'runs': [], 'edge_runs': [],
+                    'replay_pairs': 0, 'clock_signature_checks': 0, 'stall_signature_checks': 0, 'mutations': []}
+
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+
+          def save():
+              (out / 'results.json').write_text(json.dumps(report, indent=2) + '\n')
+
+
+          def execute(command, name, seconds, success=True):
+              command = ['timeout', '--kill-after=15s', f'{seconds}s'] + command
+              with (out / name).open('w') as log:
+                  log.write(shlex.join(command) + '\n')
+                  log.flush()
+                  result = subprocess.run(command, cwd=root, stdout=log, stderr=subprocess.STDOUT)
+              text = (out / name).read_text(errors='replace')
+              if success:
+                  require(result.returncode == 0, f'{name}: exit {result.returncode}')
+              return result.returncode, text
+
+
+          def parse(text, suite, cells, bits, seed, clock, stall=9):
+              lines = [line for line in text.splitlines() if line.startswith('PASS ')]
+              prefix = prefixes[suite]
+              require(len(lines) == 1 and lines[0].startswith(prefix), 'Missing or duplicate PASS record')
+              record = {}
+              for token in lines[0][len(prefix):].split():
+                  require(token.count('=') == 1, 'Malformed field')
+                  key, value = token.split('=')
+                  require(key in fields[suite] and key not in record, 'Unexpected or duplicate field')
+                  pattern = r'[0-9a-f]{16}' if key == 'signature' else r'0|[1-9][0-9]*'
+                  require(re.fullmatch(pattern, value), 'Invalid field: ' + key)
+                  record[key] = value if key == 'signature' else int(value)
+              require(set(record) == fields[suite], 'Missing field')
+              expected = dict(zip(('host_half', 'core_half', 'phase'), clock))
+              expected.update(cells=cells, bits=bits, seed=seed, max_stall=stall, modes=7, states=31, resets=2)
+              if suite == 'equivalence':
+                  windows = {8: 1, 16: 1, 32: 2, 64: 5}[cells]
+                  levels, lanes = cells.bit_length()-1, cells//4
+                  expected.update(transactions=3295+37*cells+5*levels+8*windows+8*lanes, ticks=48,
+                                  manual_ticks=24, auto_ticks=24, errors=1028, checkpoints=2, words=1248,
+                                  captures=4, frozen_reads=130, page_reads=1280, cell_reads=30*cells,
+                                  window_reads=7*windows, group_reads=cells-1, level_reads=4*levels, lane_programs=lanes)
+                  require(record['held_cycles'] == 0 if stall == 0 else record['held_cycles'] > 0,
+                          'Missing equivalence stall coverage')
+              else:
+                  expected.update(requests=1646, responses=1646, forwarded=1646, errors=174,
+                                  simultaneous=1644, ticks=45, captures=11, releases=4, frozen_reads=364,
+                                  empty_reads=156, invalid_writes=18, interleaved_reads=75, words=624)
+                  for key in ('stalls', 'changed_captures', 'stalled_capture', 'stalled_release'):
+                      require(record[key] > 0, 'Missing isolation activity: ' + key)
+              for key, value in expected.items():
+                  require(record[key] == value, f'{suite}: {key} expected {value}, got {record[key]}')
+              require(record['checks'] > 0, 'Missing comparisons')
+              return record
+
+
+          def source_hashes():
+              paths = [root / workflow]
+              paths += [p for directory in directories for p in (root / directory).rglob('*')
+                        if p.is_file() and p.suffix in ('.sv', '.svh', '.v', '.mem')]
+              return {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(paths)}
+
+
+          def build(scratch, suite, cells, bits, tag, mutation=None):
+              directory = scratch / tag
+              directory.mkdir()
+              top = tops[suite]
+              tb = top + '.sv'
+              shutil.copyfile(root / 'fpga/m32_csr' / tb, directory / tb)
+              if mutation is not None:
+                  path, changed = mutation
+                  (directory / Path(path).name).write_text(changed)
+              obj = directory / 'obj'
+              command = ['verilator-cli', '--cc', '--main', '--exe', '--timing', '--assert',
+                         '--unroll-count', '1', '--output-groups', '32', '--output-split', '10000',
+                         '--output-split-cfuncs', '0', '--top-module', top, '--verilate-jobs', '1',
+                         '-Wno-fatal', '-I' + str(directory)]
+              command += ['-I' + str(root / item) for item in directories]
+              command += ['--Mdir', str(obj), f'-GCELLS={cells}', f'-GCOUNT_BITS={bits}', str(directory / tb)]
+              execute(command, tag + '-generate.log', 1800)
+              make = ['make', '-C', str(obj), '-f', 'V' + top + '.mk',
+                      'VK_PCH_I_FAST=', 'VK_PCH_I_SLOW=', 'CXXFLAGS=--std=c++20 -DVL_TIME_CONTEXT']
+              if suite == 'equivalence' and cells == 64:
+                  # Compile the large timed driver separately; retain optimized core objects.
+                  drivers = sorted(obj.glob('V' + top + '___024root__*.cpp'))
+                  drivers = [p.stem + '.o' for p in drivers if not p.stem.endswith('__Slow')]
+                  require(drivers, 'Timed driver sources absent')
+                  execute(make + ['-j', '1', 'OPT_FAST=-O0'] + drivers, tag + '-driver.log', 1800)
+              execute(make + ['-j', '2', 'OPT_FAST=-O1'], tag + '-build.log', 1800)
+              binary = obj / ('V' + top)
+              binary.chmod(binary.stat().st_mode | 0o111)
+              return directory, str(binary)
+
+
+          def arguments(binary, seed, clock, stall=9):
+              h, c, phase = clock
+              return [binary, f'+seed={seed}', f'+MAX_STALL={stall}',
+                      f'+HOST_HALF={h}', f'+CORE_HALF={c}', f'+PHASE={phase}']
+
+
+          def mutation_diagnostic(code, text, pattern):
+              match = re.search(r'\b(?:' + pattern + r')\b', text)
+              require(code in (1, 134, -6) and match is not None and
+                      not any(line.startswith('PASS ') for line in text.splitlines()) and
+                      'TIMEOUT' not in text and 'WATCHDOG' not in text, 'Expected runtime diagnostic absent')
+              return match[0]
+
+
+          def main():
+              require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch', 'Manual execution required')
+              sha = subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
+              require(sha == os.environ['GITHUB_SHA'], 'Checked-out commit mismatch')
+              report['commit'] = sha
+              hashes = source_hashes()
+              (out / 'source_sha256.json').write_text(json.dumps(hashes, indent=2) + '\n')
+              with zipfile.ZipFile(out / 'tested_sources.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
+                  for path in hashes:
+                      archive.write(root / path, path)
+              with tempfile.TemporaryDirectory(prefix='frp119-', dir=os.environ['RUNNER_TEMP']) as temporary:
+                  scratch = Path(temporary)
+                  for suite in tops:
+                      for cells, bits in profiles[suite]:
+                          tag = f'{suite}-cells-{cells}-bits-{bits}'
+                          directory, binary = build(scratch, suite, cells, bits, tag)
+                          signatures = {}
+                          baseline = None
+                          selected_clocks = clocks if (cells, bits) == (8, 3) else clocks[:1]
+                          for clock in selected_clocks:
+                              timing = '-'.join(map(str, clock))
+                              for seed in seeds:
+                                  repeated = []
+                                  for replay in (1, 2):
+                                      label = f'{tag}-clock-{timing}-seed-{seed}-replay-{replay}'
+                                      _, text = execute(arguments(binary, seed, clock), label + '.log', 1200)
+                                      record = parse(text, suite, cells, bits, seed, clock)
+                                      repeated.append(record)
+                                      report['runs'].append({'suite': suite, 'replay': replay,
+                                                             'log': label + '.log', 'record': record})
+                                      save()
+                                  require(repeated[0] == repeated[1], 'Replay mismatch: ' + label)
+                                  report['replay_pairs'] += 1
+                                  if seed in signatures:
+                                      require(signatures[seed] == record['signature'], 'Clock signature mismatch: ' + label)
+                                      report['clock_signature_checks'] += 1
+                                  else:
+                                      signatures[seed] = record['signature']
+                                  if seed == 76 and clock == clocks[0]:
+                                      baseline = record
+                                  save()
+                                  print('PASS ' + label + ': identical replays', flush=True)
+                          if (cells, bits) == (8, 3):
+                              ignored = {'max_stall', 'checks', 'held_cycles', 'stalls', 'stalled_capture', 'stalled_release'}
+                              for stall in ((0, 31) if suite == 'equivalence' else (1, 31)):
+                                  label = f'{suite}-stall-{stall}'
+                                  _, text = execute(arguments(binary, 76, clocks[0], stall), label + '.log', 1200)
+                                  record = parse(text, suite, cells, bits, 76, clocks[0], stall)
+                                  require({k: v for k, v in record.items() if k not in ignored} ==
+                                          {k: v for k, v in baseline.items() if k not in ignored}, 'Stall-dependent result')
+                                  report['edge_runs'].append({'suite': suite, 'log': label + '.log', 'record': record})
+                                  report['stall_signature_checks'] += 1
+                                  save()
+                          shutil.rmtree(directory)
+
+                  stream = 'fpga/m32_csr/frp_m32_internal_gamma_observed_csr_cdc_stream_top.sv'
+                  snapshot = 'rtl/m32/frp_m32_boundary_snapshot_csr.sv'
+                  mutations = (
+                      ('mask_write_msb', 'equivalence', stream, '.csr_wdata(request_wdata_q),',
+                       ".csr_wdata(request_wdata_q & 32'h7fffffff),", r'STATE_EQUIVALENCE:frequency_load_q'),
+                      ('replace_phase_load', 'equivalence', stream, '.csr_wdata(request_wdata_q),',
+                       ".csr_wdata((request_write_q && request_addr_q==0 && request_wdata_q==8) ? 32'd4 : request_wdata_q),",
+                       r'STATE_EQUIVALENCE:phase_word_q'),
+                      ('truncate_cell_selector', 'equivalence', stream, '.csr_wdata(request_wdata_q),',
+                       ".csr_wdata((request_write_q && request_addr_q==9'h018) ? {30'd0,request_wdata_q[1:0]} : request_wdata_q),",
+                       r'STATE_EQUIVALENCE:phase_load_q'),
+                      ('live_payload', 'isolation', snapshot, 'csr_rdata = snapshot_words_q[',
+                       'csr_rdata = capture_words[', r'SNAPSHOT_ISOLATION'),
+                      ('ignore_release', 'isolation', snapshot, 'end else if (release_accept) begin',
+                       "end else if (release_accept && 1'b0) begin", r'SNAPSHOT_ISOLATION'),
+                      ('partial_capture', 'isolation', snapshot, 'snapshot_words_q <= capture_words;',
+                       'snapshot_words_q[31:0] <= capture_words[31:0];', r'SNAPSHOT_ISOLATION')
+                  )
+                  for name, suite, path, before, after, pattern in mutations:
+                      original = (root / path).read_text()
+                      require(original.count(before) == 1, 'Mutation anchor mismatch: ' + name)
+                      changed = original.replace(before, after)
+                      (out / (name + '.sv')).write_text(changed)
+                      directory, binary = build(scratch, suite, 8, 3, name, (path, changed))
+                      code, text = execute(arguments(binary, 76, clocks[0]), name + '-run.log', 1200, False)
+                      item = {'name': name, 'suite': suite, 'detected': False, 'exit_code': code,
+                              'source': path, 'source_sha256': hashlib.sha256(changed.encode()).hexdigest()}
+                      report['mutations'].append(item)
+                      save()
+                      item.update(diagnostic=mutation_diagnostic(code, text, pattern), detected=True)
+                      save()
+                      print('DETECTED ' + name, flush=True)
+                      shutil.rmtree(directory)
+
+              require(source_hashes() == hashes, 'Original sources changed')
+              require(len(report['runs']) == 60 and
+                      sum(x['suite'] == 'equivalence' for x in report['runs']) == 28 and
+                      sum(x['suite'] == 'isolation' for x in report['runs']) == 32 and
+                      len(report['edge_runs']) == 4 and report['replay_pairs'] == 30 and
+                      report['clock_signature_checks'] == 8 and report['stall_signature_checks'] == 4 and
+                      len(report['mutations']) == 6 and all(x['detected'] for x in report['mutations']),
+                      'Qualification matrix incomplete')
+              records = [item['record'] for item in report['runs'] + report['edge_runs']]
+              report.update(comparisons=sum(r['checks'] for r in records),
+                            transactions=sum(r.get('transactions', r.get('requests', 0)) for r in records),
+                            accepted_ticks=sum(r['ticks'] for r in records), expected_csr_errors=sum(r['errors'] for r in records))
+              require(report['transactions'] == 178872 and report['accepted_ticks'] == 2970 and
+                      report['expected_csr_errors'] == 36756, 'Qualification totals mismatch')
+              report['status'] = 'PASS'
+
+
+          save()
+          try:
+              main()
+          except BaseException as error:
+              report['status'] = 'FAIL'
+              report['error'] = f'{type(error).__name__}: {error}'
+              raise
+          finally:
+              save()
+              summary = [
+                  '## FRP M32 Gamma Stream Consistency Qualification', '',
+                  f"Result: **{report['status']}**", '', f"Commit: `{report.get('commit', 'unavailable')}`", '',
+                  'Equivalence: stream versus direct CSR, complete responses and settled architectural state.',
+                  'Isolation: captured recorder model, all 26 words across 11 generations, queued capture/release.',
+                  'Common profiles (cells / counter bits): 8/3, 8/64, 16/64, 32/64, 64/64; isolation also 8/1.',
+                  'Clock half periods / phase (ns): 5/7/1; additionally 3/11/4 and 13/2/3 for 8/3.',
+                  'Seeds: 0 and 76; two identical replays per suite/profile/timing/seed.',
+                  'Stall edges at 8/3, seed 76, timing 5/7/1: equivalence 0/31; isolation 1/31.',
+                  'Modes: free, 7/1 and 1/7; checkpoint loading, frozen data and reset behavior.', '',
+                  f"Matrix executions: {len(report['runs'])}/60; stall executions: {len(report['edge_runs'])}/4.",
+                  f"Matching replay pairs: {report['replay_pairs']}/30.",
+                  f"Cross-clock signature comparisons: {report['clock_signature_checks']}/8.",
+                  f"Stall signature comparisons: {report['stall_signature_checks']}/4.", '',
+                  '| Mutation | Runtime failure detected |', '| --- | --- |'
+              ]
+              for item in report['mutations']:
+                  summary.append(f"| {item['name']} | {item['detected']} |")
+              if report['status'] == 'PASS':
+                  summary += ['', f"Comparisons: {report['comparisons']}.", f"Transactions: {report['transactions']}.",
+                              f"Accepted ticks: {report['accepted_ticks']}.", f"Expected CSR errors: {report['expected_csr_errors']}."]
+              if 'error' in report:
+                  summary += ['', 'Failure details: results.json and the named artifact log.']
+              summary += ['', 'One artifact contains logs, toolchain, source hashes, tested sources,',
+                          'mutation copies, JSON results and this summary.', '']
+              (out / 'summary.md').write_text('\n'.join(summary))
+          PY
+
+      - name: Publish Actions summary
+        if: always()
+        run: |
+          mkdir -p bundle
+          if [ ! -f bundle/summary.md ]; then
+            printf '%s\n' 'Qualification stopped before the final report; inspect the step logs.' > bundle/summary.md
+          fi
+          cat bundle/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload one combined artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-119-gamma-stream-consistency-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bundle/
+          if-no-files-found: error
+          retention-days: 14
