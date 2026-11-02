@@ -1,0 +1,195 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 121 - FRP M31 Lane and Capacity Qualification
+run-name: '121 - FRP Arbitration | 2 suites, 40 executions, 6 mutations @ ${{ github.sha }}'
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install simulator
+        run: |
+          set -euo pipefail
+          mkdir -p bundle
+          python -m pip install 'verilator==5.48.0'
+          { python --version; verilator-cli --version; g++ --version; make --version; } > bundle/toolchain.txt
+      - name: Qualify both arbitration stages
+        shell: bash
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python -u - <<'PY'
+          import hashlib, json, os, re, shlex, shutil, subprocess, tempfile, zipfile
+          from pathlib import Path
+
+          root = Path.cwd()
+          rtl = root / 'rtl/m31'
+          out = root / 'bundle'
+          out.mkdir(exist_ok=True)
+          profiles = (8, 9, 16, 32, 64)
+          workflow = '.github/workflows/frp-121-m31-lane-capacity-qualification.yml'
+          suites = {
+              'lane': ('frp_m31_lane_partition_tb', 'frp_m31_request_lanes', 'LANE_PARTITION'),
+              'capacity': ('frp_m31_capacity_prefix_tb', 'frp_m31_capacity_guard', 'CAPACITY_PREFIX'),
+          }
+          hashes = {
+              'frp_m31_lane_partition_tb': 'c294dabb7c533b2539aa27a6fa9bdfb0a54ee7e57371f5904503b4542f4d346d',
+              'frp_m31_capacity_prefix_tb': '5a736978e029898914f8cd01bb5b834498b50592f9e483146b900c9f241f4056',
+              'frp_m31_request_lanes': '32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109',
+              'frp_m31_capacity_guard': 'd0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123',
+              'frp_m31_pkg': '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94',
+          }
+          # Each digest covers both complete reference records, in seed order 0, 76.
+          golden = {
+              'lane': (
+                  'b011e15f7281a29ff4e9588878279dba233b3dc929407d1d8a298e197ce4fe73',
+                  '623808e760791bf8b5ca4e0a486a9c97f9a6ce1f1cc3c183f107acbfa9c59770',
+                  'cab536014c83f54360cc1f54b82187b24699672ca8374679695ecc183c3cdda2',
+                  '9e582d7417934ce581c5bf8639e378647380a7e8648a97e9ca23b2bbaacb3d34',
+                  'c2fe516651cedf79efa49022cb155bf15e12cf7c9cd9981598f868662b2ce56e'),
+              'capacity': (
+                  '0f70f198e493ad522c7e6a17853e7eca84fc4f93129fae7edc3529afa5b4cf03',
+                  '809b8023829a6a11ace0837e60d9120f548efbd2ddcf237150c923e115df39c1',
+                  '104c71f76afad572450097abf119a8d97893c9d8dc20c63d995a74c7612386be',
+                  'e718bc58fd39d4957fea0f1969f3b9b845b696bc6657f7874c676bd25270640d',
+                  '2a7d724f8104d5d443543ee9a681cd87392577c1f76e93111eb0ea00beacc0c4'),
+          }
+          mutations = (
+              ('rejected_claims_cell','lane',8,'accepted_cell_mask\n                            & lane_cell_mask',
+               '(accepted_cell_mask | rejected_cell_mask)\n                            & lane_cell_mask'),
+              ('ignore_pending','lane',8,'lane_pending_busy_w[lane_index]\n                    ) begin',
+               "1'b0\n                    ) begin"),
+              ('address_off_by_one','lane',9,'lane_element_w[lane_index] >= CELLS;',
+               'lane_element_w[lane_index] > CELLS;'),
+              ('reverse_pending','capacity',8,'int element_index = 0;\n            element_index < CELLS;\n            element_index = element_index + 1',
+               'int element_index = CELLS-1;\n            element_index >= 0;\n            element_index = element_index - 1'),
+              ('deny_free_hold','capacity',8,'if (class_same_state) begin\n                        request_accept_capacity',
+               'if (class_same_state && capacity_available) begin\n                        request_accept_capacity'),
+              ('one_too_many','capacity',8,'(accepted_changes < CAPACITY_LIMIT);\n\n            if (valid_cell)',
+               '(accepted_changes <= CAPACITY_LIMIT);\n\n            if (valid_cell)'),
+          )
+          report = dict(schema='frp.m31.lane_capacity.qualification.v1', status='RUNNING',
+                        runs=[], replay_pairs=0, profile_digests={}, detected=[])
+
+          def need(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def digest(data):
+              return hashlib.sha256(data).hexdigest()
+
+          def execute(cmd, tag, seconds, positive=True):
+              cmd = ['timeout', '--kill-after=10s', f'{seconds}s', *map(str, cmd)]
+              log = out / (tag + '.log')
+              with log.open('w') as stream:
+                  stream.write(shlex.join(cmd) + '\n'); stream.flush()
+                  p = subprocess.run(cmd, stdout=stream, stderr=subprocess.STDOUT)
+              if positive:
+                  need(p.returncode == 0, f'{tag}: exit {p.returncode}')
+              return p.returncode, log.read_text(errors='replace')
+
+          def build(stage, suite, cells, tag, change=None):
+              top, dut, _ = suites[suite]
+              for name in (top, dut, 'frp_m31_pkg'):
+                  shutil.copy(rtl / (name+'.sv'), stage)
+              if change:
+                  path = stage / (dut+'.sv'); original = path.read_text()
+                  old, new = change
+                  need(original.count(old) == 1, tag+': mutation anchor mismatch')
+                  path.write_text(original.replace(old, new))
+                  shutil.copy(path, out / (tag+'.sv'))
+              obj = stage / 'obj'
+              execute(['verilator-cli','--cc','--main','--exe','--timing','--assert','--unroll-count','1',
+                       '-Wno-fatal','--top-module',top,'-I'+str(stage),'--Mdir',obj,f'-GCELLS={cells}',
+                       stage/(top+'.sv')], tag+'-generate', 600)
+              execute(['make','-C',obj,'-f','V'+top+'.mk','-j','2','VK_PCH_I_FAST=','VK_PCH_I_SLOW=',
+                       'CXXFLAGS=--std=c++20 -DVL_TIME_CONTEXT','OPT_FAST=-O1'], tag+'-build', 900)
+              return obj / ('V'+top)
+
+          def record(text, suite, cells, seed):
+              lines = [s for s in text.splitlines() if s.startswith('PASS ')]
+              prefix = 'PASS '+suites[suite][2]+' '
+              need(len(lines)==1 and lines[0].startswith(prefix), 'Missing or duplicate PASS')
+              result = {}
+              for pair in lines[0][len(prefix):].split():
+                  key, value = pair.split('=')
+                  fmt = r'[0-9a-f]{16}' if key=='signature' else r'0|[1-9][0-9]*'
+                  need(key not in result and re.fullmatch(fmt,value), 'Malformed PASS field: '+key)
+                  result[key] = value
+              need(result.get('cells')==str(cells) and result.get('seed')==str(seed), 'Wrong profile')
+              return result
+
+          try:
+              sha = subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+              need(os.environ['GITHUB_EVENT_NAME']=='workflow_dispatch' and sha==os.environ['GITHUB_SHA'],
+                   'Manual run on the selected commit required')
+              report['commit'] = sha
+              manifest = {}
+              for name, want in hashes.items():
+                  path = rtl/(name+'.sv')
+                  need(path.is_file(), 'Missing prerequisite: '+str(path.relative_to(root)))
+                  actual = digest(path.read_bytes()); manifest[str(path.relative_to(root))] = actual
+                  need(actual==want, 'Qualified source mismatch: '+name)
+              manifest[workflow] = digest((root/workflow).read_bytes())
+              (out/'source_sha256.json').write_text(json.dumps(manifest,indent=2)+'\n')
+              with zipfile.ZipFile(out/'tested_sources.zip','w',zipfile.ZIP_DEFLATED) as archive:
+                  for path in manifest: archive.write(root/path,path)
+              for suite in suites:
+                  for i,cells in enumerate(profiles):
+                      tag = f'{suite}-{cells}'; records = []
+                      with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as tmp:
+                          exe = build(Path(tmp),suite,cells,tag)
+                          for seed in (0,76):
+                              pair = []
+                              for replay in (1,2):
+                                  label = f'{tag}-{seed}-{replay}'
+                                  _,text = execute([exe,f'+SEED={seed}'],label,180)
+                                  item = record(text,suite,cells,seed); pair.append(item)
+                                  report['runs'].append(dict(suite=suite,replay=replay,log=label+'.log',record=item))
+                              need(pair[0]==pair[1], label+': replay mismatch')
+                              report['replay_pairs'] += 1; records.append(pair[0])
+                      actual = digest(json.dumps(records,sort_keys=True,separators=(',',':')).encode())
+                      report['profile_digests'][tag] = actual
+                      need(actual==golden[suite][i], tag+': reference records differ')
+                      print('PASS',tag,flush=True)
+              for tag,suite,cells,old,new in mutations:
+                  with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as tmp:
+                      exe = build(Path(tmp),suite,cells,tag,(old,new))
+                      code,text = execute([exe,'+SEED=76'],tag+'-run',180,False)
+                  marker = 'LANE_PARTITION winner' if suite=='lane' else 'CAPACITY_PREFIX rank'
+                  line = next((s for s in text.splitlines() if re.search(r'%(?:Fatal|Error):',s) and marker in s),None)
+                  need(code in (1,134,-6) and line and not any(s.startswith('PASS ') for s in text.splitlines()),
+                       tag+': expected runtime failure absent')
+                  report['detected'].append(dict(mutation=tag,cells=cells,exit_code=code,diagnostic=line))
+                  print('DETECTED',tag,flush=True)
+              need(all(digest((root/p).read_bytes())==h for p,h in manifest.items()), 'Source changed')
+              need((len(report['runs']),report['replay_pairs'],len(report['detected']))==(40,20,6), 'Incomplete matrix')
+              report['status'] = 'PASS'
+          except Exception as exc:
+              report.update(status='FAIL',error=str(exc)); raise
+          finally:
+              (out/'results.json').write_text(json.dumps(report,indent=2)+'\n')
+              summary = (f"## FRP M31 Lane and Capacity Qualification\n\nResult: **{report['status']}**\n\n"
+                         f"Commit: `{report.get('commit','unavailable')}`\n\nExecutions: {len(report['runs'])}/40; "
+                         f"matching replay pairs: {report['replay_pairs']}/20; detected mutations: {len(report['detected'])}/6.\n")
+              (out/'summary.md').write_text(summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f: f.write(summary)
+          PY
+      - name: Upload one combined artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-121-lane-capacity-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bundle/
+          if-no-files-found: error
+          retention-days: 14
