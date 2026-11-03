@@ -1,0 +1,168 @@
+name: 124 - FRP M31 Route Isolation Qualification
+run-name: '124 - FRP Route Isolation | 2 suites, 32 executions, 6 mutations @ ${{ github.sha }}'
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install simulator
+        run: |
+          mkdir -p bundle
+          python -m pip install 'verilator==5.48.0'
+          { python --version; verilator-cli --version; g++ --version; } > bundle/toolchain.txt
+      - name: Qualify writeback isolation and pending ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python -u - <<'PY'
+          import hashlib, json, os, re, shutil, subprocess, tempfile, zipfile
+          from concurrent.futures import ThreadPoolExecutor
+          from pathlib import Path
+
+          root = Path.cwd()
+          rtl = root / 'rtl/m31'
+          out = root / 'bundle'
+          out.mkdir(exist_ok=True)
+          workflow = '.github/workflows/frp-124-m31-route-isolation-qualification.yml'
+          suites = {
+              'W': ('frp_m31_writeback_isolation_tb', 'frp_m31_state_update'),
+              'P': ('frp_m31_pending_ownership_tb', 'frp_m31_pending_routes'),
+          }
+          pins = {
+              'frp_m31_writeback_isolation_tb': '065a7c35994b646b532e1ef6f8b058ae96b6003f03e825b5564ef28054c74b00',
+              'frp_m31_pending_ownership_tb': '6c6abfffe4ae761af58e7875b529d360381d5cfe15b64dbc2fd905f47307e4d4',
+              'frp_m31_state_update': 'ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90',
+              'frp_m31_pending_routes': '18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411',
+              'frp_m31_pkg': '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94',
+          }
+          sizes, seeds = (9,16,32,64), (0,76)
+          golden = {
+              'W': ('69687b11a0c73325','a1ea36b5a0c73325','633cb392a0c73325','b493861aa0c73325',
+                    '62f2b3d2a0c73325','fe0bcf7aa0c73325','7e02fd12a0c73325','fc8ce73aa0c73325'),
+              'P': ('d465ec119562a025','36ef5185132ec4e5','fa81d488f7f322bd','c8b789c9d1db74a5',
+                    '94f055114c36d4bd','d97351c2322922bd','3946dedd7d2678bd','cf796da4cc93d8a5'),
+          }
+          mutants = {
+              'ignore_capacity': ('W','&& capacity_accept_mask[element_index]',"&& 1'b1",'WRITEBACK decision'),
+              'ignore_tick': ('W','commit_allowed_w[element_index] =\n          tick_enable',
+                              "commit_allowed_w[element_index] =\n          1'b1",'WRITEBACK decision'),
+              'ignore_direct_flag': ('W','actual_direct_mask[element_index]',"1'b0",'WRITEBACK missing diagnostic'),
+              'overwrite_slot': ('P','!route_slot_free',"1'b0",'PENDING ownership phase=3 '),
+              'retire_nonzero': ('P','completion_requested && completion_legal',
+                                 'completion_requested && route_active','PENDING ownership phase=4 '),
+              'collapse_collisions': ('P','queue_overflow_events + COUNTER_ONE;',
+                                      'COUNTER_ONE;','PENDING accounting phase=3 '),
+          }
+
+          def need(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def call(command, label, limit):
+              with (out/(label+'.log')).open('w') as log:
+                  return subprocess.run(['timeout','-k','10s',str(limit),*map(str,command)],
+                                        stdout=log, stderr=subprocess.STDOUT).returncode
+
+          def job(spec):
+              suite, n, mutation = spec
+              top, dut = suites[suite]
+              label = mutation or f'{suite}-{n}'
+              with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as td:
+                  stage = Path(td)
+                  for name in (top,dut,'frp_m31_pkg'):
+                      shutil.copy(rtl/(name+'.sv'),stage)
+                  if mutation:
+                      _,old,new,marker = mutants[mutation]
+                      p = stage/(dut+'.sv')
+                      s = p.read_text()
+                      need(s.count(old)==1,label+': mutation anchor mismatch')
+                      p.write_text(s.replace(old,new))
+                      shutil.copy(p,out/(label+'.sv'))
+                  obj = stage/'obj'
+                  cmd = ['verilator-cli','--binary','--timing','--assert','-j','2',
+                         '-Wno-fatal','-Wno-PINMISSING','--top-module',top,f'-GCELLS={n}',
+                         '-I'+str(stage),'--Mdir',obj,'-MAKEFLAGS',
+                         'VK_PCH_I_FAST= VK_PCH_I_SLOW= CXXFLAGS=--std=c++20',stage/(top+'.sv')]
+                  need(call(cmd,label+'-build',900)==0,label+': build failed')
+                  exe = obj/('V'+top)
+                  if mutation:
+                      rc = call([exe,'+SEED=76'],label,120)
+                      log = (out/(label+'.log')).read_text(errors='replace')
+                      hit = next((s for s in log.splitlines() if re.search(r'%(?:Fatal|Error):',s) and marker in s),None)
+                      need(rc in (1,134,-6) and hit and not re.search(r'^PASS ',log,re.M),label+': wrong failure')
+                      print('DETECTED',label,flush=True)
+                      return dict(mutation=label,exit_code=rc,diagnostic=hit)
+                  pairs = []
+                  for j,seed in enumerate(seeds):
+                      sig = golden[suite][2*sizes.index(n)+j]
+                      if suite=='W':
+                          expected = f'PASS WRITEBACK_ISOLATION cells={n} seed={seed} cases=12288 probe_writes=24 isolated_writes=2288'
+                      else:
+                          expected = f'PASS PENDING_OWNERSHIP cells={n} seed={seed} scenarios={2*n} checks={12*n}'
+                      records = []
+                      for replay in (1,2):
+                          tag = f'{label}-{seed}-{replay}'
+                          need(call([exe,f'+SEED={seed}'],tag,120)==0,tag+': simulation failed')
+                          lines = (out/(tag+'.log')).read_text().splitlines()
+                          matches = [s for s in lines if s.startswith('PASS ')]
+                          need(matches==[expected+' signature='+sig],tag+': reference mismatch')
+                          records.append(matches[0])
+                      need(records[0]==records[1],label+': replay mismatch')
+                      pairs.append(dict(suite=suite,cells=n,seed=seed,records=records))
+                  print('PASS',label,flush=True)
+                  return pairs
+
+          report = dict(status='FAIL',pairs=[],detected=[])
+          try:
+              sha = subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+              need(os.environ['GITHUB_EVENT_NAME']=='workflow_dispatch' and sha==os.environ['GITHUB_SHA'],'Unexpected checkout')
+              report['commit'] = sha
+              manifest = {}
+              for name,want in pins.items():
+                  p = rtl/(name+'.sv')
+                  need(p.is_file(),'Missing prerequisite: '+str(p.relative_to(root)))
+                  need(hashlib.sha256(p.read_bytes()).hexdigest()==want,'Source mismatch: '+name)
+                  manifest[str(p.relative_to(root))] = want
+              manifest[workflow] = hashlib.sha256((root/workflow).read_bytes()).hexdigest()
+              (out/'source_sha256.json').write_text(json.dumps(manifest,indent=2)+'\n')
+              with zipfile.ZipFile(out/'tested_sources.zip','w',zipfile.ZIP_DEFLATED) as z:
+                  for path in manifest: z.write(root/path,path)
+              with ThreadPoolExecutor(max_workers=2) as pool:
+                  for pairs in pool.map(job,[(s,n,None) for s in suites for n in sizes]):
+                      report['pairs'].extend(pairs)
+                  for result in pool.map(job,[(v[0],9,m) for m,v in mutants.items()]):
+                      report['detected'].append(result)
+              need(len(report['pairs'])==16 and len(report['detected'])==6,'Incomplete qualification')
+              report['status'] = 'PASS'
+          except Exception as exc:
+              report['error'] = str(exc)
+              raise
+          finally:
+              (out/'results.json').write_text(json.dumps(report,indent=2)+'\n')
+              pairs = len(report['pairs'])
+              summary = (f"**M31 Route Isolation: {report['status']}**\n\n"
+                         f"Verified executions: {2*pairs}/32; replay pairs: {pairs}/16; "
+                         f"detected mutations: {len(report['detected'])}/6.\n")
+              (out/'summary.md').write_text(summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f: f.write(summary)
+          PY
+      - name: Upload combined qualification artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-124-route-isolation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bundle/
+          if-no-files-found: error
+          retention-days: 14
