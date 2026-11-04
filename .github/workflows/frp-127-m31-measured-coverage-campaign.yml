@@ -31,7 +31,7 @@ jobs:
           python -u - <<'PY'
           # Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
           import concurrent.futures, csv, hashlib, importlib.util, json, os, re
-          import shutil, subprocess, tempfile, threading
+          import shutil, subprocess, tempfile, threading, time
           from pathlib import Path
           from urllib.parse import unquote
 
@@ -91,9 +91,19 @@ jobs:
           def canonical(x):return json.dumps(x,sort_keys=True,separators=(',',':'),ensure_ascii=True)
           def execute(command,log,timeout):
            log.parent.mkdir(parents=True,exist_ok=True)
-           result=subprocess.run(command,cwd=ROOT,stdout=subprocess.PIPE,
-                                 stderr=subprocess.STDOUT,text=True,timeout=timeout)
+           started=time.monotonic()
+           try:
+            result=subprocess.run(command,cwd=ROOT,stdout=subprocess.PIPE,
+                                  stderr=subprocess.STDOUT,text=True,timeout=timeout)
+           except subprocess.TimeoutExpired as error:
+            output=error.stdout or ''
+            if isinstance(output,bytes):output=output.decode('utf-8',errors='replace')
+            log.write_text(output+f'\nTIMEOUT after {timeout} seconds\n')
+            raise RuntimeError(f'Command timed out after {timeout}s: {log.relative_to(ROOT)}') from error
            log.write_text(result.stdout)
+           log.with_suffix(log.suffix+'.timing.json').write_text(json.dumps({
+            'elapsed_seconds':round(time.monotonic()-started,3),
+            'timeout_seconds':timeout,'returncode':result.returncode},indent=2)+'\n')
            require(result.returncode==0,f'Command failed: {log.relative_to(ROOT)}')
            return log.read_text()
 
@@ -153,9 +163,12 @@ jobs:
            try:
             with tempfile.TemporaryDirectory(prefix='frp127-') as tmp:
              obj=Path(tmp)/'obj'
+             heavy=(suite=='thermal_topology_replay' and n==64)
+             optimization='-O2' if heavy else '-O0'
+             simulation_timeout=3600 if heavy else 600
              command=['verilator-cli','--binary','--timing','--assert','--coverage-line',
               '--unroll-count','1','--output-groups','0','-j','2','-Wno-fatal',
-              '-MAKEFLAGS','VK_PCH_I_FAST= VK_PCH_I_SLOW= CXXFLAGS=--std=c++20 OPT_FAST=-O0',
+              '-MAKEFLAGS','VK_PCH_I_FAST= VK_PCH_I_SLOW= CXXFLAGS=--std=c++20 OPT_FAST='+optimization,
               '-I'+str(ROOT/'rtl/m31'),'--top-module',top,'-GCELLS='+str(n),
               '--Mdir',str(obj),str(ROOT/'rtl/m31'/(top+'.sv'))]
              (folder/'command.json').write_text(json.dumps(command,indent=2))
@@ -167,7 +180,7 @@ jobs:
                run_id=f'{label}-seed-{seed}-replay-{replay}'
                cov=folder/(run_id+'.dat');log=folder/(run_id+'.log')
                output=execute([str(binary),f'+SEED={seed}',
-                              '+verilator+coverage+file+'+str(cov)],log,600)
+                              '+verilator+coverage+file+'+str(cov)],log,simulation_timeout)
                passes=[line for line in output.splitlines() if line.startswith('PASS ')]
                require(len(passes)==1 and passes[0].startswith('PASS '+SUITES[suite]+' '),
                        'Unexpected completion: '+run_id)
