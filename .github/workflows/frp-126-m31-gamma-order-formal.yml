@@ -1,0 +1,470 @@
+name: 126 - FRP M31 Gamma Order Formal
+run-name: '126 - FRP Gamma Order | 30 proofs, 40 witnesses, 6 mutations @ ${{ github.sha }}'
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install formal tools
+        run: |
+          mkdir -p bundle
+          python -m pip install 'yowasp-yosys==0.68.0.0.post1208' 'z3-solver==5.3.3.0'
+          python --version > bundle/toolchain.txt
+          yowasp-yosys -V >> bundle/toolchain.txt
+      - name: Prove gamma order and qualify the checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -u - <<'PY'
+          from dataclasses import dataclass
+          import z3
+
+          @dataclass
+          class Word:
+           e: object
+           lo: int
+           hi: int
+           w: int
+
+          class Lift:
+           def __init__(self):
+            self.memo={};self.constraints=[];self.leaves={}
+
+           def canon(self,a,signed=True):
+            m=2**a.w;h=m//2;lo,hi=(-h,h-1) if signed else (0,m-1)
+            if a.lo>=lo and a.hi<=hi:return a
+            # Shifts by whole moduli preserve every represented bit.
+            k=(a.lo-lo)//m
+            if a.hi-k*m<=hi:
+             return Word(a.e-k*m,a.lo-k*m,a.hi-k*m,a.w)
+            return Word((a.e-lo)%m+lo,lo,hi,a.w)
+
+           def get(self,x):
+            if x.get_id() in self.memo:return self.memo[x.get_id()]
+            op=x.decl().name();cs=x.children()
+            w=x.size() if z3.is_bv(x) else None
+            if z3.is_bv_value(x):
+             v=x.as_signed_long();r=Word(z3.IntVal(v),v,v,w)
+            elif z3.is_true(x) or z3.is_false(x):r=x
+            elif x.decl().kind()==z3.Z3_OP_UNINTERPRETED:
+             if z3.is_bv(x):
+              v=z3.Int('v'+str(x.get_id()))
+              lo=-2**(w-1);hi=2**(w-1)-1
+              self.constraints += [v>=lo,v<=hi]
+              r=Word(v,lo,hi,w);self.leaves[x]=v
+             elif z3.is_bool(x):
+              r=z3.Bool('b'+str(x.get_id()));self.leaves[x]=r
+             else:raise ValueError('non-scalar leaf')
+            elif op=='sign_extend':
+             a=self.canon(self.get(cs[0]));r=Word(a.e,a.lo,a.hi,w)
+            elif op=='concat':
+             # Recognize sign extension, including an arithmetic right-shift result.
+             parts=[]
+             def flatten(c):
+              if c.decl().name()=='concat':
+               for a in c.children():flatten(a)
+              else:parts.append(c)
+             flatten(x);tail=parts[-1]
+             msb=z3.simplify(z3.Extract(tail.size()-1,tail.size()-1,tail))
+             if all(p.size()==1 and z3.eq(z3.simplify(p),msb)
+                    for p in parts[:-1]):
+              a=self.canon(self.get(tail));r=Word(a.e,a.lo,a.hi,w)
+             else:
+              e=z3.IntVal(0);lo=hi=0
+              for c in cs:
+               a=self.canon(self.get(c),False);m=2**c.size()
+               e=e*m+a.e;lo=lo*m+a.lo;hi=hi*m+a.hi
+              r=Word(e,lo,hi,w)
+            elif op=='extract':
+             a=self.get(cs[0]);hi,lo=x.params();d=2**lo
+             r=Word(a.e/d,a.lo//d,a.hi//d,w)
+            elif op in ('bvadd','bvsub','bvmul','bvneg'):
+             a=[self.canon(self.get(c)) for c in cs]
+             if op=='bvadd':
+              r=Word(sum(v.e for v in a),sum(v.lo for v in a),
+                     sum(v.hi for v in a),w)
+             elif op=='bvsub':
+              r=Word(a[0].e-a[1].e,a[0].lo-a[1].hi,a[0].hi-a[1].lo,w)
+             elif op=='bvneg':
+              r=Word(-a[0].e,-a[0].hi,-a[0].lo,w)
+             else:
+              if not any(v.lo==v.hi for v in a):
+               raise ValueError('nonlinear multiplication')
+              limits=[v*u for v in (a[0].lo,a[0].hi)
+                      for u in (a[1].lo,a[1].hi)]
+              r=Word(a[0].e*a[1].e,min(limits),max(limits),w)
+            elif op in ('bvslt','bvsle','bvsgt','bvsge'):
+             a,b=[self.canon(self.get(c)) for c in cs]
+             if op=='bvslt':
+              r=z3.BoolVal(True) if a.hi<b.lo else z3.BoolVal(False) if a.lo>=b.hi else a.e<b.e
+             elif op=='bvsle':
+              r=z3.BoolVal(True) if a.hi<=b.lo else z3.BoolVal(False) if a.lo>b.hi else a.e<=b.e
+             elif op=='bvsgt':
+              r=z3.BoolVal(True) if a.lo>b.hi else z3.BoolVal(False) if a.hi<=b.lo else a.e>b.e
+             else:
+              r=z3.BoolVal(True) if a.lo>=b.hi else z3.BoolVal(False) if a.hi<b.lo else a.e>=b.e
+            elif op=='=':
+             a=[self.get(c) for c in cs]
+             r=self.canon(a[0]).e==self.canon(a[1]).e if z3.is_bv(cs[0]) else a[0]==a[1]
+            elif op=='if':
+             c=z3.simplify(self.get(cs[0]))
+             a,b=[self.get(v) for v in cs[1:]]
+             if z3.is_true(c):r=a
+             elif z3.is_false(c):r=b
+             elif w:
+              a=self.canon(a);b=self.canon(b)
+              r=Word(z3.If(c,a.e,b.e),min(a.lo,b.lo),max(a.hi,b.hi),w)
+             else:r=z3.If(c,a,b)
+            elif op=='not':r=z3.Not(self.get(cs[0]))
+            elif op=='and':r=z3.And([self.get(c) for c in cs])
+            elif op=='or':r=z3.Or([self.get(c) for c in cs])
+            else:raise ValueError('unsupported '+op)
+            if isinstance(r,Word):r.e=z3.simplify(r.e)
+            else:r=z3.simplify(r)
+            self.memo[x.get_id()]=r
+            return r
+
+          import hashlib, importlib.metadata, json, os, random, shutil, subprocess, time
+          from pathlib import Path
+
+          ROOT = Path.cwd()
+          OUT = ROOT / 'bundle'
+          OUT.mkdir(exist_ok=True)
+          TOP = 'frp_m31_gamma_order_formal'
+          WORKFLOW = '.github/workflows/frp-126-m31-gamma-order-formal.yml'
+          HARNESS = 'formal/m31/frp_m31_gamma_order_formal.sv'
+          DUT = 'rtl/m31/frp_m31_local_gamma_drift.sv'
+          PKG = 'rtl/m31/frp_m31_fixed_point_pkg.sv'
+          PINS = {
+           HARNESS: '3517d9bb537a18fe58553901f96f41bd34f406b2f7e40fd9d6c06069af9db57c',
+           DUT: '478882d4f6a2986f5079c88b444c7b007d68145d61e5150209cb0637f35b2ec0',
+           PKG: '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24',
+          }
+          PROPERTIES = (
+           'order_preserved',
+           'separation_nonincreasing',
+           'strict_contraction',
+          )
+          REPORT = {
+           'status': 'RUNNING',
+           'commit': os.getenv('GITHUB_SHA', 'local'),
+           'method': 'Yosys SMT-LIB cone; exact modular integer lifting; Z3',
+           'scope': 'Combinational all-state candidate updates; unrestricted retained words',
+           'checks': [],
+           'configurations': [],
+           'mutations': [],
+           'differential_checks': 0,
+          }
+
+          def require(ok, message):
+           if not ok:raise RuntimeError(message)
+
+          def save():
+           (OUT/'results.json').write_text(json.dumps(REPORT,indent=2)+'\n')
+
+          def digest(path):
+           return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          def query(text,name,width=None):
+           base=text+f'\n(declare-fun s () |{TOP}_s|)\n'
+           term=f'(|{TOP}_n {name}| s)'
+           if width is None:
+            return z3.parse_smt2_string(base+f'(assert {term})')[0]
+           return z3.parse_smt2_string(
+            base+f'(assert (= {term} (_ bv0 {width})))'
+           )[0].arg(0)
+
+          def solve(folder,label,goal,expected,lifted):
+           folder.mkdir(parents=True,exist_ok=True)
+           solver=z3.Solver()
+           solver.set(timeout=60000)
+           lift=Lift() if lifted else None
+           if lifted:
+            translated=lift.get(goal)
+            solver.add(*lift.constraints,translated)
+           else:solver.add(goal)
+           (folder/(label+'.smt2')).write_text(solver.to_smt2())
+           start=time.monotonic()
+           result=solver.check()
+           record={
+            'name': str(folder.relative_to(OUT)/label),
+            'result': str(result),
+            'expected': str(expected),
+            'seconds': round(time.monotonic()-start,4),
+            'engine': 'integer-lift' if lifted else 'original-bitvector',
+           }
+           REPORT['checks'].append(record)
+           save()
+           (folder/(label+'.log')).write_text(
+            json.dumps(record,indent=2)+'\n'+
+            (solver.reason_unknown() if result==z3.unknown else '')
+           )
+           print(record['name'],result,flush=True)
+           require(result==expected,f'{label}: expected {expected}, got {result}')
+           return solver,lift
+
+          def replay(folder,label,goal,solver,lift):
+           model=solver.model()
+           constraints=[]
+           values={}
+           for leaf,variable in lift.leaves.items():
+            value=model.eval(variable,model_completion=True)
+            if z3.is_bv(leaf):
+             n=value.as_long()
+             constraints.append(leaf==z3.BitVecVal(n,leaf.size()))
+             values[str(leaf)]={'signed':n,'width':leaf.size()}
+            else:
+             constraints.append(leaf==value)
+             values[str(leaf)]=str(value)
+           (folder/(label+'-counterexample.json')).write_text(
+            json.dumps(values,indent=2)
+           )
+           solve(folder,label+'-replay',z3.And(goal,*constraints),z3.sat,False)
+
+          def compare_samples(expression,cases=32):
+           lift=Lift()
+           converted=lift.get(expression)
+           rng=random.Random(76)
+           leaves=list(lift.leaves.items())
+           for case in range(cases):
+            bv_pairs=[]
+            int_pairs=[]
+            for leaf,variable in leaves:
+             if z3.is_bv(leaf):
+              w=leaf.size()
+              edge=[0,1,(1<<(w-1))-1,1<<(w-1),(1<<w)-1]
+              n=edge[case] if case<len(edge) else rng.getrandbits(w)
+              signed=n-(1<<w) if n>=(1<<(w-1)) else n
+              bv_pairs.append((leaf,z3.BitVecVal(n,w)))
+              int_pairs.append((variable,z3.IntVal(signed)))
+             else:
+              value=z3.BoolVal(bool(rng.getrandbits(1)))
+              bv_pairs.append((leaf,value))
+              int_pairs.append((variable,value))
+            actual=z3.simplify(z3.substitute(expression,*bv_pairs))
+            if isinstance(converted,Word):
+             integer=z3.simplify(
+              z3.substitute(converted.e,*int_pairs)
+             ).as_long()
+             require(
+              actual.as_long()==integer%(1<<converted.w),
+              'Bit-vector lift mismatch'
+             )
+             require(
+              converted.lo<=integer<=converted.hi,
+              'Lift interval mismatch'
+             )
+            else:
+             expected=z3.simplify(z3.substitute(converted,*int_pairs))
+             require(z3.eq(actual,expected),'Boolean lift mismatch')
+            REPORT['differential_checks']+=1
+
+          def build(label,cells,a,b,changed=None):
+           folder=OUT/label
+           for path in PINS:
+            destination=folder/path
+            destination.parent.mkdir(parents=True,exist_ok=True)
+            destination.write_bytes((ROOT/path).read_bytes())
+           if changed:
+            path,old,new=changed
+            p=folder/path
+            s=p.read_text()
+            require(s.count(old)==1,'Mutation anchor must occur once')
+            p.write_text(s.replace(old,new))
+           script=(
+            f'read_slang -j 1 --std 1800-2017 --top {TOP} '
+            f'-G CELLS={cells} -G LANE_A={a} -G LANE_B={b} '
+            f'-Irtl/m31 {HARNESS}; prep -top {TOP} -flatten; '
+            'async2sync; opt_clean; dffunmap; check -assert; '
+            'write_json model.json; write_smt2 -wires model.smt2;'
+           )
+           (folder/'build.ys').write_text(script+'\n')
+           run=subprocess.run(
+            ['yowasp-yosys','-Q','-T','-s','build.ys'],
+            cwd=folder,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=180,
+           )
+           (folder/'build.log').write_text(run.stdout)
+           require(run.returncode==0,f'{label}: Yosys failed; see build.log')
+           module=json.loads((folder/'model.json').read_text())['modules'][TOP]
+           require(
+            not any(c['type']=='$assume' for c in module['cells'].values()),
+            'Unexpected assumption in observed cone'
+           )
+           if not changed:
+            require(
+             sum(c['type']=='$mul' for c in module['cells'].values())==2,
+             'Both lane multipliers must remain in the observed cone'
+            )
+            require(
+             len(module['ports']['gamma_targets_q16']['bits'])==32*cells,
+             'Target bus width mismatch'
+            )
+           return folder,(folder/'model.smt2').read_text()
+
+          try:
+           REPORT['tools']={
+            p:importlib.metadata.version(p)
+            for p in ('yowasp-yosys','z3-solver')
+           }
+           require(
+            REPORT['tools']=={
+             'yowasp-yosys':'0.68.0.0.post1208',
+             'z3-solver':'5.3.3.0',
+            },
+            'Formal tool version mismatch'
+           )
+           for path,pin in PINS.items():
+            require((ROOT/path).is_file(),f'Missing prerequisite: {path}')
+            require(digest(ROOT/path)==pin,f'Source changed: {path}')
+           REPORT['sources']=PINS
+           shutil.copy2(ROOT/WORKFLOW,OUT/'workflow.yml')
+           REPORT['workflow_sha256']=digest(ROOT/WORKFLOW)
+
+           # Check lifting rules on small words and full-width edge/random samples.
+           for width in (2,4,8,32):
+            x,y=z3.BitVecs('x y',width)
+            expressions=[
+             x+y,x-y,-x,x*3,z3.Concat(x,y),z3.SignExt(3,x),
+             z3.Extract(width-1,1,x),z3.If(x<y,x,y),x<=y,x>=y,x==y,
+            ]
+            for expression in expressions:compare_samples(expression)
+
+           for cells in (8,9,16,32,64):
+            for a,b in ((0,cells-1),(cells//2,cells//2-1)):
+             label=f'cells-{cells}-lanes-{a}-{b}'
+             folder,text=build(label,cells,a,b)
+             for name,width in (
+              ('next_a',32),('next_b',32),('gap',64),('next_gap',64),
+             ):
+              compare_samples(query(text,name,width))
+             for name in PROPERTIES:
+              solve(folder,name,z3.Not(query(text,name)),z3.unsat,True)
+             witness=query(text,'witness',4)
+             for index in range(4):
+              solve(
+               folder,f'witness-{index}',
+               z3.Extract(index,index,witness)==1,z3.sat,False
+              )
+             REPORT['configurations'].append({
+              'cells':cells,'lane_a':a,'lane_b':b,
+             })
+             save()
+
+           coefficient="32'sd9830"
+           mutations=[
+            (
+             'zero-correlation',DUT,coefficient,
+             "32'sd0",'strict_contraction',
+            ),
+            (
+             'negative-correlation',DUT,coefficient,
+             "-32'sd9830",'separation_nonincreasing',
+            ),
+            (
+             'overshoot',DUT,coefficient,
+             "32'sd131072",'order_preserved',
+            ),
+            (
+             'tiny-correlation',DUT,coefficient,
+             "32'sd1",'strict_contraction',
+            ),
+            (
+             'six-unit-bound',HARNESS,
+             "distance_now < 64'sd7",
+             "distance_now < 64'sd6",
+             'strict_contraction',
+            ),
+            (
+             'frozen-noise',DUT,
+             '      thermal_gain = frp_m31_mul_q16(',
+             "      noise_d = 32'sd0;\n      thermal_gain = frp_m31_mul_q16(",
+             None,
+            ),
+           ]
+           for name,path,old,new,property_name in mutations:
+            folder,text=build(
+             'mutation-'+name,8,0,7,(path,old,new)
+            )
+            if property_name:
+             goal=z3.Not(query(text,property_name))
+             solver,lift=solve(
+              folder,'counterexample',goal,z3.sat,True
+             )
+             replay(folder,'counterexample',goal,solver,lift)
+            else:
+             witness=query(text,'witness',4)
+             solve(
+              folder,'blocked-witness-2',
+              z3.Extract(2,2,witness)==1,z3.unsat,False
+             )
+            REPORT['mutations'].append({'name':name,'detected':True})
+            save()
+
+           require(
+            len(REPORT['configurations'])==10
+            and len(REPORT['mutations'])==6,
+            'Incomplete qualification matrix'
+           )
+           REPORT['status']='PASS'
+           save()
+           print(
+            'PASS: 30 safety proofs, 40 witnesses, 6 detected mutations',
+            flush=True
+           )
+          except BaseException as error:
+           REPORT['status']='FAIL'
+           REPORT['error']=str(error)
+           save()
+           raise
+          finally:
+           (OUT/'summary.md').write_text(
+            '# FRP M31 Gamma Order Formal\n\n'
+            f"Status: **{REPORT['status']}**\n\n"
+            f"Commit: `{REPORT['commit']}`\n\n"
+            f"Completed configurations: {len(REPORT['configurations'])}/10\n\n"
+            f"Detected mutations: {len(REPORT['mutations'])}/6\n\n"
+            f"Differential translation checks: {REPORT['differential_checks']}\n\n"
+            'Scope: order, nonexpansion and strict contraction of candidate noise updates '
+            'for arbitrary retained states and equal selected targets.\n\n'
+            'The proof uses the Yosys SMT-LIB expressions with exact integer representatives '
+            'modulo each bit width, interval propagation and Z3. The artifact includes '
+            'the original bit-vector model, translated obligations, solver results, '
+            'source copies and replayed mutation counterexamples.\n'
+           )
+           (OUT/'manifest.json').write_text(
+            json.dumps({
+             str(p.relative_to(OUT)):digest(p)
+             for p in sorted(OUT.rglob('*'))
+             if p.is_file() and p.name!='manifest.json'
+            },indent=2)+'\n'
+           )
+          PY
+      - name: Publish summary
+        if: always()
+        run: |
+          if [ -f bundle/summary.md ]; then
+            cat bundle/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload one combined artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-126-gamma-order-formal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bundle/
+          if-no-files-found: error
+          retention-days: 30
