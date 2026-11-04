@@ -1,0 +1,279 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 127 - FRP M31 Measured Coverage Campaign
+run-name: '127 - FRP M31 Coverage | 12 suites, 58 builds, 232 executions @ ${{ github.sha }}'
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-127-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install simulator
+        run: |
+          python -m pip install 'verilator==5.48.0'
+      - name: Qualify and merge measured RTL coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python -u - <<'PY'
+          # Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+          import concurrent.futures, csv, hashlib, importlib.util, json, os, re
+          import shutil, subprocess, tempfile, threading
+          from pathlib import Path
+          from urllib.parse import unquote
+
+          ROOT=Path.cwd()
+          OUT=ROOT/'bundle127'
+          OUT.mkdir(exist_ok=True)
+          WORKFLOW='.github/workflows/frp-127-m31-measured-coverage-campaign.yml'
+          ANALYZER='verification/m32/frp_m32_coverage_union.py'
+          SIZES=(8,9,16,32,64)
+          SEEDS=(0,76)
+          def suite_sizes(suite):
+           return (8,16,32,64) if suite.startswith("thermal_") else SIZES
+          SUITES={
+           'thermal_topology_replay':'THERMAL_TOPOLOGY',
+           'thermal_equilibrium':'THERMAL_EQUILIBRIUM',
+           'lane_partition':'LANE_PARTITION',
+           'capacity_prefix':'CAPACITY_PREFIX',
+           'execution_polarity':'EXECUTION_POLARITY',
+           'execution_pause_window':'EXECUTION_PAUSE_WINDOW',
+           'execution_embedding':'EXECUTION_EMBEDDING',
+           'execution_service_width':'EXECUTION_SERVICE_WIDTH',
+           'writeback_isolation':'WRITEBACK_ISOLATION',
+           'pending_ownership':'PENDING_OWNERSHIP',
+           'gamma_settling':'GAMMA_SETTLING',
+           'gamma_symmetry':'GAMMA_SYMMETRY',
+          }
+          PINS = {
+            "rtl/m31/frp_m31_active_neutral.sv": "765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0",
+            "rtl/m31/frp_m31_capacity_guard.sv": "d0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123",
+            "rtl/m31/frp_m31_capacity_prefix_tb.sv": "5a736978e029898914f8cd01bb5b834498b50592f9e483146b900c9f241f4056",
+            "rtl/m31/frp_m31_execution_core.sv": "e516a5cd378bd2ddecdadc5abb13ddef26c63fafe5bda65b47a6bd859ca66f92",
+            "rtl/m31/frp_m31_execution_embedding_tb.sv": "62b42ae187cd895ff24bfc0613888bae98c444c91d5041a07f11bc3e0e9a7b82",
+            "rtl/m31/frp_m31_execution_pause_window_tb.sv": "299a0236275d3a1e9a25f1394aa0b636d8fc32a0174d533084fcb2103c68b022",
+            "rtl/m31/frp_m31_execution_polarity_tb.sv": "91d81ff9f3754e36f99cd7e8f281dca1a15cbb38cff14155c6be888d08f68774",
+            "rtl/m31/frp_m31_execution_service_width_tb.sv": "3466580c34e3c8f981dd902f7629f5a25f21eef073e60f2a9c05a93f19ccefe5",
+            "rtl/m31/frp_m31_fixed_point_pkg.sv": "6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24",
+            "rtl/m31/frp_m31_gamma_settling_tb.sv": "df61bb41b8432fe235b5478b9f18f66c5ae83347ee6d6d89a535a14a2c3b7a4b",
+            "rtl/m31/frp_m31_gamma_symmetry_tb.sv": "89a24eee07cd1e9f4e904476a695f803d698db17bfb3c10afe8d33392fd5dddb",
+            "rtl/m31/frp_m31_lane_partition_tb.sv": "c294dabb7c533b2539aa27a6fa9bdfb0a54ee7e57371f5904503b4542f4d346d",
+            "rtl/m31/frp_m31_local_gamma_drift.sv": "478882d4f6a2986f5079c88b444c7b007d68145d61e5150209cb0637f35b2ec0",
+            "rtl/m31/frp_m31_local_thermal_field.sv": "cb97c1bfeabbb2acaebf2f9644d484b2f7c5e995dbf1b70777f6bc2e7df9368e",
+            "rtl/m31/frp_m31_pending_ownership_tb.sv": "6c6abfffe4ae761af58e7875b529d360381d5cfe15b64dbc2fd905f47307e4d4",
+            "rtl/m31/frp_m31_pending_routes.sv": "18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411",
+            "rtl/m31/frp_m31_pkg.sv": "762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94",
+            "rtl/m31/frp_m31_request_lanes.sv": "32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109",
+            "rtl/m31/frp_m31_scheduler.sv": "fc9de24b41736e5c5a9f9e464318c80adbfda9dc8cc4362c0c55bfed403bf97f",
+            "rtl/m31/frp_m31_state_update.sv": "ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90",
+            "rtl/m31/frp_m31_thermal_equilibrium_tb.sv": "d5c574bf676aa37ecc1f7488a19c328aa53805e168bf7d0ccd23b271ba7cfce5",
+            "rtl/m31/frp_m31_thermal_topology_replay_tb.sv": "198c6ab08a75ea0cd87d8d04743d4bc398066972784988dc1c6b6cccb51bf21f",
+            "rtl/m31/frp_m31_writeback_isolation_tb.sv": "065a7c35994b646b532e1ef6f8b058ae96b6003f03e825b5564ef28054c74b00",
+            "verification/m32/frp_m32_coverage_union.py": "9901d3faa1302ca0f19b6223e420bf6ef24b61666e3980b4995f8116d393d0f1"
+          }
+
+          def require(ok,message):
+           if not ok:raise RuntimeError(message)
+          def digest(p):return hashlib.sha256(p.read_bytes()).hexdigest()
+          def canonical(x):return json.dumps(x,sort_keys=True,separators=(',',':'),ensure_ascii=True)
+          def execute(command,log,timeout):
+           log.parent.mkdir(parents=True,exist_ok=True)
+           result=subprocess.run(command,cwd=ROOT,stdout=subprocess.PIPE,
+                                 stderr=subprocess.STDOUT,text=True,timeout=timeout)
+           log.write_text(result.stdout)
+           require(result.returncode==0,f'Command failed: {log.relative_to(ROOT)}')
+           return log.read_text()
+
+          for name,expected in PINS.items():
+           require((ROOT/name).is_file(),f'Missing prerequisite: {name}')
+           require(digest(ROOT/name)==expected,f'Source changed: {name}')
+          commit=os.environ['GITHUB_SHA']
+          require(re.fullmatch('[0-9a-f]{40}',commit),'Full Git SHA required')
+          tool=subprocess.check_output(['verilator-cli','--version'],text=True).strip()
+          (OUT/'toolchain.txt').write_text(tool+'\n')
+          for name in PINS:
+           p=OUT/'sources'/name;p.parent.mkdir(parents=True,exist_ok=True)
+           shutil.copy2(ROOT/name,p)
+          shutil.copy2(ROOT/WORKFLOW,OUT/'workflow.yml')
+          source_digest=hashlib.sha256(canonical(PINS).encode()).hexdigest()
+          # Extend only the admitted cell-count list in the pinned analyzer copy.
+          original=(ROOT/ANALYZER).read_text()
+          anchor="run['cells'] in (8, 16, 32, 64)"
+          require(original.count(anchor)==1,'Analyzer cell-count guard changed')
+          adapted=OUT/'coverage_analyzer.py'
+          adapted.write_text(original.replace(anchor,"run['cells'] in (8, 9, 16, 32, 64)"))
+          (OUT/'analyzer-extension.json').write_text(json.dumps({
+           'source':ANALYZER,'source_sha256':PINS[ANALYZER],
+           'extension':'Admit CELLS=9; retain source-point identity and threshold rules',
+           'adapted_sha256':digest(adapted)},indent=2)+'\n')
+          spec=importlib.util.spec_from_file_location('frp_coverage',adapted)
+          analyzer=importlib.util.module_from_spec(spec);spec.loader.exec_module(analyzer)
+          lock=threading.Lock()
+          report={'status':'RUNNING','commit':commit,'tool':tool,'configurations':[],'failures':[]}
+          def checkpoint():
+           (OUT/'qualification.json').write_text(json.dumps(report,indent=2)+'\n')
+
+          def selected_files(coverage):
+           selected=set()
+           lines=coverage.read_text().splitlines()
+           require(lines and lines[0]=='# SystemC::Coverage-3','Coverage header missing')
+           for line in lines[1:]:
+            if not line.startswith("C '"):continue
+            payload,_=line[3:].rsplit("' ",1)
+            attributes=dict(tuple(map(unquote,item.split('\x02',1)))
+                            for item in payload[1:].split('\x01'))
+            if attributes.get('t') not in ('line','branch'):continue
+            path=(ROOT/attributes['f']).resolve()
+            if not path.is_relative_to(ROOT):continue
+            name=path.relative_to(ROOT).as_posix()
+            if analyzer.rtl_source(name):
+             require(name in PINS,'Unfingerprinted instrumented RTL: '+name)
+             selected.add(name)
+           require(selected,'No DUT coverage collected')
+           return sorted(selected)
+
+          def qualify(suite,n):
+           label=f'{suite}-{n}'
+           folder=OUT/'runs'/label;folder.mkdir(parents=True,exist_ok=True)
+           top='frp_m31_'+suite+'_tb'
+           runs=[]
+           try:
+            with tempfile.TemporaryDirectory(prefix='frp127-') as tmp:
+             obj=Path(tmp)/'obj'
+             command=['verilator-cli','--binary','--timing','--assert','--coverage-line',
+              '--unroll-count','1','--output-groups','0','-j','2','-Wno-fatal',
+              '-MAKEFLAGS','VK_PCH_I_FAST= VK_PCH_I_SLOW= CXXFLAGS=--std=c++20 OPT_FAST=-O0',
+              '-I'+str(ROOT/'rtl/m31'),'--top-module',top,'-GCELLS='+str(n),
+              '--Mdir',str(obj),str(ROOT/'rtl/m31'/(top+'.sv'))]
+             (folder/'command.json').write_text(json.dumps(command,indent=2))
+             execute(command,folder/'build.log',1200)
+             binary=obj/('V'+top);binary_hash=digest(binary)
+             for seed in SEEDS:
+              previous=None
+              for replay in range(2):
+               run_id=f'{label}-seed-{seed}-replay-{replay}'
+               cov=folder/(run_id+'.dat');log=folder/(run_id+'.log')
+               output=execute([str(binary),f'+SEED={seed}',
+                              '+verilator+coverage+file+'+str(cov)],log,600)
+               passes=[line for line in output.splitlines() if line.startswith('PASS ')]
+               require(len(passes)==1 and passes[0].startswith('PASS '+SUITES[suite]+' '),
+                       'Unexpected completion: '+run_id)
+               completion=passes[0]
+               require(f'cells={n} ' in completion and f'seed={seed} ' in completion,
+                       'Wrong runtime configuration: '+run_id)
+               require(not analyzer.FAILURE.search(output) and output.count('Verilog $finish')==1,
+                       'Incomplete simulation: '+run_id)
+               require(cov.is_file() and cov.stat().st_size>0,'Missing coverage: '+run_id)
+               fingerprint=(completion,digest(cov))
+               if previous is not None:
+                require(previous==fingerprint,'Semantic or coverage replay mismatch: '+run_id)
+               previous=fingerprint
+               runs.append(dict(id=run_id,cells=n,domain='m31-supplement',
+                configuration=dict(suite=suite,seed=seed,replay=replay,binary_sha256=binary_hash),
+                files=selected_files(cov),commit=commit,tool=tool,source_digest=source_digest,
+                coverage=cov.relative_to(OUT).as_posix(),coverage_sha256=digest(cov),
+                log=log.relative_to(OUT).as_posix(),log_sha256=digest(log),completion=completion))
+            with lock:
+             report['configurations'].append({'suite':suite,'cells':n,'runs':len(runs)})
+             checkpoint();print('PASS',label,'4 executions; exact replay',flush=True)
+            return runs
+           except Exception as error:
+            with lock:
+             report['failures'].append({'suite':suite,'cells':n,'error':str(error)})
+             checkpoint();print('FAIL',label,str(error),flush=True)
+            return []
+
+          try:
+           required=[f'{suite}-{n}-seed-{seed}-replay-{rep}'
+                     for suite in SUITES for n in suite_sizes(suite) for seed in SEEDS for rep in range(2)]
+           runs=[]
+           with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures=[pool.submit(qualify,suite,n) for suite in SUITES for n in suite_sizes(suite)]
+            for future in concurrent.futures.as_completed(futures):runs.extend(future.result())
+           require(not report['failures'],'Qualification failures; inspect qualification.json')
+           require(len(runs)==len(required)==232,'Incomplete execution matrix')
+           # Preserve native records and make source paths portable for artifact replay.
+           for run in runs:
+            cov=OUT/run['coverage'];raw=cov.with_suffix('.raw.dat')
+            shutil.copy2(cov,raw)
+            prefix='\x01f\x02'+str(ROOT)+'/'
+            data=cov.read_text()
+            require(prefix in data,'Expected source root absent from coverage')
+            cov.write_text(data.replace(prefix,'\x01f\x02'))
+            run['configuration']['raw_coverage']=raw.relative_to(OUT).as_posix()
+            run['configuration']['raw_coverage_sha256']=digest(raw)
+            run['coverage_sha256']=digest(cov)
+           manifest=dict(schema=analyzer.SCHEMA,commit=commit,tool=tool,sources=PINS,
+                         required_runs=required,runs=sorted(runs,key=lambda r:r['id']))
+           manifest_path=OUT/'inputs.json'
+           manifest_path.write_text(json.dumps(manifest,indent=2)+'\n')
+           result=analyzer.analyze(manifest_path,ROOT)
+           require(result==analyzer.analyze(manifest_path,OUT/'sources'),
+                   'Portable artifact replay differs from source-root analysis')
+           analyzer.write_report(result,OUT/'coverage')
+           by_id={r['id']:r['configuration']['suite'] for r in runs}
+           gains=[]
+           for group in result['groups']:
+            by_file={}
+            for point in group['points']:
+             key=(point['metadata']['f'],point['metadata']['t'])
+             entry=by_file.setdefault(key,{'covered':set(),'total':set(),'suites':{}})
+             entry['total'].add(point['id'])
+             if point['covered']:entry['covered'].add(point['id'])
+             for origin in point['origins']:
+              if origin['covered']:
+               entry['suites'].setdefault(by_id[origin['run']],set()).add(point['id'])
+            for (name,kind),entry in sorted(by_file.items()):
+             covered=len(entry['covered']);total=len(entry['total'])
+             best=max((len(v) for v in entry['suites'].values()),default=0)
+             gains.append(dict(cells=group['cells'],file=name,kind=kind,total=total,
+              covered=covered,percent=round(100*covered/total,3),best_single_suite=best,
+              additional_points=covered-best))
+           (OUT/'coverage'/'suite-contributions.json').write_text(json.dumps(gains,indent=2)+'\n')
+           summary=['# FRP M31 measured coverage campaign','',f'Commit: `{commit}`','',
+            '12 suites; 58 supported configurations; 2 seeds; 2 identical replays; 232 executions.','',
+            'Source-point union retains the existing coverage identity and threshold rules.',
+            'The denominator contains instrumented points in the selected RTL scope.',
+            'Additional points are measured against the best individual suite for each row.','',
+            '| Cells | RTL file | Kind | Covered/total | Percent | Additional points |',
+            '|---:|---|---|---:|---:|---:|']
+           for row in gains:
+            summary.append(f"| {row['cells']} | {row['file']} | {row['kind']} | "
+                           f"{row['covered']}/{row['total']} | {row['percent']} | {row['additional_points']} |")
+           (OUT/'summary.md').write_text('\n'.join(summary)+'\n')
+           report['status']='PASS';report['executions']=len(runs)
+           report['additional_points']=sum(row['additional_points'] for row in gains)
+           checkpoint();print('PASS 232 executions; coverage union complete',flush=True)
+          except BaseException as error:
+           report['status']='FAIL';report['error']=str(error);checkpoint();raise
+          finally:
+           (OUT/'manifest.json').write_text(json.dumps({str(p.relative_to(OUT)):digest(p)
+            for p in sorted(OUT.rglob('*')) if p.is_file() and p.name!='manifest.json'},indent=2)+'\n')
+          PY
+      - name: Publish measured coverage
+        if: always()
+        run: |
+          if [ -f bundle127/summary.md ]; then
+            cat bundle127/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload one combined artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-127-measured-coverage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bundle127/
+          if-no-files-found: error
+          retention-days: 30
