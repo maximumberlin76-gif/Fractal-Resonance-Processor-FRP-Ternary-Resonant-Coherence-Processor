@@ -1,0 +1,174 @@
+name: 125 - FRP M31 Gamma Dynamics Qualification
+run-name: '125 - FRP Gamma Dynamics | 2 suites, 32 executions, 6 mutations @ ${{ github.sha }}'
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install simulator
+        run: |
+          mkdir -p bundle
+          python -m pip install 'verilator==5.48.0'
+          { python --version; verilator-cli --version; g++ --version; } > bundle/toolchain.txt
+      - name: Qualify gamma settling and symmetry
+        shell: bash
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python -u - <<'PY'
+          import hashlib, json, os, re, shutil, subprocess, tempfile, zipfile
+          from concurrent.futures import ThreadPoolExecutor
+          from pathlib import Path
+
+          root = Path.cwd()
+          rtl = root / 'rtl/m31'
+          out = root / 'bundle'
+          out.mkdir(exist_ok=True)
+          workflow = '.github/workflows/frp-125-m31-gamma-dynamics-qualification.yml'
+          suites = {
+              'S': 'frp_m31_gamma_settling_tb',
+              'Y': 'frp_m31_gamma_symmetry_tb',
+          }
+          pins = {
+              'frp_m31_gamma_settling_tb': 'df61bb41b8432fe235b5478b9f18f66c5ae83347ee6d6d89a535a14a2c3b7a4b',
+              'frp_m31_gamma_symmetry_tb': '89a24eee07cd1e9f4e904476a695f803d698db17bfb3c10afe8d33392fd5dddb',
+              'frp_m31_local_gamma_drift': '478882d4f6a2986f5079c88b444c7b007d68145d61e5150209cb0637f35b2ec0',
+              'frp_m31_fixed_point_pkg': '6b2afb8d1583c93d95d2386ba25dd1eaef6bb5bd9a4e1c9e9abff1dd004cbf24',
+          }
+          sizes, seeds = (9,16,32,64), (0,76)
+          golden = {
+              'S': ('636a91fd88f40df9','285005dfc22b1bf5','5bb19635eac54105','43b39e73985ecbc5',
+                    '746dce38667ba9e5','469c7136519a47a5','3a50ffa5d88acb25','0814dacc05c754a5'),
+              'Y': ('48f89c22812ffa13','6427aa4a5f51488d','816d142109f82995','45ec585e0d898063',
+                    '41c45aebe78e7413','96a3bf3cbbaf2b68','7b9d49832ef5ff51','ea81a1fddef4b4ea'),
+          }
+          sign_counts = ((2581,2036),(2582,2035),(4603,3604),(4603,3605),
+                         (9104,7310),(9107,7309),(18059,14770),(18061,14771))
+          mutants = {
+              'wrong_alpha': ('S',"32'sd9830","32'sd8192",'GAMMA contraction'),
+              'ignore_valid': ('S','target_d = gamma_update_valid',
+                               "target_d = 1'b1",'GAMMA target'),
+              'ignore_pause': ('S','else if (tick_enable)',
+                               "else if (1'b1)",'GAMMA pause'),
+              'lane_bias': ('Y','THERMAL_GAIN_Q16,',
+                            "THERMAL_GAIN_Q16 + 32'(lane),",'GAMMA symmetry'),
+              'stale_noise': ('Y','frp_m31_mul_q16(thermal_gain, noise_d)',
+                              'frp_m31_mul_q16(thermal_gain, noise_q)','GAMMA anchor'),
+              'wrong_thermal_gain': ('Y',"32'sd5243","32'sd20972",'GAMMA anchor'),
+          }
+
+          def need(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def call(command, label, limit):
+              with (out/(label+'.log')).open('w') as log:
+                  return subprocess.run(['timeout','-k','10s',str(limit),*map(str,command)],
+                                        stdout=log, stderr=subprocess.STDOUT).returncode
+
+          def job(spec):
+              suite, n, mutation = spec
+              top = suites[suite]
+              dut = 'frp_m31_local_gamma_drift'
+              label = mutation or f'{suite}-{n}'
+              with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as td:
+                  stage = Path(td)
+                  for name in (top,dut,'frp_m31_fixed_point_pkg'):
+                      shutil.copy(rtl/(name+'.sv'),stage)
+                  if mutation:
+                      _,old,new,marker = mutants[mutation]
+                      p = stage/(dut+'.sv')
+                      s = p.read_text()
+                      need(s.count(old)==1,label+': mutation anchor mismatch')
+                      p.write_text(s.replace(old,new))
+                      shutil.copy(p,out/(label+'.sv'))
+                  obj = stage/'obj'
+                  cmd = ['verilator-cli','--binary','--timing','--assert','--unroll-count','1','-j','2',
+                         '-Wno-fatal','-Wno-PINMISSING','--top-module',top,f'-GCELLS={n}',
+                         '-I'+str(stage),'--Mdir',obj,'-MAKEFLAGS',
+                         'VK_PCH_I_FAST= VK_PCH_I_SLOW= CXXFLAGS=--std=c++20 OPT_FAST=-O0',stage/(top+'.sv')]
+                  need(call(cmd,label+'-build',900)==0,label+': build failed')
+                  exe = obj/('V'+top)
+                  if mutation:
+                      rc = call([exe,'+SEED=76'],label,120)
+                      log = (out/(label+'.log')).read_text(errors='replace')
+                      hit = next((s for s in log.splitlines() if re.search(r'%(?:Fatal|Error):',s) and marker in s),None)
+                      need(rc in (1,134,-6) and hit and not re.search(r'^PASS ',log,re.M),label+': wrong failure')
+                      print('DETECTED',label,flush=True)
+                      return dict(mutation=label,exit_code=rc,diagnostic=hit)
+                  pairs = []
+                  for j,seed in enumerate(seeds):
+                      sig = golden[suite][2*sizes.index(n)+j]
+                      if suite=='S':
+                          expected = f'PASS GAMMA_SETTLING cells={n} seed={seed} phases=13 residual_bins=7 longest=125'
+                      else:
+                          pos,neg = sign_counts[2*sizes.index(n)+j]
+                          expected = f'PASS GAMMA_SYMMETRY cells={n} seed={seed} steps=513 paused=74 positive={pos} negative={neg}'
+                      records = []
+                      for replay in (1,2):
+                          tag = f'{label}-{seed}-{replay}'
+                          need(call([exe,f'+SEED={seed}'],tag,120)==0,tag+': simulation failed')
+                          lines = (out/(tag+'.log')).read_text().splitlines()
+                          matches = [s for s in lines if s.startswith('PASS ')]
+                          need(matches==[expected+' signature='+sig],tag+': reference mismatch')
+                          records.append(matches[0])
+                      need(records[0]==records[1],label+': replay mismatch')
+                      pairs.append(dict(suite=suite,cells=n,seed=seed,records=records))
+                  print('PASS',label,flush=True)
+                  return pairs
+
+          report = dict(status='FAIL',pairs=[],detected=[])
+          try:
+              sha = subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+              need(os.environ['GITHUB_EVENT_NAME']=='workflow_dispatch' and sha==os.environ['GITHUB_SHA'],'Unexpected checkout')
+              report['commit'] = sha
+              manifest = {}
+              for name,want in pins.items():
+                  p = rtl/(name+'.sv')
+                  need(p.is_file(),'Missing prerequisite: '+str(p.relative_to(root)))
+                  need(hashlib.sha256(p.read_bytes()).hexdigest()==want,'Source mismatch: '+name)
+                  manifest[str(p.relative_to(root))] = want
+              manifest[workflow] = hashlib.sha256((root/workflow).read_bytes()).hexdigest()
+              (out/'source_sha256.json').write_text(json.dumps(manifest,indent=2)+'\n')
+              with zipfile.ZipFile(out/'tested_sources.zip','w',zipfile.ZIP_DEFLATED) as z:
+                  for path in manifest: z.write(root/path,path)
+              with ThreadPoolExecutor(max_workers=2) as pool:
+                  for pairs in pool.map(job,[(s,n,None) for s in suites for n in sizes]):
+                      report['pairs'].extend(pairs)
+                  for result in pool.map(job,[(v[0],9,m) for m,v in mutants.items()]):
+                      report['detected'].append(result)
+              need(len(report['pairs'])==16 and len(report['detected'])==6,'Incomplete qualification')
+              need(all(hashlib.sha256((root/p).read_bytes()).hexdigest()==h
+                       for p,h in manifest.items()),'Source changed during qualification')
+              report['status'] = 'PASS'
+          except Exception as exc:
+              report['error'] = str(exc)
+              raise
+          finally:
+              (out/'results.json').write_text(json.dumps(report,indent=2)+'\n')
+              pairs = len(report['pairs'])
+              summary = (f"**M31 Gamma Dynamics: {report['status']}**\n\n"
+                         f"Verified executions: {2*pairs}/32; replay pairs: {pairs}/16; "
+                         f"detected mutations: {len(report['detected'])}/6.\n")
+              (out/'summary.md').write_text(summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f: f.write(summary)
+          PY
+      - name: Upload combined qualification artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-125-gamma-dynamics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bundle/
+          if-no-files-found: error
+          retention-days: 14
