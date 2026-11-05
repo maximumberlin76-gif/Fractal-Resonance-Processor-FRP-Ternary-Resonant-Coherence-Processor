@@ -1,0 +1,287 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 129 - FRP M31 Pending Boundary Qualification
+run-name: '129 - FRP Pending Boundary | 20 executions, 6 mutations @ ${{ github.sha }}'
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-129-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install simulator
+        run: python -m pip install 'verilator==5.48.0'
+      - name: Qualify pending boundaries and measure coverage gain
+        shell: bash
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python -u - <<'PY'
+          # Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+          import concurrent.futures, csv, hashlib, importlib.util, json, os, re
+          import shutil, subprocess, tempfile, time
+          from pathlib import Path
+
+          ROOT=Path.cwd()
+          OUT=ROOT/'bundle129'
+          OUT.mkdir(exist_ok=True)
+          TOP='frp_m31_pending_boundary_tb'
+          TB='rtl/m31/'+TOP+'.sv'
+          ANALYZER='verification/m32/frp_m32_coverage_union.py'
+          FILES={'p':'rtl/m31/frp_m31_pending_routes.sv'}
+          PINS={
+           "rtl/m31/frp_m31_pending_boundary_tb.sv": "e1bb2e253e9db27db467437e3730bcf1b6acfd32a5c8c32cb47b99f603f81212",
+           "rtl/m31/frp_m31_pending_routes.sv": "18889d85e78b23b844f1db4c46a35a6b7d01e609e3f1f0e6263a39a6c5729411",
+           "rtl/m31/frp_m31_pkg.sv": "762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94",
+           "verification/m32/frp_m32_coverage_union.py": "9901d3faa1302ca0f19b6223e420bf6ef24b61666e3980b4995f8116d393d0f1"
+          }
+          BASELINE='''p|line|107|49|block|107,111-113|1
+          p|line|119|9|block|119,125,127-128,130-132,134|1
+          p|line|138|54|block|138,141-143|1
+          p|line|148|49|block|148,151-153|1
+          p|line|158|5|block|158-160,162-169,171-180,182-190,193-194,222-223,293-294,411-412,459-460,462-463,465,467,469,475,480,482|1
+          p|line|193|9|block|195-198,200-202|1
+          p|line|205|13|elsif|205-206,208-209,211-212|0
+          p|branch|213|22|if|213-214,216-217|1
+          p|line|222|9|block|224-231,233-235,238-240,243,245,247,249,251,254|1
+          p|line|256|13|elsif|256-260,263-264,266-267,269-270|1
+          p|line|271|22|elsif|271-273|1
+          p|branch|275|17|if|275-277|1
+          p|branch|280|17|if|280-283|1
+          p|branch|285|22|if|285-287|1
+          p|line|293|9|block|295-299,301-303,305-310,312-313,315-316,318-319,321-322,324,327,329-334|1
+          p|branch|336|13|if|336-339,342-344,347,352,357,359,361-362,364-365|1
+          p|branch|368|13|if|368-370,372-373|1
+          p|line|375|17|elsif|375-377|0
+          p|line|378|26|elsif|378-380|0
+          p|line|381|26|if|381,385-387,389-390,392-393|1
+          p|line|381|27|else|394-398,401-402,404-405|1
+          p|line|411|9|block|413-417,419-421,424-426|1
+          p|branch|429|13|if|429-432|0
+          p|branch|435|13|if|435,439-441|0
+          p|branch|444|13|if|444,447-448|0
+          p|branch|451|13|if|451,454-455|0
+          p|line|491|5|block|491|1
+          p|line|492|9|elsif|492-493|1
+          p|branch|494|18|if|494-495|1
+          p|branch|213|23|else||1
+          p|branch|275|18|else||1
+          p|branch|280|18|else||1
+          p|branch|285|23|else||1
+          p|branch|336|14|else||0
+          p|branch|368|14|else||1
+          p|branch|429|14|else||1
+          p|branch|435|14|else||1
+          p|branch|444|14|else||1
+          p|branch|451|14|else||1
+          p|branch|494|19|else||1'''
+          BASE_COMMIT='664800f31274ef7ef9dd7cd709f56e6fede452d4'
+          BASE_REPORT_SHA='38684d47584190eae9bf9f3ba76c818e9bdb8834cdd260b8c295b7b04afa7c34'
+
+          def require(ok,message):
+           if not ok:raise RuntimeError(message)
+          def digest(p):return hashlib.sha256(p.read_bytes()).hexdigest()
+          def write_json(p,value):
+           p.parent.mkdir(parents=True,exist_ok=True)
+           p.write_text(json.dumps(value,indent=2)+'\n')
+          def execute(command,folder,label,timeout,expect_failure=False):
+           folder.mkdir(parents=True,exist_ok=True)
+           write_json(folder/(label+'.command.json'),command)
+           started=time.monotonic();log=folder/(label+'.log')
+           try:
+            result=subprocess.run(command,cwd=ROOT,stdout=subprocess.PIPE,
+                                  stderr=subprocess.STDOUT,text=True,timeout=timeout)
+           except subprocess.TimeoutExpired as error:
+            output=error.stdout or b''
+            if isinstance(output,bytes):output=output.decode('utf-8',errors='replace')
+            log.write_text(output+f'\nTIMEOUT after {timeout}s\n')
+            raise RuntimeError(f'Timeout: {log.relative_to(ROOT)}') from error
+           log.write_text(result.stdout)
+           write_json(folder/(label+'.timing.json'),{'seconds':round(time.monotonic()-started,3),
+                      'returncode':result.returncode,'timeout_seconds':timeout})
+           if expect_failure:
+            require(result.returncode!=0 and re.search(
+             r'PENDING_BOUNDARY (?:outputs|register) phase=\d+ case=\d+ cells=9 .*got=[0-9a-f]+ want=[0-9a-f]+',
+             result.stdout) and not re.search(r'^PASS ',result.stdout,re.M),
+             'Mutation escaped its checker: '+label)
+           else:require(result.returncode==0,'Command failed: '+str(log.relative_to(ROOT)))
+           return result.stdout
+
+          def build(source,n,obj,folder):
+           command=['verilator-cli','--binary','--timing','--assert','--coverage-line',
+            '--unroll-count','1','--output-groups','0','-j','2','-Wno-fatal',
+            '-MAKEFLAGS','VK_PCH_I_FAST= VK_PCH_I_SLOW= CXXFLAGS=--std=c++20 OPT_FAST=-O2',
+            '-I'+str(source.parent),'--top-module',TOP,'-GCELLS='+str(n),
+            '--Mdir',str(obj),str(source)]
+           execute(command,folder,'build',900)
+           return obj/('V'+TOP)
+
+          report={'status':'RUNNING','runs':[],'mutations':[]}
+          try:
+           for name,expected in PINS.items():
+            require((ROOT/name).is_file(), 'Missing prerequisite: '+name)
+            require(digest(ROOT/name)==expected, 'Source changed: '+name)
+            dest=OUT/'sources'/name;dest.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copy2(ROOT/name,dest)
+           shutil.copy2(ROOT/'.github/workflows/frp-129-m31-pending-boundary-qualification.yml',OUT/'workflow.yml')
+           commit=os.environ['GITHUB_SHA'];require(re.fullmatch('[0-9a-f]{40}',commit),'Full Git SHA required')
+           tool=subprocess.check_output(['verilator-cli','--version'],text=True).strip()
+           report.update(commit=commit,tool=tool)
+           original=(ROOT/ANALYZER).read_text();anchor="run['cells'] in (8, 16, 32, 64)"
+           require(original.count(anchor)==1,'Analyzer cell guard changed')
+           adapted=OUT/'coverage_analyzer.py'
+           adapted.write_text(original.replace(anchor,"run['cells'] in (8, 9, 16, 32, 64)"))
+           write_json(OUT/'analyzer-extension.json',{'source_sha256':PINS[ANALYZER],
+            'adapted_sha256':digest(adapted),'extension':'Admit CELLS=9'})
+           spec=importlib.util.spec_from_file_location('coverage129',adapted)
+           cov=importlib.util.module_from_spec(spec);spec.loader.exec_module(cov)
+           source_digest=cov.sha(cov.canonical(PINS).encode())
+           baseline={}
+           for line in BASELINE.splitlines():
+            alias,kind,number,column,description,span,covered=line.split('|')
+            meta=dict(f=FILES[alias],t=kind,l=number,n=column,o=description,s='1')
+            if span:meta['S']=span
+            identity=cov.sha(cov.canonical(meta).encode())
+            require(identity not in baseline,'Duplicate baseline point')
+            baseline[identity]={'metadata':meta,'covered':covered=='1'}
+           require(len(baseline)==40,'Incomplete baseline')
+           write_json(OUT/'baseline.json',{'commit':BASE_COMMIT,'run_id':41919265495,
+            'artifact_id':13368205358,'coverage_report_sha256':BASE_REPORT_SHA,
+            'cells':[8,9,16,32,64],'points':baseline})
+
+           def qualify(n):
+            folder=OUT/'runs'/str(n);records=[]
+            with tempfile.TemporaryDirectory(prefix='frp129-') as tmp:
+             binary=build(Path(TB),n,Path(tmp)/'obj',folder)
+             binary_hash=digest(binary)
+             for seed in (0,76):
+              previous=None
+              for replay in (0,1):
+               run_id=f'pending-{n}-{seed}-{replay}'
+               dat=folder/(run_id+'.dat')
+               output=execute([str(binary),f'+SEED={seed}',
+                 '+verilator+coverage+file+'+str(dat)],folder,run_id,600)
+               passes=[s for s in output.splitlines() if s.startswith('PASS ')]
+               invalid=((1 << (n-1).bit_length())-n)*3*32
+               expected=(f'PASS PENDING_BOUNDARY cells={n} lanes=3 seed={seed} '
+                 f'cases={12288*n} invalid={invalid} random=4096 '
+                 f'checks={20482*n+4121+invalid} resets={12288*n+39} signature=')
+               require(len(passes)==1 and re.fullmatch(re.escape(expected)+r'[0-9a-f]{16}',
+                 passes[0]),'Completion or enumeration count mismatch')
+               require(output.count('Verilog $finish')==1 and not cov.FAILURE.search(output),
+                       'Incomplete simulation: '+run_id)
+               raw=dat.with_suffix('.raw.dat');shutil.copy2(dat,raw)
+               data=dat.read_text();dat.write_text(data.replace('\x01f\x02'+str(ROOT)+'/', '\x01f\x02'))
+               fingerprint=(passes[0],digest(dat))
+               if previous is not None:require(previous==fingerprint,'Replay mismatch: '+run_id)
+               previous=fingerprint
+               log=folder/(run_id+'.log')
+               records.append(dict(id=run_id,cells=n,domain='m31-supplement',
+                configuration=dict(seed=seed,replay=replay,binary_sha256=binary_hash,
+                  raw_coverage=raw.relative_to(OUT).as_posix(),raw_sha256=digest(raw)),
+                files=sorted(FILES.values()),commit=commit,tool=tool,source_digest=source_digest,
+                coverage=dat.relative_to(OUT).as_posix(),coverage_sha256=digest(dat),
+                log=log.relative_to(OUT).as_posix(),log_sha256=digest(log),completion=passes[0]))
+            print('PASS',n,'4 executions; exact replay',flush=True)
+            return records
+           with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            for records in pool.map(qualify,(8,9,16,32,64)):report['runs'].extend(records)
+           require(len(report['runs'])==20,'Incomplete matrix')
+           manifest=dict(schema=cov.SCHEMA,commit=commit,tool=tool,sources=PINS,
+            required_runs=[r['id'] for r in report['runs']],runs=report['runs'])
+           write_json(OUT/'inputs.json',manifest)
+           result=cov.analyze(OUT/'inputs.json',ROOT)
+           require(result==cov.analyze(OUT/'inputs.json',OUT/'sources'),'Portable replay differs')
+           cov.write_report(result,OUT/'coverage')
+           gains=[];uncovered=[]
+           for group in result['groups']:
+            observed={p['id']:p for p in group['points']}
+            require(observed.keys()==baseline.keys(),'Instrumented point universe changed')
+            for name in sorted(FILES.values()):
+             for kind in ('branch','line'):
+              points={i:p for i,p in baseline.items() if p['metadata']['f']==name and p['metadata']['t']==kind}
+              old=sum(p['covered'] for p in points.values())
+              new=sum(p['covered'] or observed[i]['covered'] for i,p in points.items())
+              gains.append(dict(cells=group['cells'],file=name,kind=kind,total=len(points),
+               baseline_covered=old,current_covered=sum(observed[i]['covered'] for i in points),
+               union_covered=new,additional_points=new-old,
+               added_ids=[i for i,p in points.items() if not p['covered'] and observed[i]['covered']]))
+            for i,p in baseline.items():
+             if not p['covered'] and not observed[i]['covered']:
+              uncovered.append(dict(cells=group['cells'],point_id=i,**p['metadata']))
+           write_json(OUT/'coverage/delta.json',gains)
+           write_json(OUT/'coverage/union-uncovered.json',uncovered)
+           for n in (8,9,16,32,64):
+            require(sum(r['additional_points'] for r in gains if r['cells']==n)>0,
+                    f'No measured coverage gain for CELLS={n}')
+
+           def once(text,old,new):
+            require(text.count(old)==1,'Mutation anchor changed: '+old)
+            return text.replace(old,new)
+           src=(ROOT/FILES['p']).read_text()
+           mutants=[
+            ('creation_polarity',once(src,'                        element_index_int,\n                        requested_target\n                    );','                        element_index_int,\n                        retained_state\n                    );')),
+            ('register_capture',once(src,'pending_route_q <= pending_route_d;',"pending_route_q <= '0;")),
+            ('completion_zero',once(src,'&& frp_is_zero(retained_state)','&& 1\'b1')),
+            ('duplicate_slot',once(src,'|| duplicate_creation',"|| 1'b0")),
+            ('pending_overwrite',once(src,'!route_slot_free',"1'b0")),
+            ('invalid_address',once(src,"if (!valid_index) begin\n                    pending_domain_valid = 1'b0;","if (!valid_index) begin\n                    pending_domain_valid = 1'b1;"))]
+           def mutation(item):
+            name,text=item;folder=OUT/'mutations'/name;source=folder/'source'
+            source.mkdir(parents=True,exist_ok=True)
+            for f in (TB,FILES['p'],'rtl/m31/frp_m31_pkg.sv'):
+             shutil.copy2(ROOT/f,source/Path(f).name)
+            changed=source/Path(FILES['p']).name;changed.write_text(text)
+            with tempfile.TemporaryDirectory(prefix='frp129-mut-') as tmp:
+             binary=build(source/Path(TB).name,9,Path(tmp)/'obj',folder)
+             execute([str(binary),'+SEED=0','+verilator+coverage+file+'+str(folder/'mutation.dat')],
+                     folder,'detect',600,expect_failure=True)
+            print('DETECTED',name,flush=True)
+            return dict(name=name,status='DETECTED',source_sha256=digest(changed))
+           with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            report['mutations']=list(pool.map(mutation,mutants))
+           require(len(report['mutations'])==6,'Incomplete mutation matrix')
+           for name,expected in PINS.items():require(digest(ROOT/name)==expected,'Source modified: '+name)
+           summary=['# FRP M31 pending boundary qualification','',f'Commit: `{commit}`','',
+            '20 qualified executions; 6 detected mutations; exact replay.','',
+            f'Baseline: workflow 127, run 41919265495, commit `{BASE_COMMIT}`.','',
+            '| Cells | RTL | Kind | Baseline | Current | Union | Total | Added |',
+            '|---:|---|---|---:|---:|---:|---:|---:|']
+           for r in gains:
+            summary.append(f"| {r['cells']} | {Path(r['file']).name} | {r['kind']} | "
+             f"{r['baseline_covered']} | {r['current_covered']} | {r['union_covered']} | {r['total']} | {r['additional_points']} |")
+           (OUT/'summary.md').write_text('\n'.join(summary)+'\n')
+           report['status']='PASS'
+           print('PASS 20 executions; 6 mutations; measured coverage gain',flush=True)
+          except BaseException as error:
+           report['status']='FAIL';report['error']=str(error);raise
+          finally:
+           write_json(OUT/'qualification.json',report)
+           write_json(OUT/'manifest.json',{str(p.relative_to(OUT)):digest(p)
+            for p in sorted(OUT.rglob('*')) if p.is_file() and p.name!='manifest.json'})
+          PY
+      - name: Publish measured coverage
+        if: always()
+        run: |
+          if [ -f bundle129/summary.md ]; then
+            cat bundle129/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload one combined artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-129-pending-boundary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bundle129/
+          if-no-files-found: error
+          retention-days: 30
