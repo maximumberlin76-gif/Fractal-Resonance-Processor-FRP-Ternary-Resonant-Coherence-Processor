@@ -1,0 +1,336 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 128 - FRP M31 Transition Boundary Qualification
+run-name: '128 - FRP Transition Boundary | 20 executions, 6 mutations @ ${{ github.sha }}'
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-128-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install simulator
+        run: python -m pip install 'verilator==5.48.0'
+      - name: Qualify boundaries and measure coverage gain
+        shell: bash
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python -u - <<'PY'
+          # Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+          import concurrent.futures, csv, hashlib, importlib.util, json, os, re
+          import shutil, subprocess, tempfile, time
+          from pathlib import Path
+
+          ROOT=Path.cwd()
+          OUT=ROOT/'bundle128'
+          OUT.mkdir(exist_ok=True)
+          TOP='frp_m31_transition_boundary_tb'
+          TB='rtl/m31/'+TOP+'.sv'
+          ANALYZER='verification/m32/frp_m32_coverage_union.py'
+          FILES={'a':'rtl/m31/frp_m31_active_neutral.sv','g':'rtl/m31/frp_m31_capacity_guard.sv'}
+          PINS={
+           "rtl/m31/frp_m31_transition_boundary_tb.sv": "092dfb28f2cf5cdce9c5661bfd890eb8ab24d9c485d82de6baa6c465f54f792a",
+           "rtl/m31/frp_m31_active_neutral.sv": "765429b33df3f843626bdc411ad8371fd963738a58ab10201abef75dcdafcaf0",
+           "rtl/m31/frp_m31_capacity_guard.sv": "d0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123",
+           "rtl/m31/frp_m31_pkg.sv": "762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94",
+           "verification/m32/frp_m32_coverage_union.py": "9901d3faa1302ca0f19b6223e420bf6ef24b61666e3980b4995f8116d393d0f1"
+          }
+          BASELINE='''a|line|103|49|block|103,107-109|1
+          g|line|106|51|block|106,109-111|1
+          a|line|115|9|block|115,121,123-124,126-128,130|1
+          g|line|116|49|block|116,120-122|1
+          g|line|127|30|block|127,130-131|1
+          a|line|134|54|block|134,137-139|1
+          g|line|135|44|case|135-136|1
+          g|line|138|17|case|138-139|0
+          a|line|144|49|block|144,147-149|1
+          g|line|144|5|block|144-146,148-151,153-156,158-162,164-173,179-180,266-267,530-531,533,536,541,543-544,547,549,554,556,567,569,574,578,580,583,594|1
+          a|line|154|5|block|154-155,157-159,162-171,173-182,184-191,197-198,238-239,347-348,636-637,693-694,696,699,701,711,718,725,733,739|1
+          g|line|179|9|block|181-189,191-194,197-200,203-204,206-207,209-210,212-213|1
+          a|line|197|9|block|199-203,205-208,211-214|1
+          g|branch|215|13|if|215,218|1
+          a|branch|217|13|if|217,220-223,225-227,229-230|0
+          g|branch|219|17|if|219,225-226,228-230,232|0
+          g|branch|219|18|else|233-236|1
+          g|branch|238|21|if|238-240,242-244,246-248,250-252|1
+          a|line|238|9|block|240-244,246-248,250-253,256-259,262,264,268,275,279,281|1
+          g|branch|238|22|else|253-254,256-258|1
+          g|line|266|9|block|268-273,275-276,278-286,288,290-291,293-294,296-297,299-300,302-306,308-309,311-312,314-315,317-318,320-321|1
+          a|branch|285|13|if|285|1
+          a|branch|286|17|if|286,292-297,300-302,304-306,308-310,312-314,316-318,320-322,324-326|1
+          g|branch|323|13|if|323-327,330-333,336-337,339-340,342-343,345-348,355,359|1
+          a|branch|286|18|else|327-329|0
+          a|branch|331|21|if|331-334,336-337|0
+          a|line|347|9|block|349-353,355-356,358-362,364,366-368,371-372,374-376,379-380,382-383,385-387,390-392|1
+          g|branch|351|17|if|351-352|0
+          g|branch|362|13|if|362,365|1
+          g|line|366|17|elsif|366-367,369-371,373|0
+          g|line|374|26|elsif|374,376,379-380,382-384|1
+          g|line|385|26|elsif|385,387,390-391,393-395|0
+          a|branch|394|13|if|394-398,401-403,406-408|1
+          g|line|396|26|elsif|396,401-403,405-407,409|0
+          g|branch|411|21|if|411-412|0
+          a|branch|412|13|if|412,416-421,424-427|1
+          g|line|414|26|elsif|414-417|1
+          g|line|419|21|elsif|419-421,423-425,427|0
+          g|line|428|30|if|428-431,433-435,437-439,441-443|1
+          a|branch|431|13|if|431,434|1
+          a|line|435|17|elsif|435-438|0
+          a|line|439|26|elsif|439,442-445,447-449,451-453|0
+          g|line|428|31|else|444,447-448,450-452|1
+          g|line|454|26|elsif|454|1
+          a|line|454|26|if|454,456,460|0
+          g|branch|455|21|if|455-457|1
+          g|branch|455|22|else|458-460,462-464,466|0
+          a|line|454|27|else|461-462|1
+          a|line|464|45|case|464-467,469-471,473-475|1
+          g|line|468|26|if|468-470,472-474,476|0
+          g|line|468|27|else|477-480|1
+          a|line|478|50|case|478|1
+          a|branch|479|29|if|479-484,487-489,491-493,495-497,499-501,503-505|1
+          g|branch|482|21|if|482-485,487-489,491-493,495-497|1
+          g|branch|482|22|else|498-500,502-504|1
+          a|line|509|50|case|509|1
+          g|branch|510|9|if|510,519-520,526-527|1
+          a|branch|510|29|if|510-515,518-520,522-524,526-528,530-532,534-536|1
+          g|branch|511|13|if|511-514|1
+          g|branch|511|14|else|515-516|0
+          g|branch|522|13|if|522-523|1
+          a|line|540|52|case|540-543|1
+          a|branch|545|29|if|545,550,560-564,567-569,571-573,575-577,579-581,583-585,587-589,591-593,595-597,599-601|1
+          a|branch|545|30|else|602-603|0
+          a|line|608|42|case|608-611,613-615,617-619|0
+          a|line|622|25|case|622-623|0
+          a|line|636|9|block|638-642,644-647,650-653|1
+          a|branch|656|13|if|656,660-663,665-666|0
+          a|branch|669|13|if|669,680-683,685-687,689|0
+          g|line|96|54|block|96,99-101|1
+          a|branch|217|14|else||1
+          a|branch|285|14|else||1
+          a|branch|331|22|else||0
+          a|branch|394|14|else||0
+          a|branch|412|14|else||0
+          a|branch|431|14|else||1
+          a|branch|479|30|else||0
+          a|branch|510|30|else||0
+          a|branch|656|14|else||1
+          a|branch|669|14|else||1
+          g|branch|215|14|else||1
+          g|branch|323|14|else||0
+          g|branch|351|18|else||1
+          g|branch|362|14|else||1
+          g|branch|411|22|else||0
+          g|branch|510|10|else||1
+          g|branch|522|14|else||1'''
+          BASE_COMMIT='664800f31274ef7ef9dd7cd709f56e6fede452d4'
+          BASE_REPORT_SHA='38684d47584190eae9bf9f3ba76c818e9bdb8834cdd260b8c295b7b04afa7c34'
+
+          def require(ok,message):
+           if not ok:raise RuntimeError(message)
+          def digest(p):return hashlib.sha256(p.read_bytes()).hexdigest()
+          def write_json(p,value):
+           p.parent.mkdir(parents=True,exist_ok=True)
+           p.write_text(json.dumps(value,indent=2)+'\n')
+          def execute(command,folder,label,timeout,expect_failure=False):
+           folder.mkdir(parents=True,exist_ok=True)
+           write_json(folder/(label+'.command.json'),command)
+           started=time.monotonic();log=folder/(label+'.log')
+           try:
+            result=subprocess.run(command,cwd=ROOT,stdout=subprocess.PIPE,
+                                  stderr=subprocess.STDOUT,text=True,timeout=timeout)
+           except subprocess.TimeoutExpired as error:
+            output=error.stdout or b''
+            if isinstance(output,bytes):output=output.decode('utf-8',errors='replace')
+            log.write_text(output+f'\nTIMEOUT after {timeout}s\n')
+            raise RuntimeError(f'Timeout: {log.relative_to(ROOT)}') from error
+           log.write_text(result.stdout)
+           write_json(folder/(label+'.timing.json'),{'seconds':round(time.monotonic()-started,3),
+                      'returncode':result.returncode,'timeout_seconds':timeout})
+           if expect_failure:
+            require(result.returncode!=0 and re.search(
+             r'TRANSITION_BOUNDARY (?:active|capacity) case=\d+ cells=9 got=[0-9a-f]+ want=[0-9a-f]+',
+             result.stdout) and not re.search(r'^PASS ',result.stdout,re.M),
+             'Mutation escaped its checker: '+label)
+           else:require(result.returncode==0,'Command failed: '+str(log.relative_to(ROOT)))
+           return result.stdout
+
+          def build(source,n,obj,folder):
+           command=['verilator-cli','--binary','--timing','--assert','--coverage-line',
+            '--unroll-count','1','--output-groups','0','-j','2','-Wno-fatal',
+            '-MAKEFLAGS','VK_PCH_I_FAST= VK_PCH_I_SLOW= CXXFLAGS=--std=c++20 OPT_FAST=-O2',
+            '-I'+str(source.parent),'--top-module',TOP,'-GCELLS='+str(n),
+            '--Mdir',str(obj),str(source)]
+           execute(command,folder,'build',900)
+           return obj/('V'+TOP)
+
+          report={'status':'RUNNING','runs':[],'mutations':[]}
+          try:
+           for name,expected in PINS.items():
+            require((ROOT/name).is_file(), 'Missing prerequisite: '+name)
+            require(digest(ROOT/name)==expected, 'Source changed: '+name)
+            dest=OUT/'sources'/name;dest.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copy2(ROOT/name,dest)
+           shutil.copy2(ROOT/'.github/workflows/frp-128-m31-transition-boundary-qualification.yml',OUT/'workflow.yml')
+           commit=os.environ['GITHUB_SHA'];require(re.fullmatch('[0-9a-f]{40}',commit),'Full Git SHA required')
+           tool=subprocess.check_output(['verilator-cli','--version'],text=True).strip()
+           report.update(commit=commit,tool=tool)
+           original=(ROOT/ANALYZER).read_text();anchor="run['cells'] in (8, 16, 32, 64)"
+           require(original.count(anchor)==1,'Analyzer cell guard changed')
+           adapted=OUT/'coverage_analyzer.py'
+           adapted.write_text(original.replace(anchor,"run['cells'] in (8, 9, 16, 32, 64)"))
+           write_json(OUT/'analyzer-extension.json',{'source_sha256':PINS[ANALYZER],
+            'adapted_sha256':digest(adapted),'extension':'Admit CELLS=9'})
+           spec=importlib.util.spec_from_file_location('coverage128',adapted)
+           cov=importlib.util.module_from_spec(spec);spec.loader.exec_module(cov)
+           source_digest=cov.sha(cov.canonical(PINS).encode())
+           baseline={}
+           for line in BASELINE.splitlines():
+            alias,kind,number,column,description,span,covered=line.split('|')
+            meta=dict(f=FILES[alias],t=kind,l=number,n=column,o=description,s='1')
+            if span:meta['S']=span
+            identity=cov.sha(cov.canonical(meta).encode())
+            require(identity not in baseline,'Duplicate baseline point')
+            baseline[identity]={'metadata':meta,'covered':covered=='1'}
+           require(len(baseline)==87,'Incomplete baseline')
+           write_json(OUT/'baseline.json',{'commit':BASE_COMMIT,'run_id':41919265495,
+            'artifact_id':13368205358,'coverage_report_sha256':BASE_REPORT_SHA,
+            'cells':[8,9,16,32,64],'points':baseline})
+
+           def qualify(n):
+            folder=OUT/'runs'/str(n);records=[]
+            with tempfile.TemporaryDirectory(prefix='frp128-') as tmp:
+             binary=build(Path(TB),n,Path(tmp)/'obj',folder)
+             binary_hash=digest(binary)
+             for seed in (0,76):
+              previous=None
+              for replay in (0,1):
+               run_id=f'boundary-{n}-{seed}-{replay}'
+               dat=folder/(run_id+'.dat')
+               output=execute([str(binary),f'+SEED={seed}',
+                 '+verilator+coverage+file+'+str(dat)],folder,run_id,600)
+               passes=[s for s in output.splitlines() if s.startswith('PASS ')]
+               require(len(passes)==1 and passes[0].startswith(
+                 f'PASS TRANSITION_BOUNDARY cells={n} seed={seed} '),'Completion mismatch')
+               require(output.count('Verilog $finish')==1 and not cov.FAILURE.search(output),
+                       'Incomplete simulation: '+run_id)
+               raw=dat.with_suffix('.raw.dat');shutil.copy2(dat,raw)
+               data=dat.read_text();dat.write_text(data.replace('\x01f\x02'+str(ROOT)+'/', '\x01f\x02'))
+               fingerprint=(passes[0],digest(dat))
+               if previous is not None:require(previous==fingerprint,'Replay mismatch: '+run_id)
+               previous=fingerprint
+               log=folder/(run_id+'.log')
+               records.append(dict(id=run_id,cells=n,domain='m31-supplement',
+                configuration=dict(seed=seed,replay=replay,binary_sha256=binary_hash,
+                  raw_coverage=raw.relative_to(OUT).as_posix(),raw_sha256=digest(raw)),
+                files=sorted(FILES.values()),commit=commit,tool=tool,source_digest=source_digest,
+                coverage=dat.relative_to(OUT).as_posix(),coverage_sha256=digest(dat),
+                log=log.relative_to(OUT).as_posix(),log_sha256=digest(log),completion=passes[0]))
+            print('PASS',n,'4 executions; exact replay',flush=True)
+            return records
+           with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            for records in pool.map(qualify,(8,9,16,32,64)):report['runs'].extend(records)
+           require(len(report['runs'])==20,'Incomplete matrix')
+           manifest=dict(schema=cov.SCHEMA,commit=commit,tool=tool,sources=PINS,
+            required_runs=[r['id'] for r in report['runs']],runs=report['runs'])
+           write_json(OUT/'inputs.json',manifest)
+           result=cov.analyze(OUT/'inputs.json',ROOT)
+           require(result==cov.analyze(OUT/'inputs.json',OUT/'sources'),'Portable replay differs')
+           cov.write_report(result,OUT/'coverage')
+           gains=[];uncovered=[]
+           for group in result['groups']:
+            observed={p['id']:p for p in group['points']}
+            require(observed.keys()==baseline.keys(),'Instrumented point universe changed')
+            for name in sorted(FILES.values()):
+             for kind in ('branch','line'):
+              points={i:p for i,p in baseline.items() if p['metadata']['f']==name and p['metadata']['t']==kind}
+              old=sum(p['covered'] for p in points.values())
+              new=sum(p['covered'] or observed[i]['covered'] for i,p in points.items())
+              gains.append(dict(cells=group['cells'],file=name,kind=kind,total=len(points),
+               baseline_covered=old,current_covered=sum(observed[i]['covered'] for i in points),
+               union_covered=new,additional_points=new-old,
+               added_ids=[i for i,p in points.items() if not p['covered'] and observed[i]['covered']]))
+            for i,p in baseline.items():
+             if not p['covered'] and not observed[i]['covered']:
+              uncovered.append(dict(cells=group['cells'],point_id=i,**p['metadata']))
+           write_json(OUT/'coverage/delta.json',gains)
+           write_json(OUT/'coverage/union-uncovered.json',uncovered)
+           for n in (8,9,16,32,64):
+            require(sum(r['additional_points'] for r in gains if r['cells']==n)>0,
+                    f'No measured coverage gain for CELLS={n}')
+
+           def once(text,old,new):
+            require(text.count(old)==1,'Mutation anchor changed: '+old)
+            return text.replace(old,new)
+           a=(ROOT/FILES['a']).read_text();g=(ROOT/FILES['g']).read_text()
+           pos=a.index('FRP_TRANS_OPPOSITE_POLARITY: begin');tail=a[pos:]
+           require(tail.count('FRP_ACTIVE_NEUTRAL')==1,'Direct-route mutation anchor changed')
+           require(a.count('if (scheduler_allows_class) begin')==2,'Scheduler anchor changed')
+           mutants=[
+            ('direct_polarity','a',a[:pos]+tail.replace('FRP_ACTIVE_NEUTRAL','requested_target')),
+            ('completion_priority','a',once(a,'                    pending_completion_owns_cell\n',
+               "                    1'b0 && pending_completion_owns_cell\n")),
+            ('release_gate','a',a.replace('if (scheduler_allows_class) begin',"if (1'b1) begin",1)),
+            ('unsupported_class','g',once(g,'|| !class_supported',"|| 1'b0")),
+            ('invalid_address','g',once(g,'if (!valid_cell) begin',"if (1'b0) begin")),
+            ('pending_owner','g',once(g,'                    pending_completion_candidate[element_index_int]\n',
+               "                    1'b0 && pending_completion_candidate[element_index_int]\n"))]
+           def mutation(item):
+            name,alias,text=item;folder=OUT/'mutations'/name;source=folder/'source'
+            source.mkdir(parents=True,exist_ok=True)
+            for f in (TB,FILES['a'],FILES['g'],'rtl/m31/frp_m31_pkg.sv'):
+             shutil.copy2(ROOT/f,source/Path(f).name)
+            changed=source/Path(FILES[alias]).name;changed.write_text(text)
+            with tempfile.TemporaryDirectory(prefix='frp128-mut-') as tmp:
+             binary=build(source/Path(TB).name,9,Path(tmp)/'obj',folder)
+             execute([str(binary),'+SEED=0','+verilator+coverage+file+'+str(folder/'mutation.dat')],
+                     folder,'detect',600,expect_failure=True)
+            print('DETECTED',name,flush=True)
+            return dict(name=name,status='DETECTED',source_sha256=digest(changed))
+           with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            report['mutations']=list(pool.map(mutation,mutants))
+           require(len(report['mutations'])==6,'Incomplete mutation matrix')
+           for name,expected in PINS.items():require(digest(ROOT/name)==expected,'Source modified: '+name)
+           summary=['# FRP M31 transition boundary qualification','',f'Commit: `{commit}`','',
+            '20 qualified executions; 6 detected mutations; exact replay.','',
+            f'Baseline: workflow 127, run 41919265495, commit `{BASE_COMMIT}`.','',
+            '| Cells | RTL | Kind | Baseline | Current | Union | Total | Added |',
+            '|---:|---|---|---:|---:|---:|---:|---:|']
+           for r in gains:
+            summary.append(f"| {r['cells']} | {Path(r['file']).name} | {r['kind']} | "
+             f"{r['baseline_covered']} | {r['current_covered']} | {r['union_covered']} | {r['total']} | {r['additional_points']} |")
+           (OUT/'summary.md').write_text('\n'.join(summary)+'\n')
+           report['status']='PASS'
+           print('PASS 20 executions; 6 mutations; measured coverage gain',flush=True)
+          except BaseException as error:
+           report['status']='FAIL';report['error']=str(error);raise
+          finally:
+           write_json(OUT/'qualification.json',report)
+           write_json(OUT/'manifest.json',{str(p.relative_to(OUT)):digest(p)
+            for p in sorted(OUT.rglob('*')) if p.is_file() and p.name!='manifest.json'})
+          PY
+      - name: Publish measured coverage
+        if: always()
+        run: |
+          if [ -f bundle128/summary.md ]; then
+            cat bundle128/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload one combined artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-128-transition-boundary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bundle128/
+          if-no-files-found: error
+          retention-days: 30
