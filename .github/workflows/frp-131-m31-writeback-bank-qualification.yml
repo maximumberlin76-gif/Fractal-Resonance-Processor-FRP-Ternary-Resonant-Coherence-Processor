@@ -1,0 +1,262 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 131 - FRP M31 Writeback Bank Qualification
+run-name: '131 - FRP Writeback Bank | 9 profiles, 36 executions, 6 mutations @ ${{ github.sha }}'
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-131-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install simulator
+        run: python -m pip install 'verilator==5.48.0'
+      - name: Qualify writeback bank and collect measured coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          python -u - <<'PY'
+          import concurrent.futures, hashlib, importlib.metadata, json, os, re
+          import shutil, subprocess, tempfile, time, traceback
+          from pathlib import Path
+
+          ROOT = Path.cwd()
+          OUT = ROOT / 'bundle131'
+          OUT.mkdir(exist_ok=False)
+          TOP = 'frp_m31_writeback_bank_tb'
+          TB = 'rtl/m31/' + TOP + '.sv'
+          DUT = 'rtl/m31/frp_m31_state_update.sv'
+          PKG = 'rtl/m31/frp_m31_pkg.sv'
+          WORKFLOW = '.github/workflows/frp-131-m31-writeback-bank-qualification.yml'
+          PINS = {
+              TB: 'e78060e082ca9b957e022d1e017ff0b9a80e8851f424e9e47d5b08b457d7aa90',
+              DUT: 'ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90',
+              PKG: '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94',
+          }
+          MATRIX = [(8, 3), (9, 3), (16, 3), (32, 3), (64, 3),
+                    (9, 1), (9, 2), (9, 9), (64, 64)]
+          REPORT = {'schema': 'frp.writeback-bank.v1', 'status': 'FAIL',
+                    'commit': os.environ.get('GITHUB_SHA', 'local'),
+                    'run_id': os.environ.get('GITHUB_RUN_ID', 'local'),
+                    'run_attempt': os.environ.get('GITHUB_RUN_ATTEMPT', 'local'),
+                    'source_sha256': PINS, 'profiles': [], 'mutations': []}
+          EXE = shutil.which('verilator-cli')
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def save(path, value):
+              path.write_text(json.dumps(value, indent=2) + '\n')
+
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          def execute(command, folder, label, timeout):
+              meta = {'command': command, 'timeout_seconds': timeout}
+              start = time.monotonic()
+              try:
+                  with (folder / (label + '.log')).open('w') as stream:
+                      result = subprocess.run(command, stdout=stream,
+                                              stderr=subprocess.STDOUT, timeout=timeout)
+                  meta['returncode'] = result.returncode
+                  return result.returncode, (folder / (label + '.log')).read_text(errors='replace')
+              finally:
+                  meta['seconds'] = round(time.monotonic() - start, 3)
+                  save(folder / (label + '-command.json'), meta)
+
+          def build(folder, obj, cells, lanes, include, source=None):
+              command = [EXE, '--binary', '--timing', '--assert', '--coverage-line',
+                  '--unroll-count', '1', '--output-groups', '0', '-j', '2', '-Wno-fatal',
+                  '-MAKEFLAGS', 'VK_PCH_I_FAST= VK_PCH_I_SLOW= CXXFLAGS=--std=c++20 OPT_FAST=-O2',
+                  '-I' + str(include), '--top-module', TOP, '-GCELLS=' + str(cells),
+                  '-GLANES=' + str(lanes), '--Mdir', str(obj), str(source or ROOT / TB)]
+              rc, _ = execute(command, folder, 'build', 900)
+              require(rc == 0, 'Build failed: ' + str(folder))
+              binary = obj / ('V' + TOP)
+              save(folder / 'binary.json', {'sha256': digest(binary)})
+              return binary
+
+          def coverage(path):
+              points = {}
+              for line in path.read_text().splitlines():
+                  if not line.startswith("C '"):
+                      continue
+                  payload, count = line[3:].rsplit("' ", 1)
+                  fields = dict(item.split('\x02', 1) for item in payload.split('\x01')
+                                if '\x02' in item)
+                  if fields.get('f') != str(ROOT / DUT):
+                      continue
+                  require(fields.get('t') in ('line', 'branch'), 'Unexpected coverage type')
+                  identity = {key: fields.get(key, '') for key in ('l', 'n', 't', 'o', 'S')}
+                  identity['file'] = DUT
+                  key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+                  require(key not in points and int(count) >= 0, 'Invalid coverage point')
+                  points[key] = {'identity': identity, 'hits': int(count)}
+              require(points, 'Missing DUT coverage')
+              return points
+
+          def profile(pair):
+              cells, lanes = pair
+              folder = OUT / f'cells-{cells}-lanes-{lanes}'
+              folder.mkdir()
+              row = {'cells': cells, 'lanes': lanes, 'status': 'FAIL', 'runs': []}
+              union = {}
+              try:
+                  with tempfile.TemporaryDirectory(prefix='frp131-') as tmp:
+                      binary = build(folder, Path(tmp) / 'obj', cells, lanes, ROOT / 'rtl/m31')
+                      for seed in (0, 76):
+                          previous = None
+                          for replay in (0, 1):
+                              label = f'seed-{seed}-replay-{replay}'
+                              cov = folder / (label + '.dat')
+                              rc, log = execute([str(binary), f'+SEED={seed}',
+                                  '+verilator+coverage+file+' + str(cov)], folder, label, 300)
+                              require(rc == 0, 'Simulation failed: ' + label)
+                              lines = [s for s in log.splitlines() if s.startswith('PASS WRITEBACK_BANK ')]
+                              require(len(lines) == 1, 'Missing unique PASS record')
+                              values = dict(re.findall(r'(\w+)=(\w+)', lines[0]))
+                              expected = {'cells': cells, 'lanes': lanes, 'seed': seed,
+                                  'enumerated': 12288, 'threshold_cases': 2*cells*(cells+1),
+                                  'random_steps': 4096, 'checks': 41019+8*cells*(cells+1),
+                                  'resets': 12339+2*cells*(cells+1)}
+                              require(all(int(values[k]) == v for k, v in expected.items()),
+                                      'Stimulus accounting mismatch: ' + label)
+                              require(re.fullmatch(r'[0-9a-f]{16}', values['signature']), 'Invalid signature')
+                              points = coverage(cov)
+                              fingerprint = (lines[0], digest(cov))
+                              require(previous is None or previous == fingerprint, 'Replay mismatch')
+                              previous = fingerprint
+                              if not union:
+                                  union = points
+                              else:
+                                  require(set(union) == set(points), 'Coverage denominator changed')
+                                  for key, point in points.items():
+                                      require(union[key]['identity'] == point['identity'], 'Point mismatch')
+                                      union[key]['hits'] += point['hits']
+                              row['runs'].append(dict(expected, replay=replay, signature=values['signature'],
+                                  coverage_file=str(cov.relative_to(OUT)), coverage_sha256=fingerprint[1]))
+                  totals = {}
+                  for kind in ('line', 'branch'):
+                      selected = [p for p in union.values() if p['identity']['t'] == kind]
+                      totals[kind] = {'covered': sum(p['hits'] > 0 for p in selected), 'total': len(selected)}
+                  require(totals == {'line': {'covered': 13, 'total': 13},
+                                     'branch': {'covered': 39, 'total': 44}}, 'Coverage regression')
+                  save(folder / 'coverage-points.json', union)
+                  row.update(status='PASS', coverage=totals, replay_pairs=2)
+                  print('PASS', cells, lanes, '4 executions; exact replay', flush=True)
+              except Exception:
+                  row['error'] = traceback.format_exc()
+                  print('FAIL', cells, lanes, row['error'], flush=True)
+              save(folder / 'result.json', row)
+              return row
+
+          def mutation(item):
+              name, old, new = item
+              folder = OUT / 'mutations' / name
+              folder.mkdir(parents=True)
+              row = {'name': name, 'status': 'FAIL'}
+              try:
+                  source = (ROOT / DUT).read_text()
+                  require(source.count(old) == 1, 'Mutation anchor mismatch')
+                  mutated = folder / Path(DUT).name
+                  mutated.write_text(source.replace(old, new))
+                  shutil.copyfile(ROOT / PKG, folder / Path(PKG).name)
+                  harness = folder / Path(TB).name
+                  shutil.copyfile(ROOT / TB, harness)
+                  row['source_sha256'] = digest(mutated)
+                  with tempfile.TemporaryDirectory(prefix='frp131-mut-') as tmp:
+                      binary = build(folder, Path(tmp) / 'obj', 9, 3, folder, harness)
+                      rc, log = execute([str(binary), '+SEED=0'], folder, 'counterexample', 300)
+                  require(rc != 0 and ('BANK mismatch' in log or 'BANK register' in log),
+                          'Mutation did not produce a scoreboard counterexample')
+                  row['status'] = 'DETECTED'
+                  print('DETECTED', name, flush=True)
+              except Exception:
+                  row['error'] = traceback.format_exc()
+                  print('FAIL mutation', name, row['error'], flush=True)
+              save(folder / 'result.json', row)
+              return row
+
+          started = time.monotonic()
+          try:
+              require(EXE, 'Missing verilator-cli')
+              REPORT['verilator_package'] = importlib.metadata.version('verilator')
+              require(REPORT['verilator_package'] == '5.48.0', 'Unexpected simulator package')
+              rc, log = execute([EXE, '--version'], OUT, 'tool-version', 60)
+              require(rc == 0, 'Simulator version query failed')
+              REPORT['verilator_version'] = log.strip()
+              for path, expected in PINS.items():
+                  require(digest(ROOT / path) == expected, 'Source pin mismatch: ' + path)
+              for path in [*PINS, WORKFLOW]:
+                  target = OUT / 'sources' / path
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(ROOT / path, target)
+              with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                  REPORT['profiles'] = list(pool.map(profile, MATRIX))
+              changes = [
+                  ('accepted_count', 'accepted_changes + COUNTER_ONE;', 'accepted_changes + (COUNTER_ONE << 1);'),
+                  ('hold_count', 'state_hold_events + COUNTER_ONE;', 'state_hold_events + (COUNTER_ONE << 1);'),
+                  ('limit_off_by_one', '<= REQUEST_LANE_LIMIT', '< REQUEST_LANE_LIMIT'),
+                  ('route_counter', 'neutral_routed_commit_events\n                + COUNTER_ONE;',
+                   'neutral_routed_commit_events\n                + (COUNTER_ONE << 1);'),
+                  ('completion_counter', 'pending_completion_commit_events\n                + COUNTER_ONE;',
+                   'pending_completion_commit_events\n                + (COUNTER_ONE << 1);'),
+                  ('register_capture', 'state_q <= state_d;', "state_q <= '0;"),
+              ]
+              with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                  REPORT['mutations'] = list(pool.map(mutation, changes))
+              require(len(REPORT['profiles']) == 9 and
+                      all(r['status'] == 'PASS' for r in REPORT['profiles']), 'Profile failures')
+              runs = [run for row in REPORT['profiles'] for run in row['runs']]
+              require(len(runs) == 36 and sum(r['checks'] for r in runs) == 1799244, 'Run totals mismatch')
+              require(len(REPORT['mutations']) == 6 and
+                      all(r['status'] == 'DETECTED' for r in REPORT['mutations']), 'Mutation failures')
+              REPORT.update(status='PASS', executions=36, checked_steps=1799244,
+                            replay_pairs=18, detected_mutations=6)
+          except Exception:
+              REPORT['error'] = traceback.format_exc()
+              raise
+          finally:
+              REPORT['seconds'] = round(time.monotonic() - started, 3)
+              save(OUT / 'qualification.json', REPORT)
+              summary = '# FRP 131: Writeback Bank\n\n' + REPORT['status'] + '\n\n'
+              summary += '| Cells | Lanes | Status | Runs | Line points | Branch points |\n|---|---|---|---|---|---|\n'
+              for row in REPORT['profiles']:
+                  cov = row.get('coverage', {})
+                  counts = [str(cov[k]['covered']) + '/' + str(cov[k]['total']) if k in cov else '-' for k in ('line', 'branch')]
+                  summary += f"| {row['cells']} | {row['lanes']} | {row['status']} | {len(row['runs'])} | {counts[0]} | {counts[1]} |\n"
+              summary += '\nDetected mutations: ' + str(sum(r['status'] == 'DETECTED' for r in REPORT['mutations'])) + '/6.\n'
+              summary += '\nCoverage scope: frp_m31_state_update.sv; native line/branch points; hit threshold 1; all points retained.\n'
+              (OUT / 'summary.md').write_text(summary)
+              save(OUT / 'manifest.json', {str(p.relative_to(OUT)): digest(p)
+                  for p in sorted(OUT.rglob('*')) if p.is_file() and p.name != 'manifest.json'})
+          PY
+      - name: Publish qualification summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f bundle131/summary.md ]; then
+            cat bundle131/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload one combined artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-131-writeback-bank-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bundle131/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
