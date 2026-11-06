@@ -1,0 +1,250 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 134 - FRP M31 Request Arbitration Formal
+run-name: '134 - FRP Arbitration | 13 proofs, 296 witnesses, 10 mutations @ ${{ github.sha }}'
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-134-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install formal tools
+        run: python -m pip install 'yowasp-yosys==0.68.0.0.post1208' 'yowasp-runtime==1.96' 'wasmtime==47.0.1'
+      - name: Prove request arbitration and qualify boundary witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -u - <<'PY'
+          import hashlib, importlib.metadata, json, os, shutil, subprocess, time, traceback
+          from pathlib import Path
+
+          ROOT = Path.cwd()
+          OUT = ROOT / 'bundle134'
+          OUT.mkdir(exist_ok=False)
+          TOP = 'frp_m31_request_arbitration_formal'
+          HARNESS = 'formal/m31/' + TOP + '.sv'
+          DUT = 'rtl/m31/frp_m31_request_lanes.sv'
+          PKG = 'rtl/m31/frp_m31_pkg.sv'
+          WORKFLOW = '.github/workflows/frp-134-m31-request-arbitration-formal.yml'
+          PINS = {
+              HARNESS: 'c738d8f5f95b0ab6c1a04a40f0251700e5e8733c5ce4c5c3582f1e48789cc1fc',
+              DUT: '32f75cc70df5dba3f4fbb511397be9a5921236c2afd16cfeb1350eca3f6e8109',
+              PKG: '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94',
+          }
+          VERSIONS = {'yowasp-yosys': '0.68.0.0.post1208',
+                      'yowasp-runtime': '1.96', 'wasmtime': '47.0.1'}
+          MATRIX = [(n, 3, e) for n in (8, 9, 16, 32, 64) for e in (0, 1)]
+          MATRIX += [(9, l, 1) for l in (1, 2, 4)]
+          REPORT = {'schema': 'frp.request-arbitration.v1', 'status': 'FAIL',
+                    'commit': os.environ.get('GITHUB_SHA', 'local'),
+                    'run_id': os.environ.get('GITHUB_RUN_ID', 'local'),
+                    'run_attempt': os.environ.get('GITHUB_RUN_ATTEMPT', 'local'),
+                    'source_sha256': PINS, 'profiles': [], 'mutations': [],
+                    'scope': {'proof': 'combinational, all input combinations',
+                              'counter_bits': 32, 'public_output_fields': 30,
+                              'proof_assumptions': [], 'matrix': MATRIX}}
+          EXE = shutil.which('yowasp-yosys')
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def save(path, value):
+              path.write_text(json.dumps(value, indent=2) + '\n')
+
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          def execute(command, folder, label, timeout):
+              meta = {'command': command, 'timeout_seconds': timeout}
+              logpath = folder / (label + '.log')
+              start = time.monotonic()
+              try:
+                  result = subprocess.run(command, stdout=subprocess.PIPE,
+                                          stderr=subprocess.STDOUT, timeout=timeout)
+                  logpath.write_bytes(result.stdout)
+                  meta['returncode'] = result.returncode
+                  return result.returncode, result.stdout.decode(errors='replace')
+              except subprocess.TimeoutExpired as error:
+                  logpath.write_bytes(error.output or b'')
+                  meta['error'] = 'Process timeout'
+                  raise
+              finally:
+                  meta['seconds'] = round(time.monotonic() - start, 3)
+                  save(folder / (label + '-command.json'), meta)
+
+          def synth(folder, cells, lanes, extra):
+              return (f'read_slang -j 1 --std 1800-2017 --top {TOP} -I{folder} '
+                      f'-G CELLS={cells} -G LANES={lanes} -G EXTRA_INDEX_BIT={extra} '
+                      f'{folder}/{TOP}.sv; prep -top {TOP} -flatten; opt -full; '
+                      'memory_map; opt -full; chformal -lower; '
+                      'select -assert-count 0 t:$assume; check -assert')
+
+          def wave_value(path, name):
+              signals = {s['name']: s for s in json.loads(path.read_text())['signal']}
+              values = [v for v in signals[name]['data'] if v]
+              require(len(values) == 1, 'Expected one combinational sample: ' + str(path))
+              return int(values[0], 2)
+
+          def profile(cells, lanes, extra):
+              folder = OUT / f'cells-{cells}-lanes-{lanes}-extra-{extra}'
+              folder.mkdir()
+              row = {'cells': cells, 'lanes': lanes, 'extra_index_bit': extra,
+                     'status': 'FAIL', 'proof_status': 'FAIL', 'witnesses': []}
+              try:
+                  model = folder / 'model.il'
+                  command = synth(OUT / 'inputs', cells, lanes, extra)
+                  command += (f'; write_rtlil {model}; delete -port w:reach; opt_clean -purge; '
+                              'sat -prove-asserts -verify -timeout 180')
+                  rc, log = execute([EXE, '-p', command], folder, 'proof', 480)
+                  require(rc == 0 and 'SAT proof finished - no model found: SUCCESS!' in log,
+                          'Public-output proof failed')
+                  text = model.read_text()
+                  count = text.count('cell $assert ')
+                  require(count > 0 and 'cell $assume ' not in text, 'Formal cell mismatch')
+                  row.update(proof_status='PASS', model_sha256=digest(model),
+                             assertion_cells=count, assumption_cells=0)
+                  print('PROVED', cells, lanes, extra, 'all 30 output fields', flush=True)
+                  omitted = {}
+                  if (1 << ((cells - 1).bit_length() + extra)) == cells:
+                      omitted.update({str(i): 'All encoded addresses are in range' for i in (3, 4, 22)})
+                  if lanes == 1:
+                      omitted.update({str(i): 'Requires at least two lanes' for i in (12, 13, 14, 23)})
+                  ids = [i for i in range(24) if str(i) not in omitted]
+                  row['omitted_reach_bits'] = omitted
+                  commands = [f'read_rtlil {model}']
+                  for i in ids:
+                      commands.append(f'sat -set reach[{i}] 1 -timeout 60 '
+                                      f'-show-inputs -show-outputs -dump_json {folder}/witness-{i}.json')
+                  rc, log = execute([EXE, '-p', '; '.join(commands)], folder, 'witnesses', 900)
+                  require(rc == 0 and log.count('SAT solving finished - model found:') == len(ids),
+                          'Reachability query failed')
+                  for i in ids:
+                      path = folder / f'witness-{i}.json'
+                      require(wave_value(path, 'reach') & (1 << i), 'Witness bit mismatch')
+                      require(wave_value(path, 'mismatch') == 0, 'Witness violates contract')
+                      row['witnesses'].append(i)
+                  row['status'] = 'PASS'
+                  print('WITNESSES', cells, lanes, extra, len(ids), flush=True)
+              except Exception:
+                  row['error'] = traceback.format_exc()
+                  print('FAIL profile', cells, lanes, extra, row['error'], flush=True)
+              save(folder / 'result.json', row)
+              return row
+
+          def mutation(item):
+              name, old, new = item
+              folder = OUT / 'mutations' / name
+              folder.mkdir(parents=True)
+              row = {'name': name, 'cells': 9, 'lanes': 3, 'extra_index_bit': 1, 'status': 'FAIL'}
+              try:
+                  require(any(p['cells'] == 9 and p['lanes'] == 3 and p['extra_index_bit'] == 1
+                              and p['proof_status'] == 'PASS' for p in REPORT['profiles']),
+                          'Missing proved unmodified baseline')
+                  source = (OUT / 'inputs' / Path(DUT).name).read_text()
+                  require(source.count(old) == 1, 'Mutation anchor mismatch')
+                  mutated = folder / Path(DUT).name
+                  mutated.write_text(source.replace(old, new))
+                  for path in (PKG, HARNESS):
+                      shutil.copyfile(OUT / 'inputs' / Path(path).name, folder / Path(path).name)
+                      require(digest(folder / Path(path).name) == PINS[path], 'Unchanged source mismatch')
+                  row.update(source_sha256=digest(mutated), old=old, new=new, replacements=1)
+                  command = synth(folder, 9, 3, 1) + (
+                      '; sat -prove-asserts -verify -timeout 60 -show-inputs -show-outputs '
+                      f'-dump_json {folder}/counterexample.json')
+                  rc, log = execute([EXE, '-p', command], folder, 'counterexample', 240)
+                  require(rc != 0 and 'model found: FAIL!' in log, 'Missing assertion counterexample')
+                  row['mismatch'] = wave_value(folder / 'counterexample.json', 'mismatch')
+                  require(row['mismatch'] != 0, 'Counterexample has no output mismatch')
+                  row['status'] = 'DETECTED'
+                  print('DETECTED', name, flush=True)
+              except Exception:
+                  row['error'] = traceback.format_exc()
+                  print('FAIL mutation', name, row['error'], flush=True)
+              save(folder / 'result.json', row)
+              return row
+
+          CHANGES = [
+              ('address_bound', 'lane_element_w[lane_index] >= CELLS', 'lane_element_w[lane_index] > CELLS'),
+              ('invalid_target', 'lane_invalid_target_w[lane_index]\n                    )', "1'b0\n                    )"),
+              ('rejected_ownership', 'accepted_cell_mask\n                            & lane_cell_mask_w', 'rejected_cell_mask\n                            & lane_cell_mask_w'),
+              ('pending_busy', '&& frp_is_nonzero(\n                        lane_pending_w[lane_index]\n                    )', '&& (lane_pending_w[lane_index] == FRP_STATE_ZERO)'),
+              ('same_state', "FRP_TRANS_SAME_STATE:\n                    scheduler_allows_request_class = 1'b1;", "FRP_TRANS_SAME_STATE:\n                    scheduler_allows_request_class = 1'b0;"),
+              ('change_count', 'accepted_changes\n                                + COUNTER_ONE;', 'accepted_changes\n                                + (COUNTER_ONE << 1);'),
+              ('invalid_cell_diagnostic', "request_reject_invalid_cell[lane_index] = 1'b1;\n                        request_cell_domain_valid = 1'b0;", "request_reject_invalid_cell[lane_index] = 1'b1;\n                        request_cell_domain_valid = 1'b1;"),
+              ('neutralized', "request_neutralized[lane_index] = 1'b1;", "request_neutralized[lane_index] = 1'b0;"),
+              ('disabled_tick', 'request_reject_tick_disabled = request_valid;', "request_reject_tick_disabled = '0;"),
+              ('direct_mask', 'requested_direct_cell_mask\n                                | lane_cell_mask_w[lane_index];', "requested_direct_cell_mask\n                                | '0;"),
+          ]
+          started = time.monotonic()
+          try:
+              require(EXE, 'Missing yowasp-yosys')
+              REPORT['packages'] = {name: importlib.metadata.version(name) for name in VERSIONS}
+              require(REPORT['packages'] == VERSIONS, 'Tool package mismatch')
+              rc, log = execute([EXE, '-V'], OUT, 'tool-version', 120)
+              require(rc == 0, 'Tool version query failed')
+              REPORT['tool_version'] = log.strip()
+              (OUT / 'inputs').mkdir()
+              for path, expected in PINS.items():
+                  require(digest(ROOT / path) == expected, 'Source pin mismatch: ' + path)
+                  shutil.copyfile(ROOT / path, OUT / 'inputs' / Path(path).name)
+              for path in [*PINS, WORKFLOW]:
+                  target = OUT / 'sources' / path
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(ROOT / path, target)
+              for cells, lanes, extra in MATRIX:
+                  REPORT['profiles'].append(profile(cells, lanes, extra))
+              REPORT['mutations'] = [mutation(item) for item in CHANGES]
+              require(len(REPORT['profiles']) == 13 and
+                      all(r['status'] == 'PASS' for r in REPORT['profiles']), 'Profile failures')
+              require(sum(len(r['witnesses']) for r in REPORT['profiles']) == 296, 'Witness count mismatch')
+              require(len(REPORT['mutations']) == 10 and
+                      all(r['status'] == 'DETECTED' for r in REPORT['mutations']), 'Mutation failures')
+              REPORT.update(status='PASS', combinational_proofs=13, witnesses=296, detected_mutations=10)
+          except Exception:
+              REPORT['error'] = traceback.format_exc()
+              raise
+          finally:
+              REPORT['seconds'] = round(time.monotonic() - started, 3)
+              save(OUT / 'qualification.json', REPORT)
+              summary = '# FRP 134: Request Arbitration\n\n' + REPORT['status'] + '\n\n'
+              summary += '| Cells | Lanes | Extra index bit | Proof | Witnesses | Status |\n'
+              summary += '|---|---|---|---|---|---|\n'
+              for row in REPORT['profiles']:
+                  summary += (f"| {row['cells']} | {row['lanes']} | {row['extra_index_bit']} | "
+                              f"{row['proof_status']} | {len(row['witnesses'])} | {row['status']} |\n")
+              summary += '\nDetected mutations: ' + str(sum(r['status'] == 'DETECTED' for r in REPORT['mutations'])) + '/10.\n'
+              summary += '\nScope: all 30 public output fields, 32-bit counters, unrestricted combinational inputs.\n'
+              summary += '\nProofs contain zero assumption cells; profile results record omitted witness bits and reasons.\n'
+              (OUT / 'summary.md').write_text(summary)
+              save(OUT / 'manifest.json', {str(p.relative_to(OUT)): digest(p)
+                  for p in sorted(OUT.rglob('*')) if p.is_file() and p.name != 'manifest.json'})
+          PY
+      - name: Publish formal summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f bundle134/summary.md ]; then
+            cat bundle134/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload one combined artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-134-request-arbitration-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bundle134/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
