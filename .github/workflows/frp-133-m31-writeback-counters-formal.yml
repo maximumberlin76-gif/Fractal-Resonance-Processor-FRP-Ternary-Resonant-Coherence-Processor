@@ -1,0 +1,265 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 133 - FRP M31 Writeback Counters Formal
+run-name: '133 - FRP Writeback | 70 proofs, 75 witnesses, 10 mutations @ ${{ github.sha }}'
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-133-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install formal tools
+        run: python -m pip install 'yowasp-yosys==0.68.0.0.post1208' 'yowasp-runtime==1.96' 'wasmtime==47.0.1'
+      - name: Prove counter accounting and qualify boundary witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -u - <<'PY'
+          import hashlib, importlib.metadata, json, os, shutil, subprocess, time, traceback
+          from pathlib import Path
+
+          ROOT = Path.cwd()
+          OUT = ROOT / 'bundle133'
+          OUT.mkdir(exist_ok=False)
+          TOP = 'frp_m31_writeback_counters_formal'
+          HARNESS = 'formal/m31/' + TOP + '.sv'
+          DUT = 'rtl/m31/frp_m31_state_update.sv'
+          PKG = 'rtl/m31/frp_m31_pkg.sv'
+          WORKFLOW = '.github/workflows/frp-133-m31-writeback-counters-formal.yml'
+          PINS = {
+              HARNESS: '620137b75b6bd33713f5c02c272538efc6cfed49ac51a3bdf23305309a8de2dd',
+              DUT: 'ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90',
+              PKG: '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94',
+          }
+          VERSIONS = {'yowasp-yosys': '0.68.0.0.post1208',
+                      'yowasp-runtime': '1.96', 'wasmtime': '47.0.1'}
+          MATRIX = [(n, l) for n in (8, 9, 16, 32, 64) for l in (3, n)]
+          GROUPS = {1: 'writes_and_aliases', 2: 'holds', 3: 'resets',
+                    4: 'neutral', 5: 'pending', 6: 'reserved', 7: 'direct'}
+          REPORT = {'schema': 'frp.writeback-counters.v1', 'status': 'FAIL',
+                    'commit': os.environ.get('GITHUB_SHA', 'local'),
+                    'run_id': os.environ.get('GITHUB_RUN_ID', 'local'),
+                    'run_attempt': os.environ.get('GITHUB_RUN_ATTEMPT', 'local'),
+                    'source_sha256': PINS, 'proofs': [], 'profiles': [], 'mutations': [],
+                    'scope': {'clock': 'sampled rising edges after async2sync',
+                              'counter_bits': 32, 'proof_assumptions': [],
+                              'witness_initial_reset': True, 'groups': GROUPS}}
+          EXE = shutil.which('yowasp-yosys')
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def save(path, value):
+              path.write_text(json.dumps(value, indent=2) + '\n')
+
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          def execute(command, folder, label, timeout):
+              meta = {'command': command, 'timeout_seconds': timeout}
+              logpath = folder / (label + '.log')
+              start = time.monotonic()
+              try:
+                  result = subprocess.run(command, stdout=subprocess.PIPE,
+                                          stderr=subprocess.STDOUT, timeout=timeout)
+                  logpath.write_bytes(result.stdout)
+                  meta['returncode'] = result.returncode
+                  return result.returncode, result.stdout.decode(errors='replace')
+              except subprocess.TimeoutExpired as error:
+                  logpath.write_bytes(error.output or b'')
+                  meta['error'] = 'Process timeout'
+                  raise
+              finally:
+                  meta['seconds'] = round(time.monotonic() - start, 3)
+                  save(folder / (label + '-command.json'), meta)
+
+          def synth(folder, cells, lanes, group):
+              return (f'read_slang -j 1 --std 1800-2017 --top {TOP} -I{folder} '
+                      f'-G CELLS={cells} -G LANES={lanes} -G CHECK={group} {folder}/{TOP}.sv; '
+                      f'prep -top {TOP} -flatten; async2sync; opt -full; '
+                      'memory_map; opt -full; chformal -lower; '
+                      'select -assert-count 0 t:$assume; check -assert')
+
+          def wave(path):
+              signals = json.loads(path.read_text())['signal']
+              require(signals, 'Empty waveform: ' + str(path))
+              return {s['name']: s for s in signals}
+
+          def proof(cells, lanes, group):
+              folder = OUT / f'cells-{cells}-lanes-{lanes}' / f'group-{group}'
+              folder.mkdir(parents=True)
+              row = {'cells': cells, 'lanes': lanes, 'group': group,
+                     'name': GROUPS[group], 'status': 'FAIL'}
+              try:
+                  model = folder / 'model.il'
+                  command = synth(OUT / 'inputs', cells, lanes, group) + f'; write_rtlil {model}; '
+                  command += ('delete -port w:reach; opt_clean -purge; '
+                              'sat -seq 1 -tempinduct -initsteps 1 -maxsteps 4 '
+                              '-prove-asserts -verify -timeout 120')
+                  rc, log = execute([EXE, '-p', command], folder, 'proof', 600)
+                  require(rc == 0 and 'Base case for induction length' in log and
+                          'Induction step proven: SUCCESS!' in log, 'Induction failed')
+                  text = model.read_text()
+                  require(text.count('cell $assert ') == 2 and 'cell $assume ' not in text,
+                          'Formal cell count mismatch')
+                  row.update(status='PASS', proof='INDUCTIVE_PASS', model_sha256=digest(model),
+                             assertion_cells=2, assumption_cells=0)
+                  print('PROVED', cells, lanes, GROUPS[group], flush=True)
+              except Exception:
+                  row['error'] = traceback.format_exc()
+                  print('FAIL proof', cells, lanes, group, row['error'], flush=True)
+              save(folder / 'result.json', row)
+              return row
+
+          def witnesses(cells, lanes):
+              folder = OUT / f'cells-{cells}-lanes-{lanes}'
+              row = {'cells': cells, 'lanes': lanes, 'status': 'FAIL', 'witnesses': []}
+              try:
+                  model = folder / 'group-1/model.il'
+                  require(any(r['cells'] == cells and r['lanes'] == lanes and r['group'] == 1
+                              and r['status'] == 'PASS' for r in REPORT['proofs']), 'Missing proved model')
+                  ids = [i for i in range(8) if i != 7 or lanes < cells]
+                  commands = [f'read_rtlil {model}']
+                  for i in ids:
+                      commands.append(f'sat -seq 4 -set-at 1 rst_n 0 -set-at 4 reach[{i}] 1 '
+                                      f'-timeout 90 -show-inputs -show-outputs '
+                                      f'-dump_json {folder}/witness-{i}.json')
+                  rc, log = execute([EXE, '-p', '; '.join(commands)], folder, 'witnesses', 900)
+                  require(rc == 0 and log.count('SAT solving finished - model found:') == len(ids),
+                          'Reachability query failed')
+                  for i in ids:
+                      signals = wave(folder / f'witness-{i}.json')
+                      require(int(signals['reach']['data'][-1], 2) & (1 << i), 'Witness bit mismatch')
+                      require(signals['rst_n']['wave'][1] == '0', 'Initial reset missing')
+                      row['witnesses'].append(i)
+                  row.update(status='PASS', depth=4, omitted_reach_bits=[7] if lanes == cells else [])
+                  print('WITNESSES', cells, lanes, len(ids), flush=True)
+              except Exception:
+                  row['error'] = traceback.format_exc()
+                  print('FAIL witnesses', cells, lanes, row['error'], flush=True)
+              save(folder / 'witness-result.json', row)
+              return row
+
+          def mutation(item):
+              name, old, new, group = item
+              folder = OUT / 'mutations' / name
+              folder.mkdir(parents=True)
+              row = {'name': name, 'cells': 9, 'lanes': 3, 'group': group, 'status': 'FAIL'}
+              try:
+                  source = (ROOT / DUT).read_text()
+                  require(source.count(old) == 1, 'Mutation anchor mismatch')
+                  mutated = folder / Path(DUT).name
+                  mutated.write_text(source.replace(old, new))
+                  for path in (PKG, HARNESS):
+                      shutil.copyfile(ROOT / path, folder / Path(path).name)
+                      require(digest(folder / Path(path).name) == PINS[path], 'Unchanged source mismatch')
+                  row.update(source_sha256=digest(mutated), old=old, new=new, replacements=1)
+                  command = synth(folder, 9, 3, group) + (
+                      '; sat -seq 4 -set-at 1 rst_n 0 -prove-asserts -verify -timeout 90 '
+                      f'-show-inputs -show-outputs -dump_json {folder}/counterexample.json')
+                  rc, log = execute([EXE, '-p', command], folder, 'counterexample', 240)
+                  require(rc != 0 and 'model found: FAIL!' in log, 'Missing assertion counterexample')
+                  signals = wave(folder / 'counterexample.json')
+                  require(signals['rst_n']['wave'][1] == '0', 'Counterexample reset mismatch')
+                  row['status'] = 'DETECTED'
+                  print('DETECTED', name, flush=True)
+              except Exception:
+                  row['error'] = traceback.format_exc()
+                  print('FAIL mutation', name, row['error'], flush=True)
+              save(folder / 'result.json', row)
+              return row
+
+          started = time.monotonic()
+          try:
+              require(EXE, 'Missing yowasp-yosys')
+              REPORT['packages'] = {name: importlib.metadata.version(name) for name in VERSIONS}
+              require(REPORT['packages'] == VERSIONS, 'Tool package mismatch')
+              rc, log = execute([EXE, '-V'], OUT, 'tool-version', 120)
+              require(rc == 0, 'Tool version query failed')
+              REPORT['tool_version'] = log.strip()
+              for path, expected in PINS.items():
+                  require(digest(ROOT / path) == expected, 'Source pin mismatch: ' + path)
+              (OUT / 'inputs').mkdir()
+              for path in PINS:
+                  shutil.copyfile(ROOT / path, OUT / 'inputs' / Path(path).name)
+              for path in [*PINS, WORKFLOW]:
+                  target = OUT / 'sources' / path
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(ROOT / path, target)
+              for cells, lanes in MATRIX:
+                  for group in GROUPS:
+                      REPORT['proofs'].append(proof(cells, lanes, group))
+                  REPORT['profiles'].append(witnesses(cells, lanes))
+              changes = [
+                  ('writes', 'state_write_events + COUNTER_ONE;', 'state_write_events + (COUNTER_ONE << 1);', 1),
+                  ('changes', 'accepted_changes + COUNTER_ONE;', 'accepted_changes + (COUNTER_ONE << 1);', 1),
+                  ('load', 'switch_load_numerator =\n      accepted_changes;',
+                   'switch_load_numerator =\n      accepted_changes + COUNTER_ONE;', 1),
+                  ('accepted', 'accepted_change_events + COUNTER_ONE;', 'accepted_change_events + (COUNTER_ONE << 1);', 1),
+                  ('holds', 'state_hold_events + COUNTER_ONE;', 'state_hold_events + (COUNTER_ONE << 1);', 2),
+                  ('resets', 'state_reset_events + COUNTER_ONE;', 'state_reset_events + (COUNTER_ONE << 1);', 3),
+                  ('neutral', 'neutral_routed_commit_events\n                + COUNTER_ONE;',
+                   'neutral_routed_commit_events\n                + (COUNTER_ONE << 1);', 4),
+                  ('pending', 'pending_completion_commit_events\n                + COUNTER_ONE;',
+                   'pending_completion_commit_events\n                + (COUNTER_ONE << 1);', 5),
+                  ('reserved', 'reserved_state_events + COUNTER_ONE;', 'reserved_state_events + (COUNTER_ONE << 1);', 6),
+                  ('direct', "actual_direct_events = '0;", "actual_direct_events = 32'd1;", 7),
+              ]
+              REPORT['mutations'] = [mutation(item) for item in changes]
+              require(len(REPORT['proofs']) == 70 and
+                      all(r['status'] == 'PASS' for r in REPORT['proofs']), 'Proof failures')
+              require(len(REPORT['profiles']) == 10 and
+                      all(r['status'] == 'PASS' for r in REPORT['profiles']) and
+                      sum(len(r['witnesses']) for r in REPORT['profiles']) == 75, 'Witness failures')
+              require(len(REPORT['mutations']) == 10 and
+                      all(r['status'] == 'DETECTED' for r in REPORT['mutations']), 'Mutation failures')
+              REPORT.update(status='PASS', inductive_proofs=70, witnesses=75, detected_mutations=10)
+          except Exception:
+              REPORT['error'] = traceback.format_exc()
+              raise
+          finally:
+              REPORT['seconds'] = round(time.monotonic() - started, 3)
+              save(OUT / 'qualification.json', REPORT)
+              summary = '# FRP 133: Writeback Counters\n\n' + REPORT['status'] + '\n\n'
+              summary += '| Cells | Lanes | Proved groups | Witnesses | Status |\n|---|---|---|---|---|\n'
+              for row in REPORT['profiles']:
+                  passed = sum(p['status'] == 'PASS' and p['cells'] == row['cells'] and
+                               p['lanes'] == row['lanes'] for p in REPORT['proofs'])
+                  summary += (f"| {row['cells']} | {row['lanes']} | {passed}/7 | "
+                              f"{len(row['witnesses'])} | {row['status']} |\n")
+              summary += '\nDetected mutations: ' + str(sum(r['status'] == 'DETECTED' for r in REPORT['mutations'])) + '/10.\n'
+              summary += '\nProof scope: 32-bit counters, sampled rising edges after async2sync, zero assumption cells.\n'
+              summary += '\nWitnesses: four cycles with first-cycle reset; overflow bit 7 queried when LANES < CELLS.\n'
+              (OUT / 'summary.md').write_text(summary)
+              save(OUT / 'manifest.json', {str(p.relative_to(OUT)): digest(p)
+                  for p in sorted(OUT.rglob('*')) if p.is_file() and p.name != 'manifest.json'})
+          PY
+      - name: Publish formal summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f bundle133/summary.md ]; then
+            cat bundle133/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload one combined artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-133-writeback-counters-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bundle133/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
