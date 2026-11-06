@@ -1,0 +1,244 @@
+# Copyright (c) 2026 Maksym Marnov (Alchimist). All rights reserved.
+name: 132 - FRP M31 Writeback Reachability Formal
+run-name: '132 - FRP Writeback | 10 proofs, 115 witnesses, 6 mutations @ ${{ github.sha }}'
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frp-132-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install formal tools
+        run: python -m pip install 'yowasp-yosys==0.68.0.0.post1208' 'yowasp-runtime==1.96' 'wasmtime==47.0.1'
+      - name: Prove writeback invariants and qualify reachability
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -u - <<'PY'
+          import concurrent.futures, hashlib, importlib.metadata, json, os
+          import shutil, subprocess, time, traceback
+          from pathlib import Path
+
+          ROOT = Path.cwd()
+          OUT = ROOT / 'bundle132'
+          OUT.mkdir(exist_ok=False)
+          TOP = 'frp_m31_writeback_reachability_formal'
+          HARNESS = 'formal/m31/' + TOP + '.sv'
+          DUT = 'rtl/m31/frp_m31_state_update.sv'
+          PKG = 'rtl/m31/frp_m31_pkg.sv'
+          WORKFLOW = '.github/workflows/frp-132-m31-writeback-reachability-formal.yml'
+          PINS = {
+              HARNESS: '722a00dfc7cdd18e3fdd33ce12e698e00d7fff44f1f4295f24308797af70a7bd',
+              DUT: 'ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90',
+              PKG: '762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94',
+          }
+          VERSIONS = {'yowasp-yosys': '0.68.0.0.post1208',
+                      'yowasp-runtime': '1.96', 'wasmtime': '47.0.1'}
+          MATRIX = [(n, l) for n in (8, 9, 16, 32, 64) for l in (3, n)]
+          REPORT = {'schema': 'frp.writeback-reachability.v1', 'status': 'FAIL',
+                    'commit': os.environ.get('GITHUB_SHA', 'local'),
+                    'run_id': os.environ.get('GITHUB_RUN_ID', 'local'),
+                    'run_attempt': os.environ.get('GITHUB_RUN_ATTEMPT', 'local'),
+                    'source_sha256': PINS, 'profiles': [], 'mutations': [],
+                    'scope': {'clock': 'sampled rising edges after async2sync',
+                              'assumption': 'first sampled cycle in reset',
+                              'inputs': 'unrestricted thereafter, including later resets',
+                              'guard_lines': [468, 476, 502, 517, 550]}}
+          EXE = shutil.which('yowasp-yosys')
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def save(path, value):
+              path.write_text(json.dumps(value, indent=2) + '\n')
+
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          def execute(command, folder, label, timeout):
+              meta = {'command': command, 'timeout_seconds': timeout}
+              start = time.monotonic()
+              try:
+                  with (folder / (label + '.log')).open('w') as stream:
+                      result = subprocess.run(command, stdout=stream,
+                                              stderr=subprocess.STDOUT, timeout=timeout)
+                  meta['returncode'] = result.returncode
+                  return result.returncode, (folder / (label + '.log')).read_text(errors='replace')
+              except Exception as error:
+                  meta['error'] = str(error)
+                  raise
+              finally:
+                  meta['seconds'] = round(time.monotonic() - start, 3)
+                  save(folder / (label + '-command.json'), meta)
+
+          def synth(folder, cells, lanes):
+              return (f'read_slang -j 1 --std 1800-2017 --top {TOP} -I{folder} '
+                      f'-G CELLS={cells} -G LANES={lanes} {folder}/{TOP}.sv; '
+                      f'prep -top {TOP} -flatten; async2sync; opt -full; '
+                      'memory_map; opt -full; chformal -lower; '
+                      'select -assert-count 1 t:$assume; '
+                      'select -assert-count 16 t:$assert; check -assert')
+
+          def wave(path):
+              signals = json.loads(path.read_text())['signal']
+              require(signals, 'Empty witness: ' + str(path))
+              return {s['name']: s for s in signals}
+
+          def profile(pair):
+              cells, lanes = pair
+              folder = OUT / f'cells-{cells}-lanes-{lanes}'
+              folder.mkdir()
+              row = {'cells': cells, 'lanes': lanes, 'status': 'FAIL', 'witnesses': []}
+              try:
+                  model = folder / 'model.il'
+                  command = synth(OUT / 'inputs', cells, lanes) + f'; write_rtlil {model}; '
+                  command += ('delete -port w:reach; opt_clean -purge; '
+                              'sat -seq 1 -tempinduct -initsteps 1 -maxsteps 6 '
+                              '-set-assumes -prove-asserts -verify -timeout 240')
+                  rc, log = execute([EXE, '-p', command], folder, 'proof', 600)
+                  require(rc == 0 and 'Base case for induction length' in log and
+                          'Induction step proven: SUCCESS!' in log, 'Induction failed')
+                  text = model.read_text()
+                  require(text.count('cell $assert ') == 16 and text.count('cell $assume ') == 1,
+                          'Formal cell count mismatch')
+                  row['proof'] = 'INDUCTIVE_PASS'
+                  row['model_sha256'] = digest(model)
+                  ids = [i for i in range(12) if i != 6 or lanes < cells]
+                  commands = [f'read_rtlil {model}']
+                  for i in ids:
+                      commands.append(f'sat -seq 4 -set-assumes -set-at 4 reach[{i}] 1 '
+                                      f'-timeout 120 -show-inputs -show-outputs '
+                                      f'-dump_json {folder}/witness-{i}.json')
+                  rc, log = execute([EXE, '-p', '; '.join(commands)], folder, 'witnesses', 600)
+                  require(rc == 0 and log.count('SAT solving finished - model found:') == len(ids),
+                          'Reachability query failed')
+                  for i in ids:
+                      signals = wave(folder / f'witness-{i}.json')
+                      require(int(signals['reach']['data'][-1], 2) & (1 << i), 'Witness bit mismatch')
+                      require(signals['rst_n']['wave'][1] == '0', 'Initial reset missing')
+                      require(signals['guard_ok']['data'][-1] == '11111', 'Guard witness mismatch')
+                      row['witnesses'].append(i)
+                  row.update(status='PASS', assertion_cells=16, assumption_cells=1,
+                             witness_depth=4, omitted_reach_bits=[6] if lanes == cells else [])
+                  print('PASS', cells, lanes, 'induction;', len(ids), 'witnesses', flush=True)
+              except Exception:
+                  row['error'] = traceback.format_exc()
+                  print('FAIL', cells, lanes, row['error'], flush=True)
+              save(folder / 'result.json', row)
+              return row
+
+          def mutation(item):
+              name, old, new, count = item
+              folder = OUT / 'mutations' / name
+              folder.mkdir(parents=True)
+              row = {'name': name, 'cells': 9, 'lanes': 3, 'status': 'FAIL'}
+              try:
+                  source = (ROOT / DUT).read_text()
+                  require(source.count(old) == count, 'Mutation anchor mismatch')
+                  mutated = folder / Path(DUT).name
+                  mutated.write_text(source.replace(old, new))
+                  for path in (PKG, HARNESS):
+                      shutil.copyfile(ROOT / path, folder / Path(path).name)
+                      require(digest(folder / Path(path).name) == PINS[path], 'Unchanged source mismatch')
+                  row.update(source_sha256=digest(mutated), replacements=count, old=old, new=new)
+                  command = synth(folder, 9, 3) + ('; sat -seq 4 -set-assumes -prove-asserts '
+                      '-verify -timeout 120 -show-inputs -show-outputs '
+                      f'-dump_json {folder}/counterexample.json')
+                  rc, log = execute([EXE, '-p', command], folder, 'counterexample', 240)
+                  require(rc != 0 and 'model found: FAIL!' in log, 'Missing assertion counterexample')
+                  signals = wave(folder / 'counterexample.json')
+                  require(signals['rst_n']['wave'][1] == '0', 'Counterexample reset mismatch')
+                  row['status'] = 'DETECTED'
+                  print('DETECTED', name, flush=True)
+              except Exception:
+                  row['error'] = traceback.format_exc()
+                  print('FAIL mutation', name, row['error'], flush=True)
+              save(folder / 'result.json', row)
+              return row
+
+          started = time.monotonic()
+          try:
+              require(EXE, 'Missing yowasp-yosys')
+              REPORT['packages'] = {name: importlib.metadata.version(name) for name in VERSIONS}
+              require(REPORT['packages'] == VERSIONS, 'Tool package mismatch')
+              rc, log = execute([EXE, '-V'], OUT, 'tool-version', 120)
+              require(rc == 0, 'Tool version query failed')
+              REPORT['tool_version'] = log.strip()
+              for path, expected in PINS.items():
+                  require(digest(ROOT / path) == expected, 'Source pin mismatch: ' + path)
+              (OUT / 'inputs').mkdir()
+              for path in PINS:
+                  shutil.copyfile(ROOT / path, OUT / 'inputs' / Path(path).name)
+              for path in [*PINS, WORKFLOW]:
+                  target = OUT / 'sources' / path
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(ROOT / path, target)
+              with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                  REPORT['profiles'] = list(pool.map(profile, MATRIX))
+              assignment = 'packed_state_value(\n              state_candidate_d,\n              element_index\n            );'
+              changes = [
+                  ('reserved_write', assignment, "2'b10;", 1),
+                  ('direct_write', assignment,
+                   '(state_q[element_index*STATE_BITS+:STATE_BITS] == FRP_STATE_POS ? FRP_STATE_NEG : FRP_STATE_POS);', 1),
+                  ('capacity_bypass', '&& capacity_accept_mask[element_index]', "&& 1'b1", 1),
+                  ('neutral_phase', 'frp_scheduler_is_neutralize_capable(\n                scheduler_state\n              );', "1'b1;", 2),
+                  ('pending_phase', 'frp_scheduler_is_commit_capable(\n                scheduler_state\n              );', "1'b1;", 2),
+                  ('register_capture', 'state_q <= state_d;', "state_q <= '0;", 1),
+              ]
+              with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                  REPORT['mutations'] = list(pool.map(mutation, changes))
+              require(len(REPORT['profiles']) == 10 and
+                      all(r['status'] == 'PASS' for r in REPORT['profiles']), 'Profile failures')
+              witnesses = sum(len(r['witnesses']) for r in REPORT['profiles'])
+              require(witnesses == 115, 'Witness total mismatch')
+              require(len(REPORT['mutations']) == 6 and
+                      all(r['status'] == 'DETECTED' for r in REPORT['mutations']), 'Mutation failures')
+              REPORT.update(status='PASS', inductive_profiles=10, witnesses=115, detected_mutations=6)
+          except Exception:
+              REPORT['error'] = traceback.format_exc()
+              raise
+          finally:
+              REPORT['seconds'] = round(time.monotonic() - started, 3)
+              save(OUT / 'qualification.json', REPORT)
+              summary = '# FRP 132: Writeback Reachability\n\n' + REPORT['status'] + '\n\n'
+              summary += '| Cells | Lanes | Status | Proof | Witnesses |\n|---|---|---|---|---|\n'
+              for row in REPORT['profiles']:
+                  summary += (f"| {row['cells']} | {row['lanes']} | {row['status']} | "
+                              f"{row.get('proof', '-')} | {len(row['witnesses'])} |\n")
+              summary += '\nDetected mutations: ' + str(sum(r['status'] == 'DETECTED' for r in REPORT['mutations'])) + '/6.\n'
+              summary += '\nScope: sampled rising edges after async2sync; first sampled cycle in reset; subsequent inputs unrestricted.\n'
+              summary += '\nGuard mapping: bits 0/1/2/3/4 correspond to DUT lines 468/476/502/517/550.\n'
+              summary += '\nReach bit 6 (writes > LANES) is queried when LANES < CELLS.\n'
+              (OUT / 'summary.md').write_text(summary)
+              save(OUT / 'manifest.json', {str(p.relative_to(OUT)): digest(p)
+                  for p in sorted(OUT.rglob('*')) if p.is_file() and p.name != 'manifest.json'})
+          PY
+      - name: Publish formal summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f bundle132/summary.md ]; then
+            cat bundle132/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload one combined artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-132-writeback-reachability-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bundle132/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
