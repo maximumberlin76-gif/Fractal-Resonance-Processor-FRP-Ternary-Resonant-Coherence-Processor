@@ -1,0 +1,248 @@
+name: 136 - FRP M31 Pending Refill Rank
+run-name: "136 - M31 pending refill rank | ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Prepare evidence
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/commit.txt
+          sha256sum formal/m31/frp_m31_pending_refill_rank_formal.sv \
+            rtl/m31/frp_m31_{pkg,scheduler,execution_core,request_lanes,active_neutral,capacity_guard,pending_routes,state_update}.sv \
+            > evidence/sources.sha256
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install verification tools
+        run: |
+          python -m pip install yowasp-yosys==0.68.0.0.post1208 yowasp-runtime==1.96 wasmtime==47.0.1 verilator==5.48.0
+          python -m pip freeze > evidence/packages.txt
+          { yowasp-yosys -V; verilator-cli --version; g++ --version; } > evidence/tools.txt
+
+      - name: Prove rank and collect reset witnesses
+        run: |
+          set -euo pipefail
+          top=frp_m31_pending_refill_rank_formal
+          while read -r cells lanes probe; do
+            dir=evidence/formal-$cells-$lanes-$probe
+            mkdir -p "$dir"
+            timeout 300 yowasp-yosys -Q -p "
+              read_slang -j 1 --top $top -Irtl/m31 -G CELLS=$cells -G LANES=$lanes -G PROBE=$probe formal/m31/$top.sv;
+              prep -top $top -flatten; async2sync; opt -full; memory_map; opt -full;
+              chformal -lower; check -assert;
+              select -assert-any t:\$assert; select -assert-count 1 t:\$assume;
+              write_rtlil $dir/model.il" > "$dir/synthesis.log" 2>&1
+            timeout 300 yowasp-yosys -Q -p "read_rtlil $dir/model.il;
+              sat -set-assumes -tempinduct -seq 1 -maxsteps 8 -timeout 180 -prove-asserts -verify" \
+              > "$dir/proof.log" 2>&1
+            grep -F 'Induction step proven: SUCCESS!' "$dir/proof.log"
+            if [[ $cells == 4 && $probe == 3 ]]; then
+              for bit in {0..7}; do
+                timeout 300 yowasp-yosys -Q -p "read_rtlil $dir/model.il;
+                  sat -set-assumes -seq 9 -set rst_n 1 -set-at 1 rst_n 0 -set-at 9 reach[$bit] 1 -show-inputs -show reach -timeout 90 -dump_json $dir/witness-$bit.json" > "$dir/witness-$bit.log" 2>&1
+                grep -F 'SAT solving finished - model found:' "$dir/witness-$bit.log"
+                test -s "$dir/witness-$bit.json"
+              done
+            fi
+            echo "PASS formal cells=$cells lanes=$lanes probe=$probe" | tee -a evidence/results.txt
+          done <<'PROFILES'
+          4 2 0
+          4 2 2
+          4 2 3
+          8 2 7
+          9 3 4
+          9 3 8
+          PROFILES
+
+      - name: Detect reversed pending priority
+        run: |
+          set -euo pipefail
+          dir=evidence/mutation
+          mkdir -p "$dir/src"
+          cp rtl/m31/frp_m31_{pkg,scheduler,execution_core,request_lanes,active_neutral,capacity_guard,pending_routes,state_update}.sv "$dir/src/"
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("evidence/mutation/src/frp_m31_capacity_guard.sv")
+          s = p.read_text()
+          ascending = """int element_index = 0;
+                      element_index < CELLS;
+                      element_index = element_index + 1"""
+          descending = """int element_index = CELLS - 1;
+                      element_index >= 0;
+                      element_index = element_index - 1"""
+          if s.count(ascending) != 1:
+              raise SystemExit("Expected one pending allocation loop")
+          p.write_text(s.replace(ascending, descending))
+          PY
+          top=frp_m31_pending_refill_rank_formal
+          timeout 300 yowasp-yosys -Q -p "
+            read_slang -j 1 --top $top -I$dir/src -G CELLS=4 -G LANES=2 formal/m31/$top.sv;
+            prep -top $top -flatten; async2sync; opt -full; memory_map; opt -full;
+            chformal -lower; check -assert;
+            sat -set-assumes -seq 9 -set rst_n 1 -set-at 1 rst_n 0 -prove-asserts -timeout 90 -show-inputs -show reach -dump_json $dir/counterexample.json" \
+            > "$dir/mutation.log" 2>&1
+          grep -F 'model found: FAIL!' "$dir/mutation.log"
+          test -s "$dir/counterexample.json"
+          echo 'PASS mutation reversed pending priority detected' | tee -a evidence/results.txt
+
+      - name: Replay refill across five sizes
+        run: |
+          cat > evidence/refill_sim.sv <<'SV'
+          `timescale 1ns/1ps
+          `include "frp_m31_pending_refill_rank_formal.sv"
+
+          module refill_sim #(parameter int N=8);
+              localparam int L=frp_m31_pkg::frp_calc_request_lanes(N);
+              localparam int W=$clog2(N);
+              logic clk=0, rst_n=0, tick_enable=0, clear_counters=0;
+              logic [1:0] scheduler_mode=0;
+              logic [L-1:0] request_valid='0;
+              logic [L*W-1:0] request_cell_index='0;
+              logic [2*L-1:0] request_target='0;
+              logic [2*N-1:0] target_q='0;
+              wire [7:0] reach;
+              frp_m31_pending_refill_rank_formal #(.CELLS(N), .LANES(L)) monitor(.*);
+
+              int ticks=0, edges=0;
+              bit [7:0] seen=0;
+
+              task automatic edge_step(input bit enabled);
+                  tick_enable=enabled;
+                  #2;
+                  if (rst_n) seen |= reach;
+                  $display("TRACE %0d %0d %h %h %h",edges,N,reach,
+                      monitor.state_q,monitor.pending_q);
+                  clk=1; #2; clk=0; #2;
+                  if (!rst_n) ticks=0;
+                  else if (enabled) ticks++;
+                  edges++;
+              endtask
+
+              task automatic select_phase(input bit neutral);
+                  request_valid='0;
+                  scheduler_mode=neutral ? ((ticks%8==7) ? 2 : 1) : 0;
+                  edge_step(0);
+              endtask
+
+              task automatic request(input int lane, addr, input logic [1:0] target);
+                  request_valid[lane]=1;
+                  request_cell_index[lane*W+:W]=W'(addr);
+                  request_target[lane*2+:2]=target;
+              endtask
+
+              task automatic episode(input int refill_count, input bit reverse_sign);
+                  logic [1:0] first, opposite;
+                  first=reverse_sign ? 2'b11 : 2'b01;
+                  opposite=reverse_sign ? 2'b01 : 2'b11;
+                  rst_n=0; clear_counters=0; request_valid='0; scheduler_mode=0;
+                  edge_step(0); rst_n=1;
+
+                  // Polarize the lower cells and the last cell in free mode.
+                  for (int i=0;i<L;i++) request(i,i,first);
+                  edge_step(1);
+                  request_valid='0;
+                  request(0,L,first); request(1,N-1,first); edge_step(1);
+
+                  // Queue L lower routes ahead of the probe without serving them.
+                  select_phase(1);
+                  for (int i=0;i<L;i++) request(i,i,opposite);
+                  edge_step(1);
+                  select_phase(1); request(0,N-1,opposite); edge_step(1);
+
+                  select_phase(0); request(0,N-1,first);
+                  tick_enable=1; #2;
+                  if (reach[2] !== 1'b1) $fatal(1,"expected initial deferral");
+                  edge_step(1);
+                  clear_counters=1; select_phase(1); clear_counters=0;
+
+                  for (int base=0;base<refill_count;base+=L) begin
+                      select_phase(1);
+                      for (int i=0;i<L && base+i<refill_count;i++)
+                          request(i,base+i,(base+i==L) ? opposite : first);
+                      edge_step(1);
+                  end
+                  select_phase(0);
+                  request(0,N-1,first); tick_enable=1; #2;
+                  if (reach[(refill_count==0) ? 4 : (refill_count<L) ? 5 :
+                            (refill_count==L) ? 6 : 7] !== 1'b1)
+                      $fatal(1,"incorrect refill class N=%0d refill=%0d",N,refill_count);
+                  edge_step(1);
+                  request_valid='0;
+                  repeat (2) edge_step(1);
+                  if (monitor.pending_q !== '0 || monitor.state_q[2*N-1-:2] !== opposite)
+                      $fatal(1,"drain failed");
+              endtask
+
+              initial begin
+                  for (int sign_id=0;sign_id<2;sign_id++) begin
+                      episode(0,sign_id!=0);
+                      episode(L-1,sign_id!=0);
+                      episode(L,sign_id!=0);
+                      episode(L+1,sign_id!=0);
+                  end
+                  if (seen !== 8'hff) $fatal(1,"missing reach %h",seen);
+                  $display("PASS cells=%0d lanes=%0d episodes=8 reach=%h",N,L,seen);
+                  $finish;
+              end
+          endmodule
+          SV
+          set -euo pipefail
+          for n in 8 9 16 32 64; do
+            dir=evidence/sim-$n
+            mkdir -p "$dir"
+            obj="$RUNNER_TEMP/refill-$n"
+            verilator-cli --cc --exe --main --timing --assert -Wno-fatal \
+              --top-module refill_sim -GN="$n" -Irtl/m31 -Iformal/m31 \
+              --Mdir "$obj" evidence/refill_sim.sv > "$dir/build.log" 2>&1
+            make -C "$obj" -f Vrefill_sim.mk -j2 VK_PCH_I_FAST= VK_PCH_I_SLOW= OPT_FAST=-O0 \
+              CXXFLAGS=--std=c++20 >> "$dir/build.log" 2>&1
+            for run in 1 2; do
+              "$obj/Vrefill_sim" > "$dir/run-$run.log" 2>&1
+              grep -Fx "PASS cells=$n lanes=$(((n+2)/4)) episodes=8 reach=ff" "$dir/run-$run.log"
+              grep '^TRACE ' "$dir/run-$run.log" > "$dir/trace-$run.txt"
+            done
+            cmp "$dir/trace-1.txt" "$dir/trace-2.txt"
+            sha256sum "$dir/trace-1.txt" > "$dir/trace.sha256"
+            echo "PASS simulation cells=$n episodes=8 replays=2" | tee -a evidence/results.txt
+            rm -rf "$obj"
+          done
+
+      - name: Summarize results
+        if: always()
+        run: |
+          mkdir -p evidence
+          {
+            echo '### M31 pending refill rank'
+            echo
+            if [[ -f evidence/results.txt ]]; then
+              sed 's/^/- /' evidence/results.txt
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload combined evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-136-pending-refill-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
