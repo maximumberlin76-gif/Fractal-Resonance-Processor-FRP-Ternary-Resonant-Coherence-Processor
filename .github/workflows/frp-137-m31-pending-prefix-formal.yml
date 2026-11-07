@@ -1,0 +1,191 @@
+name: 137 - FRP M31 Pending Prefix Formal
+run-name: "137 - M31 | 16 cells, 4 lanes | ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Prepare evidence and tools
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/commit.txt
+          python -m pip install yowasp-yosys==0.68.0.0.post1208 yowasp-runtime==1.96 wasmtime==47.0.1
+          yowasp-yosys -V > evidence/tool-version.txt
+          python -m pip freeze > evidence/packages.txt
+
+      - name: Prove service order and check counterexample
+        run: |
+          cat > evidence/verify.py <<'PY'
+          import hashlib
+          import json
+          import re
+          import subprocess
+          from pathlib import Path
+
+          out = Path("evidence")
+          rtl = Path("rtl/m31")
+          formal = Path("formal/m31")
+          bank = "frp_m31_pending_prefix_formal"
+          arithmetic = "frp_m31_pending_prefix_arithmetic_formal"
+          interval = "frp_m31_pending_refill_rank_formal"
+          induct = "sat -set-assumes -tempinduct -seq 1 -maxsteps 5 -prove-asserts -verify"
+          success = "Induction step proven: SUCCESS!"
+          reset = "-seq 10 -set-assumes -set rst_n 1 -set-at 1 rst_n 0"
+          queue = "-set-at 8 waiting 32783 -set-at 8 grant 15"
+          rows = []
+
+          def run(name, script, marker=None):
+              path = out / (name + ".log")
+              with (out / (name + ".stderr")).open("w") as err:
+                  subprocess.run(["yowasp-yosys", "-Q", "-l", str(path), "-p", script],
+                                 stdout=subprocess.DEVNULL, stderr=err, timeout=360, check=True)
+              if marker and marker not in path.read_text():
+                  raise RuntimeError(f"{name}: missing {marker}")
+              if marker:
+                  rows.append({"stage": name, "result": "PASS", "marker": marker})
+                  (out / "results.json").write_text(json.dumps(rows, indent=2))
+                  print("PASS", name, flush=True)
+
+          def build(name, top, source, inc, assertions, assumptions, extra=""):
+              model = out / (name + ".il")
+              run(name + "-build", f"""
+                  read_slang -j 1 --top {top} -I{inc} -G CELLS=16 -G LANES=4 {extra} {formal}/{source}.sv;
+                  prep -top {top} -flatten; async2sync; opt -full; memory_map; opt -full;
+                  chformal -lower; check -assert;
+                  select -assert-count {assertions} t:$assert;
+                  select -assert-count {assumptions} t:$assume;
+                  write_rtlil {model}
+              """)
+              return f"read_rtlil {model}; "
+
+          out.mkdir(exist_ok=True)
+          files = [formal / (s + ".sv") for s in (bank, interval)]
+          rtl_names = ("pkg", "scheduler", "request_lanes", "pending_routes", "active_neutral",
+                       "capacity_guard", "state_update", "execution_core")
+          sources = [rtl / ("frp_m31_" + s + ".sv") for s in rtl_names]
+          # The three lemma substitutions refer to these reviewed monitor revisions.
+          # RTL changes are qualified by the induction stage below.
+          reviewed = {
+              bank: "73e49995c360a563b350882a900c55d04d16266cd0ed743b9ed5e1c0de3768c9",
+              interval: "5c17fd827f0af958f56d8e63ca8b76d3a44562671d6e535eb92bcdd5b7c35775",
+          }
+          for p in files:
+              normalized = " ".join(p.read_text().split()).encode()
+              if hashlib.sha256(normalized).hexdigest() != reviewed[p.stem]:
+                  raise RuntimeError(f"{p}: review lemma mapping for this monitor revision")
+
+          with (out / "sources.sha256").open("w") as manifest:
+              for p in files + sources:
+                  print(hashlib.sha256(p.read_bytes()).hexdigest(), p, file=manifest)
+
+          bank_model = build("bank", bank, bank, rtl, 81, 1)
+          run("bank-induction", bank_model + induct, success)
+          math_model = build("arithmetic", arithmetic, bank, rtl, 6, 0)
+          run("prefix-arithmetic", math_model + "sat -prove-asserts -verify",
+              "no model found: SUCCESS!")
+
+          rank_model = build("interval", interval, interval, rtl, 42, 1, "-G PROBE=15")
+          # Cell retention and release are established by bank-induction. Extending
+          # the empty prefix through addresses 0..14 gives the single-tick rank law.
+          facts = "c:a_commit c:a_hold c:a_rank_step"
+          run("interval-induction-with-lemmas", rank_model +
+              f"select -assert-count 3 {facts} t:$assert %i; chformal -assert2assume {facts}; "
+              "select -assert-count 39 t:$assert; select -assert-count 4 t:$assume; " +
+              induct, success)
+
+          witness = out / "ordered.json"
+          run("ordered-service", bank_model + f"sat {reset} {queue} "
+              f"-set-at 9 grant[15] 1 -set-at 10 waiting[15] 0 "
+              f"-show-inputs -show waiting -show grant -dump_json {witness}",
+              "SAT solving finished - model found:")
+          signals = {s["name"]: s for s in json.loads(witness.read_text())["signal"]}
+
+          def words(name):
+              sig = signals[name]
+              data = iter(sig.get("data", [])[1:])
+              result = []
+              for symbol in sig["wave"][1:]:
+                  if symbol == "=":
+                      result.append(int(next(data), 2))
+                  elif symbol in ("0", "1"):
+                      result.append(int(symbol))
+                  elif symbol == "." and result:
+                      result.append(result[-1])
+                  else:
+                      raise ValueError(f"{name}: unexpected wave symbol {symbol}")
+              if len(result) != 10:
+                  raise ValueError(f"{name}: expected ten samples")
+              return result
+
+          waiting, grant = words("waiting"), words("grant")
+          if (waiting[7], grant[7]) != (0x800f, 0x000f) or not (grant[8] & 0x8000) or waiting[9] & 0x8000:
+              raise RuntimeError("Witness disagrees with the requested service order")
+
+          inputs = ("rst_n", "tick_enable", "clear_counters", "scheduler_mode",
+                    "request_valid", "request_cell_index", "request_target", "target_q")
+          fixed = " ".join(f"-set-at {t} {name} {value}" for name in inputs
+                           for t, value in enumerate(words(name), start=1))
+          replay = f"sat -seq 10 -set-assumes {fixed} -prove-asserts"
+          run("witness-replay", bank_model + replay + " -verify", "no model found: SUCCESS!")
+
+          mut = out / "mutant"
+          mut.mkdir()
+          for p in sources:
+              (mut / p.name).write_bytes(p.read_bytes())
+          guard = mut / "frp_m31_capacity_guard.sv"
+          pattern = r"int element_index = 0;\s*element_index < CELLS;\s*element_index = element_index \+ 1"
+          body, hits = re.subn(pattern, "int element_index = CELLS - 1; "
+                               "element_index >= 0; element_index = element_index - 1", guard.read_text())
+          if hits != 1:
+              raise RuntimeError(f"Expected one pending-priority loop, found {hits}")
+          guard.write_text(body)
+          mut_model = build("reversed-priority", bank, bank, mut, 81, 1)
+          counter = out / "counterexample.json"
+          run("reversed-priority-detected", mut_model + replay +
+              f" -show-inputs -show waiting -show grant -dump_json {counter}",
+              "model found: FAIL!")
+          if not json.loads(counter.read_text())["signal"]:
+              raise RuntimeError("Empty counterexample")
+          PY
+          python -u evidence/verify.py
+
+      - name: Summarize proof stages
+        if: always()
+        env:
+          VERIFY_STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "### M31 pending prefix, 16 cells / 4 lanes"
+            echo "Verification status: $VERIFY_STATUS"
+            if [[ -f evidence/results.json ]]; then
+              jq -r '.[] | "- " + .stage + ": " + .result' evidence/results.json
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload one combined artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-137-pending-prefix-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
