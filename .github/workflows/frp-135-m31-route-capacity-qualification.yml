@@ -1,0 +1,301 @@
+name: 135 - FRP M31 Route and Capacity Qualification
+run-name: "135 - FRP M31 | 3 contracts | ${{ github.sha }}"
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install verification tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/commit.txt
+          sudo apt-get update -qq
+          sudo apt-get install -y yosys make g++
+          python -m pip install yowasp-yosys==0.68.0.0.post1208 yowasp-runtime==1.96 wasmtime==47.0.1 verilator==5.48.0
+          { yosys -V; yowasp-yosys -V; verilator-cli --version; python --version; } > evidence/tools.txt
+          python -m pip freeze > evidence/python-packages.txt
+
+      - name: Prove contracts, collect witnesses and test mutations and replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -u - <<'PYTHON'
+          import hashlib, json, os, re, shutil, subprocess, tempfile
+          from pathlib import Path
+
+          out = Path("evidence")
+          out.mkdir(exist_ok=True)
+          rtl = Path("rtl/m31")
+          formal = Path("formal/m31")
+          tops = ["frp_m31_" + x + "_formal" for x in
+                  ("capacity_allocation", "active_neutral_routing", "route_capacity_boundary")]
+          rows = []
+
+          def need(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def run(args, log, limit=600):
+              with log.open("w") as f:
+                  f.write("COMMAND " + repr(args) + "\n")
+                  f.flush()
+                  subprocess.run(args, stdout=f, stderr=subprocess.STDOUT,
+                                 timeout=limit, check=True)
+              return log.read_text(errors="replace")
+
+          def solver(cmd, log):
+              return run(["yosys", "-p", cmd], log)
+
+          def model(k, cfg, inc, folder):
+              n, l, e = cfg
+              m = folder / "model.il"
+              top = tops[k]
+              cmd = (f"read_slang -j 1 --std 1800-2017 --top {top} -I{inc} "
+                     f"-G CELLS={n} -G LANES={l} -G EXTRA_INDEX_BIT={e} {formal}/{top}.sv; "
+                     f"prep -top {top} -flatten; " + ("async2sync; " if k == 2 else "") +
+                     f"opt -full; memory_map; opt -full; chformal -lower; check -assert; "
+                     f"select -assert-count 0 t:$assume; write_rtlil {m}")
+              run(["yowasp-yosys", "-p", cmd], folder / "synth.log")
+              need("cell $assert " in m.read_text(), "empty assertion set")
+              return m
+
+          def signal(path, name):
+              sig = next(v for v in json.loads(path.read_text())["signal"] if v["name"] == name)
+              return [int(x, 2) for x in sig["data"] if x]
+
+          def qualify(k, cfg, folder):
+              n, l, e = cfg
+              m = model(k, cfg, rtl, folder)
+              cmd = f"read_rtlil {m}; "
+              if k == 2:
+                  proof = "sat -tempinduct -seq 1 -maxsteps 4 -timeout 240 -prove-asserts -verify"
+                  marker = "Induction step proven: SUCCESS!"
+              else:
+                  proof = ("delete -port w:reach; opt_clean -purge; techmap; opt -full; "
+                           "abc -exe yosys-abc -g AND; opt_clean -purge; "
+                           "select -assert-count 0 t:$assume; sat -prove-asserts -verify -timeout 240")
+                  marker = "no model found: SUCCESS!"
+              need(marker in solver(cmd + proof, folder / "proof.log"), "proof incomplete")
+              if k == 0:
+                  bits = [b for b in range(32) if (b not in (24,25) or (1 << ((n-1).bit_length()+e)) > n)
+                          and (b not in (6,22,28,30) or l > 1) and (b not in (3,18) or n > l)]
+              elif k == 1:
+                  bits = [b for b in range(20) if (b != 16 or (1 << ((n-1).bit_length()+e)) > n)
+                          and (b not in (17,18) or l > 1)]
+              else:
+                  bits = list(range(12)) if n == 4 else []
+              queries = []
+              for b in bits:
+                  sel = f"-set reach[{b}] 1"
+                  if k == 2:
+                      depth = 7 if b in (4,5,6,7) else 4
+                      sel = f"-seq {depth} -set rst_n 1 -set-at 1 rst_n 0 -set-at {depth} reach[{b}] 1"
+                  queries.append(f"sat {sel} -timeout 120 -show-inputs -show-outputs "
+                                 f"-dump_json {folder}/w{b}.json")
+              if bits:
+                  log = solver(cmd + "; ".join(queries), folder / "witness.log")
+                  need(log.count("SAT solving finished - model found:") == len(bits), "missing witness")
+                  for b in bits:
+                      p = folder / f"w{b}.json"
+                      need(signal(p, "reach")[-1] & (1 << b) and max(signal(p, "mismatch")) == 0,
+                           f"invalid witness {b}")
+              return {"method": "induction" if k == 2 else "SAT", "witnesses": bits}
+
+          faults = [
+              (0, "address", r"element_index_int < CELLS", "element_index_int <= CELLS"),
+              (0, "pending_owner", r"pending_completion_candidate\[element_index_int\](\s*\))", r"1'b0\1"),
+              (0, "lane_owner", r"capacity_accept_mask\[element_index_int\](\s*\))", r"1'b0\1"),
+              (0, "pending_operand", r"!frp_is_zero\(current_state\)", "!frp_is_nonzero(current_state)"),
+              (0, "direct", r"\|\| direct_candidate(\s*\))", r"|| 1'b0\1"),
+              (0, "neutral_marker", r"neutral_routed_candidate\[element_index_int\](\s*&&)", r"1'b1\1"),
+              (0, "phase", r"&& frp_scheduler_state_is_valid\(scheduler_state\)", "&& 1'b1"),
+              (0, "remaining", r"CAPACITY_LIMIT(\s*)- accepted_changes;", r"CAPACITY_LIMIT\1+ accepted_changes;"),
+              (0, "full", r"\(accepted_changes == CAPACITY_LIMIT\);", "(accepted_changes > CAPACITY_LIMIT);"),
+              (0, "hold", r"if \(class_same_state\)( begin\s*request_accept_capacity)", r"if (!class_same_state)\1"),
+              (0, "candidates", r"capacity_candidate_events = '0;", "capacity_candidate_events = COUNTER_ONE;"),
+              (0, "rejects", r"capacity_reject_events = '0;", "capacity_reject_events = COUNTER_ONE;"),
+              (1, "first_leg", r"(// Only the first route leg executes now:[\s\S]*?set_packed_state_value\(\s*state_candidate_next,\s*element_index_int,\s*)FRP_ACTIVE_NEUTRAL", r"\1requested_target"),
+              (1, "completion", r"(if \(\s*completion_operands_valid[\s\S]*?set_packed_state_value\(\s*state_candidate_next,\s*element_index,\s*)pending_target", r"\1FRP_STATE_ZERO"),
+              (1, "marker", r"request_neutralized\[\s*lane_index\s*\]\s*&& scheduler_allows_class", "scheduler_allows_class"),
+              (1, "double_count", r"(requested_direct_events\s*=\s*requested_direct_events\s*\+ COUNTER_ONE);", r"\1 + COUNTER_ONE;"),
+              (2, "route_bypass", r"transition_neutral_routed_mask\s*& capacity_accept_mask;", "transition_neutral_routed_mask;"),
+              (2, "pending_bypass", r"\.request_accept\(request_accept_capacity\)", ".request_accept(request_accept_lane)"),
+              (2, "write_bypass", r"\.capacity_accept_mask\(capacity_accept_mask\),(\s*\.accepted_change_candidate_mask)", r".capacity_accept_mask({CELLS{1'b1}}),\1")
+          ]
+
+          def mutant(fault, folder):
+              k, name, pattern, repl = fault
+              with tempfile.TemporaryDirectory(dir=".") as tmp:
+                  inc = Path(tmp)
+                  for p in sources:
+                      shutil.copy(p, inc)
+                  p = inc / ("frp_m31_" + ("capacity_guard","active_neutral","execution_core")[k] + ".sv")
+                  body, nr = re.subn(pattern, repl, p.read_text())
+                  need(nr == 1, f"{name}: expected one anchor, found {nr}")
+                  p.write_text(body)
+                  shutil.copy(p, folder)
+                  m = model(k, (4,2,0) if k == 2 else (9,3,1), inc, folder)
+              seq = "-seq 2 -set rst_n 1" if k == 2 else ""
+              p = folder / "counterexample.json"
+              cmd = (f"read_rtlil {m}; sat {seq} -prove-asserts -timeout 120 "
+                     f"-show-inputs -show mismatch -dump_json {p}")
+              log = solver(cmd, folder / "mutant.log")
+              need("model found: FAIL!" in log and any(signal(p, "mismatch")), "no counterexample")
+              return {"mutation": name, "mismatch": signal(p, "mismatch")}
+
+          def case(name, fn, *args):
+              folder = out / name
+              folder.mkdir()
+              try:
+                  row = {"name": name, "status": "PASS", **fn(*args, folder)}
+              except Exception as exc:
+                  row = {"name": name, "status": "FAIL", "error": str(exc)}
+              rows.append(row)
+              (out / "results.json").write_text(json.dumps(rows, indent=2))
+              print(row, flush=True)
+
+          sources = [rtl / ("frp_m31_" + s + ".sv") for s in
+                     ("pkg","request_lanes","active_neutral","capacity_guard","pending_routes",
+                      "state_update","scheduler","execution_core")]
+          for p in sources + [formal / (t+".sv") for t in tops]:
+              dst = out / "source" / p
+              dst.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copy(p, dst)
+
+          tb = """
+          module sim;
+              parameter int N = 9;
+              localparam int I = $clog2(N)+1;
+              logic clk,rst_n,tick_enable,clear_counters;
+              logic [1:0] scheduler_mode;
+              logic [2:0] request_valid;
+              logic [3*I-1:0] request_cell_index;
+              logic [5:0] request_target;
+              logic [2*N-1:0] target_q;
+              wire [11:0] reach;
+              wire [5:0] mismatch;
+              frp_m31_route_capacity_boundary_formal #(.CELLS(N),.LANES(3),.EXTRA_INDEX_BIT(1)) top(.*);
+              int unsigned v=32'h135a2937, word_v, digest=32'h811c9dc5;
+              function automatic int unsigned draw();
+                  v ^= v << 13; v ^= v >> 17; v ^= v << 5; return v;
+              endfunction
+              logic [11:0] seen=0;
+              initial begin
+                  clk=0; rst_n=0; tick_enable=0; #2; clk=1; #2; clk=0; #2;
+                  for (int k=0; k<8192; k++) begin
+                      rst_n=(k%509)!=0; tick_enable=(draw()%8)!=0;
+                      clear_counters=(draw()%97)==0; scheduler_mode=draw()%3;
+                      request_valid=draw();
+                      for (int c=0;c<N;c++) target_q[2*c+:2]=draw();
+                      for (int l=0;l<3;l++) begin
+                          word_v=draw();
+                          request_cell_index[I*l+:I]=(word_v%8==0)?N-1:(word_v%9==0)?N+1:
+                              (word_v%31==0)?((word_v>>8)%N):word_v%7;
+                          request_target[2*l+:2]=draw();
+                      end
+                      #2; if(mismatch!=0) $fatal(1,"pre %0d %h",k,mismatch);
+                      seen |= reach; digest=(digest ^ reach)*32'h01000193;
+                      clk=1; #2; if(mismatch!=0) $fatal(1,"post %0d %h",k,mismatch);
+                      for (int c=0;c<N;c++) digest=(digest ^ {top.state_q[2*c+:2],
+                          top.pending_q[2*c+:2]})*32'h01000193;
+                      clk=0; #2;
+                  end
+                  if(seen!=12'hfff) $fatal(1,"missing reach: %h",~seen);
+                  $display("PASS cycles=8192 reach=%03h digest=%08h",seen,digest); $finish;
+              end
+          endmodule
+          """
+
+          def simulate(n, folder):
+              bench = folder / "sim.sv"
+              bench.write_text(tb)
+              with tempfile.TemporaryDirectory(dir=".") as tmp:
+                  obj = Path(tmp) / "obj"
+                  run(["verilator-cli","--cc","--exe","--main","--timing","--assert",
+                       "-Wno-fatal","--top-module","sim",f"-GN={n}",f"-I{rtl}","--Mdir",str(obj),
+                       str(formal/(tops[2]+".sv")),str(bench)], folder/"compile.log")
+                  run(["make","-C",str(obj),"-f","Vsim.mk","-j2","CFG_CXXFLAGS_PCH_I=-include",
+                       "CXXFLAGS=--std=c++20"], folder/"build.log")
+                  traces = []
+                  for i in (1,2):
+                      log = run([str(obj/"Vsim")], folder/f"replay{i}.log")
+                      hit = re.search(r"PASS cycles=8192 reach=fff digest=([0-9a-fA-F]{8})", log)
+                      need(hit, "incomplete simulation")
+                      traces.append(hit[1])
+                  need(traces[0] == traces[1], "replay digest differs")
+              return {"method":"simulation", "cycles_per_run":8192, "runs":2, "digest":traces[0]}
+
+          profiles = [
+              [(n,3,e) for n in (8,9,16,32,64) for e in (0,1)] + [(9,l,1) for l in (1,2,4)],
+              [(8,1,0),(9,3,1)],
+              [(4,2,1),(8,1,0)]
+          ]
+          for k, group in enumerate(profiles):
+              for cfg in group:
+                  case(tops[k]+"-"+"-".join(map(str,cfg)), qualify, k, cfg)
+          for fault in faults:
+              case("mutation-"+fault[1], mutant, fault)
+          for n in (8,9,16,32,64):
+              case(f"simulation-{n}", simulate, n)
+          need(len(rows) == 41 and all(r["status"]=="PASS" for r in rows), "inspect results.json")
+          PYTHON
+
+      - name: Summarize and hash evidence
+        if: always()
+        shell: bash
+        env:
+          PRIOR_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          python - <<'PYTHON'
+          from pathlib import Path
+          import hashlib, json, os
+          p = Path("evidence")
+          results = p / "results.json"
+          rows = json.loads(results.read_text()) if results.exists() else []
+          passed = [r for r in rows if r["status"] == "PASS"]
+          summary = {
+              "commit": os.environ["GITHUB_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "job_status_before_upload": os.environ["PRIOR_STATUS"],
+              "expected_cases": 41, "completed_cases": len(rows), "passed_cases": len(passed),
+              "proof_profiles": sum("witnesses" in r for r in passed),
+              "sat_witnesses": sum(len(r.get("witnesses", [])) for r in passed),
+              "mutations_detected": sum("mutation" in r for r in passed),
+              "simulation_cycles_including_replay": sum(r.get("cycles_per_run", 0)*r.get("runs", 0) for r in passed),
+              "failed": [r["name"] for r in rows if r["status"] != "PASS"],
+          }
+          (p/"summary.json").write_text(json.dumps(summary, indent=2))
+          with (p/"SHA256SUMS").open("w") as f:
+              for q in sorted(p.rglob("*")):
+                  if q.is_file() and q != p/"SHA256SUMS":
+                      f.write(hashlib.sha256(q.read_bytes()).hexdigest()+"  "+str(q.relative_to(p))+"\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write("### M31 route and capacity qualification\n\n")
+              for key, value in summary.items():
+                  f.write(f"- {key}: {value}\n")
+          PYTHON
+
+      - name: Upload one combined artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-135-route-capacity-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
