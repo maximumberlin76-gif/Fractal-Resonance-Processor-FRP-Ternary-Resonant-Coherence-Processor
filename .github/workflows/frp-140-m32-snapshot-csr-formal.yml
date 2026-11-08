@@ -1,0 +1,201 @@
+name: 140 - FRP M32 Snapshot CSR Formal
+run-name: "140 - M32 snapshot CSR | 26 words | ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Prepare sources and tools
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/commit.txt
+          sha256sum formal/m32/frp_m32_snapshot_csr_formal.sv \
+            rtl/m32/frp_m32_boundary_snapshot_csr.sv > evidence/sources.sha256
+          python -m pip install yowasp-yosys==0.68.0.0.post1208 yowasp-runtime==1.96 wasmtime==47.0.1
+          yowasp-yosys -V > evidence/tool-version.txt
+          python -m pip freeze > evidence/packages.txt
+
+      - name: Prove snapshots and replay CSR transactions
+        run: |
+          cat > evidence/verify.py <<'PY'
+          from concurrent.futures import ThreadPoolExecutor
+          import json
+          from pathlib import Path
+          import shutil
+          import subprocess
+
+          top = "frp_m32_snapshot_csr_formal"
+          dut = Path("rtl/m32/frp_m32_boundary_snapshot_csr.sv")
+          bench = Path("formal/m32") / (top + ".sv")
+          out = Path("evidence")
+          sizes = (8, 9, 16, 32, 64)
+          reset = "-set-assumes -set rst_n 1 -set-at 1 rst_n 0"
+          show = "-show csr_rdata -show csr_error -show csr_ready"
+
+          def prepare(folder):
+              folder.mkdir(parents=True)
+              for src in (bench, dut):
+                  shutil.copyfile(src, folder / src.name)
+
+          def solve(folder, label, script):
+              marker = label + ".ok"
+              script += f"; tee -o {marker} log FRP140_COMPLETE"
+              with (folder / (label + ".stderr")).open("w") as err:
+                  proc = subprocess.run(["yowasp-yosys", "-Q", "-p", script], cwd=folder,
+                                        stderr=err, stdout=subprocess.PIPE, timeout=360)
+              (folder / (label + ".log")).write_bytes(proc.stdout)
+              proc.check_returncode()
+              if "FRP140_COMPLETE" not in (folder / marker).read_text():
+                  raise RuntimeError(f"{folder}: incomplete {label}")
+
+          def build(n, w):
+              return (f"read_slang -j 1 --top {top} -I. -G CELLS={n} -G COUNT_BITS={w} {top}.sv; "
+                      f"prep -top {top} -flatten; async2sync; opt -full; chformal -lower; check -assert; "
+                      "select -assert-count 5 t:$assert; select -assert-count 1 t:$assume; write_rtlil model.il")
+
+          def samples(path, name, depth):
+              signals = json.loads(path.read_text())["signal"]
+              s = next(x for x in signals if x["name"] == name)
+              data = iter(s.get("data", [])[1:])
+              values = []
+              for ch in s["wave"][1:]:
+                  if ch == "=":
+                      values.append(int(next(data), 2))
+                  elif ch in ("0", "1"):
+                      values.append(int(ch))
+                  elif ch == "." and values:
+                      values.append(values[-1])
+                  else:
+                      raise ValueError(f"{path}: unexpected {name} symbol {ch}")
+              if len(values) != depth:
+                  raise ValueError(f"{path}: incomplete {name}")
+              return values
+
+          def readback(n, w):
+              # Sample 2 captures nonzero recorder inputs. All live inputs then go to zero.
+              words = [0x90000001+i for i in range(26)]
+              words[11] = 17
+              words[18:22] = [1, 4, 16, 0x40000000]
+              words[22:] = [12, 48, 192, 3]
+              fields = [
+                  ("count",w,0,2), ("previous_margin",32,2,1), ("minimum_margin",32,3,1),
+                  ("minimum_tick",64,4,2), ("peak_load",32,6,1), ("peak_tick",64,7,2),
+                  ("boundary_tick",64,9,2), ("boundary_previous",32,12,1), ("margin",32,13,1),
+                  ("capacity",32,14,1), ("pressure",32,15,1), ("heat",32,16,1),
+                  ("load_word",32,17,1), ("retained",2*n,18,4), ("pending",2*n,22,4),
+              ]
+              inputs = {"flags": (5,27), "mode": (2,1), "phase": (3,4)}
+              for name, width, first, length in fields:
+                  value = sum(words[first+i] << (32*i) for i in range(length)) & ((1 << width)-1)
+                  inputs[name] = (width, value)
+                  for i in range(length):
+                      words[first+i] = (value >> (32*i)) & 0xffffffff
+              cmd = (f"sat -seq 33 {reset} -set csr_valid 1 -set csr_addr 0 -set csr_write 0 "
+                     "-set csr_wdata 0 -set-at 2 csr_write 1 -set-at 2 csr_wdata 1 "
+                     "-set-at 32 csr_write 1 -set-at 32 csr_wdata 2 -set-at 33 csr_addr 16")
+              for name, (width, value) in inputs.items():
+                  cmd += f" -set {name} 0 -set-at 2 {name} {width}'b{value:b}"
+              for step, addr in enumerate(range(4, 0x75, 4), start=3):
+                  cmd += f" -set-at {step} csr_addr {addr}"
+              data = [0, 0, 55, 0x46524201, (w << 16) | n] + words + [0, 0]
+              return cmd, data
+
+          def qualify(case):
+              n, w = case
+              folder = out / f"cells-{n}-width-{w}"
+              prepare(folder)
+              solve(folder, "proof", build(n, w) +
+                    "; sat -set-assumes -tempinduct -seq 1 -maxsteps 5 -prove-asserts -verify")
+              queries = [f"sat -seq 5 {reset} -set-at 5 reach[{b}] 1 -show-inputs -show reach "
+                         f"{show} -dump_json w{b}.json" for b in range(8)]
+              solve(folder, "witness", "read_rtlil model.il; " + "; ".join(queries))
+              for b in range(8):
+                  path = folder / f"w{b}.json"
+                  if samples(path, "rst_n", 5) != [0,1,1,1,1] or not samples(path, "reach", 5)[-1] & (1 << b):
+                      raise RuntimeError(f"{path}: reset or reach mismatch")
+              pins, expected = readback(n, w)
+              solve(folder, "readback", f"read_rtlil model.il; {pins} {show} -dump_json bus.json")
+              bus = folder / "bus.json"
+              for name, want in (("csr_rdata", expected), ("csr_ready", [0]+[1]*32),
+                                 ("csr_error", [0]*32+[1])):
+                  if samples(bus, name, 33) != want:
+                      raise RuntimeError(f"{bus}: {name} mismatch")
+              print(f"PASS cells={n} width={w}", flush=True)
+              return {"cells": n, "count_bits": w, "witnesses": 8, "payload_words": 26}
+
+          cases = [(n,w) for n in sizes for w in (3,64)]
+          with ThreadPoolExecutor(max_workers=2) as pool:
+              rows = list(pool.map(qualify, cases))
+          (out / "profiles.json").write_text(json.dumps(rows, indent=2))
+
+          pins, _ = readback(64, 64)
+          faults = [
+              ("wrong-bank", "capture_words[22*32+:128] = padded_pending",
+               "capture_words[22*32+:128] = padded_retained", "csr_rdata", 31, 0x40000000),
+              ("live-read", "csr_rdata = snapshot_words_q[",
+               "csr_rdata = capture_words[", "csr_rdata", 6, 0),
+              ("read-after-release", "csr_addr <= 8'h74 && snapshot_valid_q",
+               "csr_addr <= 8'h74", "csr_error", 33, 0),
+          ]
+          for label, old, new, signal, step, value in faults:
+              folder = out / label
+              prepare(folder)
+              p = folder / dut.name
+              body = p.read_text()
+              if body.count(old) != 1:
+                  raise RuntimeError(f"{label}: expected one mutation anchor")
+              p.write_text(body.replace(old, new))
+              solve(folder, "fault", build(64,64) + f"; {pins} -prove-asserts -falsify "
+                    f"{show} -dump_json counterexample.json")
+              actual = samples(folder / "counterexample.json", signal, 33)[step-1]
+              control = samples(out / "cells-64-width-64/bus.json", signal, 33)[step-1]
+              if actual != value or actual == control:
+                  raise RuntimeError(f"{label}: unexpected counterexample")
+              print("PASS detected", label, flush=True)
+          (out / "mutations.json").write_text(json.dumps([f[0] for f in faults]))
+          PY
+          python -u evidence/verify.py
+
+      - name: Summarize verification
+        if: always()
+        env:
+          PRIOR_STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "### M32 snapshot CSR"
+            echo "Verification status: $PRIOR_STATUS"
+            if [[ -f evidence/profiles.json ]]; then
+              jq -r '"Profiles: \(length), witnesses: \(map(.witnesses)|add), payload reads: \(map(.payload_words)|add)"' evidence/profiles.json
+            fi
+            if [[ -f evidence/mutations.json ]]; then
+              jq -r '"Detected mutations: " + join(", ")' evidence/mutations.json
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload one combined artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-140-snapshot-csr-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
