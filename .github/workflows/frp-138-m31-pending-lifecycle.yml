@@ -1,0 +1,299 @@
+name: 138 - FRP M31 Pending Lifecycle and Recovery
+run-name: "138 - M31 | all addresses up to 64 cells | ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Prepare evidence and install tools
+        id: tools
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/commit.txt
+          sha256sum formal/m31/frp_m31_pending_cell_lifecycle_formal.sv \
+            rtl/m31/frp_m31_{pkg,scheduler,request_lanes,pending_routes,active_neutral,capacity_guard,state_update,execution_core}.sv \
+            verification/m32/frp_m32_coverage_union.py > evidence/sources.sha256
+          python -m pip install yowasp-yosys==0.68.0.0.post1208 yowasp-runtime==1.96 wasmtime==47.0.1 verilator==5.48.0
+          { yowasp-yosys -V; verilator-cli --version; } > evidence/tools.txt
+          python -m pip freeze > evidence/packages.txt
+
+      - name: Prove every pending address
+        run: |
+          cat > evidence/prove.py <<'PY'
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+          import json
+          from pathlib import Path
+          import shutil
+          import subprocess
+
+          top = "frp_m31_pending_cell_lifecycle_formal"
+          out = Path("evidence")
+          rtl = Path("rtl/m31")
+          monitor = Path("formal/m31") / (top + ".sv")
+          sizes = (8, 9, 16, 32, 64)
+          sources = [monitor, rtl / "frp_m31_pending_routes.sv", rtl / "frp_m31_pkg.sv"]
+
+          def prepare(folder):
+              folder.mkdir(parents=True)
+              for p in sources:
+                  shutil.copyfile(p, folder / p.name)
+
+          def synth(n, probe):
+              return (f"read_slang -j 1 --top {top} -I. -G CELLS={n} -G PROBE={probe} {top}.sv; "
+                      f"prep -top {top} -flatten; async2sync; opt -full; memory_map; opt -full; "
+                      "chformal -lower; check -assert; select -assert-any t:$assert; "
+                      "select -assert-count 1 t:$assume; ")
+
+          def solve(folder, label, cmd):
+              # SAT -verify gates induction; SAT -falsify gates the mutation control.
+              # Witnesses are checked from WaveJSON after the solver returns.
+              done = label + ".ok"
+              script = cmd + f"; tee -o {done} log FRP138_COMPLETE"
+              with (folder / (label + ".stderr")).open("w") as err:
+                  proc = subprocess.run(["yowasp-yosys", "-Q", "-p", script], cwd=folder,
+                                        stdout=subprocess.PIPE, stderr=err, timeout=480)
+              (folder / (label + ".log")).write_bytes(proc.stdout)
+              proc.check_returncode()
+              if "FRP138_COMPLETE" not in (folder / done).read_text():
+                  raise RuntimeError(f"{folder}: incomplete {label}")
+
+          def stimulus(n, bit, step):
+              lanes = (n + 2) // 4
+              iw = (n - 1).bit_length()
+              used = [lanes - 1] if bit != 2 else [0, lanes - 1]
+              mask = sum(1 << l for l in used)
+              index = sum((n - 1) << (iw*l) for l in used)
+              goal = sum((1 if bit == 0 else 3) << (2*l) for l in used)
+              at = f"-set-at {step}"
+              return (f"{at} request_accept {mask} {at} request_neutralized {mask} "
+                      f"{at} request_cell_index {lanes*iw}'b{index:b} "
+                      f"{at} request_target {2*lanes}'b{goal:b}")
+
+          def prove(case):
+              n, probe = case
+              folder = out / f"cells-{n}" / f"probe-{probe}"
+              prepare(folder)
+              save = "write_rtlil model.il; " if probe == n-1 else ""
+              solve(folder, "proof", synth(n, probe) + save +
+                    "sat -set-assumes -tempinduct -seq 1 -maxsteps 4 -prove-asserts -verify")
+              if probe == n-1:
+                  queries = []
+                  for b in range(8):
+                      pins = stimulus(n, b, 4) if b < 3 else ""
+                      queries.append(f"sat -seq 4 -set-assumes -set rst_n 1 -set-at 1 rst_n 0 "
+                                     f"-set-at 4 reach[{b}] 1 {pins} -show-inputs -show reach "
+                                     f"-dump_json witness-{b}.json")
+                  solve(folder, "witness", "read_rtlil model.il; " + "; ".join(queries))
+                  for b in range(8):
+                      wave = json.loads((folder / f"witness-{b}.json").read_text())["signal"]
+                      signal = next(s for s in wave if s["name"] == "reach")
+                      if not (int(signal["data"][-1], 2) & (1 << b)):
+                          raise RuntimeError(f"{folder}: wrong witness {b}")
+              return {"cells": n, "probe": probe, "witnesses": 8 if probe == n-1 else 0}
+
+          cases = [(n, p) for n in sizes for p in range(n)]
+          rows, failures = [], []
+          with ThreadPoolExecutor(max_workers=4) as pool:
+              jobs = {pool.submit(prove, case): case for case in cases}
+              for job in as_completed(jobs):
+                  n, p = jobs[job]
+                  try:
+                      rows.append(job.result())
+                      print(f"PASS cells={n} probe={p}", flush=True)
+                  except Exception as exc:
+                      failures.append({"cells": n, "probe": p, "error": str(exc)})
+                      print(f"FAIL cells={n} probe={p}: {exc}", flush=True)
+          rows.sort(key=lambda row: (row["cells"], row["probe"]))
+          (out / "formal.json").write_text(json.dumps(rows, indent=2))
+          (out / "failures.json").write_text(json.dumps(failures, indent=2))
+          if failures or len(rows) != 129 or sum(r["witnesses"] for r in rows) != 40:
+              raise RuntimeError("Incomplete proof matrix; inspect failures.json")
+
+          fault = out / "collision-control"
+          prepare(fault)
+          source = fault / "frp_m31_pending_routes.sv"
+          body = source.read_text()
+          if body.count("|| duplicate_creation") != 1:
+              raise RuntimeError("Expected one duplicate-creation guard")
+          source.write_text(body.replace("|| duplicate_creation", "|| 1'b0"))
+          test = ("sat -seq 3 -set-assumes -set rst_n 1 -set-at 1 rst_n 0 "
+                  "-set-at 2 tick_enable 1 -set-at 2 state_q[127:126] 1 " +
+                  stimulus(64, 2, 2) + " -prove-asserts -falsify -show-inputs -dump_json fault.json")
+          solve(fault, "mutation", synth(64, 63) + test)
+          if not json.loads((fault / "fault.json").read_text())["signal"]:
+              raise RuntimeError("Missing mutation trace")
+          print("PASS 129 address proofs, 40 reset witnesses and 64-cell collision control")
+          PY
+          python -u evidence/prove.py
+
+      - name: Check recovery and measure RTL coverage
+        if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
+        run: |
+          cat > evidence/recovery.sv <<'SV'
+          `timescale 1ns/1ps
+          `include "frp_m31_execution_core.sv"
+
+          module recovery #(parameter int N=64);
+            import frp_m31_pkg::*;
+            localparam int K=frp_calc_request_lanes(N), I=$clog2(N)+(N!=9);
+            logic clk=0, rst_n=0, tick_enable=0, clear_counters=0;
+            frp_m31_scheduler_mode_e scheduler_mode=FRP_MODE_FREE;
+            logic [K-1:0] request_valid='0;
+            logic [K*I-1:0] request_cell_index='0;
+            logic [2*K-1:0] request_target='0;
+            logic [2*N-1:0] target_q='0;
+            wire [2*N-1:0] state_out, pending_route_out;
+            wire [K-1:0] request_accept, request_reject;
+            wire [31:0] actual_direct_events, queue_overflow_events;
+            wire frp_m31_scheduler_state_e scheduler_state_q;
+
+            frp_m31_execution_core #(.CELLS(N), .REQUEST_LANES(K), .CELL_INDEX_BITS(I)) dut (
+                .clk, .rst_n, .tick_enable, .clear_counters, .scheduler_mode, .request_valid,
+                .request_cell_index, .request_target, .target_q, .state_out, .pending_route_out,
+                .request_accept, .request_reject, .actual_direct_events, .queue_overflow_events,
+                .scheduler_state_q);
+
+            logic [2*N-1:0] lane_state='0, lane_target='0, lane_pending='0;
+            wire cell_ok, target_ok;
+            frp_m31_request_lanes #(.CELLS(N), .REQUEST_LANES(K), .CELL_INDEX_BITS(I)) ingress (
+                .tick_enable, .scheduler_state(scheduler_state_q), .request_valid,
+                .request_cell_index, .request_target, .state_q(lane_state),
+                .target_q(lane_target), .pending_route_q(lane_pending),
+                .request_cell_domain_valid(cell_ok), .request_target_domain_valid(target_ok));
+
+            task automatic tick();
+              #2; clk=1; #2; clk=0; #2;
+              if ({actual_direct_events,queue_overflow_events} !== '0)
+                $fatal(1,"direct event or queue overflow");
+            endtask
+
+            task automatic bank(input logic [1:0] state, pending);
+              if (state_out !== {state,{(2*N-2){1'b0}}} ||
+                  pending_route_out !== {pending,{(2*N-2){1'b0}}})
+                $fatal(1,"bank mismatch N=%0d state=%h pending=%h",N,state_out,pending_route_out);
+            endtask
+
+            initial begin
+              tick(); rst_n=1;
+              lane_state[2*N-1-:2]=2; #2;
+              if ({cell_ok,target_ok} !== 2'b01) $fatal(1,"reserved retained input");
+              lane_state='0; lane_target[2*N-1-:2]=2; #2;
+              if ({cell_ok,target_ok} !== 2'b10) $fatal(1,"reserved target input");
+              lane_target='0; lane_pending[2*N-1-:2]=2; #2;
+              if ({cell_ok,target_ok} !== 2'b10) $fatal(1,"reserved pending input");
+              lane_pending='0; #2;
+              if ({cell_ok,target_ok} !== 2'b11) $fatal(1,"domain recovery");
+              tick_enable=1;
+              request_valid[0]=1; request_target[1:0]=1; request_cell_index[0+:I]=I'(N-1);
+              tick(); bank(1,0);
+              request_target[1:0]=3; tick(); bank(0,3);
+              request_valid='0; tick_enable=0; scheduler_mode=FRP_MODE_RESERVED;
+              tick(); bank(0,3);
+              if (scheduler_state_q !== FRP_SCHED_INVALID) $fatal(1,"reserved mode");
+
+              tick_enable=1; request_valid[K-1]=1; request_cell_index[(K-1)*I+:I]=I'(N);
+              request_target[2*K-1-:2]=1; target_q[2*N-1-:2]=2; #2;
+              if (request_accept[K-1] !== 0 || request_reject[K-1] !== 1)
+                $fatal(1,"reserved-mode rejection");
+              tick(); bank(0,3);
+              target_q='0; scheduler_mode=FRP_MODE_FREE; tick_enable=0; clear_counters=1;
+              tick(); bank(0,3);
+              if (scheduler_state_q !== FRP_SCHED_FREE) $fatal(1,"free-mode recovery");
+              clear_counters=0; tick_enable=1; #2;
+              if (request_accept[K-1] !== 0 || request_reject[K-1] !== 1)
+                $fatal(1,"invalid address accepted in FREE");
+              tick(); bank(3,0);
+              $display("PASS recovery cells=%0d lanes=%0d index_bits=%0d",N,K,I);
+              $finish;
+            end
+          endmodule
+          SV
+          set -euo pipefail
+          for n in 8 9 16 32 64; do
+            dir="evidence/recovery-$n"
+            obj="$RUNNER_TEMP/recovery-$n"
+            mkdir -p "$dir"
+            verilator-cli --cc --exe --main --assert --timing --coverage-line \
+              --unroll-count 1 -Wno-fatal --top-module recovery -GN="$n" \
+              -Irtl/m31 --Mdir "$obj" evidence/recovery.sv > "$dir/build.log" 2>&1
+            make -C "$obj" -f Vrecovery.mk -j2 VK_PCH_I_FAST= VK_PCH_I_SLOW= \
+              OPT_FAST=-O0 CXXFLAGS=--std=c++20 >> "$dir/build.log" 2>&1
+            "$obj/Vrecovery" "+verilator+coverage+file+$PWD/$dir/coverage.dat" > "$dir/run.log" 2>&1
+            grep -F "PASS recovery cells=$n " "$dir/run.log"
+            rm -rf "$obj"
+          done
+          cat > evidence/check_coverage.py <<'PY'
+          from pathlib import Path
+          import json
+          import sys
+          sys.path.insert(0, "verification/m32")
+          from frp_m32_coverage_union import source_points
+
+          wanted = {
+              "scheduler": [(131,"else"), (201,"case"), (296,"case")],
+              "request_lanes": [(232,"if"), (240,"if"), (248,"if"), (288,"else"), (340,"elsif")],
+              "active_neutral": [(394,"else")], "capacity_guard": [(323,"else")],
+              "execution_core": [(397,"else")], "pending_routes": [(336,"else")],
+          }
+          root = Path.cwd()
+          files = {f"rtl/m31/frp_m31_{k}.sv": points for k, points in wanted.items()}
+          source = {f: Path(f).read_text().splitlines() for f in files}
+          rows = []
+          for n in (8,9,16,32,64):
+              folder = Path("evidence") / f"recovery-{n}"
+              pts = source_points((folder/"coverage.dat").read_bytes(), set(files), root, source)
+              for f, targets in files.items():
+                  for line, arm in targets:
+                      hits = max((h for m,h,_ in pts if m["f"]==f and int(m["l"])==line
+                                  and m.get("o")==arm and h>=int(m["s"])), default=0)
+                      if not hits:
+                          raise RuntimeError(f"{n} cells: missing {f}:{line} {arm}")
+                      rows.append(dict(cells=n, file=f, line=line, arm=arm, hits=hits))
+          Path("evidence/coverage.json").write_text(json.dumps(rows, indent=2))
+          print("PASS 12 measured source points in each of five profiles")
+          PY
+          python evidence/check_coverage.py
+
+      - name: Summarize verified results
+        if: always()
+        env:
+          PRIOR_STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "### M31 pending lifecycle and recovery"
+            echo "Verification status: $PRIOR_STATUS"
+            if [[ -f evidence/formal.json ]]; then
+              jq -r '"Address proofs: \(length), reset witnesses: \(map(.witnesses)|add)"' evidence/formal.json
+            fi
+            if [[ -f evidence/coverage.json ]]; then
+              jq -r '"Measured profile/point pairs: \(length)"' evidence/coverage.json
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload combined evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-138-pending-lifecycle-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
