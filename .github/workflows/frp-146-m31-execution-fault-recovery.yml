@@ -1,0 +1,162 @@
+name: 146 - FRP M31 Execution Fault Recovery
+run-name: "146 - M31 coverage and 128-cell stress | ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Record sources and install Verilator
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/commit.txt
+          git archive --format=tar.gz --output=evidence/sources.tar.gz HEAD -- \
+            rtl/m31 verification/m32/frp_m32_coverage_union.py
+          python -m pip install 'verilator==5.38.0'
+          {
+            python --version
+            python -m pip show verilator
+            verilator-cli --version
+            g++ --version
+          } > evidence/tools.txt
+
+      - name: Measure branch coverage and run 128-cell stress
+        run: |
+          cat > evidence/verify.py <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import shlex
+          import subprocess
+          import sys
+          import tempfile
+
+          root = Path.cwd()
+          out = root / "evidence"
+          sys.path.insert(0, str(root / "verification/m32"))
+          from frp_m32_coverage_union import canonical, source_points
+
+          modules = "scheduler execution_core request_lanes pending_routes active_neutral capacity_guard state_update".split()
+          files = {f"rtl/m31/frp_m31_{m}.sv" for m in modules}
+          sources = {p: (root / p).read_text().splitlines() for p in files}
+          baselines = ("polarity", "pause_window")
+          fault = "fault_recovery"
+          checks_expected = {8:3808, 9:4842, 16:11968, 32:41344, 64:152320, 128:583168}
+
+          def check(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def execute(command, log, timeout):
+              with log.open("w") as stream:
+                  print("$", shlex.join(command), file=stream, flush=True)
+                  subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT,
+                                 timeout=timeout, check=True)
+
+          def read_run(folder, cells, suite):
+              log = (folder / "run.log").read_text()
+              records = [line for line in log.splitlines() if line.startswith("PASS ")]
+              prefix = "PASS EXECUTION_" + suite.upper() + " "
+              check(len(records) == 1 and records[0].startswith(prefix), f"{folder}: missing PASS")
+              fields = dict(re.findall(r"(\w+)=(\w+)", records[0]))
+              lanes = (cells + 2)//4
+              check(int(fields["cells"]) == cells and int(fields["lanes"]) == lanes, str(folder))
+              if suite == fault:
+                  edges = (42 if cells == 9 else 40)*cells
+                  check(int(fields["edges"]) == edges and int(fields["checks"]) == checks_expected[cells],
+                        f"{folder}: incomplete recovery scenarios")
+              else:
+                  check(int(fields["seed"]) == 76 and int(fields["checks"]) > 0, f"{folder}: baseline")
+              raw = (folder / "coverage.dat").read_bytes()
+              points = {}
+              for key, hits, _ in source_points(raw, files, root, sources):
+                  if key["t"] == "branch":
+                      point = canonical(key)
+                      points[point] = points.get(point, False) or hits >= int(key["s"])
+              check({json.loads(p)["f"] for p in points} == files, f"{folder}: missing branch data")
+              return points, {"pass": records[0], "coverage_sha256": hashlib.sha256(raw).hexdigest()}
+
+          def build_run(folder, cells, suite):
+              top = f"frp_m31_execution_{suite}_tb"
+              folder.mkdir()
+              with tempfile.TemporaryDirectory(dir=root) as obj:
+                  build = ["verilator-cli", "--binary", "--timing", "--assert", "--coverage-line",
+                           "-MAKEFLAGS", "CFG_CXXFLAGS_PCH_I=-include", "-MAKEFLAGS", "OPT_FAST=-O0",
+                           "-Wno-fatal", "-j", "2", "--top-module", top, f"-GCELLS={cells}",
+                           "-Irtl/m31", "--Mdir", obj, f"rtl/m31/{top}.sv"]
+                  execute(build, folder / "build.log", 1200)
+                  execute([str(Path(obj) / ("V"+top)), "+SEED=76",
+                           "+verilator+coverage+file+" + str(folder / "coverage.dat")],
+                          folder / "run.log", 900)
+              return read_run(folder, cells, suite)
+
+          def identities(points):
+              return [json.loads(p) for p in sorted(points)]
+
+          def run_matrix(run):
+              rows = []
+              table = ["| Cells | Baseline | With recovery | Total | Gain (pp) |",
+                       "|---:|---:|---:|---:|---:|"]
+              for cells in (8, 9, 16, 32, 64, 128):
+                  folder = out / f"cells-{cells}"
+                  folder.mkdir()
+                  suites = (*baselines, fault) if cells != 128 else (fault,)
+                  hits, logs = {}, {}
+                  for suite in suites:
+                      hits[suite], logs[suite] = run(folder / suite, cells, suite)
+                      print(logs[suite]["pass"], flush=True)
+                  universe = set(hits[fault])
+                  after = {p for p in universe if hits[fault][p]}
+                  row = {"cells": cells, "total": len(universe), "runs": logs,
+                         "baseline": None, "gain_pp": None}
+                  if cells != 128:
+                      check(all(set(hits[s]) == universe for s in baselines), f"{cells}: point sets differ")
+                      before = {p for p in universe if any(hits[s][p] for s in baselines)}
+                      added = after - before
+                      after |= before
+                      check(added, f"{cells}: recovery added no branch points")
+                      row.update(baseline=len(before), added=identities(added),
+                                 gain_pp=round(100*len(added)/len(universe), 2))
+                  row.update(covered=len(after), uncovered=identities(universe - after))
+                  before_text = row["baseline"] if cells != 128 else "standalone"
+                  gain_text = row["gain_pp"] if cells != 128 else "—"
+                  table.append(f"| {cells} | {before_text} | {len(after)} | {len(universe)} | {gain_text} |")
+                  (folder / "result.json").write_text(json.dumps(row, indent=2) + "\n")
+                  rows.append(row)
+              (out / "summary.json").write_text(json.dumps({"modules": sorted(files), "profiles": rows}, indent=2) + "\n")
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
+                  print("### M31 execution-core branch coverage\n", *table, sep="\n", file=stream)
+
+          if __name__ == "__main__":
+              run_matrix(build_run)
+          PY
+          python -u evidence/verify.py
+
+      - name: Upload combined evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-146-execution-fault-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
