@@ -1,0 +1,220 @@
+name: 144 - FRP M32 Neutral Threshold Capture Formal
+run-name: "144 - M32 neutral threshold capture | up to 64 cells | ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Record inputs and install solver
+        shell: bash
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/commit.txt
+          git archive --format=tar.gz --output=evidence/sources.tar.gz HEAD -- \
+            rtl/m31 rtl/m32 formal/m32/frp_m32_neutral_threshold_capture_formal.sv
+          python -m pip install yowasp-yosys==0.68.0.0.post1208 yowasp-runtime==1.96 wasmtime==47.0.1
+          yowasp-yosys -V > evidence/tool-version.txt
+          python -m pip freeze > evidence/packages.txt
+
+      - name: Prove neutral threshold capture and replay counterexamples
+        shell: bash
+        run: |
+          cat > evidence/verify.py <<'PY'
+          import json
+          import shutil
+          import subprocess
+          from pathlib import Path
+
+          out = Path("evidence")
+          top = "frp_m32_neutral_threshold_capture_formal"
+          harness = Path("formal/m32") / (top + ".sv")
+          stability = Path("rtl/m31/frp_m31_global_stability.sv")
+          recorder = Path("rtl/m32/frp_m32_boundary_recorder.sv")
+          events = ["remove-last-neutral", "captured-last-neutral", "negative-on-pause",
+                    "zero-to-negative", "retain-first-tag", "held-stable"]
+          reset = "-set-assumes -set rst_n 1 -set-at 1 rst_n 0"
+          inputs = "rst_n tick_enable neutral upper_threshold lane negative load_offset tick_tag".split()
+          outputs = ["reach", "stability.next_coherence_capacity_q16", "stability.next_stable",
+                     "live_margin", "recorder.boundary_valid_q", "recorder.boundary_pulse_q",
+                     "recorder.boundary_tick_q", "recorder.boundary_previous_margin_q16",
+                     "recorder.boundary_margin_q16", "recorder.boundary_retained_state_q"]
+
+          def check(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def solve(folder, n, src, queries):
+              marker = folder / "complete.txt"
+              commands = [
+                  f"read_slang -j 1 --unroll-limit 10000 --top {top} -G CELLS={n} "
+                  f"-I{src.parent} -Irtl/m31 -Irtl/m32 {src}",
+                  f"prep -top {top} -flatten", "async2sync", "opt -full", "memory_map", "opt -full",
+                  "chformal -lower", "check -assert", "select -assert-count 7 t:$assert",
+                  "select -assert-count 1 t:$assume", *queries, f"tee -o {marker} log FRP144_COMPLETE",
+              ]
+              script = folder / "run.ys"
+              script.write_text("\n".join(commands) + "\n")
+              proc = subprocess.run(["yowasp-yosys", "-Q", "-s", str(script)],
+                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=900)
+              log = proc.stdout.decode()
+              (folder / "solver.log").write_text(log)
+              proc.check_returncode()
+              check(marker.read_text().strip() == "FRP144_COMPLETE", f"{folder}: incomplete run")
+              return log
+
+          def waves(path, names, depth):
+              signals = {s["name"]: s for s in json.loads(path.read_text())["signal"]}
+              result = {}
+              for name in names:
+                  s = signals[name]
+                  data = iter(s.get("data", [])[1:])
+                  values = []
+                  for ch in s["wave"][1:]:
+                      if ch == "=":
+                          values.append(int(next(data), 2))
+                      elif ch in ("0", "1"):
+                          values.append(int(ch))
+                      elif ch == "." and values:
+                          values.append(values[-1])
+                      else:
+                          raise ValueError(f"{path}: invalid symbol for {name}")
+                  check(len(values) == depth, f"{path}: incomplete {name}")
+                  result[name] = values
+              return result
+
+          def audit(path, n, bit):
+              depth = 8
+              w = waves(path, inputs + outputs, depth)
+              check(w["rst_n"] == [0]+[1]*7 and w["reach"][-1] & (1 << bit), f"{path}: event/reset")
+              mask32 = (1 << 32) - 1
+              gain = (5243 + n//2) // n
+              previous = 39322
+              live = 62259
+              pending = None
+              taken = pulse = False
+              frame = (0, 0, 0, 0)
+              for i in range(depth):
+                  neutral = w["neutral"][i]
+                  lane = w["lane"][i]
+                  capacity = 53740 + neutral * gain
+                  load = 53740 + w["upper_threshold"][i] * gain + (0, -1, 1, 0)[w["load_offset"][i]]
+                  margin = capacity - load
+                  actual = tuple(w[name][i] for name in outputs[1:])
+                  tag, before, after, retained = frame
+                  expected = (capacity, int(margin > 0), live & mask32, int(taken), int(pulse),
+                              tag, before & mask32, after & mask32, retained)
+                  check(actual == expected, f"{path}: cycle {i+1}")
+                  if not w["rst_n"][i]:
+                      continue
+                  pulse = False
+                  if pending is not None:
+                      old_margin, old_tag, old_bank = pending
+                      if not taken and previous > 0 and old_margin <= 0:
+                          taken = pulse = True
+                          frame = (old_tag, previous, old_margin, old_bank)
+                      previous = old_margin
+                  pending = None
+                  if w["tick_enable"][i]:
+                      polarity = w["negative"][i]
+                      bank = sum((0 if neutral and j == lane else 1 + 2*((polarity >> j) & 1))
+                                 << (2*j) for j in range(n))
+                      live = margin
+                      pending = (margin, w["tick_tag"][i], bank)
+              if bit == 0:
+                  check(w["lane"][4] == n-1 and w["neutral"][4:6] == [1, 0] and
+                        w["recorder.boundary_previous_margin_q16"][-1] == gain and
+                        w["recorder.boundary_margin_q16"][-1] == 0, f"{path}: last-lane crossing")
+
+          show = " ".join("-show " + name for name in inputs + outputs)
+          profiles = []
+          for n in (8, 16, 32, 64):
+              folder = out / f"cells-{n}"
+              folder.mkdir()
+              queries = ["sat -tempinduct -set-assumes -seq 1 -maxsteps 6 -verify -prove-asserts"]
+              for bit, event in enumerate(events):
+                  queries.append(f"sat -seq 8 {reset} -set-at 8 reach[{bit}] 1 {show} "
+                                 f"-dump_json {folder}/{event}.json")
+              log = solve(folder, n, harness, queries)
+              check("Induction step proven: SUCCESS!" in log, f"{folder}: missing induction proof")
+              for bit, event in enumerate(events):
+                  audit(folder / (event + ".json"), n, bit)
+              profiles.append({"cells": n, "events": events, "neutral_step": (5243+n//2)//n})
+              print(f"PASS {n} cells, 7 assertions, 6 witnesses", flush=True)
+
+          faults = [
+              ("last-neutral", stability, "if (retained_state[cell_index*2 +: 2] == 2'b00)",
+               "if (cell_index != CELLS-1 && retained_state[cell_index*2 +: 2] == 2'b00)",
+               "stability.next_coherence_capacity_q16", 2, 53822, 53740),
+              ("stable-at-zero", stability, "next_stability_margin_q16 > 32'sd0",
+               "next_stability_margin_q16 >= 32'sd0", "stability.next_stable", 3, 0, 1),
+              ("skip-zero", recorder, "stability_margin_q16 <= 32'sd0) begin",
+               "stability_margin_q16 < 32'sd0) begin", "recorder.boundary_valid_q", 5, 1, 0),
+              ("overwrite-first", recorder, "!boundary_valid_q && previous_margin_q16",
+               "previous_margin_q16", "recorder.boundary_tick_q", 7, 12, 14),
+          ]
+          pins = (f"sat -seq 7 {reset} -set tick_enable 0 -set neutral 0 -set lane 63 "
+                  "-set negative 0 -set upper_threshold 0 -set load_offset 0 -set tick_tag 0")
+          for cycle in range(2, 6):
+              pins += f" -set-at {cycle} tick_enable 1 -set-at {cycle} tick_tag {cycle+9}"
+          pins += " -set-at 2 neutral 1 -set-at 4 neutral 1"
+          signals = ["rst_n"] + [case[4] for case in faults]
+          pins += " " + " ".join("-show " + name for name in signals)
+
+          folder = out / "control"
+          folder.mkdir()
+          path = folder / "control.json"
+          solve(folder, 64, harness, [f"{pins} -dump_json {path}"])
+          control = waves(path, signals, 7)
+          check(control["rst_n"] == [0]+[1]*6, "Control reset mismatch")
+          detected = {}
+          for name, source, old, new, signal, cycle, good, bad in faults:
+              check(control[signal][cycle-1] == good, f"{name}: incorrect control")
+              folder = out / name
+              folder.mkdir()
+              for original in (harness, stability, recorder):
+                  shutil.copyfile(original, folder / original.name)
+              text = source.read_text()
+              check(text.count(old) == 1, f"{name}: mutation anchor changed")
+              (folder / source.name).write_text(text.replace(old, new))
+              path = folder / "counterexample.json"
+              log = solve(folder, 64, folder / harness.name,
+                          [f"{pins} -prove-asserts -falsify -dump_json {path}"])
+              trace = waves(path, signals, 7)
+              check("model found: FAIL!" in log and trace["rst_n"] == control["rst_n"] and
+                    trace[signal][cycle-1] == bad, f"{name}: wrong counterexample")
+              detected[name] = {"cycle": cycle, "control": good, "mutant": bad}
+              print(f"DETECTED {name} at cycle {cycle}: {good} -> {bad}", flush=True)
+
+          total = sum(len(p["events"]) for p in profiles)
+          check((len(profiles), total, len(detected)) == (4, 24, 4), "Incomplete matrix")
+          summary = {"profiles": profiles, "witnesses": total, "mutations": detected}
+          (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+          PY
+          python -u evidence/verify.py
+          jq -r '"Profiles: \(.profiles|length), witnesses: \(.witnesses), detected mutations: \(.mutations|length)"' \
+            evidence/summary.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload combined evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-144-neutral-threshold-capture-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
