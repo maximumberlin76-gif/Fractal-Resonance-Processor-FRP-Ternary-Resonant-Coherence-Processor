@@ -1,0 +1,95 @@
+name: 149 - FRP M31 Route Contract
+run-name: "149 - M31 route contract through 128 cells | ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Record sources and tool
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/commit.txt
+          git archive -o evidence/sources.tar.gz HEAD -- rtl/m31 verification/m32/frp_m32_coverage_union.py
+          python -m pip install 'verilator==5.38.0'
+          verilator-cli --version > evidence/tools.txt
+      - name: Verify all addresses and both polarities
+        run: |
+          set -euo pipefail
+          top=frp_m31_route_contract_tb
+          for n in 8 9 16 32 64 128; do
+            out="evidence/cells-$n"
+            mkdir -p "$out"
+            verilator-cli --binary --timing --assert --coverage-line -j 2 -Wno-fatal \
+              -MAKEFLAGS CFG_CXXFLAGS_PCH_I=-include -MAKEFLAGS OPT_FAST=-O0 \
+              --top-module "$top" "-GCELLS=$n" -Irtl/m31 --Mdir "obj_$n" \
+              "rtl/m31/$top.sv" > "$out/build.log" 2>&1
+            "./obj_$n/V$top" "+verilator+coverage+file+$out/coverage.dat" |& tee "$out/run.log"
+            rm -rf "obj_$n"
+          done
+      - name: Compare three RTL modules with run 42507865694
+        run: |
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          from verification.m32.frp_m32_coverage_union import canonical, source_points
+
+          root = Path.cwd()
+          modules = ('active_neutral', 'pending_routes', 'request_lanes')
+          sources = {f'rtl/m31/frp_m31_{m}.sv': Path(f'rtl/m31/frp_m31_{m}.sv').read_text().splitlines()
+                     for m in modules}
+          inputs = sorted([*sources, 'rtl/m31/frp_m31_pkg.sv'])
+          source_hash = hashlib.sha256(b''.join(Path(p).read_bytes() for p in inputs)).hexdigest()
+          if source_hash != '040e0b1450775928f60f07ffc2f630974c4b410ecd1c15edc3207155af7e477b':
+              raise ValueError('RTL sources differ from the run 42507865694 baseline')
+          baseline = dict.fromkeys((8, 16, 32, 64), 0xEFFDF998F17F35D3)
+          baseline.update({9: 0xFFFFF9D8F17F35D3, 128: 0xCFFDF998B17F35D3})
+          rows = []
+          for n in sorted(baseline):
+              folder = Path(f'evidence/cells-{n}')
+              lines = (folder/'run.log').read_text().splitlines()
+              marker = f'PASS ROUTE_CONTRACT cells={n} checks={2*n*(11 if n == 9 else 10)}'
+              if lines.count(marker) != 1 or sum('Verilog $finish' in s for s in lines) != 1:
+                  raise ValueError(f'{folder}: incomplete simulation')
+              data = (folder/'coverage.dat').read_bytes()
+              points = source_points(data, set(sources), root, sources)
+              ids = sorted({canonical(k) for k, _, _ in points if k['t'] == 'branch'})
+              digest = hashlib.sha256(('\n'.join(ids)+'\n').encode()).hexdigest()
+              if digest != '9ce05463ca64fcb531da266f43e6e660c98d2d64fb2e723f55a1c63ab2c1e745':
+                  raise ValueError(f'{folder}: branch inventory differs from baseline')
+              old = {k for i, k in enumerate(ids) if baseline[n] & (1 << i)}
+              hits = {canonical(k) for k, v, _ in points if k['t'] == 'branch' and v >= int(k['s'])}
+              added = sorted(hits - old)
+              if len(added) < (14 if n == 128 else 12):
+                  raise ValueError(f'{folder}: lost branch coverage')
+              # Run 42390332506 recorded these same source point IDs through 64 cells.
+              prior138 = {k for i, k in enumerate(ids) if 0xFFFFF9D8B17F35FB & (1 << i)}
+              overlap = sorted(set(added) & prior138) if n <= 64 else []
+              rows.append(dict(overlap_138=[json.loads(k) for k in overlap], cells=n, pass_line=marker, baseline=len(old), total=len(ids),
+                               union=len(old | hits), added=[json.loads(k) for k in added],
+                               remaining=[json.loads(k) for k in sorted(set(ids)-old-hits)]))
+          Path('evidence/summary.json').write_text(json.dumps(rows, indent=2) + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              for r in rows:
+                  print(f"- {r['cells']} cells: {r['baseline']} -> {r['union']}/{r['total']} branches", file=f)
+          PY
+      - name: Upload one archive
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-149-route-contract-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
