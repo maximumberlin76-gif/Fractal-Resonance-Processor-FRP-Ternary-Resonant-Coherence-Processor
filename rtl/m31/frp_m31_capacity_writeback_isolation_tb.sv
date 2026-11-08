@@ -130,7 +130,7 @@ module frp_m31_capacity_writeback_isolation_tb #(parameter int CELLS=128);
 
         // Retry the same address with clean metadata on a legal leg through zero.
         clear_ports(); dest=(model[2*p+:2]==0) ? sign_code : FRP_STATE_ZERO;
-        lane(0,p,dest,(dest==0) ? FRP_TRANS_ZERO_TO_NONZERO : FRP_TRANS_NONZERO_TO_ZERO);
+        lane(0,p,dest,(dest==0) ? FRP_TRANS_NONZERO_TO_ZERO : FRP_TRANS_ZERO_TO_NONZERO);
         #1; check(cap_ok && update_ok && writes[p] && committed_changes==1,"clean retry");
         model[2*p+:2]=dest; edge_step(); check(q===model,"retry bank");
         cases++;
