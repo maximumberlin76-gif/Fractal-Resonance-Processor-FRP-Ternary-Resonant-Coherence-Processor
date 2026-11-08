@@ -1,0 +1,247 @@
+name: 145 - FRP M32 Neutral Population Capture Formal
+run-name: "145 - M32 neutral population capture | up to 64 cells | ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Record inputs and install solver
+        shell: bash
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/commit.txt
+          git archive --format=tar.gz --output=evidence/sources.tar.gz HEAD -- \
+            rtl/m31 rtl/m32 formal/m32/frp_m32_neutral_population_capture_formal.sv
+          python -m pip install yowasp-yosys==0.68.0.0.post1208 yowasp-runtime==1.96 wasmtime==47.0.1
+          yowasp-yosys -V > evidence/tool-version.txt
+          python -m pip freeze > evidence/packages.txt
+
+      - name: Prove neutral population capture and replay counterexamples
+        shell: bash
+        run: |
+          cat > evidence/verify.py <<'PY'
+          import json
+          import re
+          import shutil
+          import subprocess
+          from pathlib import Path
+
+          out = Path("evidence")
+          top = "frp_m32_neutral_population_capture_formal"
+          source = Path("formal/m32") / (top + ".sv")
+          stability = Path("rtl/m31/frp_m31_global_stability.sv")
+          recorder = Path("rtl/m32/frp_m32_boundary_recorder.sv")
+          events = ["half-crossing", "full-to-empty", "half-relocation",
+                    "hold-above", "retain-first-tag", "full-span-capture"]
+          reset = "-set-assumes -set rst_n 1 -set-at 1 rst_n 0"
+          fields = ["population", "stability.next_coherence_capacity_q16", "margin",
+                    "stability.next_stable", "live_margin", "recorder.boundary_valid_q",
+                    "recorder.boundary_pulse_q", "recorder.boundary_tick_q",
+                    "recorder.boundary_previous_margin_q16", "recorder.boundary_margin_q16",
+                    "recorder.boundary_retained_state_q"]
+          inputs = ["rst_n", "tick_enable", "neutral_mask", "negative", "tick_tag", "reach"]
+          sweep_fields = ["next_coherence_capacity_q16", "next_stability_margin_q16", "next_stable"]
+          mask32 = (1 << 32) - 1
+
+          def check(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def capacity(n, k):
+              return 53740 + (5243*k + n//2)//n
+
+          def solve(folder, n, src, queries):
+              script = folder / "run.ys"
+              marker = folder / "complete.txt"
+              commands = [
+                  f"read_slang -j 1 --unroll-limit 10000 --top {top} -G CELLS={n} "
+                  f"-I{src.parent} -Irtl/m31 -Irtl/m32 {src}",
+                  f"prep -top {top} -flatten", "async2sync", "opt -full", "memory_map", "opt -full",
+                  "chformal -lower", "check -assert", "select -assert-count 8 t:$assert",
+                  "select -assert-count 1 t:$assume", *queries, f"tee -o {marker} log FRP145_COMPLETE",
+              ]
+              script.write_text("\n".join(commands) + "\n")
+              proc = subprocess.run(["yowasp-yosys", "-Q", "-s", str(script)],
+                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=900)
+              log = proc.stdout.decode()
+              (folder / "solver.log").write_text(log)
+              proc.check_returncode()
+              check(marker.read_text().strip() == "FRP145_COMPLETE", f"{folder}: incomplete solver run")
+              return log
+
+          def waves(path, names):
+              signals = {s["name"].replace(" ", ""): s for s in json.loads(path.read_text())["signal"]}
+              result = {}
+              for name in names:
+                  sig = signals[name]
+                  data = iter(sig.get("data", [])[1:])
+                  values = []
+                  for symbol in sig["wave"][1:]:
+                      if symbol == "=":
+                          values.append(int(next(data), 2))
+                      elif symbol in ("0", "1"):
+                          values.append(int(symbol))
+                      elif symbol == "." and values:
+                          values.append(values[-1])
+                      else:
+                          raise ValueError(f"{path}: invalid wave for {name}")
+                  check(len(values) == 8, f"{path}: incomplete {name}")
+                  result[name] = values
+              check(result["rst_n"] == [0] + [1]*7, f"{path}: unexpected reset")
+              return result
+
+          def audit(path, n, bit):
+              w = waves(path, inputs + fields)
+              check(w["reach"][-1] & (1 << bit), f"{path}: missing event")
+              previous, live = 39322, 62259
+              pending = None
+              taken = pulse = False
+              frame = (0, 0, 0, 0)
+              for i in range(8):
+                  mask = w["neutral_mask"][i]
+                  count = mask.bit_count()
+                  cap = capacity(n, count)
+                  margin = cap - 56362
+                  expected = (count, cap, margin & mask32, int(count > n//2),
+                              live & mask32, int(taken), int(pulse), *frame)
+                  check(tuple(w[s][i] for s in fields) == expected, f"{path}: cycle {i+1}")
+                  if not w["rst_n"][i]:
+                      continue
+                  pulse = False
+                  if pending is not None:
+                      old_margin, tag, bank = pending
+                      if not taken and previous > 0 and old_margin <= 0:
+                          taken = pulse = True
+                          frame = (tag, previous & mask32, old_margin & mask32, bank)
+                      previous = old_margin
+                  pending = None
+                  if w["tick_enable"][i]:
+                      polarity = w["negative"][i]
+                      bank = sum((0 if (mask >> j) & 1 else 1 + 2*((polarity >> j) & 1))
+                                 << (2*j) for j in range(n))
+                      live = margin
+                      pending = (margin, w["tick_tag"][i], bank)
+
+          def sweep(n, queries):
+              rows = []
+              show = " ".join("-show stability." + s for s in sweep_fields)
+              for k in range(n+1):
+                  for side in ("low", "high"):
+                      mask = (1 << k) - 1
+                      polarity = 0
+                      if side == "high":
+                          mask <<= n-k
+                          polarity = (1 << n) - 1
+                      queries.append(f"eval -set neutral_mask {n}'h{mask:x} -set negative {n}'h{polarity:x} {show}")
+                      rows.append({"count": k, "placement": side, "mask": hex(mask)})
+              return rows
+
+          profiles = []
+          show = " ".join("-show " + s for s in inputs + fields)
+          for n in (8, 16, 32, 64):
+              folder = out / f"cells-{n}"
+              folder.mkdir()
+              queries = ["sat -set-assumes -tempinduct -seq 1 -maxsteps 6 -verify -prove-asserts"]
+              for bit, event in enumerate(events):
+                  queries.append(f"sat -seq 8 {reset} -set-at 8 reach[{bit}] 1 {show} "
+                                 f"-dump_json {folder}/{event}.json")
+              rows = sweep(n, queries)
+              log = solve(folder, n, source, queries)
+              check("Induction step proven: SUCCESS!" in log, f"{folder}: proof incomplete")
+              for bit, event in enumerate(events):
+                  audit(folder / (event + ".json"), n, bit)
+              matches = re.findall(r"(?m)^Eval result: \\stability\.(\w+) = (-?\d+(?:'[01]+)?)\.$", log)
+              check(len(matches) == 3*len(rows), f"{folder}: sweep incomplete")
+              for i, row in enumerate(rows):
+                  cap = capacity(n, row["count"])
+                  expected = (cap, (cap-56362) & mask32, int(row["count"] > n//2))
+                  for j, (field, raw) in enumerate(matches[3*i:3*i+3]):
+                      value = int(raw.split("'")[1], 2) if "'" in raw else int(raw) & mask32
+                      check(field == sweep_fields[j] and value == expected[j], f"{folder}: {row}, {field}")
+                  row.update(capacity=cap, margin=cap-56362, stable=bool(expected[2]))
+              (folder / "sweep.json").write_text(json.dumps(rows, indent=2))
+              profiles.append({"cells": n, "populations": n+1, "vectors": len(rows), "events": events})
+              print(f"PASS cells={n} witnesses={len(events)} vectors={len(rows)}", flush=True)
+
+          term = "extend_s32(frp_m31_mul_q16_q30(\n      NEUTRAL_GAIN_Q16, neutral_fraction_q30))"
+          faults = [
+              ("truncate-half", stability, term, "((64'sd5243 * extend_s32(neutral_fraction_q30)) >>> 30)",
+               "stability.next_coherence_capacity_q16", 3, 56362, 56361),
+              ("round-per-lane", stability, term,
+               "(((64'sd5243 + CELLS/2)/CELLS) * (neutral_fraction_q30 >>> (30-MEAN_SHIFT)))",
+               "stability.next_coherence_capacity_q16", 3, 56362, 56364),
+              ("live-bank", source, ".retained_state(sample_bank), .pending_route",
+               ".retained_state(bank), .pending_route", "recorder.boundary_retained_state_q[127:126]", 5, 0, 1),
+              ("exclude-half", recorder, "stability_margin_q16 <= 32'sd0) begin",
+               "stability_margin_q16 < 32'sd0) begin", "recorder.boundary_valid_q", 5, 1, 0),
+          ]
+          pins = (f"sat -seq 8 {reset} -set tick_enable 0 -set neutral_mask 0 -set negative 0 -set tick_tag 0")
+          masks = ["ffffffff00000001", "ffffffff00000000", "00000000ffffffff",
+                   "ffffffffffffffff", "0000000000000000"]
+          for cycle, mask in enumerate(masks, 2):
+              pins += f" -set-at {cycle} tick_enable 1 -set-at {cycle} neutral_mask 64'h{mask} -set-at {cycle} tick_tag {100+cycle}"
+          names = ["rst_n", "population", "recorder.boundary_tick_q",
+                   "recorder.boundary_previous_margin_q16", "recorder.boundary_margin_q16"]
+          names = list(dict.fromkeys(names + [case[4] for case in faults]))
+          pins += " " + " ".join("-show " + name for name in names)
+          folder = out / "control"
+          folder.mkdir()
+          path = folder / "control.json"
+          solve(folder, 64, source, [f"{pins} -dump_json {path}"])
+          control = waves(path, names)
+          check(control["population"][1:6] == [33,32,32,64,0], "Control masks differ")
+          check(control["recorder.boundary_tick_q"][4:] == [103]*4 and
+                control["recorder.boundary_previous_margin_q16"][-1] == 81 and
+                control["recorder.boundary_margin_q16"][-1] == 0, "Control lost first crossing")
+          detected = {}
+          for name, file, old, new, signal, cycle, good, bad in faults:
+              check(control[signal][cycle-1] == good, f"{name}: wrong control")
+              folder = out / name
+              folder.mkdir()
+              for original in (source, stability, recorder):
+                  shutil.copyfile(original, folder / original.name)
+              body = file.read_text()
+              check(body.count(old) == 1, f"{name}: changed mutation anchor")
+              (folder / file.name).write_text(body.replace(old, new))
+              path = folder / "counterexample.json"
+              log = solve(folder, 64, folder / source.name,
+                          [f"{pins} -prove-asserts -falsify -dump_json {path}"])
+              trace = waves(path, names)
+              check("model found: FAIL!" in log and trace[signal][cycle-1] == bad, f"{name}: wrong counterexample")
+              detected[name] = {"cycle": cycle, "control": good, "mutant": bad}
+              print(f"DETECTED {name}: cycle={cycle}, control={good}, mutant={bad}", flush=True)
+
+          totals = [len(profiles), sum(len(p["events"]) for p in profiles),
+                    sum(p["populations"] for p in profiles), sum(p["vectors"] for p in profiles), len(detected)]
+          check(totals == [4, 24, 124, 248, 4], f"Incomplete verification: {totals}")
+          summary = dict(profiles=profiles, witnesses=totals[1], populations=totals[2], vectors=totals[3], mutations=detected)
+          (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+          PY
+          python -u evidence/verify.py
+          jq -r '"Profiles: \(.profiles|length), witnesses: \(.witnesses), populations: \(.populations), vectors: \(.vectors), detected mutations: \(.mutations|length)"' \
+            evidence/summary.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload combined evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-145-neutral-population-capture-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
