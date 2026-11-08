@@ -1,0 +1,94 @@
+name: 148 - FRP M31 Writeback Diagnostics
+run-name: "148 - M31 writeback through 128 cells | ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Record inputs and install Verilator
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/commit.txt
+          git archive --format=tar.gz -o evidence/sources.tar.gz HEAD -- rtl/m31 verification/m32/frp_m32_coverage_union.py
+          python -m pip install 'verilator==5.38.0'
+          verilator-cli --version > evidence/tools.txt
+
+      - name: Run port and fault-injection suites
+        run: |
+          set -euo pipefail
+          for cells in 8 9 16 32 64 128; do
+            for suite in capacity_writeback_isolation writeback_diagnostics; do
+              top="frp_m31_${suite}_tb"
+              out="evidence/cells-$cells/$suite"
+              mkdir -p "$out"
+              verilator-cli --binary --timing --assert --coverage-line -Wno-fatal -j 2 \
+                -MAKEFLAGS CFG_CXXFLAGS_PCH_I=-include -MAKEFLAGS OPT_FAST=-O0 \
+                --top-module "$top" "-GCELLS=$cells" -Irtl/m31 --Mdir "obj_$suite" \
+                "rtl/m31/$top.sv" > "$out/build.log" 2>&1
+              "./obj_$suite/V$top" "+verilator+coverage+file+$out/coverage.dat" |& tee "$out/run.log"
+              rm -rf "obj_$suite"
+            done
+          done
+
+      - name: Verify counts and five diagnostic branches
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from verification.m32.frp_m32_coverage_union import source_points
+
+          root = Path.cwd()
+          name = 'rtl/m31/frp_m31_state_update.sv'
+          sources = {name: Path(name).read_text().splitlines()}
+          targets = {(468, 'if'), (476, 'if'), (502, 'if'), (517, 'else'), (550, 'else')}
+          rows = []
+          for n in (8, 9, 16, 32, 64, 128):
+              for suite in ('capacity_writeback_isolation', 'writeback_diagnostics'):
+                  folder = Path(f'evidence/cells-{n}') / suite
+                  count = 12*n if suite == 'writeback_diagnostics' else (42 if n == 9 else 40)*n
+                  marker = f'PASS {suite.upper()} cells={n}'
+                  lines = (folder/'run.log').read_text().splitlines()
+                  matches = [s for s in lines if s.startswith(marker + ' ')]
+                  if len(matches) != 1 or f'cases={count}' not in matches[0].split():
+                      raise ValueError(f'{folder}: missing completion or wrong case count')
+                  data = (folder/'coverage.dat').read_bytes()
+                  points = source_points(data, {name}, root, sources)
+                  hits = {(int(k['l']), k['o']) for k, v, _ in points
+                          if k['t'] == 'branch' and v >= int(k['s'])}
+                  observed = sorted(targets & hits)
+                  expected = sorted(targets) if suite == 'writeback_diagnostics' else []
+                  if observed != expected:
+                      raise ValueError(f'{folder}: unexpected diagnostic hits {observed}')
+                  rows.append(dict(cells=n, suite=suite, pass_line=matches[0], diagnostic_hits=observed))
+          Path('evidence/summary.json').write_text(json.dumps(rows, indent=2) + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              for row in rows:
+                  print(f"- {row['pass_line']} ({len(row['diagnostic_hits'])}/5 diagnostic branches)", file=f)
+          PY
+
+      - name: Upload one evidence archive
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-148-writeback-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
