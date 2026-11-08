@@ -1,0 +1,211 @@
+name: 147 - FRP M31 Capacity Writeback Isolation
+run-name: "147 - M31 writeback isolation through 128 cells | ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Record sources and install Verilator
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/commit.txt
+          git archive --format=tar.gz --output=evidence/sources.tar.gz HEAD -- \
+            rtl/m31 verification/m32/frp_m32_coverage_union.py
+          python -m pip install 'verilator==5.38.0'
+          {
+            python --version
+            python -m pip show verilator
+            verilator-cli --version
+            g++ --version
+          } > evidence/tools.txt
+
+      - name: Verify isolation, compare coverage and replay mutations
+        run: |
+          ulimit -c 0
+          cat > evidence/verify.py <<'PY'
+          import hashlib
+          import json
+          import os
+          import shutil
+          import subprocess
+          import sys
+          import tempfile
+          from pathlib import Path
+
+          root = Path.cwd()
+          out = root / "evidence"
+          sys.path.insert(0, str(root / "verification/m32"))
+          from frp_m32_coverage_union import canonical, source_points
+
+          rtl = Path("rtl/m31")
+          top = "frp_m31_capacity_writeback_isolation_tb"
+          guard = str(rtl / "frp_m31_capacity_guard.sv")
+          wb = str(rtl / "frp_m31_state_update.sv")
+          files = {guard, wb}
+          sources = {p: Path(p).read_text().splitlines() for p in files}
+          baseline_commit = "081c022f4382c216ec349b17e4ecd9a72aa00728"
+          inventory_sha = "cae5a6574528b0ca6b9385e38c00378d58f84593bff42c6f983ce9903927680d"
+          baseline_sha = {
+              guard: "d0587897f955ce49923aca807b5d3e0c637383c88e5d5e0dfa8405f47917c123",
+              wb: "ebad1f7ee952a577239445d33d99cae799afaaff5c181c7162514bbcea6eab90",
+              str(rtl / "frp_m31_pkg.sv"): "762302f1c7a7f7f40cb029f5ada6a111fc8c3e3f6be9920e9b2401b95e179c94",
+          }
+          # Hit bits from run 42507865694, indexed by sorted canonical branch identities.
+          hit_bits = {n: 0xFE7FF6EDBB8C28D47 for n in (8, 16, 32, 64, 128)}
+          hit_bits[9] = 0xFE7FF7EDBB8C28D47
+
+          def check(ok, reason):
+              if not ok:
+                  raise RuntimeError(reason)
+
+          def sha(data):
+              return hashlib.sha256(data).hexdigest()
+
+          def save(path, data):
+              path.write_text(json.dumps(data, indent=2) + "\n")
+
+          for p, digest in baseline_sha.items():
+              check(sha(Path(p).read_bytes()) == digest, f"Source differs from coverage baseline: {p}")
+
+          monitor = out / "retry_check.sv"
+          monitor.write_text("""module frp147_retry_check #(parameter int N=8, L=2, B=3) (
+              input logic clk, rst_n, tick, input logic [L-1:0] requests,
+              input logic [B-1:0] addr, input logic [3:0] kind,
+              input logic [2*N-1:0] q, candidate
+          );
+              import frp_m31_pkg::*;
+              always @(posedge clk) if (rst_n && tick && requests == L'(1) && int'(addr) < N) begin
+                  if (q[2*int'(addr)+:2] != 0 && candidate[2*int'(addr)+:2] == 0)
+                      assert (kind == FRP_TRANS_NONZERO_TO_ZERO) else $fatal(1,"nonzero-to-zero request class");
+                  if (q[2*int'(addr)+:2] == 0 && candidate[2*int'(addr)+:2] != 0)
+                      assert (kind == FRP_TRANS_ZERO_TO_NONZERO) else $fatal(1,"zero-to-nonzero request class");
+              end
+          endmodule
+          bind frp_m31_capacity_writeback_isolation_tb frp147_retry_check
+              #(.N(CELLS), .L(LANES), .B(IB)) retry_check
+              (.clk, .rst_n, .tick, .requests, .addr(address[0+:IB]), .kind(classes[3:0]), .q, .candidate);
+          """)
+
+          def simulate(folder, n, src, expected_failure=None):
+              with tempfile.TemporaryDirectory(dir=root) as build:
+                  command = ["verilator-cli", "--binary", "--timing", "--assert", "--coverage-line",
+                             "-MAKEFLAGS", "CFG_CXXFLAGS_PCH_I=-include", "-MAKEFLAGS", "OPT_FAST=-O0",
+                             "-Wno-fatal", "-j", "2", "--top-module", top, f"-GCELLS={n}",
+                             "-I"+str(src), "--Mdir", build, str(src/(top+".sv")), str(monitor)]
+                  with (folder/"build.log").open("w") as log:
+                      subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=1200, check=True)
+                  data = folder / "coverage.dat"
+                  with (folder/"run.log").open("w") as log:
+                      proc = subprocess.run([str(Path(build)/("V"+top)), "+verilator+coverage+file+"+str(data)],
+                                            stdout=log, stderr=subprocess.STDOUT, timeout=600)
+              text = (folder/"run.log").read_text()
+              if expected_failure:
+                  check(proc.returncode != 0 and not any(l.startswith("PASS ") for l in text.splitlines())
+                        and any("%Fatal:" in l and l.endswith(expected_failure) for l in text.splitlines()),
+                        f"{folder}: wrong mutation outcome")
+                  return
+              proc.check_returncode()
+              cases = (42 if n == 9 else 40)*n
+              checks = (468 if n == 9 else 444)*n
+              marker = f"PASS CAPACITY_WRITEBACK_ISOLATION cells={n} lanes={(n+2)//4} cases={cases} checks={checks}"
+              check([l for l in text.splitlines() if l.startswith("PASS ")] == [marker], f"{folder}: incomplete run")
+              print(marker, flush=True)
+              return marker
+
+          def coverage(folder, n):
+              data = (folder/"coverage.dat").read_bytes()
+              inventory, hit = {}, set()
+              for key, count, _ in source_points(data, files, root, sources):
+                  if key["t"] == "branch":
+                      point = canonical(key)
+                      inventory[point] = key
+                      if count >= int(key["s"]):
+                          hit.add(point)
+              ordered = sorted(inventory)
+              check(sha(("\n".join(ordered)+"\n").encode()) == inventory_sha, f"{folder}: branch identities changed")
+              native = {k for i, k in enumerate(ordered) if (hit_bits[n] >> i) & 1}
+              missing = set(ordered) - native
+              new = hit & missing
+              counts = {}
+              for p in sorted(files):
+                  subset = {k for k in ordered if inventory[k]["f"] == p}
+                  counts[p] = dict(total=len(subset), native=len(native & subset),
+                                   component=len(hit & subset), previously_missing_hit=len(new & subset))
+              check(counts[guard]["previously_missing_hit"] >= 5 and counts[wb]["previously_missing_hit"] >= 12,
+                    f"{folder}: lost targeted branches")
+              return dict(cells=n, coverage_sha256=sha(data), counts=counts, component_hits=len(hit),
+                          baseline_missing=len(missing), previously_missing_hit=[inventory[k] for k in sorted(new)],
+                          still_missing=[inventory[k] for k in sorted(missing-hit)])
+
+          rows = []
+          table = ["| Cells | Cases | Component hits / 68 | Hit from #146 missing |",
+                   "|---:|---:|---:|---:|"]
+          for n in (8, 9, 16, 32, 64, 128):
+              folder = out / f"cells-{n}"
+              folder.mkdir()
+              marker = simulate(folder, n, rtl)
+              row = coverage(folder, n)
+              row["pass"] = marker
+              save(folder/"result.json", row)
+              rows.append(row)
+              table.append(f"| {n} | {(42 if n == 9 else 40)*n} | {row['component_hits']} / 68 | "
+                           f"{len(row['previously_missing_hit'])} / {row['baseline_missing']} |")
+
+          mutants = [
+              ("suppress-peer", wb, "tick_enable\n          && current_valid_w[element_index]",
+               "tick_enable && !(|actual_direct_mask)\n          && current_valid_w[element_index]",
+               "cells=8 case=13 writeback isolation"),
+              ("count-invalid", guard, "pending_capacity_valid = 1'b0;",
+               "pending_capacity_valid = 1'b0;\n                    accepted_changes = accepted_changes + COUNTER_ONE;",
+               "cells=8 case=9 guard change count"),
+          ]
+          detected = {}
+          for name, file, old, new, reason in mutants:
+              folder = out / name
+              folder.mkdir()
+              for p in [rtl/(top+".sv"), rtl/"frp_m31_pkg.sv", Path(guard), Path(wb)]:
+                  shutil.copyfile(p, folder/p.name)
+              p = folder/Path(file).name
+              body = p.read_text()
+              check(body.count(old) == 1, f"{name}: mutation anchor changed")
+              p.write_text(body.replace(old, new))
+              simulate(folder, 8, folder, reason)
+              detected[name] = reason
+              print("DETECTED", name, reason, flush=True)
+
+          save(out/"summary.json", dict(baseline_commit=baseline_commit, baseline_run=42507865694,
+               baseline_bits={n:hex(v) for n,v in hit_bits.items()}, inventory_sha256=inventory_sha,
+               profiles=rows, mutations=detected))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              print("### M31 capacity and writeback isolation\n", *table, sep="\n", file=f)
+              print("\nDetected mutations: " + ", ".join(detected), file=f)
+          PY
+          python -u evidence/verify.py
+
+      - name: Upload combined evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-147-capacity-writeback-isolation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
