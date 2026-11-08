@@ -1,0 +1,115 @@
+name: 150 - FRP M31 Route Fault Matrix
+run-name: "150 - M31 route and capacity diagnostics | ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Record sources and tools
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/commit.txt
+          git archive -o evidence/sources.tar.gz HEAD -- rtl/m31 verification/m32/frp_m32_coverage_union.py
+          python -m pip install 'verilator==5.38.0'
+          python -m pip show verilator > evidence/tools.txt
+      - name: Exercise all seven profiles with and without internal faults
+        run: |
+          set -euo pipefail
+          top=frp_m31_route_fault_matrix_tb
+          for profile in 8:3 9:4 16:4 32:5 64:6 128:7 128:8; do
+            n=${profile%:*}
+            b=${profile#*:}
+            out="evidence/cells-$n-bits-$b"
+            mkdir -p "$out"
+            verilator-cli --binary --timing --assert --coverage-line -j 2 -Wno-fatal \
+              -MAKEFLAGS CFG_CXXFLAGS_PCH_I=-include -MAKEFLAGS OPT_FAST=-O0 \
+              --top-module "$top" "-GCELLS=$n" "-GB=$b" -Irtl/m31 --Mdir obj \
+              "rtl/m31/$top.sv" > "$out/build.log" 2>&1
+            for mode in control inject; do
+              dir="$out/$mode"
+              mkdir -p "$dir"
+              "obj/V$top" "+$mode" "+verilator+coverage+file+$dir/coverage.dat" |& tee "$dir/run.log"
+            done
+            rm -rf obj
+          done
+      - name: Verify individual branch counters
+        run: |
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          from verification.m32.frp_m32_coverage_union import canonical, source_points
+
+          fault = {('active_neutral', 669, 'if'), ('capacity_guard', 511, 'else')}
+          fault.update(('pending_routes', n, 'if') for n in (429, 435, 444, 451))
+          address = {(m, n, 'else') for m, n in [('request_lanes', 288), ('pending_routes', 336),
+                                                  ('active_neutral', 394), ('capacity_guard', 323)]}
+          paths = {f'rtl/m31/frp_m31_{m}.sv': m for m, _, _ in fault | address}
+          sources = {p: Path(p).read_text().splitlines() for p in paths}
+          inputs = sorted([*sources, 'rtl/m31/frp_m31_pkg.sv'])
+          if hashlib.sha256(b''.join(Path(p).read_bytes() for p in inputs)).hexdigest() != (
+              '4459318abbc21eaf149a67fb4a5ec67fd64fce4973c59307218782407658398b'):
+              raise ValueError('Baseline RTL mismatch')
+          # Canonical branch hit sets from runs 146 through 149 at native address width.
+          baseline = dict.fromkeys((8, 16, 32, 64, 128), 0xEFFDFF7F77BFE2FFFFFFFF)
+          baseline[9] = 0xFFFFFFFFF7BFE2FFFFFFFF
+          profiles = [(8, 3), (9, 4), (16, 4), (32, 5), (64, 6), (128, 7), (128, 8)]
+          rows = []
+          for cells, bits in profiles:
+              for mode in ('control', 'inject'):
+                  folder = Path(f'evidence/cells-{cells}-bits-{bits}') / mode
+                  unused = (1 << bits) - cells
+                  marker = (f'PASS ROUTE_FAULT_MATRIX cells={cells} bits={bits} inject={int(mode=="inject")}'
+                            f' trials={2*cells} invalid={unused}')
+                  lines = (folder/'run.log').read_text().splitlines()
+                  if lines.count(marker) != 1 or sum('Verilog $finish' in s for s in lines) != 1:
+                      raise ValueError(f'{folder}: incomplete simulation')
+                  points = source_points((folder/'coverage.dat').read_bytes(), set(paths), Path.cwd(), sources)
+                  observed, hits = set(), set()
+                  for k, count, _ in points:
+                      if k['t'] == 'branch':
+                          point = (paths[k['f']], int(k['l']), k['o'])
+                          observed.add(point)
+                          if count >= int(k['s']):
+                              hits.add(point)
+                  targets = fault | address
+                  expected = (fault if mode == 'inject' else set()) | (address if unused else set())
+                  if not targets <= observed or hits & targets != expected:
+                      raise ValueError(f'{folder}: target branch mismatch: {sorted(hits & targets)}')
+                  ids = sorted({canonical(k) for k, _, _ in points if k['t'] == 'branch'})
+                  digest = hashlib.sha256(('\n'.join(ids)+'\n').encode()).hexdigest()
+                  if digest != '1468272b3bd8f9e64d6e6adfa3bb52f6c350e5f520e629d70502d93e111b6370':
+                      raise ValueError('Branch inventory mismatch')
+                  union = None
+                  if bits == (cells-1).bit_length():
+                      old = {k for i, k in enumerate(ids) if baseline[cells] & (1 << i)}
+                      hit_ids = {canonical(k) for k, v, _ in points if k['t'] == 'branch' and v >= int(k['s'])}
+                      union = len(old | hit_ids)
+                  rows.append(dict(native_union=union, cells=cells, bits=bits, mode=mode, pass_line=marker,
+                                   fault_hits=sorted(hits & fault), address_hits=sorted(hits & address)))
+          Path('evidence/summary.json').write_text(json.dumps(rows, indent=2) + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
+              for r in rows:
+                  print(f"- {r['pass_line']} | faults {len(r['fault_hits'])}/6 | "
+                        f"address {len(r['address_hits'])}/4", file=out)
+          PY
+      - name: Upload one archive
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-150-route-fault-matrix-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
