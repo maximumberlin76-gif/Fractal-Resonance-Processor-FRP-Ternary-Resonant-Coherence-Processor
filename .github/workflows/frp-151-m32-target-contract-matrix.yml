@@ -1,0 +1,166 @@
+name: 151 - FRP M32 Target Contract Matrix
+run-name: "151 - Target capture and transition matrix | ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Record sources and tools
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/commit.txt
+          git archive -o evidence/sources.tar.gz HEAD -- rtl/m31 rtl/m32 verification/m32
+          python -m pip install 'verilator==5.38.0'
+          python -m pip show verilator > evidence/tools.txt
+      - name: Run baseline and replay seven profiles
+        run: |
+          set -euo pipefail
+          for profile in legacy 8:4 9:4 16:4 32:4 64:4 128:4 128:32; do
+            top=frp_m32_target_contract_matrix_tb
+            options=()
+            modes=(control full)
+            if [[ $profile == legacy ]]; then
+              top=frp_m32_registered_target_request_path_tb
+              modes=(legacy)
+            else
+              options=("-GCELLS=${profile%:*}" "-GCW=${profile#*:}")
+            fi
+            out="evidence/${profile/:/-}"
+            obj="build-${profile/:/-}"
+            mkdir -p "$out"
+            verilator-cli --binary --timing --assert --coverage-line --coverage-expr -Wno-fatal -j 2 \
+              -MAKEFLAGS CFG_CXXFLAGS_PCH_I=-include -MAKEFLAGS OPT_FAST=-O0 \
+              -Irtl/m31 -Irtl/m32 --top-module "$top" "${options[@]}" --Mdir "$obj" \
+              "rtl/m32/$top.sv" > "$out/build.log" 2>&1
+            for mode in "${modes[@]}"; do
+              mkdir -p "$out/$mode"
+              for pass in 1 2; do
+                "$obj/V$top" "+$mode" "+verilator+coverage+file+$out/$mode/$pass.dat" |& tee "$out/$mode/$pass.log"
+              done
+              cmp "$out/$mode/1.dat" "$out/$mode/2.dat"
+            done
+            rm -rf "$obj"
+          done
+      - name: Verify coverage and replay
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from verification.m32.frp_m32_coverage_union import canonical, decode
+
+          root = Path('evidence')
+          files = {'rtl/m31/frp_m31_phase_request_adapter.sv', 'rtl/m32/frp_m32_registered_target_boundary.sv',
+                   'rtl/m32/frp_m32_registered_target_request_path.sv'}
+          profiles = [(8,4), (9,4), (16,4), (32,4), (64,4), (128,4), (128,32)]
+          rows = []
+          inventory = {}
+
+          def qualify(folder, mode, marker):
+              for attempt in (1, 2):
+                  lines = (folder/f'{attempt}.log').read_text().splitlines()
+                  if lines.count(marker) != 1 or sum('Verilog $finish' in x for x in lines) != 1:
+                      raise ValueError(f'{folder}: incomplete replay {attempt}')
+              raw = (folder/'1.dat').read_bytes()
+              if raw != (folder/'2.dat').read_bytes():
+                  raise ValueError(f'{folder}: replay counters differ')
+              lines = raw.decode().splitlines()
+              if lines[0] != '# SystemC::Coverage-3':
+                  raise ValueError('Unexpected coverage format')
+              points = {'branch': {}, 'expr': {}}
+              for line in lines[1:]:
+                  if not line or line.startswith('#'):
+                      continue
+                  body, count = line[3:].rsplit("' ", 1)
+                  fields = dict(tuple(map(decode, item.split('\x02'))) for item in body[1:].split('\x01'))
+                  t = fields['t']
+                  if fields['f'] in files and t in points:
+                      ident = canonical({k:v for k,v in fields.items() if k not in ('h','page','P')})
+                      points[t][ident] = points[t].get(ident, False) or int(count) >= int(fields.get('s','1'))
+              counts = {}
+              for t, seen in points.items():
+                  profile = '8-4' if mode == 'legacy' else folder.parent.name
+                  if not seen or set(seen) != inventory.setdefault((profile,t), set(seen)):
+                      raise ValueError(f'{folder}: different {t} inventory')
+                  counts[t] = [sum(seen.values()), len(seen)]
+                  if mode == 'full':
+                      for key, hit in seen.items():
+                          k = json.loads(key)
+                          if not hit and not (profile == '9-4' and t == 'expr' and
+                                  k['f'].endswith('registered_target_boundary.sv') and k['l'] in ('78','87')
+                                  and k['o'].endswith('==0) => 1')):
+                              raise ValueError(f'{folder}: missed {key}')
+              rows.append(dict(profile=str(folder), pass_line=marker, coverage=counts,
+                               missing={t:[json.loads(k) for k,v in seen.items() if not v] for t,seen in points.items()}))
+
+          qualify(root/'legacy/legacy', 'legacy', 'FRP_M32_REGISTERED_TARGET_REQUEST_PATH_TB: PASS')
+          for n, w in profiles:
+              for mode in ('control','full'):
+                  full = int(mode=='full')
+                  marker = (f'PASS TARGET_MATRIX cells={n} bits={w} full={full} rows={352*full} '
+                            f'steps={24*n+40} faults={2*n*full}')
+                  qualify(root/f'{n}-{w}'/mode, mode, marker)
+          (root/'summary.json').write_text(json.dumps(rows, indent=2)+'\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
+              for r in rows:
+                  print(f"- {r['profile']} | branches {r['coverage']['branch']} | expressions {r['coverage']['expr']}", file=out)
+          PY
+      - name: Verify three negative controls
+        run: |
+          ulimit -c 0
+          python - <<'PY'
+          from pathlib import Path
+          import shutil, subprocess
+
+          top = 'frp_m32_target_contract_matrix_tb'
+          mutants = [
+              ('domain', 'frp_m32_registered_target_request_path', '&& registered_target_domain_valid;', ';', 'fault cell=0'),
+              ('owner', 'frp_m31_pkg', 'frp_transition_selected_target =\n            pending_value;',
+               'frp_transition_selected_target = target_value;', 'transition s=0 t=0 p=1'),
+              ('last', 'frp_m31_phase_request_adapter', '(selected < REQUEST_LANES)',
+               '(selected < REQUEST_LANES && cell_index != CELLS-1)', 'pre-edge step='),
+          ]
+          for label, module, old, new, reason in mutants:
+              folder = Path('evidence/mutations') / label
+              folder.mkdir(parents=True, exist_ok=True)
+              obj = Path('obj-negative')
+              for name in (top, 'frp_m32_registered_target_request_path', 'frp_m32_registered_target_boundary',
+                           'frp_m31_pkg', 'frp_m31_phase_request_adapter'):
+                  shutil.copyfile(Path('rtl', name.split('_')[1], name+'.sv'), folder/(name+'.sv'))
+              path = folder/(module+'.sv')
+              body = path.read_text()
+              if body.count(old) != 1:
+                  raise ValueError(f'{label}: mutation anchor changed')
+              path.write_text(body.replace(old, new))
+              args = ['verilator-cli', '--binary', '--timing', '--assert', '-j', '2', '-Wno-fatal',
+                      '-MAKEFLAGS', 'CFG_CXXFLAGS_PCH_I=-include', '-MAKEFLAGS', 'OPT_FAST=-O0',
+                      '-I'+str(folder), '--top-module', top, '-GCELLS=8', '--Mdir', str(obj), str(folder/(top+'.sv'))]
+              with (folder/'build.log').open('w') as log:
+                  subprocess.run(args, stdout=log, stderr=subprocess.STDOUT, check=True)
+              run = subprocess.run([str(obj/('V'+top)), '+full'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+              (folder/'run.log').write_text(run.stdout)
+              if run.returncode == 0 or reason not in run.stdout:
+                  raise ValueError(f'{label}: expected {reason}')
+              print('DETECTED', label, reason)
+              shutil.rmtree(obj)
+          PY
+      - name: Upload one artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-151-target-contract-matrix-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
