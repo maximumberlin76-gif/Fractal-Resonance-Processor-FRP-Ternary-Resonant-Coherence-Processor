@@ -1,0 +1,185 @@
+name: 156 - FRP active-zero, feedback and thermal regression
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Verilator
+        run: python -m pip install 'verilator==5.48.0' 'systemc==3.0.2.1'
+      - name: Run SystemVerilog regressions
+        run: |
+          python - <<'PYCODE'
+          from pathlib import Path
+          import csv
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          from urllib.parse import unquote
+
+          out = Path("evidence")
+          out.mkdir(exist_ok=True)
+          builds = Path(os.environ["RUNNER_TEMP"]) / "frp156"
+          builds.mkdir(parents=True, exist_ok=True)
+          profiles = {}
+          counters_by_profile = {}
+          errors = {}
+          gold = {
+              8:  (9627365,    "8c2515079d70ce27"),
+              16: (57863045,   "ac10e840b1d6274f"),
+              32: (386280965,  "cc6bc3b0c124a75f"),
+              64: (2783754245, "f2a94ed74688a81f"),
+          }
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def sha(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          def run(args, log):
+              with log.open("w") as stream:
+                  result = subprocess.run(args, stdout=stream, stderr=subprocess.STDOUT)
+              if result.returncode:
+                  print(log.read_text(errors="replace")[-4000:], flush=True)
+                  raise RuntimeError(f"{log.name}: exit {result.returncode}")
+
+          def build(top, source, cells=None, unroll=64):
+              label = top if cells is None else f"{top}-{cells}"
+              obj = builds / label
+              args = ["verilator-cli", "--binary", "--timing", "--assert", "--coverage-line",
+                      "--unroll-count", str(unroll), "--unroll-stmts", "1", "-j", "2",
+                      "-Wno-fatal", "-MAKEFLAGS", "VK_PCH_I_FAST= VK_PCH_I_SLOW= OPT_FAST=-O2",
+                      "-Irtl/m31", "-Irtl/m32", "--top-module", top, "--Mdir", str(obj)]
+              if cells is not None:
+                  args.append(f"-GCELLS={cells}")
+              print("Build", label, flush=True)
+              run([*args, source], out / f"{label}-build.log")
+              return str(obj / ("V" + top))
+
+          def coverage(path):
+              seen = {}
+              for row in path.read_text().splitlines():
+                  if not row.startswith("C '"):
+                      continue
+                  fields, value = row[3:].rsplit("' ", 1)
+                  rec = dict(part.split("\x02", 1) for part in fields[1:].split("\x01"))
+                  source = unquote(rec["f"])
+                  if rec["t"] != "branch" or not source.startswith("rtl/") or source.endswith("_tb.sv"):
+                      continue
+                  key = (source, rec["l"], rec["n"], unquote(rec["o"]), unquote(rec.get("S","")), int(rec.get("s","1")))
+                  seen[key] = max(seen.get(key, 0), int(value))
+              require(seen, f"Empty RTL branch inventory: {path}")
+              return seen
+
+          def replay(label, exe, args, prefixes):
+              replays = []
+              for index in (1, 2):
+                  log = out / f"{label}-{index}.log"
+                  dat = out / f"{label}-{index}.dat"
+                  print("Run", label, index, flush=True)
+                  run([exe, *args, "+verilator+coverage+file+" + str(dat)], log)
+                  lines = log.read_text().splitlines()
+                  records = []
+                  for prefix in prefixes:
+                      found = [line for line in lines if line.startswith(prefix)]
+                      require(len(found) == 1, f"{log}: expected one {prefix!r}")
+                      records.append(found[0])
+                  replays.append((records, sha(dat)))
+              require(replays[0] == replays[1], f"Replay mismatch: {label}")
+              records, digest = replays[0]
+              counters = coverage(out / f"{label}-1.dat")
+              counters_by_profile[label] = counters
+              profiles[label] = dict(records=records, coverage_sha256=digest,
+                                     reached=sum(v >= k[-1] for k,v in counters.items()), observed=len(counters))
+              return [dict(re.findall(r"(\w+)=(\w+)", row)) for row in records]
+
+          def active(n):
+              checks, signature = gold[n]
+              top = "frp_m31_active_zero_sequence_tb"
+              exe = build(top, f"rtl/m31/{top}.sv", n, unroll=1)
+              markers = ["ACTIVE_ZERO_RANGE ", "PASS ACTIVE_ZERO ", "ACTIVE_ZERO_EVENTS "]
+              span, stats, events = replay(f"active-{n}", exe, [], markers)
+              cases = 432 * n * (n//4)
+              require([int(span[k]) for k in ("cells","first_cell","last_cell","lanes")] ==
+                      [n,0,n-1,n//4], f"Address range: {n}")
+              require((int(stats["cases"]),int(stats["checks"]),stats["signature"]) ==
+                      (cases,checks,signature), f"Active-zero reference: {n}")
+              require([int(events[k]) for k in ("routes","completions","aborted","handovers")] ==
+                      [cases,2*cases//3,cases//3,cases//3], f"Route counts: {n}")
+              if n == 64:
+                  span, stats, _ = replay("active-64-last", exe, ["+FIRST_CELL=63","+LAST_CELL=63"], markers)
+                  require((span["first_cell"],span["last_cell"],int(stats["cases"]),stats["signature"]) ==
+                          ("63","63",6912,"03f0bdc6056ca9cd"), "Last address replay")
+
+          def feedback(n):
+              top = "frp_m31_feedback_scaling_tb"
+              exe = build(top, f"rtl/m31/{top}.sv", n)
+              replay(f"feedback-{n}", exe, [], [f"PASS LOCAL_GAMMA cells={n} ",
+                     f"PASS LOCAL_ATTENUATION cells={n} ",f"PASS FEEDBACK_SCALING cells={n} suites=2"])
+
+          def thermal():
+              top = "frp_m32_thermal_batch_tb"
+              exe = build(top, f"rtl/m32/{top}.sv")
+              row, = replay("thermal-8", exe, ["+CYCLES=512"], ["PASS profiles=96 cycles=49152 "])
+              require(int(row["checks"]) == 10722053 and int(row["zero_entries"]) == 12861 and
+                      int(row["zero_exits"]) == 13331, "Thermal reference")
+
+          def check(label, fn, *args):
+              before = set(profiles)
+              try:
+                  fn(*args)
+              except Exception as exc:
+                  errors[label] = str(exc)
+                  print(f"FAILED {label}: {exc}", flush=True)
+                  for k in set(profiles) - before:
+                      del profiles[k]
+                      del counters_by_profile[k]
+
+          for n in gold:
+              check(f"active-{n}", active, n)
+              check(f"feedback-{n}", feedback, n)
+          check("thermal-8", thermal)
+          branches = {}
+          for counters in counters_by_profile.values():
+              for key, value in counters.items():
+                  branches[key] = max(branches.get(key, 0), value)
+
+          with (out/"branches.csv").open("w", newline="") as stream:
+              writer = csv.writer(stream)
+              writer.writerow(["source","line","column","outcome","span","threshold","max_instance_hits"])
+              writer.writerows([*key,value] for key,value in sorted(branches.items()))
+
+          reached = sum(value >= key[-1] for key,value in branches.items())
+          summary = dict(commit=os.environ["GITHUB_SHA"], run_id=os.environ["GITHUB_RUN_ID"],
+                         attempt=os.environ["GITHUB_RUN_ATTEMPT"], profiles=profiles, errors=errors,
+                         status="FAIL" if errors else "PASS",
+                         rtl_branches_observed=len(branches), rtl_branches_reached=reached)
+          (out/"summary.json").write_text(json.dumps(summary,indent=2)+"\n")
+          with (out/"SHA256SUMS").open("w") as stream:
+              for path in sorted(out.iterdir()):
+                  if path.is_file() and path.name != "SHA256SUMS":
+                      stream.write(f"{sha(path)}  {path.name}\n")
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as stream:
+              stream.write(f"RTL branch outcomes reached in this run: {reached}/{len(branches)}.\n")
+          if errors:
+              raise SystemExit("Failed suites: " + ", ".join(errors))
+          PYCODE
+      - name: Upload combined regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-156-regression-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 30
