@@ -1,0 +1,164 @@
+name: 153 - FRP M32 Lane Rank Matrix
+run-name: "153 - Rank and backlog through 128 cells | ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Record inputs and tools
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/commit.txt
+          git archive -o evidence/sources.tar.gz HEAD -- rtl/m31 rtl/m32
+          python -m pip install 'verilator==5.38.0'
+          python -m pip show verilator > evidence/tools.txt
+      - name: Compare both workloads with the same lane monitor
+        run: |
+          set -euo pipefail
+          tb=rtl/m32/frp_m32_lane_rank_matrix_tb.sv
+          for n in 8 9 16 32 64 128; do
+            for suite in baseline contention; do
+              top=frp_m32_lane_rank_matrix_tb
+              files=("$tb")
+              opts=()
+              if [[ $suite == baseline ]]; then
+                top=frp_m32_target_contract_matrix_tb
+                files+=("rtl/m32/$top.sv")
+                opts=(-GCW=32)
+              fi
+              out="evidence/cells-$n/$suite"
+              obj="build-$n-$suite"
+              mkdir -p "$out"
+              verilator-cli --binary --timing --assert --coverage-line --unroll-count 1 -Wno-fatal -j 2 \
+                -MAKEFLAGS CFG_CXXFLAGS_PCH_I=-include -MAKEFLAGS OPT_FAST=-O1 \
+                -Irtl/m31 -Irtl/m32 --top-module "$top" "-GCELLS=$n" "${opts[@]}" --Mdir "$obj" \
+                "${files[@]}" > "$out/build.log" 2>&1
+              for run in 1 2; do
+                "$obj/V$top" +full "+verilator+coverage+file+$out/$run.dat" > "$out/$run.log"
+              done
+              cmp "$out/1.dat" "$out/2.dat"
+              rm -rf "$obj"
+            done
+          done
+      - name: Check feasible rank bins and replay
+        run: |
+          python - <<'PY'
+          import json, re
+          from pathlib import Path
+
+          root = Path('evidence')
+          totals = []
+          for n in (8,9,16,32,64,128):
+              lanes = max(1,(n+2)//4)
+              possible = sum(n-k for k in range(lanes))
+              masks = (1<<n) if n<=16 else 0
+              batches = (n+lanes-1)//lanes
+              checks = 9*possible + masks + 8*n + 4 + batches
+              full_mask = (1<<n)-1
+              expected = {(k,s): full_mask ^ ((1<<k)-1) for k in range(lanes) for s in ('zero','pos','neg')}
+              suites = {}
+              row = dict(cells=n,lanes=lanes,possible=3*possible)
+              for suite in ('baseline','contention'):
+                  folder = root/f'cells-{n}'/suite
+                  marker = (f'PASS TARGET_MATRIX cells={n} bits=32 full=1 rows=352 steps={24*n+40} faults={2*n}'
+                            if suite=='baseline' else f'PASS LANE_RANK cells={n} lanes={lanes} checks={checks} '
+                            f'deletions={3*possible} masks={masks} batches={batches}')
+                  for run in (1,2):
+                      lines = (folder/f'{run}.log').read_text().splitlines()
+                      if lines.count(marker)!=1 or sum('Verilog $finish' in x for x in lines)!=1:
+                          raise ValueError(f'{folder}: incomplete simulation')
+                      bins = {}
+                      for line in lines:
+                          if not line.startswith('RANK_MAP'):
+                              continue
+                          m = re.fullmatch(r'RANK_MAP lane=(\d+) zero=([\da-fA-F]+) pos=([\da-fA-F]+) neg=([\da-fA-F]+)',line)
+                          if not m:
+                              raise ValueError(line)
+                          for sym,word in zip(('zero','pos','neg'),m.groups()[1:]):
+                              key = (int(m[1]),sym)
+                              if key in bins:
+                                  raise ValueError(f'{folder}: duplicate lane')
+                              bins[key] = int(word,16)
+                      if bins.keys()!=expected.keys() or any(v & ~expected[k] for k,v in bins.items()):
+                          raise ValueError(f'{folder}: impossible or missing lane')
+                      if run==1:
+                          suites[suite]=bins
+                      elif suites[suite]!=bins:
+                          raise ValueError(f'{folder}: replay mismatch')
+                  row[suite]=sum(v.bit_count() for v in bins.values())
+              if suites['contention']!=expected:
+                  raise ValueError(f'{n}: missed feasible rank/target combinations')
+              row['added']=row['contention']-row['baseline']
+              totals.append(row)
+          (root/'summary.json').write_text(json.dumps(totals,indent=2)+'\n')
+          print(*totals,sep='\n')
+          PY
+          python - <<'PY'
+          import json, os
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              for row in json.load(open('evidence/summary.json')):
+                  print(f"- {row['cells']} cells: {row['baseline']} -> {row['contention']}/{row['possible']} rank bins",file=f)
+          PY
+      - name: Detect four arbitration faults
+        run: |
+          ulimit -c 0
+          python - <<'PY'
+          import shutil, subprocess
+          from pathlib import Path
+
+          top='frp_m32_lane_rank_matrix_tb'
+          adapter='frp_m31_phase_request_adapter'
+          sink='frp_m31_request_lanes'
+          sources=(adapter,sink,top,'frp_m31_pkg','frp_m32_registered_target_boundary','frp_m32_registered_target_request_path')
+          cases=[
+              ('short_vector',adapter,'selected < REQUEST_LANES','selected + 1 < REQUEST_LANES','rank projection'),
+              ('address_alias',adapter,'cell_index[CELL_INDEX_BITS-1:0];',
+               "cell_index[CELL_INDEX_BITS-1:0] ^ CELL_INDEX_BITS'(selected != 0);",'rank projection'),
+              ('pending_bypass',adapter,'!frp_has_pending_route(pending_value)',"1'b1",'rank projection'),
+              ('last_neutral',sink,"request_neutralized[lane_index] = 1'b1;",
+               'request_neutralized[lane_index] = lane_index != REQUEST_LANES-1;','downstream acceptance')
+          ]
+          for label,module,old,new,reason in cases:
+              folder=Path('evidence/mutations')/label
+              folder.mkdir(parents=True,exist_ok=True)
+              for name in sources:
+                  body=Path('rtl',name.split('_')[1],name+'.sv').read_text()
+                  if name==module:
+                      if body.count(old)!=1:
+                          raise ValueError(f'{label}: mutation anchor changed')
+                      body=body.replace(old,new)
+                  (folder/(name+'.sv')).write_text(body)
+              obj=Path('build-mut-'+label)
+              cmd=['verilator-cli','--binary','--timing','--assert','--unroll-count','1','-j','2','-Wno-fatal',
+                   '-MAKEFLAGS','CFG_CXXFLAGS_PCH_I=-include','-MAKEFLAGS','OPT_FAST=-O1','-I'+str(folder),
+                   '--Mdir',str(obj),'--top-module',top,'-GCELLS=8',str(folder/(top+'.sv'))]
+              with (folder/'build.log').open('w') as log:
+                  subprocess.run(cmd,stdout=log,stderr=subprocess.STDOUT,check=True)
+              sim=subprocess.run([str(obj/('V'+top))],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+              (folder/'run.log').write_text(sim.stdout)
+              if sim.returncode==0 or reason+' cells=8 step=' not in sim.stdout:
+                  raise ValueError(f'{label}: expected {reason}')
+              print('DETECTED',label,flush=True)
+              shutil.rmtree(obj)
+          PY
+      - name: Upload one archive
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-153-lane-rank-matrix-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
