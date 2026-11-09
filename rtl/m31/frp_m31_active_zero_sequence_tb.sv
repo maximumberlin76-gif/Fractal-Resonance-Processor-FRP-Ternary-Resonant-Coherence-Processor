@@ -2,6 +2,7 @@
 // Active-zero execution sequences on the integrated M31 execution core.
 // Independent integer oracle; only public DUT ports are observed.
 // Sweep: cells x lanes x directions x modes x positions x pauses x endings.
+// +FIRST_CELL and +LAST_CELL select an inclusive interval; both default to the full sweep.
 `timescale 1ns/1ps
 `include "frp_m31_execution_core.sv"
 
@@ -30,7 +31,8 @@ module frp_m31_active_zero_sequence_tb #(
   int state_ref[CELLS], pending_ref[CELLS], counts_ref[5];
   int mode_ref = 0, position_ref = 0, ticks_ref = 0;
   int cell_id = 0, lane_id = 0, destination = 0;
-  int cases = 0, cycles = 0, checks = 0, resets = 0;
+  int cases = 0, cycles = 0, resets = 0;
+  longint unsigned checks = 0;
   int routes = 0, completions = 0, aborted = 0, handovers = 0;
   int paused_pending = 0, deferred_pending = 0, busy_rejections = 0;
   int route_cycle[CELLS], route_tick[CELLS];
@@ -212,11 +214,17 @@ module frp_m31_active_zero_sequence_tb #(
 
   initial begin : stimulus
     int start_value, pause_length, bound, completion_start, route_start;
-    if (!(CELLS == 8 || CELLS == 16 || CELLS == 32))
-      $fatal(1, "CELLS must be 8, 16 or 32");
+    int first_cell, last_cell, selected_cells;
+    if (!(CELLS inside {8, 16, 32, 64}))
+      $fatal(1, "CELLS must be 8, 16, 32 or 64");
+    if (!$value$plusargs("FIRST_CELL=%d", first_cell)) first_cell = 0;
+    if (!$value$plusargs("LAST_CELL=%d", last_cell)) last_cell = CELLS-1;
+    if (first_cell < 0 || last_cell >= CELLS || first_cell > last_cell)
+      $fatal(1, "Invalid cell interval [%0d,%0d] for CELLS=%0d", first_cell, last_cell, CELLS);
+    selected_cells = last_cell-first_cell+1;
     for (int mode = 0; mode < 3; mode++)
       for (int position = 0; position < 8; position++)
-        for (int c = 0; c < CELLS; c++)
+        for (int c = first_cell; c <= last_cell; c++)
           for (int lane = 0; lane < LANES; lane++)
             for (int direction = 0; direction < 2; direction++)
               for (int pause_case = 0; pause_case < 3; pause_case++)
@@ -269,16 +277,21 @@ module frp_m31_active_zero_sequence_tb #(
                   end
                 end
     foreach (completed_hits[m,p,c,l,d]) begin
-      eq(64'(completed_hits[m][p][c][l][d]), 6, "completion coverage");
-      eq(64'(aborted_hits[m][p][c][l][d]), 3, "reset coverage");
+      if (c >= first_cell && c <= last_cell) begin
+        eq(64'(completed_hits[m][p][c][l][d]), 6, "completion coverage");
+        eq(64'(aborted_hits[m][p][c][l][d]), 3, "reset coverage");
+      end else if (completed_hits[m][p][c][l][d] != 0 || aborted_hits[m][p][c][l][d] != 0)
+        $fatal(1, "Unexpected coverage outside selected interval at cell %0d", c);
     end
-    eq(64'(cases), 64'(3*8*CELLS*LANES*2*3*3), "scenario count");
+    eq(64'(cases), 64'(3*8*selected_cells*LANES*2*3*3), "scenario count");
     eq(64'(routes), 64'(cases), "route count");
     eq(64'(completions), 64'(cases*2/3), "completion count");
     eq(64'(aborted), 64'(cases/3), "abort count");
     eq(64'(handovers), 64'(cases/3), "handover count");
     if (paused_pending == 0 || deferred_pending == 0 || busy_rejections == 0)
       $fatal(1, "Missing pause, scheduler deferral or busy-request coverage");
+    $display("ACTIVE_ZERO_RANGE cells=%0d first_cell=%0d last_cell=%0d lanes=%0d",
+      CELLS, first_cell, last_cell, LANES);
     $display("PASS ACTIVE_ZERO cells=%0d cases=%0d cycles=%0d checks=%0d resets=%0d signature=%016h",
       CELLS, cases, cycles, checks, resets, signature);
     $display("ACTIVE_ZERO_EVENTS cells=%0d routes=%0d completions=%0d aborted=%0d handovers=%0d paused=%0d deferred=%0d busy=%0d",
