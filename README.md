@@ -147,7 +147,24 @@ RTL reproduction procedures and the source inventory are linked from the
 
 The [M32 trace manifest](artifacts/m32/manifests/m32-deterministic-rtl-trace-manifest.json) records source revision `c0bc0fbc2c1c2e500b19d0ba84b3431a813e3941`. At the regression commit, two source files have different hashes: `rtl/m31/frp_m31_phase_interference.sv` and `rtl/m32/frp_m32_core.sv`. Workflow 155 records these differences in `summary.json`.
 
-The [FRP Trace Observatory](#frp-trace-observatory) snapshot at `3e259818ee14ed0c95749a11026febf9d486e68a` passed 208 M31 intake tests against the FRP tree at `99c3952`. Its dispatcher classified the M32 bundle schema `frp.m32.deterministic_rtl_trace_bundle.v1` as `unknown_identifier`.
+### Active-zero regression and thermal post-synthesis
+
+At FRP commit `874dbb954f690e405e8ce702ae3b40ea5a77d078`, [workflow 156](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/42681967385) reached 196 of the 252 RTL branch outcomes instrumented in its ten profiles. Each profile produced identical raw coverage counters on both replays.
+
+At the same commit, [thermal post-synthesis workflow 63](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/42687859249) compared 26 outputs between RTL and the synthesized netlist. Each size ran 75 cases, with two synthesis runs and two simulation replays.
+
+| Cells | Output comparisons per replay | Completed neutral routes reported by the oracle |
+|---:|---:|---:|
+| 8 | 80,704 | 168 |
+| 16 | 83,720 | 273 |
+| 32 | 81,796 | 552 |
+| 64 | 82,108 | 1,059 |
+
+### M32 publication in FRP Trace Observatory
+
+[Observatory M26 run 42709869404](https://github.com/maximumberlin76-gif/FRP-Trace-Observatory/actions/runs/42709869404/attempts/1) passed 691 tests with zero skips, failures or errors at Observatory commit `1cb3feb6f78ce319ff3257a1c2fcab49eaf25da6`. Its dedicated M32 intake verified four publication documents from FRP commit `874dbb954f690e405e8ce702ae3b40ea5a77d078` and 29 source files from the manifest revision `c0bc0fbc2c1c2e500b19d0ba84b3431a813e3941`. The raw [trace bundle](artifacts/m32/exports/m32-deterministic-rtl-trace-bundle.json) SHA-256 is `62d8c1e6d205b9262a5c950883d3259275d5049f7a896ae12956a210cb75b7e0`.
+
+Trace Explorer exposes all 396 monitor records across 33 source ticks in the eight-cell publication. The cell timelines contain 264 observations, including 238 at active zero and zero direct opposite transitions. Cell 0 takes the route `+1 → 0 → −1`. It enters active zero at tick 9 and completes the route at tick 15 in mode `7/1`. In mode `1/7`, the corresponding ticks are 10 and 16. See the [Observatory usage and reproduction commands](https://github.com/maximumberlin76-gif/FRP-Trace-Observatory/blob/7dbee04/README.md).
 
 ## Processor model
 
