@@ -133,6 +133,22 @@ to the source commit, run ID, and run attempt.
 RTL reproduction procedures and the source inventory are linked from the
 [M32 RTL documentation](rtl/m32/README.md).
 
+## M31/M32 regression on main
+
+[Workflow 155, run 1](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/42623232514) passed on commit `718a29f6cb2749602a2c663647885ea12e82e73c`. Its single artifact contains `summary.json`, simulation logs, branch counters, generated netlists, and a SHA-256 inventory covering all 97 payload files.
+
+| Check | Profiles | Observed result |
+|---|---|---|
+| M31 thermal and gamma coupling | 8, 16, 32, 64 cells | Six cases per profile check thermal LUT endpoints, global compression, gamma target capture, and register hold. |
+| M32 host CSR request clear | 8 and 64 cells | All 22 transactions per replay passed, including clearing two valid lanes, retaining their programmed addresses and targets, and reusing a lane. |
+| RTL branch coverage | 13 simulation profiles | Both replays produced identical raw counters within every profile. Across the 13 branch reports, 309 of 374 distinct instrumented outcomes were reached in 27 source files. These counts describe this run. |
+| M31 request-lane post-synthesis comparison | 9 and 64 cells, seeds 0 and 76 | The RTL and the synthesized netlist each passed 53,304 comparisons. Their result counters and signatures matched for every size and seed. |
+| M32 deterministic trace replay | Scheduler modes `7/1` and `1/7`, two replays each | Every parsed trace matched the published payload, spanning 33 source ticks and 396 monitor records across the two modes. |
+
+The [M32 trace manifest](artifacts/m32/manifests/m32-deterministic-rtl-trace-manifest.json) records source revision `c0bc0fbc2c1c2e500b19d0ba84b3431a813e3941`. At the regression commit, two source files have different hashes: `rtl/m31/frp_m31_phase_interference.sv` and `rtl/m32/frp_m32_core.sv`. Workflow 155 records these differences in `summary.json`.
+
+The [FRP Trace Observatory](#frp-trace-observatory) snapshot at `3e259818ee14ed0c95749a11026febf9d486e68a` passed 208 M31 intake tests against the FRP tree at `99c3952`. Its dispatcher classified the M32 bundle schema `frp.m32.deterministic_rtl_trace_bundle.v1` as `unknown_identifier`.
+
 ## Processor model
 
 FRP combines two inseparable computational layers:
