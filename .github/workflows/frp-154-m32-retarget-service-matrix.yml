@@ -1,0 +1,165 @@
+name: 154 - FRP M32 Retarget Service Matrix
+run-name: "154 - Pending completion and fresh requests | ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Record sources and tool
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/commit.txt
+          git archive -o evidence/sources.tar.gz HEAD -- rtl/m31 rtl/m32
+          python -m pip install 'verilator==5.38.0'
+          python -m pip show verilator > evidence/tools.txt
+      - name: Verify six configurations and replay every run
+        run: |
+          set -euo pipefail
+          for n in 8 9 16 32 64 128; do
+            t=frp_m32_retarget_service_matrix_tb
+            out="evidence/cells-$n"
+            obj="build-$n"
+            mkdir -p "$out"
+            verilator-cli --binary --timing --assert --coverage-line --unroll-count 1 -Wno-fatal -j 2 \
+              -MAKEFLAGS CFG_CXXFLAGS_PCH_I=-include -MAKEFLAGS OPT_FAST=-O1 \
+              -Irtl/m31 -Irtl/m32 --top-module "$t" "-GCELLS=$n" --Mdir "$obj" \
+              "rtl/m32/$t.sv" > "$out/build.log" 2>&1
+            for run in 1 2; do
+              "$obj/V$t" "+verilator+coverage+file+$out/$run.dat" > "$out/$run.log"
+            done
+            cmp "$out/1.dat" "$out/2.dat"
+            rm -rf "$obj"
+          done
+      - name: Audit service maps, replay and shared RTL coverage
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, re
+          from pathlib import Path
+          from urllib.parse import unquote
+
+          root=Path('evidence')
+          modules=('frp_m31_request_lanes','frp_m31_phase_request_adapter',
+                   'frp_m32_registered_target_boundary','frp_m32_registered_target_request_path')
+          files=sorted(f'rtl/{m.split("_")[1]}/{m}.sv' for m in modules)
+          sha=lambda b: hashlib.sha256(b).hexdigest()
+          if sha(b''.join(Path(f).read_bytes() for f in files))!='f097f2bc052e12a6b7c7a414d6d6ef603c0e289dadd64600951fcc848e6351b6':
+              raise ValueError('Shared RTL changed since run 42592790144')
+          rows=[]
+          for n in (8,9,16,32,64,128):
+              folder=root/f'cells-{n}'
+              lanes=max(1,(n+2)//4)
+              trials=18*(lanes+1)+n
+              expected={(m,a,r,p):(1<<lanes)-1 for m in range(3) for a in range(3)
+                        for r in range(lanes+1) for p in range(2)}
+              total=len(expected)*lanes
+              for run in (1,2):
+                  lines=(folder/f'{run}.log').read_text().splitlines()
+                  records={}
+                  for line in lines:
+                      if line.startswith('SERVICE_MAP'):
+                          v=re.fullmatch(r'SERVICE_MAP mode=(\d+) action=(\d+) occupied=(\d+) negative=(\d+) lanes=([0-9a-fA-F]+)',line)
+                          if not v: raise ValueError(line)
+                          k=tuple(map(int,v.groups()[:4]))
+                          if k in records: raise ValueError(f'Duplicate {k}')
+                          records[k]=int(v[5],16)
+                  markers=[x for x in lines if x.startswith('PASS ')]
+                  if records!=expected or len(markers)!=1 or sum('Verilog $finish' in x for x in lines)!=1:
+                      raise ValueError(f'{folder}: incomplete simulation')
+                  m=re.fullmatch(fr'PASS RETARGET_SERVICE cells={n} lanes={lanes} trials={trials} steps=(\d+) bins={total} owners={n}',markers[0])
+                  if not m: raise ValueError(markers[0])
+                  if run==1: steps=int(m[1])
+                  elif int(m[1])!=steps: raise ValueError('Replay step mismatch')
+              data=(folder/'1.dat').read_bytes()
+              if data!=(folder/'2.dat').read_bytes(): raise ValueError('Coverage replay mismatch')
+              hits={}
+              for line in data.decode().splitlines()[1:]:
+                  if not line.startswith("C '"): continue
+                  body,count=line[3:].rsplit("' ",1)
+                  d=dict(tuple(map(unquote,item.split('\x02'))) for item in body[1:].split('\x01'))
+                  if d['t']=='branch' and d['f'] in files:
+                      k=json.dumps({a:b for a,b in d.items() if a not in ('h','page','P')},sort_keys=True,separators=(',',':'))
+                      hits[k]=hits.get(k,False) or int(count)>=int(d.get('s','1'))
+              ids=sorted(hits)
+              if sha(('\n'.join(ids)+'\n').encode())!='4ff6c2a37681ac1eed13f991f0f9aa95308794dafcdf8b3b0e2161f0ad8451b9':
+                  raise ValueError('Branch inventory differs from run 42592790144')
+              old={k for i,k in enumerate(ids) if 0x3F5FFFF8F & (1<<i)}
+              new={k for k,v in hits.items() if v}
+              rows.append(dict(cells=n,lanes=lanes,trials=trials,steps=steps,service_bins=total,
+                               shared_branches=len(ids),prior=len(old),current=len(new),added=len(new-old)))
+          (root/'summary.json').write_text(json.dumps(rows,indent=2)+'\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              for r in rows:
+                  print(f"- {r['cells']} cells: {r['service_bins']} service bins, {r['steps']} checked edges, "
+                        f"{r['added']} additional shared RTL branches",file=f)
+          PY
+      - name: Verify integration faults
+        run: |
+          ulimit -c 0
+          python - <<'PY'
+          import shutil, subprocess
+          from pathlib import Path
+
+          top='frp_m32_retarget_service_matrix_tb'
+          cases=[
+              ('fresh_overbook','frp_m31_capacity_guard',
+               '(accepted_changes < CAPACITY_LIMIT);\n\n            if (valid_cell)',
+               '(accepted_changes <= CAPACITY_LIMIT);\n\n            if (valid_cell)'),
+              ('replace_owner','frp_m31_execution_core',
+               '.state_q(state_q),\n    .pending_route_q(pending_route_q),\n    .request_accept(request_accept_lane)',
+               '.state_q(state_q),\n    .pending_route_q(target_q),\n    .request_accept(request_accept_lane)'),
+              ('live_target','frp_m32_registered_target_request_path',
+               '.phase_target(registered_target_q)', '.phase_target(phase_target_source)'),
+              ('drop_clear_completion','frp_m31_execution_core',
+               "pending_completion_candidate[element_index] = 1'b1;", 'pending_completion_candidate[element_index] = !clear_counters;')
+          ]
+          allowed=('pre-edge mismatch','post-edge mismatch','residual capacity','capacity cutoff')
+          for label,module,old,new in cases:
+              folder=Path('evidence/mutations')/label
+              folder.mkdir(parents=True,exist_ok=True)
+              p=Path('rtl',module.split('_')[1],module+'.sv')
+              body=p.read_text()
+              if body.count(old)!=1:
+                  raise ValueError(f'{label}: mutation anchor changed')
+              # Keep includes local to the mutant source tree.
+              for sub in ('m31','m32'):
+                  dest=folder/sub
+                  dest.mkdir(exist_ok=True)
+                  for f in Path('rtl',sub).glob('*.sv'):
+                      if not f.name.endswith('_tb.sv') or f.stem==top:
+                          shutil.copyfile(f,dest/f.name)
+              (folder/p.relative_to('rtl')).write_text(body.replace(old,new))
+              obj=Path('build-mut-'+label)
+              cmd=['verilator-cli','--binary','--timing','--assert','--unroll-count','1','-j','2','-Wno-fatal',
+                   '-MAKEFLAGS','CFG_CXXFLAGS_PCH_I=-include','-MAKEFLAGS','OPT_FAST=-O1',
+                   '-I'+str(folder/'m31'),'-I'+str(folder/'m32'),'--top-module',top,'-GCELLS=8',
+                   '--Mdir',str(obj),str(folder/'m32'/(top+'.sv'))]
+              with (folder/'build.log').open('w') as log:
+                  subprocess.run(cmd,stdout=log,stderr=subprocess.STDOUT,check=True)
+              result=subprocess.run([str(obj/('V'+top))],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+              (folder/'run.log').write_text(result.stdout)
+              if result.returncode==0 or '%Fatal' not in result.stdout or not any(x in result.stdout for x in allowed):
+                  raise ValueError(f'{label}: expected scoreboard failure')
+              print('DETECTED',label,flush=True)
+              shutil.rmtree(obj)
+          PY
+      - name: Upload one archive
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-154-retarget-service-matrix-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
