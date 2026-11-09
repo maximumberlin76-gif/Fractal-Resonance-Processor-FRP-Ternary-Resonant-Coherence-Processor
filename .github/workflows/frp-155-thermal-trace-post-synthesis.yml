@@ -1,0 +1,210 @@
+name: 155 - FRP thermal, trace and post-synthesis regression
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install simulators
+        run: python -m pip install 'verilator==5.38.0' 'yowasp-yosys==0.68.0.0.post1208' 'jsonschema==4.26.0'
+      - name: Run RTL, replay and generic netlist checks
+        run: |
+          python - <<'PYCODE'
+          from pathlib import Path
+          import csv
+          import hashlib
+          import json
+          import os
+          import subprocess
+
+          from frp_m32_deterministic_rtl_trace_export import TRACE_PROFILES, parse_transcript
+
+          out = Path("evidence")
+          out.mkdir(exist_ok=True)
+          work = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "frp155-build"
+          work.mkdir(parents=True, exist_ok=True)
+          rtl = Path("rtl/m31")
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          def run(args, log):
+              with log.open("w") as stream:
+                  subprocess.run([str(a) for a in args], stdout=stream, stderr=subprocess.STDOUT, check=True)
+
+          def build(label, top, sources, options=(), coverage=True, unroll=64):
+              dest = work / label
+              args = ["verilator-cli", "--binary", "--assert", "--timing", "--unroll-count", str(unroll),
+                      "-j", "2", "-Wno-fatal", "-Wno-PINMISSING", "-MAKEFLAGS",
+                      "VK_PCH_I_FAST= VK_PCH_I_SLOW= OPT_FAST=-O0", "-Irtl/m31", "-Irtl/m32",
+                      "--top-module", top, "--Mdir", dest, *options]
+              if coverage:
+                  args.append("--coverage-line")
+              run([*args, *sources], out / (label + "-build.log"))
+              return dest / ("V" + top)
+
+          def need(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def replay(label, exe, marker):
+              logs = []
+              for i in (1, 2):
+                  log = out / f"{label}-{i}.log"
+                  data = out / f"{label}-{i}.dat"
+                  run([exe, "+verilator+coverage+file+" + str(data)], log)
+                  logs.append(log.read_bytes())
+                  need(any(line.startswith(marker) for line in logs[-1].decode().splitlines()), label)
+              need(digest(out/f"{label}-1.dat") == digest(out/f"{label}-2.dat"), "Coverage replay: " + label)
+              return logs
+
+          def branch_report(label):
+              rows = {}
+              for row in (out/f"{label}-1.dat").read_text().splitlines():
+                  if not row.startswith("C '"):
+                      continue
+                  fields, value = row[3:].rsplit("' ", 1)
+                  m = dict(part.split("\x02", 1) for part in fields[1:].split("\x01"))
+                  if m["t"] != "branch" or not m["f"].startswith(("rtl/", "fpga/")) or m["f"].endswith("_tb.sv"):
+                      continue
+                  key = tuple(m.get(k, "") for k in ("f", "l", "n", "o", "S", "s"))
+                  rows[key] = max(rows.get(key, 0), int(value))
+              with (out/f"{label}-branches.csv").open("w", newline="") as stream:
+                  writer = csv.writer(stream)
+                  writer.writerow(["source", "line", "column", "arm", "span", "threshold", "max_instance_hits"])
+                  writer.writerows([*key, count] for key, count in sorted(rows.items()))
+              return {(Path(k[0]).name, k[1], k[3]) for k, count in rows.items() if count >= int(k[5] or 1)}
+
+          for n in (8, 16, 32, 64):
+              label = f"coupling-{n}"
+              top = "frp_m31_thermal_gamma_coupling_tb"
+              exe = build(label, top, [rtl/(top+".sv")], [f"-GCELLS={n}"])
+              replay(label, exe, f"PASS THERMAL_GAMMA_COUPLING cells={n} cases=6")
+              hits = branch_report(label)
+              required = {("frp_m31_local_thermal_attenuation.sv", line, "cond_then") for line in ("217","218")}
+              required.add(("frp_m31_global_stability.sv", "300", "cond_then"))
+              need(required <= hits, f"Missing measured outcomes for {label}: {required - hits}")
+
+          top = "frp_m31_thermal_equilibrium_tb"
+          exe = build("thermal64", top, [rtl/(top+".sv")], ["-GCELLS=64"])
+          replay("thermal64", exe, "PASS THERMAL_EQUILIBRIUM cells=64 ")
+          branch_report("thermal64")
+
+          probe = work/"phase_probe.sv"
+          probe.write_text("""`timescale 1ns/1ps
+          `include "frp_m31_phase_multicell_tb.sv"
+          module phase_probe;
+            wire done;
+            frp_m31_phase_multicell_checker #(.CELLS(16)) checker16 (.done(done));
+            initial begin
+              wait(done);
+              $display("PASS PHASE_PROBE cells=16");
+              $finish;
+            end
+          endmodule
+          """)
+          exe = build("phase16", "phase_probe", [probe])
+          replay("phase16", exe, "PASS PHASE_PROBE cells=16")
+          branch_report("phase16")
+
+          top = "frp_m32_gamma_source_arbitration_tb"
+          exe = build("gamma64", top, [Path("rtl/m32")/(top+".sv")], ["-GCELLS=64"])
+          replay("gamma64", exe, "PASS GAMMA_SOURCE_ARBITRATION cells=64 ")
+          branch_report("gamma64")
+
+          top = "frp_m32_internal_gamma_cdc_stream_interruption_tb"
+          exe = build("cdc8", top, [Path("fpga/m32_csr")/(top+".sv")],
+                      ["-GCELLS=8","-Irtl/m22","-Irtl/m23","-Ifpga/m32","-Ifpga/m32_csr"], unroll=1)
+          replay("cdc8", exe, "PASS STREAM_RECOVERY cells=8 ")
+          branch_report("cdc8")
+
+          top = "frp_m32_internal_gamma_observed_csr_cdc_tb"
+          exe = build("hostcdc8", top, [Path("fpga/m32_csr")/(top+".sv")],
+                      ["-GCELLS=8","-Irtl/m22","-Irtl/m23","-Ifpga/m32","-Ifpga/m32_csr"], unroll=1)
+          replay("hostcdc8", exe, "PASS HOST_CDC cells=8 ")
+          branch_report("hostcdc8")
+
+          top = "frp_m32_host_request_clear_tb"
+          for n in (8,64):
+              label = f"clear{n}"
+              exe = build(label, top, [Path("fpga/m32_csr")/(top+".sv")],
+                          [f"-GCELLS={n}","-Irtl/m22","-Irtl/m23","-Ifpga/m32","-Ifpga/m32_csr"], unroll=64)
+              replay(label, exe, f"PASS HOST_REQUEST_CLEAR cells={n} transactions=22")
+              hits = branch_report(label)
+              need(all(("frp_m32_internal_gamma_observed_csr_top.sv", line, "if") in hits
+                       for line in ("342","491")), "Host request coverage: " + label)
+
+          artifact = Path("artifacts/m32/exports/m32-deterministic-rtl-trace-bundle.json")
+          bundle = json.loads(artifact.read_bytes())
+          for mode in ("7/1", "1/7"):
+              label = mode.replace("/", "_")
+              top = f"frp_m32_mode_{label}_trace_tb"
+              exe = build(label, top, [Path("rtl/m32")/(top+".sv")], unroll=1)
+              logs = replay(label, exe, TRACE_PROFILES[mode].pass_record)
+              expected, = [trace for trace in bundle["traces"] if trace["scheduler_mode"] == mode]
+              need(all(parse_transcript(raw, TRACE_PROFILES[mode]) == expected for raw in logs),
+                   "Published trace payload mismatch: " + mode)
+              branch_report(label)
+
+          manifest = json.loads(Path("artifacts/m32/manifests/m32-deterministic-rtl-trace-manifest.json").read_bytes())
+          drift = [x["path"] for x in manifest["source_identities"] if digest(Path(x["path"])) != x["raw_sha256"]]
+          summary = {"commit": subprocess.check_output(["git","rev-parse","HEAD"], text=True).strip(),
+                     "trace_source_commit": manifest["source_commit"], "trace_bundle_sha256": digest(artifact),
+                     "historical_source_differences": drift, "matching_trace_modes": ["7/1", "1/7"],
+                     "coupling_cells": [8,16,32,64], "post_synthesis_profiles": [],
+                     "gamma_source_cells": [64], "gamma_cdc_cells": [8], "host_request_clear_cells": [8,64]}
+
+          for n in (9, 64):
+              source = rtl/"frp_m31_lane_partition_tb.sv"
+              text = source.read_text()
+              for old, new in [("frp_m31_request_lanes.sv","frp_m31_pkg.sv"),
+                               ("frp_m31_request_lanes #(.CELLS(CELLS),.COUNTER_BITS(32)) dut", "lane_net dut")]:
+                  need(text.count(old) == 1, "Netlist harness binding changed: " + old)
+                  text = text.replace(old, new)
+              post_tb = work / f"post-{n}.sv"
+              post_tb.write_text(text)
+              net = out / f"net-{n}.v"
+              script = out / f"net-{n}.ys"
+              script.write_text(f"""read_slang -j 1 --top frp_m31_request_lanes -G CELLS={n} -Irtl/m31 rtl/m31/frp_m31_request_lanes.sv
+          synth -top frp_m31_request_lanes -flatten
+          check -assert
+          rename frp_m31_request_lanes lane_net
+          write_verilog -noattr {net}
+          """)
+              run(["yowasp-yosys", "-Q", "-s", script], out/f"synth-{n}.log")
+              top = "frp_m31_lane_partition_tb"
+              results = {}
+              for kind, src in [("rtl",[source]), ("post",[net,post_tb])]:
+                  label = f"lanes-{kind}-{n}"
+                  exe = build(label, top, src, [f"-GCELLS={n}"], coverage=False, unroll=1)
+                  for seed in (0,76):
+                      log = out/f"{label}-{seed}.log"
+                      run([exe, f"+SEED={seed}"], log)
+                      matches = [line for line in log.read_text().splitlines()
+                                 if line.startswith(f"PASS LANE_PARTITION cells={n} ")]
+                      need(len(matches) == 1, str(log))
+                      results[kind,seed] = matches[0]
+              for seed in (0,76):
+                  need(results["post",seed] == results["rtl",seed], f"Post-synthesis mismatch {n}/{seed}")
+              summary["post_synthesis_profiles"].append({"cells":n, "seeds":[0,76], "netlist_sha256":digest(net)})
+          (out/"summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+          with (out/"SHA256SUMS").open("w") as inventory:
+              for path in sorted(out.iterdir()):
+                  if path.is_file() and path.name != "SHA256SUMS":
+                      print(digest(path), " ", path.name, sep="", file=inventory)
+          print(json.dumps(summary, indent=2))
+          PYCODE
+      - name: Upload combined evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-155-regression-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 30
