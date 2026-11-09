@@ -1,0 +1,197 @@
+name: 152 - FRP M32 Target Recovery Proof
+run-name: "152 - M32 target recovery through 128 cells | ${{ github.sha }}"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Record inputs and tools
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/commit.txt
+          git archive -o evidence/sources.tar.gz HEAD -- formal/m32 rtl/m31 rtl/m32
+          python -m pip install 'verilator==5.38.0' 'yowasp-yosys==0.68.0.0.post1208' 'yowasp-runtime==1.96' 'wasmtime==47.0.1'
+          python -m pip freeze > evidence/tools.txt
+      - name: Reproduce and inspect the two expression counters
+        run: |
+          set -euo pipefail
+          top=frp_m32_target_contract_matrix_tb
+          dir=evidence/verilator-9
+          mkdir -p "$dir"
+          verilator-cli --binary --assert --timing --coverage-line --coverage-expr -Wno-fatal -j 2 \
+            -MAKEFLAGS CFG_CXXFLAGS_PCH_I=-include -MAKEFLAGS OPT_FAST=-O0 --Mdir obj9 \
+            -Irtl/m31 -Irtl/m32 --top-module "$top" -GCELLS=9 -GCW=4 "rtl/m32/$top.sv" > "$dir/build.log" 2>&1
+          "obj9/V$top" +full "+verilator+coverage+file+$dir/coverage.dat" |& tee "$dir/run.log"
+          python - <<'PY'
+          import hashlib, json, re
+          from pathlib import Path
+
+          out=Path('evidence/verilator-9')
+          logs=(out/'run.log').read_text().splitlines()
+          if logs.count('PASS TARGET_MATRIX cells=9 bits=4 full=1 rows=352 steps=256 faults=18')!=1:
+              raise ValueError('Missing nine-cell simulation')
+          files={p.name:p.read_text() for p in Path('obj9').glob('*.cpp')}
+          report=[]
+          lines=(out/'coverage.dat').read_text().splitlines()
+          for line in ('78','87'):
+              name='frp_m32_registered_target_boundary.sv'
+              entries=[]
+              for row in lines[1:]:
+                  if not row.startswith("C '"):
+                      continue
+                  body,count=row[3:].rsplit("' ",1)
+                  d=dict(x.split('\x02') for x in body[1:].split('\x01'))
+                  if d['f'].endswith('/'+name) and d['l']==line:
+                      entries.append((d,int(count)))
+              hits=[v for d,v in entries if d['t']=='branch' and d['o']=='if']
+              misses=[v for d,v in entries if d['t']=='expr' and d['o'].endswith('==0) => 1')]
+              if not hits or not all(v>0 for v in hits) or len(misses)!=1:
+                  raise ValueError(f'Unexpected Verilator 5.38 counters at {line}: {hits}, {misses}')
+              if misses[0]>0:
+                  report.append(dict(line=int(line),branch_hits=hits,expression_hits=misses[0]))
+                  continue
+              ids=set()
+              for body in files.values():
+                  for row in body.splitlines():
+                      if f'{name}", {line},' in row and '"v_expr/' in row and '==0) => 1"' in row:
+                          ids.update(re.findall(r'__Vcoverage\[(\d+)\]',row))
+              if len(ids)!=1:
+                  raise ValueError(f'{line}: ambiguous generated counter')
+              index=ids.pop()
+              # Match every increment site, allowing only counter increments in the comma expression.
+              sites=0
+              cond=r'if\s*\(\(1U\s*&\s*\(~\s*\(\[&\]\(\)\s*\{(?:\s*\+\+\(vlSymsp->__Vcoverage\[\d+\]\);)*\s*\}\(\),\s*1U\)\)\)\)\s*\{\s*'
+              incr=rf'\+\+\(vlSymsp->__Vcoverage\[{index}\]\);'
+              for filename,body in files.items():
+                  snippets=re.findall(cond+incr,body)
+                  if len(snippets)!=len(re.findall(incr,body)):
+                      raise ValueError(f'{filename}: unexpected expression at counter {index}')
+                  for snippet in snippets:
+                      sites+=1
+                      (out/f'line-{line}-site-{sites}.txt').write_text(filename+'\n'+snippet+'\n')
+              if not sites:
+                  raise ValueError(f'No increment sites for {line}')
+              report.append(dict(line=int(line),branch_hits=hits,expression_hits=misses[0],constant_false_sites=sites))
+          digest=hashlib.sha256((out/'coverage.dat').read_bytes()).hexdigest()
+          result=dict(counters=report,coverage_sha256=digest,
+                      same_as_run_42580747365=digest=='29a533d958d007ab4fb82fa7af628c502527cfc87f203596fb76fe90d1a10558')
+          (out/'counters.json').write_text(json.dumps(result,indent=2)+'\n')
+          PY
+      - name: Prove contracts and verify witnesses and mutations
+        run: |
+          python - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+
+          top = 'frp_m32_target_recovery_formal'
+          source = Path('formal/m32', top+'.sv')
+          profiles = [(n,4,n-1) for n in (8,16,32,64,128)]
+          profiles += [(9,4,w) for w in range(1,9)]
+          profiles += [(128,32,w) for w in (63,64,127)]
+          traces = {'recover':(0,1), 'reject_hold':(2,2), 'accept_sat':(3,3),
+                    'reject_sat':(4,4), 'clear_capture':(5,6), 'dual_issue':(7,7), 'reset':(7,8)}
+          out = Path('evidence')
+          out.mkdir(exist_ok=True)
+
+          def samples(path, name):
+              sig = next(x for x in json.loads(path.read_text())['signal'] if x['name'].strip()==name)
+              data = iter(sig.get('data', []))
+              values = []
+              for ch in sig['wave']:
+                  if ch in '23456789=':
+                      values.append(next(data))
+                  elif ch in '01':
+                      values.append(ch)
+                  elif ch=='.':
+                      values.append(values[-1])
+                  else:
+                      values.append('')
+              return [int(x,2) for x in values[1:]]
+
+          def solve(folder, n, cw, watch, commands, includes, open_banks=0):
+              folder.mkdir(parents=True,exist_ok=True)
+              script = folder/'run.ys'
+              script.write_text(f'read_slang -j 1 --top {top} -G CELLS={n} -G CW={cw} -G WATCH={watch} '
+                                f'-G OPEN_BANKS={open_banks} {includes} {source}\nprep -top {top} -flatten\nasync2sync\ndffunmap\nopt_clean\n'
+                                + '\n'.join(commands)+'\n')
+              with (folder/'solver.log').open('w') as log:
+                  subprocess.run(['yowasp-yosys','-Q','-s',str(script)],stdout=log,stderr=subprocess.STDOUT,check=True)
+              return (folder/'solver.log').read_text()
+
+          rows = []
+          for n,cw,watch in profiles:
+              folder = out/f'cells-{n}-cw-{cw}-watch-{watch}'
+              commands = ['sat -timeout 120 -seq 1 -prove bad[2:0] 0 -verify',
+                          'sat -timeout 120 -seq 2 -prove-skip 1 -prove bad 0 -verify']
+              for label,(a,b) in traces.items():
+                  commands.append(f'sat -timeout 120 -seq 2 -set-at 1 witness[{a}] 1 -set-at 2 witness[{b}] 1 '
+                                  f'-show witness -dump_json {folder}/{label}.json')
+              log = solve(folder,n,cw,watch,commands,'-Irtl/m31 -Irtl/m32')
+              if log.count('SAT proof finished - no model found: SUCCESS!')!=2:
+                  raise ValueError(f'{folder}: incomplete proof')
+              for label,(a,b) in traces.items():
+                  x,y = samples(folder/(label+'.json'),'witness')
+                  if not (x & (1<<a) and y & (1<<b)):
+                      raise ValueError(f'{folder}: missing {label}')
+              rows.append(dict(cells=n,counter_bits=cw,watch=watch,proofs=2,witnesses=list(traces)))
+              print('PASS',n,cw,watch,flush=True)
+
+          # With arbitrary retained and pending banks, prove the gate and every output bit.
+          open_profiles = [(8,4), (9,4), (16,4), (32,4), (64,4), (128,32)]
+          for n,cw in open_profiles:
+              folder=out/f'open-{n}-{cw}'
+              log=solve(folder,n,cw,n-1,['sat -timeout 300 -seq 1 -prove bad[2:0] 0 -verify'],
+                        '-Irtl/m31 -Irtl/m32',open_banks=1)
+              if log.count('SAT proof finished - no model found: SUCCESS!')!=1:
+                  raise ValueError(f'{folder}: missing open-bank proof')
+              print('PASS OPEN',n,cw,flush=True)
+
+          mutants = [
+              ('last','frp_m32_registered_target_boundary','cell_index < CELLS;', 'cell_index < CELLS-1;',0),
+              ('clear','frp_m32_registered_target_boundary','else if (capture_accepted) begin',
+               'else if (capture_accepted && !clear_counters) begin',3),
+              ('priority','frp_m31_phase_request_adapter','int cell_index = 0; cell_index < CELLS; cell_index = cell_index + 1',
+               'int cell_index = CELLS-1; cell_index >= 0; cell_index = cell_index - 1',6),
+          ]
+          for name,mod,old,new,bit in mutants:
+              folder = out/'mutations'/name
+              folder.mkdir(parents=True,exist_ok=True)
+              for m in ('frp_m31_pkg','frp_m31_phase_request_adapter','frp_m32_registered_target_boundary',
+                        'frp_m32_registered_target_request_path'):
+                  p=Path('rtl',m.split('_')[1],m+'.sv')
+                  s=p.read_text()
+                  if m==mod:
+                      if s.count(old)!=1:
+                          raise ValueError(f'{m}: mutation anchor changed')
+                      s=s.replace(old,new)
+                  (folder/p.name).write_text(s)
+              trace=folder/'counterexample.json'
+              solve(folder,9,4,8,[f'sat -timeout 120 -seq 2 -prove-skip 1 -prove bad[{bit}] 0 '
+                                  f'-falsify -show bad -dump_json {trace}'],f'-I{folder}')
+              if not (samples(trace,'bad')[-1] & (1<<bit)):
+                  raise ValueError(f'{name}: missing counterexample')
+              print('DETECTED',name,flush=True)
+          (out/'formal.json').write_text(json.dumps(dict(profiles=rows,open_profiles=open_profiles,mutants=[m[0] for m in mutants]),indent=2)+'\n')
+          PY
+          echo '16 arbitration profiles, 6 open-bank profiles, 112 witness traces, 3 detected mutations.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload one archive
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frp-152-target-recovery-proof-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
