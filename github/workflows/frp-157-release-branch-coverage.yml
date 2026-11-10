@@ -1,0 +1,174 @@
+name: 157 - FRP release branch coverage
+on: workflow_dispatch
+permissions:
+  contents: read
+  actions: read
+
+env:
+  BASE: c4409db2e795d8912a73040f3dd864929b27f58f
+
+jobs:
+  coverage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: python -m pip install 'verilator==5.38.0'
+
+      - name: Run the 64-cell bench twice
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          git rev-parse HEAD | tee evidence/commit.txt
+          test "$(cat evidence/commit.txt)" = "$GITHUB_SHA"
+          git diff --exit-code "$BASE" HEAD -- rtl fpga > evidence/rtl.diff
+          top=frp_m32_release_branch_tb
+          verilator-cli --version | tee evidence/verilator.txt
+          verilator-cli --binary --timing --assert --coverage-line --unroll-count 2 \
+            -Wno-fatal -Wno-PINMISSING -j 2 -GCELLS=64 \
+            -MAKEFLAGS 'VK_PCH_I_FAST= VK_PCH_I_SLOW= OPT_FAST=-O0' \
+            -Irtl/m31 -Irtl/m32 -Irtl/m22 -Irtl/m23 -Ifpga/m32 -Ifpga/m32_csr \
+            --top-module "$top" --Mdir obj "verification/m32/$top.sv" > evidence/build.log 2>&1
+          for pass in 1 2; do
+            "obj/V$top" "+verilator+coverage+file+evidence/replay-$pass.dat" | tee "evidence/replay-$pass.log"
+            grep -Fxq 'PASS RELEASE_BRANCH cells=64' "evidence/replay-$pass.log"
+          done
+          cmp evidence/replay-{1,2}.dat
+
+      - name: Download the pinned counter archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > evidence/archives.tsv <<'PINS'
+          155 42776472508 13744701546 c4409db2e795d8912a73040f3dd864929b27f58f ecc58963c7c3afd3f9eeb112faacd42dffd2f8bdda9e76e2d10b17171dd7b890
+          156 42681967385 13704271702 874dbb954f690e405e8ce702ae3b40ea5a77d078 31297bdd69e91208dcb2f9a92c2a2cd4935836271134048a7f39137c78d3b3a5
+          127 41919265495 13368205358 664800f31274ef7ef9dd7cd709f56e6fede452d4 5a688d0b65b35ebaecf67c739946954507d6647ece82ff4e961e2b7cb1db8a12
+          128 42014818377 13408617822 2f793eaaa606455bd517e52d85f7f2616faadfb4 db9e8c9b365dfd06eafa24687f47733fa09e0cedf279576c9f48c7a2ce32b598
+          129 42030196666 13415413745 894c45a1bc8447c58ee91e91a979612bf4c2d030 159fd9f94baeddba9e175137f36b5732329dc48aff853fe83bcc226594c49ae3
+          146 42507865694 13628515978 081c022f4382c216ec349b17e4ecd9a72aa00728 a786a052bca278882b64ff2c92994668941e12d516028ae16107c74dba57b38a
+          148 42523481074 13634835299 c56e7d59edf999dd4eb8e0cb10165fddcbd458b0 b430f76d26e670236dfdbe886e91b156f12f880a93fa90bfdb57634f6629a2a3
+          149 42529666669 13637300567 81b9e153bc8a0b2737a35f5e7593ce7f832f9192 33880046c80ced6b19eb5c412f79ef44e343d7d4638d11f093df2df504c7edbf
+          150 42532278439 13637882294 44c947b7f4d22c621fe95015907e9cfdd3848142 8266633d389adce0fec1c30c0fb7f68a835296bb020919969bbaac385dc55f5b
+          151 42580747365 13657102036 d1f46e3e6485e18694456da8aa225e9cc020f6c2 bca0a20acc98da74f95cfe1cecaf0f0c6428102f4e9c643c7fb91082c6da6f3d
+          PINS
+          while read -r suite run artifact sha digest; do
+            curl --fail --silent --show-error --location --retry 3 \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact/zip" \
+              -o "evidence/$suite.zip"
+          done < evidence/archives.tsv
+
+      - name: Verify the 374 baseline outcomes
+        run: |
+          python - <<'PY'
+          import csv
+          import hashlib
+          import io
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          out = Path("evidence")
+          base = os.environ["BASE"]
+          inventory = set()
+          found = {}
+          totals = {}
+
+          def hits(raw):
+              for line in raw.decode().splitlines():
+                  if not line.startswith("C '"):
+                      continue
+                  fields, count = line[3:].rsplit("' ", 1)
+                  d = dict(pair.split("\x02", 1) for pair in fields[1:].split("\x01"))
+                  if d["t"] != "branch":
+                      continue
+                  path = d["f"]
+                  if path.startswith("/home/runner/work/"):
+                      for anchor in ("/rtl/", "/fpga/"):
+                          if anchor in path:
+                              path = anchor[1:] + path.split(anchor, 1)[1]
+                              break
+                  key = (path, d["l"], d["n"], d["o"], d.get("S", ""), d.get("s", "1"))
+                  if int(count) >= int(key[-1]):
+                      yield key, int(count)
+
+          for line in (out / "archives.tsv").read_text().splitlines():
+              suite, run, artifact, sha, digest = line.split()
+              archive = out / f"{suite}.zip"
+              if hashlib.sha256(archive.read_bytes()).hexdigest() != digest:
+                  raise ValueError(f"Archive digest mismatch: {suite}")
+              changed = subprocess.check_output(
+                  ["git", "diff", "--name-only", base, sha, "--", "rtl", "fpga"], text=True
+              ).splitlines()
+              with ZipFile(archive) as z:
+                  if suite == "155":
+                      for name in z.namelist():
+                          if name.endswith("-branches.csv"):
+                              rows = csv.reader(io.StringIO(z.read(name).decode()))
+                              next(rows)
+                              for path, lineno, col, arm, span, threshold, count in rows:
+                                  inventory.add((path, lineno, col, arm, span, threshold or "1"))
+                      if len(inventory) != 374:
+                          raise ValueError("Baseline must contain exactly 374 distinct outcomes")
+                  for name in sorted(z.namelist()):
+                      if not name.endswith(".dat") or "mutant" in name or "mutation" in name:
+                          continue
+                      if suite in ("127", "128", "129") and not name.endswith(".raw.dat"):
+                          continue
+                      for key, count in hits(z.read(name)):
+                          if key in inventory and key[0] not in changed:
+                              found.setdefault(key, (suite, run, sha, name, count))
+              totals[suite] = len(found)
+
+          remaining = inventory - found.keys()
+          for key, count in hits((out / "replay-1.dat").read_bytes()):
+              if key in remaining:
+                  found[key] = ("157", os.environ["GITHUB_RUN_ID"], os.environ["GITHUB_SHA"],
+                                "replay-1.dat", count)
+
+          with (out / "branches.csv").open("w", newline="") as stream:
+              writer = csv.writer(stream)
+              writer.writerow(("source", "line", "column", "arm", "span", "threshold",
+                               "suite", "run", "commit", "counter_file", "hits"))
+              for key in sorted(inventory):
+                  writer.writerow((*key, *found.get(key, ("", "", "", "", 0))))
+
+          report = dict(baseline=base, commit=os.environ["GITHUB_SHA"], cells=64,
+                        cumulative=totals, fresh=len(found) - totals["151"],
+                        reached=len(found), required=len(inventory))
+          (out / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
+          print(json.dumps(report))
+          if totals["155"] != 309 or len(remaining) != 8 or found.keys() != inventory:
+              raise SystemExit("Coverage gate failed; inspect branches.csv")
+          PY
+
+      - name: Hash the evidence files
+        if: always()
+        run: |
+          if [[ -d evidence ]]; then
+            cd evidence
+            find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 -r sha256sum > SHA256SUMS
+          fi
+
+      - name: Upload one evidence archive
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-157-coverage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
