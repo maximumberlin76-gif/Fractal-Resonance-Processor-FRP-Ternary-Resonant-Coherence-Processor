@@ -9,20 +9,14 @@ abstract: >-
   the -1/0/1 domain. State 0 is an active computational state that performs
   mediation, routing, retention, balancing, and controlled neutralization.
   Opposite-polarity execution follows -1 to 0 to 1 and 1 to 0 to -1, with
-  target state and executed retained state kept distinct. FRP v3.3.0 publishes
-  the qualified M31 phase-interference, active-zero, and thermal-evidence
-  boundary over the preserved FRP v3.2.0 / M30 archival baseline. The M31
-  publication contains four deterministic canonical outputs: formal schema,
-  evidence record, publication manifest, and qualification record. Its two
-  cycle-exact execution contours contain 100 execution records, 800 cell
-  observations, 702 active-zero observations, five requested direct events
-  that are all prevented and neutral-routed, and zero actual direct
-  opposite-polarity events. The focused M31 qualification records 13 of 13
-  checks and 60 of 60 tests passing. Historical and current thermal and
-  benchmark evidence remain separate measurement contours, the immutable M30
-  archive remains byte-identical, the M15 executable semantic reference and
-  M16 RTL and FPGA implementation anchor remain preserved, and the one-way
-  published-byte boundary to FRP Trace Observatory remains read-only.
+  target state and executed retained state kept distinct. The v3.4.0-rc.1 qualification records
+  374 of 374 measured branch outcomes in a fixed inventory across 27 RTL
+  files, including directed diagnostic cases. Of 633 distinct test methods,
+  627 passed on the candidate and six on their historical publication
+  revisions. The M32 trace export reproduces 396 monitor records across
+  33 source ticks in scheduler modes 7/1 and 1/7. FRP Trace Observatory
+  reads the published data and exposes cell timelines with active-zero
+  mediation and pending-route completion.
 authors:
   - family-names: "Marnov"
     given-names: "Maksym"
@@ -31,9 +25,7 @@ authors:
     city: "Berlin"
     country: "DE"
 type: software
-version: "v3.3.0"
-date-released: "2026-09-06"
-doi: "10.5281/zenodo.21183966"
+version: "v3.4.0-rc.1"
 license: "Apache-2.0"
 repository-code: "https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor"
 url: "https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor"
