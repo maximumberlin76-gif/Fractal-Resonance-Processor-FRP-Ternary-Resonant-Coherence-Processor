@@ -1,0 +1,146 @@
+name: 158 - FRP candidate and historical publication tests
+on: workflow_dispatch
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare qualification
+        run: |
+          set -euo pipefail
+          EVIDENCE="$RUNNER_TEMP/frp-evidence"
+          echo "EVIDENCE=$EVIDENCE" >> "$GITHUB_ENV"
+          mkdir -p "$EVIDENCE"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python -m pip install -r requirements.txt
+          python --version > "$EVIDENCE/python.txt"
+          python -m pip freeze > "$EVIDENCE/dependencies.txt"
+          cat > "$RUNNER_TEMP/frp-checks.py" <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          import unittest
+          from pathlib import Path
+
+          out = Path(os.environ["EVIDENCE"])
+          group = os.environ["GROUP"]
+          bindings = {
+              "21": {
+                  "test_frp_m21_parameterized_qualification_matrix.M21CommittedOutputTests.test_committed_outputs_are_byte_identical",
+                  "test_frp_m21_parameterized_qualification_matrix.M21CommittedOutputTests.test_complete_verification_passes",
+              },
+              "22": {"test_frp_m22_control_status_register_interface.M22ControlStatusRegisterTests.test_committed_artifacts_are_byte_exact_and_complete_verification_passes"},
+              "23": {"test_frp_m23_clock_reset_cdc_interface_hardening.M23ClockResetCdcInterfaceHardeningTests.test_committed_verification_self_test_and_safety_boundaries_pass"},
+              "30": {"test_frp_m30_reproducibility_qualification_archival_closure.M30GeneratedClosureTests.test_committed_outputs_are_byte_exact"},
+              "32": {"test_frp_m32_deterministic_rtl_trace_export.M32TraceExportBoundaryTests.test_04_source_identities_are_exact"},
+          }
+          def cases(suite):
+              for item in suite:
+                  if isinstance(item, unittest.TestSuite):
+                      yield from cases(item)
+                  else:
+                      yield item
+
+          sys.path.insert(0, str(Path.cwd()))
+          loader = unittest.TestLoader()
+          if group == "candidate":
+              inventory = list(cases(loader.discover("tests", pattern="test_frp_m*.py")))
+              ids = {t.id() for t in inventory}
+              bound = set.union(*bindings.values())
+              if len(ids) != len(inventory) or not bound <= ids or len(ids) < 633:
+                  raise SystemExit("Candidate test inventory mismatch")
+              selected = [t for t in inventory if t.id() not in bound]
+          else:
+              sys.path.insert(0, str(Path("tests").resolve()))
+              selected = list(cases(loader.loadTestsFromNames(sorted(bindings[group]))))
+              if {t.id() for t in selected} != bindings[group]:
+                  raise SystemExit(f"M{group} archive test inventory mismatch")
+          if loader.errors:
+              raise SystemExit("\n".join(loader.errors))
+          sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          with (out / f"{group}.log").open("w") as log:
+              result = unittest.TextTestRunner(stream=log, verbosity=2).run(unittest.TestSuite(selected))
+          ok = (result.wasSuccessful() and result.testsRun == len(selected)
+                and not result.skipped and not result.expectedFailures)
+          record = dict(group=group, revision=sha, passed=ok, count=result.testsRun,
+                        tests=[test.id() for test in selected])
+          (out / f"{group}.json").write_text(json.dumps(record, indent=2) + "\n")
+          print(group, sha, result.testsRun, ok, flush=True)
+          if not ok:
+              raise SystemExit(f"See {group}.log")
+          PY
+      - name: Check historical publications
+        run: |
+          set -euo pipefail
+          while read -r group sha; do
+            # The candidate must retain the archived test, producer, schemas and publication.
+            git diff --exit-code "$sha" HEAD -- "tests/test_frp_m${group}_*.py" \
+              "frp_m${group}_*.py" "schemas/m$group" "artifacts/m$group"
+            tree="$RUNNER_TEMP/frp-archive-$group"
+            git worktree add --quiet --detach "$tree" "$sha"
+            (cd "$tree" && GROUP="$group" python "$RUNNER_TEMP/frp-checks.py")
+            git worktree remove --force "$tree"
+          done <<'PINS'
+          21 759ee446adf028ca135c75ca38388c26e911aa68
+          22 6bb07958710dc942c4deea1e7663ea97017fe3a8
+          23 1dcc4e4d47135cdf1e38192cc96f0d928066b13e
+          30 108e14fbc25dda6d220293208158b0a64de36017
+          32 a7efd319b4e3f52d461b19936a4d29d6c94e0d95
+          PINS
+      - name: Run candidate tests
+        run: GROUP=candidate python "$RUNNER_TEMP/frp-checks.py"
+
+      - name: Check combined inventory
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          out = Path(os.environ["EVIDENCE"])
+          ids = set()
+          counts = {}
+          for group in ("candidate", "21", "22", "23", "30", "32"):
+              r = json.loads((out / f"{group}.json").read_text())
+              names = set(r["tests"])
+              if not r["passed"] or len(names) != r["count"] or ids & names:
+                  raise SystemExit(f"Invalid or duplicate results in {group}")
+              ids.update(names)
+              counts[group] = len(names)
+          archive_count = len(ids) - counts["candidate"]
+          if len(ids) < 633 or archive_count != 6:
+              raise SystemExit(f"Incomplete inventory: {len(ids)} total, {archive_count} historical")
+          report = dict(commit=os.environ["GITHUB_SHA"], passed=len(ids), candidate=counts["candidate"],
+                        historical=archive_count, groups=counts)
+          (out / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
+          print(json.dumps(report))
+          PY
+      - name: Hash reports and logs
+        if: always()
+        run: |
+          if [[ -d "${EVIDENCE:-}" ]]; then
+            cd "$EVIDENCE"
+            find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 -r sha256sum > SHA256SUMS
+          fi
+      - name: Upload qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-158-qualification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frp-evidence/
+          if-no-files-found: error
