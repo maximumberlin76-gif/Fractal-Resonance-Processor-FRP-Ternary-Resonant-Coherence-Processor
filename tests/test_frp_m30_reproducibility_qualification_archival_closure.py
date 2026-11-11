@@ -3,7 +3,10 @@ from __future__ import annotations
 import copy
 import gzip
 import hashlib
+import io
 import json
+import subprocess
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,6 +21,23 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def load(relative: str):
     return json.loads((ROOT / relative).read_text(encoding="utf-8"))
+
+
+def published_package_inputs():
+    """Read the six release documents and the test source embedded as package data."""
+    raw = (ROOT / m30.PACKAGE_PATH).read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != "05ea33f6f3f505d315af930c2d51779f7189905308473f32a57375e477069caa":
+        raise AssertionError(f"M30 published archive SHA-256 mismatch: {digest}")
+    with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as archive:
+        result = {}
+        for path in (*m30.ALIGNED_DOCUMENTS, m30.TEST_PATH):
+            member = archive.getmember(f"{m30.PACKAGE_ROOT}/{path}")
+            if not member.isfile():
+                raise AssertionError(f"Expected a regular archive member: {path}")
+            with archive.extractfile(member) as source:
+                result[path] = source.read()
+        return result
 
 
 class M30ConstantBoundaryTests(unittest.TestCase):
@@ -212,9 +232,28 @@ class M30GeneratedClosureTests(unittest.TestCase):
         self.assertEqual(set(self.outputs), set(m30.GENERATED_PATHS))
 
     def test_committed_outputs_are_byte_exact(self):
-        for relative, expected in self.outputs.items():
-            with self.subTest(path=relative):
-                self.assertEqual((ROOT / relative).read_bytes(), expected)
+        archived = published_package_inputs()
+        with tempfile.TemporaryDirectory() as directory:
+            inputs = Path(directory)
+            # Provide the same Git objects for the producer's existing M29 reads.
+            # No checkout or archived Python execution takes place.
+            subprocess.run(
+                ["git", "clone", "--quiet", "--shared", "--no-checkout", str(ROOT), str(inputs)],
+                check=True,
+            )
+            for path in (m30.SOURCE_PATH, *m30.M30_WORKFLOWS, m30.TEST_PATH):
+                target = inputs / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                raw = archived[path] if path == m30.TEST_PATH else (ROOT / path).read_bytes()
+                target.write_bytes(raw)
+            evidence = ROOT / m30.ARTIFACT_PATHS["required_workflow_success_records"]
+            generated, _ = m30.build_outputs(inputs, m30.EXPECTED_M29_COMMIT, evidence)
+
+        self.assertEqual(set(generated), set(m30.GENERATED_PATHS))
+        for path, expected in generated.items():
+            with self.subTest(path=path):
+                actual = archived[path] if path in m30.ALIGNED_DOCUMENTS else (ROOT / path).read_bytes()
+                self.assertEqual(actual, expected)
 
     def test_all_generated_json_schemas_are_valid(self):
         for kind, schema in self.schemas.items():
@@ -365,11 +404,11 @@ class M30GeneratedClosureTests(unittest.TestCase):
                 self.assertIn("M30", text)
                 self.assertIn("PASS", text)
 
-    def test_current_documents_are_aligned_to_v3_2_0(self):
+    def test_published_m30_documents_are_aligned_to_v3_2_0(self):
+        archived = published_package_inputs()
         for relative in m30.ALIGNED_DOCUMENTS:
             with self.subTest(path=relative):
-                text = (ROOT / relative).read_text(encoding="utf-8")
-                self.assertIn("3.2.0", text)
+                self.assertIn("3.2.0", archived[relative].decode("utf-8"))
 
     def test_readme_preserves_the_m16_historical_anchor(self):
         text = (ROOT / "README.md").read_text(encoding="utf-8")
