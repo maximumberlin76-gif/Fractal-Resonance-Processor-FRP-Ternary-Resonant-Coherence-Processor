@@ -3,13 +3,55 @@
 from __future__ import annotations
 
 import copy
+import json
+import subprocess
+import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 
 import frp_m21_parameterized_qualification_matrix as M21
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PUBLISHED_M21_COMMIT = "759ee446adf028ca135c75ca38388c26e911aa68"
+PUBLISHED_INPUT_PATHS = (M21.ROADMAP, M21.MILESTONES, M21.TESTS)
+
+
+@contextmanager
+def qualification_inputs(*, published: bool):
+    """Stage current inputs, with explicit publication data for archive replay."""
+    paths = set(M21.TECHNICAL_SOURCE_PATHS)
+    paths.update(M21.UPSTREAM_SOURCE_PATHS)
+    paths.update(M21.GENERATED_PATHS)
+    manifest = M21.read_json(ROOT, M21.MANIFEST_ARTIFACT)
+    records = {record["path"]: record for record in manifest["sources"]}
+    with tempfile.TemporaryDirectory() as directory:
+        staged = Path(directory)
+        for relative in sorted(paths):
+            raw = M21.read_bytes(ROOT, relative)
+            if published and relative in PUBLISHED_INPUT_PATHS:
+                # The original test source is read as manifest input data.
+                raw = subprocess.run(
+                    [
+                        "git", "-C", str(ROOT), "show",
+                        f"{PUBLISHED_M21_COMMIT}:{relative}",
+                    ],
+                    check=True,
+                    capture_output=True,
+                ).stdout
+                record = records[relative]
+                if (
+                    M21.sha256_bytes(raw) != record["raw_sha256"]
+                    or len(raw) != record["byte_length"]
+                ):
+                    raise AssertionError(
+                        f"Published M21 input identity mismatch: {relative}"
+                    )
+            target = staged / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(raw)
+        yield staged
 
 
 class M21ParameterizedMatrixTests(unittest.TestCase):
@@ -364,20 +406,45 @@ class M21CommittedOutputTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        if not all((ROOT / path).is_file() for path in M21.GENERATED_PATHS):
-            raise unittest.SkipTest("committed M21 outputs not installed yet")
+        for relative in M21.GENERATED_PATHS:
+            M21.read_bytes(ROOT, relative)
         cls.outputs = M21.build_outputs(ROOT, M21.EXPECTED_M20_COMMIT)
 
     def test_committed_outputs_are_byte_identical(self) -> None:
-        for relative, expected in self.outputs.items():
-            with self.subTest(path=relative):
-                self.assertEqual((ROOT / relative).read_bytes(), expected)
+        with qualification_inputs(published=True) as staged:
+            published = M21.build_outputs(staged, M21.EXPECTED_M20_COMMIT)
+            self.assertEqual(set(published), set(M21.GENERATED_PATHS))
+            for relative, expected in published.items():
+                with self.subTest(path=relative):
+                    self.assertEqual(M21.read_bytes(ROOT, relative), expected)
+            result = M21.verify(staged, M21.EXPECTED_M20_COMMIT)
+            self.assertEqual(result["status"], "PASS")
+            self.assertEqual(result["artifact_count"], 4)
+            self.assertTrue(all(item["match"] for item in result["artifacts"]))
 
     def test_complete_verification_passes(self) -> None:
-        result = M21.verify(ROOT, M21.EXPECTED_M20_COMMIT)
-        self.assertEqual(result["status"], "PASS")
-        self.assertEqual(result["artifact_count"], 4)
-        self.assertTrue(all(item["match"] for item in result["artifacts"]))
+        self.assertEqual(set(self.outputs), set(M21.GENERATED_PATHS))
+        manifest = json.loads(self.outputs[M21.MANIFEST_ARTIFACT])
+        self.assertEqual(
+            {record["path"] for record in manifest["sources"]},
+            set(M21.TECHNICAL_SOURCE_PATHS) | set(M21.UPSTREAM_SOURCE_PATHS),
+        )
+        for record in manifest["sources"]:
+            with self.subTest(source=record["path"]):
+                raw = M21.read_bytes(ROOT, record["path"])
+                self.assertEqual(record["raw_sha256"], M21.sha256_bytes(raw))
+                self.assertEqual(record["byte_length"], len(raw))
+        with qualification_inputs(published=False) as staged:
+            for relative, raw in self.outputs.items():
+                (staged / relative).write_bytes(raw)
+            result = M21.verify(staged, M21.EXPECTED_M20_COMMIT)
+            self.assertEqual(result["status"], "PASS")
+            self.assertEqual(result["artifact_count"], 4)
+            self.assertTrue(all(item["match"] for item in result["artifacts"]))
+            target = staged / M21.MATRIX_ARTIFACT
+            target.write_bytes(target.read_bytes() + b"\n")
+            with self.assertRaises(M21.ContractError):
+                M21.verify(staged, M21.EXPECTED_M20_COMMIT)
 
     def test_qualification_record_is_complete(self) -> None:
         qualification = M21.read_json(ROOT, M21.QUALIFICATION_ARTIFACT)
