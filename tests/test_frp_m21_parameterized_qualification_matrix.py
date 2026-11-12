@@ -15,7 +15,12 @@ import frp_m21_parameterized_qualification_matrix as M21
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLISHED_M21_COMMIT = "759ee446adf028ca135c75ca38388c26e911aa68"
-PUBLISHED_INPUT_PATHS = (M21.ROADMAP, M21.MILESTONES, M21.TESTS)
+PUBLISHED_INPUT_PATHS = (
+    M21.ROADMAP,
+    M21.MILESTONES,
+    M21.TESTS,
+    M21.WORKFLOW,
+)
 
 
 @contextmanager
