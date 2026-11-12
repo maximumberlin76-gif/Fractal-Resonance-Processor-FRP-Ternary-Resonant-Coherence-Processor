@@ -4,13 +4,59 @@ from __future__ import annotations
 
 import copy
 import json
+import subprocess
+import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 
 import frp_m22_control_status_register_interface as M22
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PUBLISHED_M22_COMMIT = "6bb07958710dc942c4deea1e7663ea97017fe3a8"
+PUBLISHED_INPUT_PATHS = (
+    M22.ROADMAP,
+    M22.MILESTONES,
+    M22.TESTS,
+    M22.WORKFLOW,
+)
+
+
+@contextmanager
+def qualification_inputs(*, published: bool):
+    """Stage current inputs and explicitly identified publication data."""
+    paths = set(M22.TECHNICAL_SOURCE_PATHS)
+    paths.update(M22.UPSTREAM_SOURCE_PATHS)
+    paths.update(M22.GENERATED_PATHS)
+    manifest = M22.read_json(ROOT, M22.MANIFEST_ARTIFACT)
+    records = {record["path"]: record for record in manifest["sources"]}
+    with tempfile.TemporaryDirectory() as directory:
+        staged = Path(directory)
+        for relative in sorted(paths):
+            raw = M22.read_bytes(ROOT, relative)
+            if published and relative in PUBLISHED_INPUT_PATHS:
+                # Original test and workflow bytes are publication input data.
+                raw = subprocess.run(
+                    [
+                        "git", "-C", str(ROOT), "show",
+                        f"{PUBLISHED_M22_COMMIT}:{relative}",
+                    ],
+                    check=True,
+                    capture_output=True,
+                ).stdout
+                record = records[relative]
+                if (
+                    M22.sha256_bytes(raw) != record["raw_sha256"]
+                    or len(raw) != record["byte_length"]
+                ):
+                    raise AssertionError(
+                        f"Published M22 input identity mismatch: {relative}"
+                    )
+            target = staged / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(raw)
+        yield staged
 
 
 class M22ControlStatusRegisterTests(unittest.TestCase):
@@ -320,11 +366,28 @@ class M22ControlStatusRegisterTests(unittest.TestCase):
                 M22.safe_relative_path(value)
 
     def test_committed_artifacts_are_byte_exact_and_complete_verification_passes(self) -> None:
-        for path, raw in self.outputs.items():
-            self.assertEqual((ROOT / path).read_bytes(), raw)
-        result = M22.verify(ROOT, M22.EXPECTED_M21_COMMIT)
-        self.assertEqual(result["status"], "PASS")
-        self.assertEqual(result["artifact_count"], 4)
+        self.assertEqual(set(self.outputs), set(M22.GENERATED_PATHS))
+        with qualification_inputs(published=True) as staged:
+            published = M22.build_outputs(staged, M22.EXPECTED_M21_COMMIT)
+            self.assertEqual(set(published), set(M22.GENERATED_PATHS))
+            for path, raw in published.items():
+                with self.subTest(archive=path):
+                    self.assertEqual(M22.read_bytes(ROOT, path), raw)
+            result = M22.verify(staged, M22.EXPECTED_M21_COMMIT)
+            self.assertEqual(result["status"], "PASS")
+            self.assertEqual(result["artifact_count"], 4)
+            self.assertTrue(all(item["match"] for item in result["artifacts"]))
+        with qualification_inputs(published=False) as staged:
+            for path, raw in self.outputs.items():
+                (staged / path).write_bytes(raw)
+            result = M22.verify(staged, M22.EXPECTED_M21_COMMIT)
+            self.assertEqual(result["status"], "PASS")
+            self.assertEqual(result["artifact_count"], 4)
+            self.assertTrue(all(item["match"] for item in result["artifacts"]))
+            target = staged / M22.TRACE_ARTIFACT
+            target.write_bytes(target.read_bytes() + b"\n")
+            with self.assertRaises(M22.ContractError):
+                M22.verify(staged, M22.EXPECTED_M21_COMMIT)
 
 
 if __name__ == "__main__":
