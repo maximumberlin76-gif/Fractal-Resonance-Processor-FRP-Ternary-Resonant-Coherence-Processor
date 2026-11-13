@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import math
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -25,6 +26,40 @@ SCHEMA_BYTES = 34066
 SCHEMA_SHA256 = (
     "534db8227218184cac5d1cabb461dd63b1b61a99e0269c98535539ad3f7d7da2"
 )
+
+# Reviewed RTL revisions and their additional source dependencies.
+CURRENT_SOURCE_UPDATES = {
+    "rtl/m31/frp_m31_phase_interference.sv": (
+        15499,
+        "7ac3572ef2bf9feef509e7dc43c662d92d23fa3eb0563efbfa8dba7c28157746",
+    ),
+    "rtl/m32/frp_m32_core.sv": (
+        22652,
+        "0be6c5ee28ee4a23baf6110143eec309f387200c1c2c80e3016353d5d4107541",
+    ),
+}
+CURRENT_SOURCE_ADDITIONS = {
+    "rtl/m31/frp_m31_isqrt_u64.sv": (
+        2622,
+        "cbb5a531283164d1d54d59ec748b97bf84e172704854bf5eb7c6bda2c502f7c7",
+    ),
+    "rtl/m31/frp_m31_local_thermal_field.sv": (
+        9911,
+        "cb97c1bfeabbb2acaebf2f9644d484b2f7c5e995dbf1b70777f6bc2e7df9368e",
+    ),
+    "rtl/m31/frp_m31_local_gamma_drift.sv": (
+        3837,
+        "478882d4f6a2986f5079c88b444c7b007d68145d61e5150209cb0637f35b2ec0",
+    ),
+    "rtl/m31/frp_m31_local_thermal_attenuation.sv": (
+        9521,
+        "6e10f738f94c43ac9748ec7a033adde16243beea59e2f7f2973a3ab51c2e5e04",
+    ),
+    "rtl/m31/frp_m31_global_stability.sv": (
+        14786,
+        "df058d4e3671ba1d7c9d0403a6bb1b8c9750a0a967905b5f91cca455c1dddb83",
+    ),
+}
 
 SAMPLE_7_1 = (
     "M32_TRACE_SAMPLE source_tick=0 tick_enable=1 clear_counters=0 "
@@ -322,12 +357,42 @@ class M32TraceExportBoundaryTests(unittest.TestCase):
         )
 
     def test_04_source_identities_are_exact(self) -> None:
-        identities = m32.validate_source_identities(ROOT)
+        with tempfile.TemporaryDirectory() as directory:
+            published = Path(directory)
+            for relative in m32.SOURCE_IDENTITIES:
+                raw = subprocess.run(
+                    [
+                        "git", "-C", str(ROOT), "show",
+                        f"{m32.SOURCE_COMMIT}:{relative}",
+                    ],
+                    check=True,
+                    capture_output=True,
+                ).stdout
+                target = published / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(raw)
+            identities = m32.validate_source_identities(published)
         self.assertEqual(len(identities), 29)
         self.assertEqual(
             [item["path"] for item in identities],
             list(m32.SOURCE_IDENTITIES),
         )
+        self.assertEqual(len(CURRENT_SOURCE_UPDATES), 2)
+        self.assertEqual(len(CURRENT_SOURCE_ADDITIONS), 5)
+        self.assertTrue(set(CURRENT_SOURCE_UPDATES) <= set(m32.SOURCE_IDENTITIES))
+        self.assertFalse(set(CURRENT_SOURCE_ADDITIONS) & set(m32.SOURCE_IDENTITIES))
+        current = {
+            **m32.SOURCE_IDENTITIES,
+            **CURRENT_SOURCE_UPDATES,
+            **CURRENT_SOURCE_ADDITIONS,
+        }
+        self.assertEqual(len(current), 34)
+        for relative, expected in current.items():
+            with self.subTest(scope="current", path=relative):
+                raw = m32.read_regular(ROOT / relative)
+                self.assertEqual(
+                    (len(raw), hashlib.sha256(raw).hexdigest()), expected
+                )
 
     def test_05_source_identity_classes_remain_separate(self) -> None:
         paths = list(m32.SOURCE_IDENTITIES)
