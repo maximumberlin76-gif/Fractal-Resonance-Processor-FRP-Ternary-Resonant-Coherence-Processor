@@ -4,14 +4,58 @@ from __future__ import annotations
 
 import copy
 import json
+import subprocess
+import tempfile
 import unittest
 from collections import Counter
+from contextlib import contextmanager
 from pathlib import Path
 
 import frp_m23_clock_reset_cdc_interface_hardening as M23
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PUBLISHED_M23_COMMIT = "1dcc4e4d47135cdf1e38192cc96f0d928066b13e"
+PUBLISHED_INPUT_PATHS = (
+    M23.WORKFLOW_PATH,
+    "tests/test_frp_m23_clock_reset_cdc_interface_hardening.py",
+)
+
+
+@contextmanager
+def qualification_inputs(*, published: bool):
+    """Stage current sources and explicitly identified publication inputs."""
+    paths = {M23.WORKFLOW_PATH, *M23.TECHNICAL_SOURCE_PATHS}
+    paths.update(M23.UPSTREAM_SOURCE_PATHS)
+    paths.update(M23.ARTIFACT_PATHS)
+    manifest = json.loads(M23.require_file(ROOT, M23.MANIFEST_ARTIFACT).read_bytes())
+    records = {record["path"]: record for record in manifest["sources"]}
+    with tempfile.TemporaryDirectory() as directory:
+        staged = Path(directory)
+        for relative in sorted(paths):
+            raw = M23.require_file(ROOT, relative).read_bytes()
+            if published and relative in PUBLISHED_INPUT_PATHS:
+                # Original test and workflow bytes are publication input data.
+                raw = subprocess.run(
+                    [
+                        "git", "-C", str(ROOT), "show",
+                        f"{PUBLISHED_M23_COMMIT}:{relative}",
+                    ],
+                    check=True,
+                    capture_output=True,
+                ).stdout
+                record = records[relative]
+                if (
+                    M23.sha256_bytes(raw) != record["raw_sha256"]
+                    or len(raw) != record["bytes"]
+                ):
+                    raise AssertionError(
+                        f"Published M23 input identity mismatch: {relative}"
+                    )
+            target = M23.path_for(staged, relative)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(raw)
+        yield staged
 
 
 class M23ClockResetCdcInterfaceHardeningTests(unittest.TestCase):
@@ -194,10 +238,49 @@ class M23ClockResetCdcInterfaceHardeningTests(unittest.TestCase):
             self.schemas.validate(M23.CONTRACT_SCHEMA, invalid, "invalid-contract")
 
     def test_committed_verification_self_test_and_safety_boundaries_pass(self) -> None:
-        verification = M23.verify(ROOT, M23.EXPECTED_M22_COMMIT)
-        self.assertEqual((verification["status"], verification["artifact_count"]), ("PASS", 5))
+        self.assertEqual(set(self.outputs), set(M23.ARTIFACT_PATHS))
+        self.assertEqual(len(self.outputs), 5)
+        with qualification_inputs(published=True) as staged:
+            published = M23.build_outputs(staged, M23.EXPECTED_M22_COMMIT)
+            self.assertEqual(set(published), set(M23.ARTIFACT_PATHS))
+            for relative, expected in published.items():
+                with self.subTest(scope="published", path=relative):
+                    self.assertEqual(
+                        M23.require_file(ROOT, relative).read_bytes(), expected
+                    )
+            verification = M23.verify(staged, M23.EXPECTED_M22_COMMIT)
+            self.assertEqual(
+                (verification["status"], verification["artifact_count"]),
+                ("PASS", 5),
+            )
+        with qualification_inputs(published=False) as staged:
+            current = M23.build_outputs(staged, M23.EXPECTED_M22_COMMIT)
+            self.assertEqual(current, self.outputs)
+            for relative, raw in current.items():
+                M23.path_for(staged, relative).write_bytes(raw)
+            verification = M23.verify(staged, M23.EXPECTED_M22_COMMIT)
+            self.assertEqual(
+                (verification["status"], verification["artifact_count"]),
+                ("PASS", 5),
+            )
+            self.assertEqual(
+                {item["path"] for item in verification["artifacts"]},
+                set(M23.ARTIFACT_PATHS),
+            )
+            for relative, raw in current.items():
+                with self.subTest(scope="altered-artifact", path=relative):
+                    target = M23.path_for(staged, relative)
+                    target.write_bytes(raw + b"\n")
+                    try:
+                        with self.assertRaises(M23.ContractError):
+                            M23.verify(staged, M23.EXPECTED_M22_COMMIT)
+                    finally:
+                        target.write_bytes(raw)
         result = M23.self_test(ROOT, M23.EXPECTED_M22_COMMIT)
         self.assertEqual((result["check_count"], result["passed_count"]), (15, 15))
+        self.assertEqual((result["status"], result["failed_count"]), ("PASS", 0))
+        self.assertEqual(len({item["check_id"] for item in result["checks"]}), 15)
+        self.assertTrue(all(item["status"] == "PASS" for item in result["checks"]))
         with self.assertRaises(M23.ContractError):
             M23.validate_source_commit("0" * 40)
         for value in ("/absolute", "../escape", "a/../b", "a\\b"):
