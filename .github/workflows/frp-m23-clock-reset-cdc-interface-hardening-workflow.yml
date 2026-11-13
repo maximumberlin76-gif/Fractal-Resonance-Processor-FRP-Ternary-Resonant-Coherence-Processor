@@ -1,6 +1,6 @@
 name: FRP M23 Clock Reset CDC Interface Hardening
 
-run-name: FRP M23 Preserved Release Qualification
+run-name: FRP M23 Current and Preserved Release Qualification
 
 on:
   workflow_dispatch:
@@ -82,6 +82,7 @@ jobs:
           release = Path(os.environ["M23_REPLAY"]).resolve()
           evidence = Path(os.environ["M23_EVIDENCE"])
           workflow = ".github/workflows/frp-m23-clock-reset-cdc-interface-hardening-workflow.yml"
+          test_runner = "tests/test_frp_m23_clock_reset_cdc_interface_hardening.py"
           artifacts = (
               "artifacts/m23/contracts/m23-clock-reset-cdc-interface-contract.json",
               "artifacts/m23/records/m23-hardening-sequence-records.json",
@@ -118,7 +119,7 @@ jobs:
               manifest["source_count"] != 14 or len(sources) != 14
               or manifest["upstream_dependency_count"] != 6 or len(upstream) != 6
               or len(set(paths)) != 20
-              or workflow not in {item["path"] for item in sources}
+              or not {workflow, test_runner} <= {item["path"] for item in sources}
           ):
               raise SystemExit("M23 source inventory mismatch")
           records = []
@@ -129,9 +130,13 @@ jobs:
               if identity(frozen) != expected:
                   raise SystemExit(f"Preserved M23 source mismatch: {relative}")
               present = read(current, relative)
-              if relative != workflow and present != frozen:
+              if relative not in {workflow, test_runner} and present != frozen:
                   raise SystemExit(f"Current M23 bound input changed: {relative}")
-              scope = "preserved creation workflow" if relative == workflow else "current bound input"
+              scope = (
+                  "current test runner" if relative == test_runner
+                  else "preserved creation workflow" if relative == workflow
+                  else "current bound input"
+              )
               records.append({"path": relative, "scope": scope, "preserved": expected, "current": identity(present)})
           for relative in artifacts:
               if read(current, relative) != read(release, relative):
@@ -144,7 +149,8 @@ jobs:
               "m22_source_commit": os.environ["M22_SOURCE_COMMIT"],
               "preserved_source_count": 14,
               "preserved_upstream_count": 6,
-              "current_bound_input_count": 19,
+              "current_bound_input_count": 18,
+              "current_test_runner_count": 1,
               "committed_artifact_count": len(artifacts),
               "sources": records,
               "current_workflow_sha256": identity(read(current, workflow))["raw_sha256"],
@@ -152,7 +158,7 @@ jobs:
           (evidence / "source-boundary.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
           print("M23_PRESERVED_SOURCES=14/14 PASS")
           print("M23_PRESERVED_UPSTREAM_INPUTS=6/6 PASS")
-          print("M23_CURRENT_BOUND_INPUTS=19/19 PASS")
+          print("M23_CURRENT_BOUND_INPUTS=18/18 PASS")
           print("M23_COMMITTED_ARTIFACT_IDENTITIES=5/5 PASS")
           PY
 
@@ -281,8 +287,67 @@ jobs:
           (evidence / "unittest.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
           if not passed:
               raise SystemExit("Preserved M23 release regression failed")
-          print("M23_UNIT_TESTS=36/36 PASS")
+          print("M23_PRESERVED_UNIT_TESTS=36/36 PASS")
           print("M23_RELEASE_FULL_REGRESSION=238/238 PASS")
+          PY
+
+      - name: Execute current M23 qualification tests
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import unittest
+          from pathlib import Path
+
+          import frp_m23_clock_reset_cdc_interface_hardening as m23
+
+          loader = unittest.TestLoader()
+          suite = loader.discover(
+              "tests", pattern="test_frp_m23_clock_reset_cdc_interface_hardening.py"
+          )
+          discovered = suite.countTestCases()
+          evidence = Path(os.environ["M23_EVIDENCE"])
+          log = evidence / "current-unittest.log"
+          with log.open("w", encoding="utf-8") as stream:
+              result = unittest.TextTestRunner(stream=stream, verbosity=2).run(suite)
+          print(log.read_text(encoding="utf-8"), end="")
+          passed = (
+              not loader.errors
+              and discovered == result.testsRun == 36
+              and result.wasSuccessful()
+              and not result.skipped
+              and not result.expectedFailures
+              and not result.unexpectedSuccesses
+          )
+          paths = sorted({m23.WORKFLOW_PATH, *m23.TECHNICAL_SOURCE_PATHS, *m23.UPSTREAM_SOURCE_PATHS})
+          report = {
+              "scope": "Current M23 tests, current generation, and published artifact replay",
+              "candidate_commit": os.environ["GITHUB_SHA"],
+              "discovered": discovered,
+              "executed": result.testsRun,
+              "failure_count": len(result.failures),
+              "error_count": len(result.errors),
+              "skipped_count": len(result.skipped),
+              "expected_failure_count": len(result.expectedFailures),
+              "unexpected_success_count": len(result.unexpectedSuccesses),
+              "loader_errors": loader.errors,
+              "current_inputs": [
+                  {"path": path, "sha256": hashlib.sha256(
+                      m23.require_file(Path.cwd(), path).read_bytes()
+                  ).hexdigest()}
+                  for path in paths
+              ],
+              "status": "PASS" if passed else "FAIL",
+          }
+          (evidence / "current-unittest.json").write_text(
+              json.dumps(report, indent=2) + "\n", encoding="utf-8"
+          )
+          if not passed:
+              raise SystemExit("Current M23 qualification failed")
+          print("M23_CURRENT_REGRESSION=36/36 PASS")
           PY
 
       - name: Lint and execute all three M23 RTL parameter profiles
@@ -302,7 +367,7 @@ jobs:
             2>&1 | tee "$M23_EVIDENCE/rtl-lint.log"
           for cells in 8 16 32; do
             lanes=$((cells / 4))
-            timeout 600s verilator --binary "${common[@]}" \
+            timeout 600s verilator --binary -CFLAGS "-std=c++20" "${common[@]}" \
               "-GCELLS=$cells" "-GREQUEST_LANES=$lanes" \
               --Mdir "$M23_RUN_ROOT/obj-$cells" \
               > "$M23_EVIDENCE/rtl-build-$cells.log" 2>&1 || {
@@ -357,7 +422,7 @@ jobs:
                   checksums.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(evidence).as_posix()}")
           (evidence / "SHA256SUMS").write_text("\n".join(checksums) + "\n", encoding="utf-8")
           lines = [
-              "## M23 preserved release qualification: PASS",
+              "## M23 current and preserved release qualification: PASS",
               "",
               f"Dispatched commit: {os.environ['GITHUB_SHA']}",
               f"Preserved M23 release: {os.environ['M23_RELEASE_COMMIT']}",
@@ -366,7 +431,8 @@ jobs:
               "| Check | Result |",
               "|---|---|",
               "| Preserved source and upstream identities | 20/20 PASS |",
-              "| Current bound input identities | 19/19 PASS |",
+              "| Current bound input identities | 18/18 PASS |",
+              "| Current M23 unittest suite | 36/36 PASS |",
               "| Independently reproduced committed artifacts | 5/5 PASS |",
               "| Sequence records | 45/45 PASS |",
               "| Structural CDC checks | 10/10 PASS |",
@@ -384,7 +450,8 @@ jobs:
               "| Current and preserved worktrees | CLEAN |",
               "",
               "The complete regression and original creation workflow are read from the pinned M23 release.",
-              "Current M23 technical sources, bound upstream inputs, and committed artifacts match that release byte for byte.",
+              "Eighteen current technical and upstream inputs and five committed artifacts match the release byte for byte.",
+              "The current test runner executes 36 tests against the dispatched source and recorded publication inputs.",
           ]
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:
               stream.write("\n".join(lines) + "\n")
@@ -394,7 +461,7 @@ jobs:
         if: ${{ always() && env.M23_EVIDENCE != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: frp-m23-hardening-reports
+          name: frp-m23-qualification-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.M23_EVIDENCE }}
           if-no-files-found: error
           retention-days: 90
