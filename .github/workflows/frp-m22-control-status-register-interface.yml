@@ -1,6 +1,6 @@
 name: FRP M22 Control Status Register Interface
 
-run-name: FRP M22 Preserved Release Qualification
+run-name: FRP M22 Current and Preserved Release Qualification
 
 on:
   workflow_dispatch:
@@ -82,6 +82,7 @@ jobs:
           release = Path(os.environ["M22_REPLAY"]).resolve()
           evidence = Path(os.environ["M22_EVIDENCE"])
           workflow = ".github/workflows/frp-m22-control-status-register-interface.yml"
+          test_runner = "tests/test_frp_m22_control_status_register_interface.py"
           documents = {"MILESTONES.md", "ROADMAP.md"}
           historical_only = documents | {workflow}
           artifacts = (
@@ -114,7 +115,7 @@ jobs:
               raise SystemExit("M22 manifest upstream commit mismatch")
           sources = manifest["sources"]
           paths = [item["path"] for item in sources]
-          if len(paths) != 18 or len(set(paths)) != 18 or not historical_only <= set(paths):
+          if len(paths) != 18 or len(set(paths)) != 18 or not (historical_only | {test_runner}) <= set(paths):
               raise SystemExit("M22 source inventory mismatch")
           records = []
           for item in sources:
@@ -124,8 +125,12 @@ jobs:
               if identity(frozen) != expected:
                   raise SystemExit(f"Preserved M22 source mismatch: {relative}")
               present = read(current, relative)
-              scope = "historical document or workflow" if relative in historical_only else "current technical source"
-              if relative not in historical_only and present != frozen:
+              scope = (
+                  "current test runner" if relative == test_runner
+                  else "historical document or workflow" if relative in historical_only
+                  else "current technical source"
+              )
+              if relative not in historical_only | {test_runner} and present != frozen:
                   raise SystemExit(f"Current M22 technical source changed: {relative}")
               records.append({"path": relative, "scope": scope, "preserved": expected, "current": identity(present)})
           for relative in artifacts:
@@ -138,14 +143,15 @@ jobs:
               "m22_release_commit": os.environ["M22_RELEASE_COMMIT"],
               "m21_source_commit": os.environ["M21_SOURCE_COMMIT"],
               "preserved_source_count": len(records),
-              "current_technical_source_count": len(records) - len(historical_only),
+              "current_technical_source_count": len(records) - len(historical_only) - 1,
+              "current_test_runner_count": 1,
               "committed_artifact_count": len(artifacts),
               "sources": records,
               "current_workflow_sha256": identity(read(current, workflow))["raw_sha256"],
           }
           (evidence / "source-boundary.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
           print("M22_PRESERVED_SOURCES=18/18 PASS")
-          print("M22_CURRENT_TECHNICAL_SOURCES=15/15 PASS")
+          print("M22_CURRENT_TECHNICAL_SOURCES=14/14 PASS")
           print("M22_COMMITTED_ARTIFACT_IDENTITIES=4/4 PASS")
           PY
 
@@ -270,6 +276,65 @@ jobs:
           print("M22_RELEASE_FULL_REGRESSION=202/202 PASS")
           PY
 
+      - name: Execute current M22 qualification tests
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import unittest
+          from pathlib import Path
+
+          import frp_m22_control_status_register_interface as m22
+
+          loader = unittest.TestLoader()
+          suite = loader.discover(
+              "tests", pattern="test_frp_m22_control_status_register_interface.py"
+          )
+          discovered = suite.countTestCases()
+          evidence = Path(os.environ["M22_EVIDENCE"])
+          log = evidence / "current-unittest.log"
+          with log.open("w", encoding="utf-8") as stream:
+              result = unittest.TextTestRunner(stream=stream, verbosity=2).run(suite)
+          print(log.read_text(encoding="utf-8"), end="")
+          passed = (
+              not loader.errors
+              and discovered == result.testsRun == 36
+              and result.wasSuccessful()
+              and not result.skipped
+              and not result.expectedFailures
+              and not result.unexpectedSuccesses
+          )
+          paths = sorted(set(m22.TECHNICAL_SOURCE_PATHS) | set(m22.UPSTREAM_SOURCE_PATHS))
+          report = {
+              "scope": "Current M22 tests, current generation, and published artifact replay",
+              "candidate_commit": os.environ["GITHUB_SHA"],
+              "discovered": discovered,
+              "executed": result.testsRun,
+              "failure_count": len(result.failures),
+              "error_count": len(result.errors),
+              "skipped_count": len(result.skipped),
+              "expected_failure_count": len(result.expectedFailures),
+              "unexpected_success_count": len(result.unexpectedSuccesses),
+              "loader_errors": loader.errors,
+              "current_inputs": [
+                  {"path": path, "sha256": hashlib.sha256(
+                      m22.read_bytes(Path.cwd(), path)
+                  ).hexdigest()}
+                  for path in paths
+              ],
+              "status": "PASS" if passed else "FAIL",
+          }
+          (evidence / "current-unittest.json").write_text(
+              json.dumps(report, indent=2) + "\n", encoding="utf-8"
+          )
+          if not passed:
+              raise SystemExit("Current M22 qualification failed")
+          print("M22_CURRENT_REGRESSION=36/36 PASS")
+          PY
+
       - name: Lint and execute all three M22 RTL parameter profiles
         run: |
           set -euo pipefail
@@ -280,7 +345,7 @@ jobs:
             rtl/m22/frp_m22_control_status_register_interface_tb.sv \
             2>&1 | tee "$M22_EVIDENCE/rtl-lint.log"
           for cells in 8 16 32; do
-            verilator --sv --timing --assert --binary \
+            verilator --sv --timing --assert --binary -CFLAGS "-std=c++20" \
               --Wno-TIMESCALEMOD \
               --top-module frp_m22_control_status_register_interface_tb \
               "-GCELLS=$cells" -Irtl/m16 -Irtl/m22 \
@@ -346,7 +411,8 @@ jobs:
               "| Check | Result |",
               "|---|---|",
               "| Preserved manifest source identities | 18/18 PASS |",
-              "| Current M22 technical source identities | 15/15 PASS |",
+              "| Current M22 technical source identities | 14/14 PASS |",
+              "| Current M22 unittest suite | 36/36 PASS |",
               "| Independently reproduced committed artifacts | 4/4 PASS |",
               "| Register map | 26/26 PASS |",
               "| Invalid accesses rejected | 36/36 PASS |",
@@ -356,8 +422,9 @@ jobs:
               "| Current and preserved worktrees | CLEAN |",
               "",
               "The historical documents and original creation workflow are read from the pinned M22 release.",
-              "Current technical inputs and committed M22 artifacts must still match that release byte for byte.",
-              "This run qualifies the M22 boundary; it does not claim a new M32 synthesis or FPGA implementation result.",
+              "Fourteen current technical inputs and four committed M22 artifacts match the release byte for byte.",
+              "The current test runner executes 36 tests against the dispatched source and recorded publication inputs.",
+              "RTL evidence covers the M22 CSR boundary and its three published parameter profiles.",
           ]
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:
               stream.write("\n".join(lines) + "\n")
