@@ -261,7 +261,6 @@ jobs:
               })
           bundle = json.loads(m32.read_regular(Path(m32.BUNDLE_PATH)))
           schema = json.loads(m32.read_regular(Path(m32.SCHEMA_PATH)))
-)))
           m32.validate_bundle(bundle, schema)
           expected_traces = {trace["scheduler_mode"]: trace for trace in bundle["traces"]}
           profiles = []
