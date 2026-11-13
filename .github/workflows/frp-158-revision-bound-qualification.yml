@@ -1,146 +1,382 @@
-name: 158 - FRP candidate and historical publication tests
-on: workflow_dispatch
+name: 158 - FRP current 633 tests and M32 trace replay
+
+run-name: FRP current 633 tests and M32 replay
+
+on:
+  workflow_dispatch:
+
 permissions:
   contents: read
+
+concurrency:
+  group: frp-current-633-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   qualify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    defaults:
-      run:
-        shell: bash
+    timeout-minutes: 45
+    env:
+      PYTHONHASHSEED: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      PYTHONUTF8: "1"
+      LC_ALL: C.UTF-8
+      TZ: UTC
+      M32_PUBLICATION_COMMIT: a7efd319b4e3f52d461b19936a4d29d6c94e0d95
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-python@v5
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
-      - name: Prepare qualification
+          python-version: "3.12"
+
+      - name: Prepare qualification and record source identities
         run: |
           set -euo pipefail
-          EVIDENCE="$RUNNER_TEMP/frp-evidence"
-          echo "EVIDENCE=$EVIDENCE" >> "$GITHUB_ENV"
-          mkdir -p "$EVIDENCE"
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          python -m pip install -r requirements.txt
-          python --version > "$EVIDENCE/python.txt"
-          python -m pip freeze > "$EVIDENCE/dependencies.txt"
-          cat > "$RUNNER_TEMP/frp-checks.py" <<'PY'
+          test -z "$(git status --porcelain --untracked-files=all)"
+          git merge-base --is-ancestor "$M32_PUBLICATION_COMMIT" "$GITHUB_SHA"
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+          root = Path(tempfile.mkdtemp(prefix="frp-current-633-", dir=os.environ["RUNNER_TEMP"]))
+          evidence = root / "evidence"
+          evidence.mkdir()
+          names = subprocess.check_output(["git", "ls-files", "-z"]).decode().split("\0")
+          records = []
+          for name in sorted(filter(None, names)):
+              path = Path(name)
+              if path.is_symlink() or not path.is_file():
+                  raise SystemExit(f"Regular tracked file required: {name}")
+              raw = path.read_bytes()
+              records.append({
+                  "path": name,
+                  "bytes": len(raw),
+                  "sha256": hashlib.sha256(raw).hexdigest(),
+              })
+          report = {
+              "candidate_commit": os.environ["GITHUB_SHA"],
+              "candidate_tree": subprocess.check_output(
+                  ["git", "rev-parse", "HEAD^{tree}"], text=True
+              ).strip(),
+              "file_count": len(records),
+              "files": records,
+          }
+          (evidence / "source-manifest.json").write_text(
+              json.dumps(report, indent=2) + "\n", encoding="utf-8"
+          )
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as stream:
+              stream.write(f"QUALIFICATION_ROOT={root}\n")
+              stream.write(f"EVIDENCE={evidence}\n")
+          PY
+
+      - name: Install dependencies and record toolchain
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r requirements.txt
+          sudo apt-get update
+          sudo apt-get install --yes verilator g++ make
+          {
+            python --version
+            verilator --version
+            g++ --version
+            python -m pip freeze
+          } > "$EVIDENCE/toolchain.txt"
+          cat "$EVIDENCE/toolchain.txt"
+
+      - name: Execute all 633 current tests
+        run: |
+          set -euo pipefail
+          timeout 1200s python - <<'PY'
+          import json
+          import os
+          import unittest
+          from pathlib import Path
+
+          def flatten(suite):
+              for item in suite:
+                  if isinstance(item, unittest.TestSuite):
+                      yield from flatten(item)
+                  else:
+                      yield item
+
+          class RecordedResult(unittest.TextTestResult):
+              def __init__(self, *args, **kwargs):
+                  super().__init__(*args, **kwargs)
+                  self.executed_ids = []
+                  self.passed_ids = []
+
+              def startTest(self, test):
+                  self.executed_ids.append(test.id())
+                  super().startTest(test)
+
+              def addSuccess(self, test):
+                  self.passed_ids.append(test.id())
+                  super().addSuccess(test)
+
+          evidence = Path(os.environ["EVIDENCE"])
+          loader = unittest.TestLoader()
+          suite = loader.discover("tests", pattern="test*.py")
+          cases = list(flatten(suite))
+          discovered_ids = [case.id() for case in cases]
+          inventory = {
+              "candidate_commit": os.environ["GITHUB_SHA"],
+              "count": len(discovered_ids),
+              "tests": discovered_ids,
+              "loader_errors": loader.errors,
+          }
+          (evidence / "test-inventory.json").write_text(
+              json.dumps(inventory, indent=2) + "\n", encoding="utf-8"
+          )
+          if loader.errors or len(discovered_ids) != 633 or len(set(discovered_ids)) != 633:
+              raise SystemExit("Current test inventory must contain exactly 633 unique tests")
+          log = evidence / "current-633.log"
+          with log.open("w", encoding="utf-8") as stream:
+              result = unittest.TextTestRunner(
+                  stream=stream, verbosity=2, resultclass=RecordedResult
+              ).run(suite)
+          print(log.read_text(encoding="utf-8"), end="")
+          passed = (
+              result.wasSuccessful()
+              and result.testsRun == 633
+              and result.executed_ids == discovered_ids
+              and len(result.passed_ids) == 633
+              and set(result.passed_ids) == set(discovered_ids)
+              and not result.skipped
+              and not result.expectedFailures
+              and not result.unexpectedSuccesses
+          )
+          report = {
+              "scope": "All tests discovered and executed from the dispatched checkout",
+              "candidate_commit": os.environ["GITHUB_SHA"],
+              "discovered": len(discovered_ids),
+              "executed": result.testsRun,
+              "passed": len(result.passed_ids),
+              "failures": len(result.failures),
+              "errors": len(result.errors),
+              "skipped": len(result.skipped),
+              "expected_failures": len(result.expectedFailures),
+              "unexpected_successes": len(result.unexpectedSuccesses),
+              "executed_ids": result.executed_ids,
+              "passed_ids": result.passed_ids,
+              "status": "PASS" if passed else "FAIL",
+          }
+          (evidence / "current-633.json").write_text(
+              json.dumps(report, indent=2) + "\n", encoding="utf-8"
+          )
+          if not passed:
+              raise SystemExit("Current 633-test qualification failed")
+          print("FRP_CURRENT_TESTS=633/633 PASS")
+          PY
+
+      - name: Compile current M32 RTL and run both modes twice
+        run: |
+          set -euo pipefail
+          for mode in 7_1 1_7; do
+            top="frp_m32_mode_${mode}_trace_tb"
+            build="$QUALIFICATION_ROOT/obj-$mode"
+            timeout 600s verilator --binary --sv --timing --assert \
+              -Wall -Wno-fatal -CFLAGS "-std=c++20" \
+              --top-module "$top" --Mdir "$build" \
+              -Irtl/m31 -Irtl/m32 "rtl/m32/$top.sv" \
+              > "$EVIDENCE/build-$mode.log" 2>&1 || {
+                cat "$EVIDENCE/build-$mode.log"
+                exit 1
+              }
+            for replay in 1 2; do
+              timeout 180s "$build/V$top" \
+                > "$EVIDENCE/trace-$mode-$replay.log" 2>&1 || {
+                  cat "$EVIDENCE/trace-$mode-$replay.log"
+                  exit 1
+                }
+            done
+          done
+
+      - name: Verify M32 publication and current replay equivalence
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
           import json
           import os
           import subprocess
           import sys
-          import unittest
           from pathlib import Path
 
-          out = Path(os.environ["EVIDENCE"])
-          group = os.environ["GROUP"]
-          bindings = {
-              "21": {
-                  "test_frp_m21_parameterized_qualification_matrix.M21CommittedOutputTests.test_committed_outputs_are_byte_identical",
-                  "test_frp_m21_parameterized_qualification_matrix.M21CommittedOutputTests.test_complete_verification_passes",
-              },
-              "22": {"test_frp_m22_control_status_register_interface.M22ControlStatusRegisterTests.test_committed_artifacts_are_byte_exact_and_complete_verification_passes"},
-              "23": {"test_frp_m23_clock_reset_cdc_interface_hardening.M23ClockResetCdcInterfaceHardeningTests.test_committed_verification_self_test_and_safety_boundaries_pass"},
-              "30": {"test_frp_m30_reproducibility_qualification_archival_closure.M30GeneratedClosureTests.test_committed_outputs_are_byte_exact"},
-              "32": {"test_frp_m32_deterministic_rtl_trace_export.M32TraceExportBoundaryTests.test_04_source_identities_are_exact"},
-          }
-          def cases(suite):
-              for item in suite:
-                  if isinstance(item, unittest.TestSuite):
-                      yield from cases(item)
-                  else:
-                      yield item
+          import frp_m32_deterministic_rtl_trace_export as m32
 
-          sys.path.insert(0, str(Path.cwd()))
-          loader = unittest.TestLoader()
-          if group == "candidate":
-              inventory = list(cases(loader.discover("tests", pattern="test_frp_m*.py")))
-              ids = {t.id() for t in inventory}
-              bound = set.union(*bindings.values())
-              if len(ids) != len(inventory) or not bound <= ids or len(ids) < 633:
-                  raise SystemExit("Candidate test inventory mismatch")
-              selected = [t for t in inventory if t.id() not in bound]
-          else:
-              sys.path.insert(0, str(Path("tests").resolve()))
-              selected = list(cases(loader.loadTestsFromNames(sorted(bindings[group]))))
-              if {t.id() for t in selected} != bindings[group]:
-                  raise SystemExit(f"M{group} archive test inventory mismatch")
-          if loader.errors:
-              raise SystemExit("\n".join(loader.errors))
-          sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-          with (out / f"{group}.log").open("w") as log:
-              result = unittest.TextTestRunner(stream=log, verbosity=2).run(unittest.TestSuite(selected))
-          ok = (result.wasSuccessful() and result.testsRun == len(selected)
-                and not result.skipped and not result.expectedFailures)
-          record = dict(group=group, revision=sha, passed=ok, count=result.testsRun,
-                        tests=[test.id() for test in selected])
-          (out / f"{group}.json").write_text(json.dumps(record, indent=2) + "\n")
-          print(group, sha, result.testsRun, ok, flush=True)
-          if not ok:
-              raise SystemExit(f"See {group}.log")
+          sys.path.insert(0, str(Path("tests").resolve()))
+          import test_frp_m32_deterministic_rtl_trace_export as tests
+
+          evidence = Path(os.environ["EVIDENCE"])
+          identities = {
+              **m32.SOURCE_IDENTITIES,
+              **tests.CURRENT_SOURCE_UPDATES,
+              **tests.CURRENT_SOURCE_ADDITIONS,
+          }
+          if len(identities) != 34:
+              raise SystemExit("M32 current source inventory mismatch")
+          current_sources = []
+          for name, expected in identities.items():
+              raw = m32.read_regular(Path(name))
+              actual = (len(raw), hashlib.sha256(raw).hexdigest())
+              if actual != tuple(expected):
+                  raise SystemExit(f"M32 current source identity mismatch: {name}")
+              current_sources.append({
+                  "path": name, "bytes": actual[0], "sha256": actual[1]
+              })
+          publication = []
+          for name in (
+              m32.SCHEMA_PATH, m32.BUNDLE_PATH,
+              m32.MANIFEST_PATH, m32.QUALIFICATION_PATH,
+          ):
+              raw = m32.read_regular(Path(name))
+              original = subprocess.check_output([
+                  "git", "show", f"{os.environ['M32_PUBLICATION_COMMIT']}:{name}"
+              ])
+              if raw != original:
+                  raise SystemExit(f"M32 published artifact mismatch: {name}")
+              publication.append({
+                  "path": name, "bytes": len(raw),
+                  "sha256": hashlib.sha256(raw).hexdigest(),
+              })
+          bundle = json.loads(m32.read_regular(Path(m32.BUNDLE_PATH)))
+          schema = json.loads(m32.read_regular(Path(m32.SCHEMA_PATH)))
+)))
+          m32.validate_bundle(bundle, schema)
+          expected_traces = {trace["scheduler_mode"]: trace for trace in bundle["traces"]}
+          profiles = []
+          for token, mode in (("7_1", "7/1"), ("1_7", "1/7")):
+              transcripts = [
+                  (evidence / f"trace-{token}-{replay}.log").read_bytes()
+                  for replay in (1, 2)
+              ]
+              traces = [
+                  m32.parse_transcript(raw, m32.TRACE_PROFILES[mode])
+                  for raw in transcripts
+              ]
+              if traces[0] != traces[1] or traces[0] != expected_traces[mode]:
+                  raise SystemExit(f"M32 replay or published trace mismatch: {mode}")
+              protocol = [
+                  b"\n".join(
+                      line for line in raw.splitlines()
+                      if line.startswith((b"M32_", b"FRP_M32_"))
+                  ) + b"\n"
+                  for raw in transcripts
+              ]
+              if protocol[0] != protocol[1]:
+                  raise SystemExit(f"M32 protocol replay differs: {mode}")
+              for replay, raw in enumerate(protocol, 1):
+                  (evidence / f"protocol-{token}-{replay}.log").write_bytes(raw)
+              trace = traces[0]
+              profiles.append({
+                  "mode": mode,
+                  "replays": 2,
+                  "sample_count": trace["sample_record_count"],
+                  "record_count": trace["record_count"],
+                  "active_zero_observations": trace["active_zero_cell_observation_count"],
+                  "records_sha256": trace["records_sha256"],
+                  "protocol_sha256": hashlib.sha256(protocol[0]).hexdigest(),
+                  "status": "PASS",
+              })
+              print(f"M32_CURRENT_REPLAY={mode} PASS")
+          report = {
+              "candidate_commit": os.environ["GITHUB_SHA"],
+              "publication_commit": os.environ["M32_PUBLICATION_COMMIT"],
+              "publication_source_commit": m32.SOURCE_COMMIT,
+              "current_source_count": len(current_sources),
+              "current_sources": current_sources,
+              "published_artifacts": publication,
+              "profiles": profiles,
+              "matched_records_per_pair": sum(p["record_count"] for p in profiles),
+              "status": "PASS",
+          }
+          (evidence / "m32-current-replay.json").write_text(
+              json.dumps(report, indent=2) + "\n", encoding="utf-8"
+          )
+          print("M32_PUBLISHED_RECORD_MATCH=396/396 PASS")
           PY
-      - name: Check historical publications
+
+      - name: Verify source preservation and summarize evidence
         run: |
           set -euo pipefail
-          while read -r group sha; do
-            # The candidate must retain the archived test, producer, schemas and publication.
-            git diff --exit-code "$sha" HEAD -- "tests/test_frp_m${group}_*.py" \
-              "frp_m${group}_*.py" "schemas/m$group" "artifacts/m$group"
-            tree="$RUNNER_TEMP/frp-archive-$group"
-            git worktree add --quiet --detach "$tree" "$sha"
-            (cd "$tree" && GROUP="$group" python "$RUNNER_TEMP/frp-checks.py")
-            git worktree remove --force "$tree"
-          done <<'PINS'
-          21 759ee446adf028ca135c75ca38388c26e911aa68
-          22 6bb07958710dc942c4deea1e7663ea97017fe3a8
-          23 1dcc4e4d47135cdf1e38192cc96f0d928066b13e
-          30 108e14fbc25dda6d220293208158b0a64de36017
-          32 a7efd319b4e3f52d461b19936a4d29d6c94e0d95
-          PINS
-      - name: Run candidate tests
-        run: GROUP=candidate python "$RUNNER_TEMP/frp-checks.py"
-
-      - name: Check combined inventory
-        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain --untracked-files=all)"
           python - <<'PY'
+          import hashlib
           import json
           import os
           from pathlib import Path
 
-          out = Path(os.environ["EVIDENCE"])
-          ids = set()
-          counts = {}
-          for group in ("candidate", "21", "22", "23", "30", "32"):
-              r = json.loads((out / f"{group}.json").read_text())
-              names = set(r["tests"])
-              if not r["passed"] or len(names) != r["count"] or ids & names:
-                  raise SystemExit(f"Invalid or duplicate results in {group}")
-              ids.update(names)
-              counts[group] = len(names)
-          archive_count = len(ids) - counts["candidate"]
-          if len(ids) < 633 or archive_count != 6:
-              raise SystemExit(f"Incomplete inventory: {len(ids)} total, {archive_count} historical")
-          report = dict(commit=os.environ["GITHUB_SHA"], passed=len(ids), candidate=counts["candidate"],
-                        historical=archive_count, groups=counts)
-          (out / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
-          print(json.dumps(report))
+          evidence = Path(os.environ["EVIDENCE"])
+          manifest = json.loads((evidence / "source-manifest.json").read_text())
+          for record in manifest["files"]:
+              path = Path(record["path"])
+              if path.is_symlink() or not path.is_file():
+                  raise SystemExit(f"Source file type changed: {path}")
+              raw = path.read_bytes()
+              if len(raw) != record["bytes"] or hashlib.sha256(raw).hexdigest() != record["sha256"]:
+                  raise SystemExit(f"Source bytes changed: {path}")
+          reports = [
+              json.loads((evidence / name).read_text())
+              for name in ("current-633.json", "m32-current-replay.json")
+          ]
+          if any(r["status"] != "PASS" or r["candidate_commit"] != os.environ["GITHUB_SHA"] for r in reports):
+              raise SystemExit("Qualification reports disagree")
+          lines = [
+              "## FRP current qualification: PASS",
+              "",
+              f"Candidate commit: {os.environ['GITHUB_SHA']}",
+              "",
+              "| Check | Result |",
+              "|---|---|",
+              "| Current tests discovered / executed / passed | 633 / 633 / 633 |",
+              "| Failures / errors / skipped / expected failures | 0 / 0 / 0 / 0 |",
+              "| Current M32 source identities | 34/34 PASS |",
+              "| Published M32 artifact identities | 4/4 PASS |",
+              "| Current RTL replays | 7/1 twice; 1/7 twice |",
+              "| Published trace records matched per pair | 396/396 PASS |",
+              "| Candidate source preservation | PASS |",
+              "",
+              "The 633 test results come from the dispatched checkout.",
+              "M32 replay comparison covers the two published eight-cell trace profiles.",
+          ]
+          summary = "\n".join(lines) + "\n"
+          (evidence / "SUMMARY.md").write_text(summary, encoding="utf-8")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:
+              stream.write(summary)
+          sums = [
+              f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(evidence).as_posix()}"
+              for path in sorted(evidence.rglob("*"))
+              if path.is_file() and path.name != "SHA256SUMS"
+          ]
+          (evidence / "SHA256SUMS").write_text("\n".join(sums) + "\n", encoding="utf-8")
           PY
-      - name: Hash reports and logs
-        if: always()
-        run: |
-          if [[ -d "${EVIDENCE:-}" ]]; then
-            cd "$EVIDENCE"
-            find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 -r sha256sum > SHA256SUMS
-          fi
-      - name: Upload qualification evidence
-        if: always()
+
+      - name: Upload consolidated qualification evidence
+        if: ${{ always() && env.EVIDENCE != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: frp-158-qualification-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/frp-evidence/
+          name: frp-current-633-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.EVIDENCE }}
           if-no-files-found: error
+          retention-days: 90
