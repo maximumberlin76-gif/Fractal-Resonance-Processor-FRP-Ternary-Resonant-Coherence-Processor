@@ -94,10 +94,21 @@ jobs:
           set -euo pipefail
           python -m pip install --disable-pip-version-check -r requirements.txt
           sudo apt-get update
-          sudo apt-get install --yes verilator g++ make
+          sudo apt-get install --yes g++ make perl
+          python -m venv "$QUALIFICATION_ROOT/verilator-venv"
+          sim_python="$QUALIFICATION_ROOT/verilator-venv/bin/python"
+          "$sim_python" -m pip install --disable-pip-version-check --only-binary=:all: "verilator==5.38.0"
+          "$sim_python" -c 'from importlib.metadata import version; assert version("verilator") == "5.38.0"'
+          sim_root="$("$sim_python" -c 'import pathlib, verilator; print(pathlib.Path(verilator.__file__).resolve().parent)')"
+          export VERILATOR_ROOT="$sim_root"
+          sim_exe="$sim_root/bin/verilator"
+          test -x "$sim_exe"
+          echo "VERILATOR_ROOT=$sim_root" >> "$GITHUB_ENV"
+          echo "VERILATOR_EXE=$sim_exe" >> "$GITHUB_ENV"
           {
             python --version
-            verilator --version
+            "$sim_exe" --version
+            "$sim_python" -m pip freeze
             g++ --version
             python -m pip freeze
           } > "$EVIDENCE/toolchain.txt"
@@ -191,10 +202,11 @@ jobs:
       - name: Compile current M32 RTL and run both modes twice
         run: |
           set -euo pipefail
+          export MAKEFLAGS="${MAKEFLAGS:+$MAKEFLAGS }CFG_CXXFLAGS_PCH_I=-include"
           for mode in 7_1 1_7; do
             top="frp_m32_mode_${mode}_trace_tb"
             build="$QUALIFICATION_ROOT/obj-$mode"
-            timeout 600s verilator --binary --sv --timing --assert \
+            timeout 600s "$VERILATOR_EXE" --binary --sv --timing --assert \
               -Wall -Wno-fatal -CFLAGS "-std=c++20" \
               --top-module "$top" --Mdir "$build" \
               -Irtl/m31 -Irtl/m32 "rtl/m32/$top.sv" \
