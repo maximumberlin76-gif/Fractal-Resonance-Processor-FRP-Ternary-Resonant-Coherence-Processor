@@ -2,7 +2,7 @@
 
 **Ternary Fractal Resonant Coherence Processor**
 
-[![Version](https://img.shields.io/badge/version-v3.3.0-blue.svg)](#release-status)
+[![Version](https://img.shields.io/badge/version-v3.4.0--rc.2-blue.svg)](#release-status)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue.svg)](#quick-start)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 
@@ -26,21 +26,80 @@ neutralization.
 
 | Field | Current record |
 |---|---|
-| Version | `FRP v3.3.0` |
-| Milestone | `M31 — Phase-Interference, Active-Zero, and Thermal-Evidence Publication` |
-| Qualification | `PASS` |
-| Focused M31 tests | `60 / 60 PASS` |
-| M31 qualification checks | `13 / 13 PASS` |
-| Canonical M31 outputs | `4 / 4 exact` |
+| Release candidate | `FRP v3.4.0-rc.2` |
+| Qualified source revision | `97fd5faab9934756b5d54e81f070d3b49ecee688` |
+| Current-checkout tests | `633 / 633 PASS` |
+| Failures / errors / skipped | `0 / 0 / 0` |
+| Fixed RTL branch inventory | `374 / 374 reached`, across 27 RTL files |
+| Current M32 replay | `7/1` and `1/7`, two runs per mode |
+| Published M32 records reproduced | `396 / 396` per pair of modes |
+| Current M32 source identities | `34 / 34 exact` |
+| Preserved M32 publication artifacts | `4 / 4 exact` |
 | Executable semantic reference | `frp_prototype_v1_7_0.py` |
-| Release RTL and FPGA baseline | `M16 — PASS` |
 | Preserved archival baseline | `FRP v3.2.0 / M30 — PASS` |
 
-Current release records:
+Current candidate records:
+
+- [FRP v3.4.0-rc.2 release notes](RELEASE_NOTES_v3_4_0_rc_2.md)
+- [Current 633-test and M32 replay qualification](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/44069652350)
+- [Citation metadata](CITATION.cff)
+
+M31 publication records:
 
 - [FRP v3.3.0 validation index](FRP_VALIDATION_INDEX_v3_3_0.md)
 - [FRP v3.3.0 release notes](RELEASE_NOTES_v3_3_0.md)
 - [FRP v3.3.0 test report](TEST_REPORT_v3_3_0.md)
+
+## Current-revision qualification
+
+Workflow 158, run `44069652350`, executed all 633 distinct test methods from
+source revision `97fd5faab9934756b5d54e81f070d3b49ecee688`. The discovered,
+executed, and successful identifiers agree with all 633 individual log
+results. Failures, errors, skips, expected failures, and unexpected successes
+are all zero.
+
+The same run compiled the current M32 RTL and executed the published
+eight-cell trace profiles twice per scheduler mode. Both repetitions agree
+on parsed content and protocol bytes, and each parsed trace matches the
+published M32 bundle.
+
+| Scheduler | Runs | Source ticks per run | Monitor records per run | Active-zero cell observations per run |
+|---|---|---|---|---|
+| `7/1` | 2 | 16 | 192 | 115 |
+| `1/7` | 2 | 17 | 204 | 123 |
+
+One pair of scheduler runs reproduces 396 monitor records across 33 source
+ticks, including 238 active-zero cell observations. The current 34-file M32
+source inventory and four preserved publication artifacts pass exact
+identity checks. The run also verifies preservation of all 995 tracked
+source files.
+
+The single downloadable artifact, `frp-current-633-44069652350-1.zip`, contains
+the test inventory and individual results, build logs, four raw traces,
+four protocol logs, source identities, toolchain records, and the final
+summary. Its `SHA256SUMS` verifies all 17 evidence payload files.
+
+Archive SHA-256:
+
+`d79cff2b2fb585cf701e9a96a56a094b0ccae746ebc352154acb83f928cda46c`
+
+The [current qualification workflow](.github/workflows/frp-158-revision-bound-qualification.yml)
+runs manually on `main`. It installs `verilator==5.38.0` in a separate virtual
+environment and invokes the bundled simulator by explicit path.
+
+### Fixed RTL branch inventory closure
+
+[Workflow 157, run 42797467764](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/42797467764)
+records 374 of 374 reached outcomes in the fixed workflow 155 inventory
+across 27 RTL files at revision `adcb4c9b0badaf5767458d5142a142574827b0a3`.
+The cumulative evidence covers 366 outcomes; two byte-identical 64-cell
+replays cover the remaining eight, including four internal fault-injection
+cases. These counts apply to that fixed instrumented inventory.
+
+The `rtl` and `verification` trees at the coverage revision match the
+qualified source revision `97fd5faab9934756b5d54e81f070d3b49ecee688`.
+The earlier individual regression counts below retain their original
+run-specific scopes.
 
 ## M32 RTL and FPGA integration
 
@@ -133,7 +192,7 @@ to the source commit, run ID, and run attempt.
 RTL reproduction procedures and the source inventory are linked from the
 [M32 RTL documentation](rtl/m32/README.md).
 
-## M31/M32 regression on main
+## Recorded M31/M32 regression baselines
 
 [Workflow 155, run 1](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/42623232514) passed on commit `718a29f6cb2749602a2c663647885ea12e82e73c`. Its single artifact contains `summary.json`, simulation logs, branch counters, generated netlists, and a SHA-256 inventory covering all 97 payload files.
 
@@ -344,6 +403,9 @@ schemas are stored under [`artifacts/`](artifacts/) and [`schemas/`](schemas/).
 
 | Subject | Record |
 |---|---|
+| Current release candidate | [FRP v3.4.0-rc.2 release notes](RELEASE_NOTES_v3_4_0_rc_2.md) |
+| Current qualification workflow | [.github/workflows/frp-158-revision-bound-qualification.yml](.github/workflows/frp-158-revision-bound-qualification.yml) |
+| Citation | [CITATION.cff](CITATION.cff) |
 | Execution | [USAGE.md](USAGE.md) |
 | Reproducibility | [REPRODUCIBILITY.md](REPRODUCIBILITY.md) |
 | Repository structure | [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) |
