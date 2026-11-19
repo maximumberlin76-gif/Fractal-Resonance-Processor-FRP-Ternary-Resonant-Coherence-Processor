@@ -9,14 +9,16 @@ abstract: >-
   the -1/0/1 domain. State 0 is an active computational state that performs
   mediation, routing, retention, balancing, and controlled neutralization.
   Opposite-polarity execution follows -1 to 0 to 1 and 1 to 0 to -1, with
-  target state and executed retained state kept distinct. The v3.4.0-rc.1 qualification records
-  374 of 374 measured branch outcomes in a fixed inventory across 27 RTL
-  files, including directed diagnostic cases. Of 633 distinct test methods,
-  627 passed on the candidate and six on their historical publication
-  revisions. The M32 trace export reproduces 396 monitor records across
-  33 source ticks in scheduler modes 7/1 and 1/7. FRP Trace Observatory
-  reads the published data and exposes cell timelines with active-zero
-  mediation and pending-route completion.
+  target state and executed retained state kept distinct. The v3.4.0-rc.2
+  qualification records 633 of 633 test methods passing without skips from
+  source revision 97fd5faab9934756b5d54e81f070d3b49ecee688. Retained RTL
+  coverage evidence records 374 of 374 reached branch outcomes in a fixed
+  inventory across 27 RTL files, including directed diagnostic cases.
+  Current M32 RTL reproduces the two published eight-cell trace profiles
+  in scheduler modes 7/1 and 1/7, with two repetitions per mode and 396
+  matching monitor records across 33 source ticks per pair of modes.
+  FRP Trace Observatory reads the published data and exposes cell timelines
+  with active-zero mediation and pending-route completion.
 authors:
   - family-names: "Marnov"
     given-names: "Maksym"
@@ -25,7 +27,7 @@ authors:
     city: "Berlin"
     country: "DE"
 type: software
-version: "v3.4.0-rc.1"
+version: "v3.4.0-rc.2"
 license: "Apache-2.0"
 repository-code: "https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor"
 url: "https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor"
