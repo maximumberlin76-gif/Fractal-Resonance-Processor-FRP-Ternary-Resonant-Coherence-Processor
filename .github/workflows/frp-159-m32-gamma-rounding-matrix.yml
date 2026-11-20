@@ -1,0 +1,122 @@
+name: 159 - M32 gamma Q16.16 rounding matrix
+
+on: workflow_dispatch
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      TOP: frp_m32_gamma_rounding_matrix_tb
+      PYTHONDONTWRITEBYTECODE: '1'
+      CXXFLAGS: '-std=c++20 -DVL_TIME_CONTEXT'
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Record the dispatched sources
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          git rev-parse HEAD | tee evidence/commit.txt
+          test "$(cat evidence/commit.txt)" = "$GITHUB_SHA"
+          sha256sum "verification/m32/$TOP.sv" rtl/m32/frp_m32_gamma_target_source.sv \
+            frp_prototype_v1_7_0.py > evidence/source-sha256.txt
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install Verilator and record the toolchain
+        run: |
+          set -euo pipefail
+          python -m pip install --only-binary=:all: 'verilator==5.38.0'
+          sim_root=$(python -c 'from pathlib import Path; import verilator; print(Path(verilator.__file__).resolve().parent)')
+          test -x "$sim_root/bin/verilator"
+          echo "VERILATOR_ROOT=$sim_root" >> "$GITHUB_ENV"
+          {
+            python --version
+            python -m pip show verilator
+            VERILATOR_ROOT="$sim_root" "$sim_root/bin/verilator" --version
+            g++ --version
+            make --version
+          } > evidence/toolchain.txt
+
+      - name: Verify the expected codes against the FRP Python reference
+        run: |
+          set -euo pipefail
+          python - <<'PY' | tee evidence/reference.log
+          from frp_prototype_v1_7_0 import quantize_q16
+
+          checked = 0
+          for lower in range(-65536, 65536):
+              tie = ((lower + 65536) << 36) + (1 << 35)
+              for offset in (-1, 0, 1):
+                  target = 2.0 * ((tie + offset) / (1 << 53)) - 1.0
+                  expected = lower + int(offset > 0 or (offset == 0 and lower >= 0))
+                  actual = quantize_q16(target)
+                  if actual != expected:
+                      raise SystemExit(f"lower={lower} offset={offset} got={actual} expected={expected}")
+                  checked += 1
+          if checked != 393216:
+              raise SystemExit(f"Incomplete reference sweep: {checked}")
+          print(f"PASS reference fractions={checked}")
+          PY
+
+      - name: Compile and simulate 8, 16, 32 and 64 cells
+        run: |
+          set -euo pipefail
+          printf 'cells\tboundaries\ttargets\n' > evidence/results.tsv
+          total=0
+          for cells in 8 16 32 64; do
+            out="$PWD/evidence/$cells"
+            obj="$RUNNER_TEMP/gamma-rounding-$cells"
+            mkdir -p "$out"
+            if ! "$VERILATOR_ROOT/bin/verilator" --binary --timing --assert --coverage-line \
+              -j 2 -MAKEFLAGS 'VK_PCH_I_FAST= VK_PCH_I_SLOW=' -Irtl/m32 \
+              --top-module "$TOP" "-GCELLS=$cells" --Mdir "$obj" \
+              "verification/m32/$TOP.sv" > "$out/build.log" 2>&1; then
+              tail -60 "$out/build.log"
+              exit 1
+            fi
+            timeout 120s "$obj/V$TOP" "+verilator+coverage+file+$out/coverage.dat" \
+              2>&1 | tee "$out/simulation.log"
+            expected="PASS gamma_rounding cells=$cells boundaries=131072 targets=786432"
+            actual=$(grep '^PASS ' "$out/simulation.log")
+            if [[ "$actual" != "$expected" ]]; then
+              echo "Unexpected simulation result for CELLS=$cells: $actual" >&2
+              exit 1
+            fi
+            test -s "$out/coverage.dat"
+            targets=${actual##*targets=}
+            printf '%s\t131072\t%s\n' "$cells" "$targets" >> evidence/results.tsv
+            total=$((total + targets))
+          done
+          test "$total" -eq 3145728
+          printf 'M32 gamma Q16.16: %d RTL target comparisons passed across 8, 16, 32 and 64 cells.\n' \
+            "$total" | tee evidence/summary.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Hash collected evidence
+        if: ${{ always() && hashFiles('evidence/commit.txt') != '' }}
+        working-directory: evidence
+        run: |
+          set -euo pipefail
+          find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          sha256sum -c SHA256SUMS
+
+      - name: Upload the consolidated artifact
+        if: ${{ always() && hashFiles('evidence/commit.txt') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-159-gamma-rounding-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
