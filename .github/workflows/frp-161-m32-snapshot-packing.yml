@@ -1,0 +1,141 @@
+name: 161 - M32 snapshot packing
+on: workflow_dispatch
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      TOP: frp_m32_snapshot_packing_tb
+      RTL: rtl/m32/frp_m32_boundary_snapshot_csr.sv
+      CXXFLAGS: '-std=c++20 -DVL_TIME_CONTEXT'
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Record inputs and install Verilator
+        run: |
+          set -euo pipefail
+          mkdir evidence
+          git rev-parse HEAD | tee evidence/commit.txt
+          test "$(cat evidence/commit.txt)" = "$GITHUB_SHA"
+          sha256sum "$RTL" "verification/m32/$TOP.sv" \
+            verification/m32/frp_m32_coverage_union.py > evidence/sources.sha256
+          python -m pip install --only-binary=:all: 'verilator==5.38.0'
+          root=$(python -c 'from pathlib import Path; import verilator; print(Path(verilator.__file__).resolve().parent)')
+          echo "VERILATOR_ROOT=$root" >> "$GITHUB_ENV"
+          { python --version; python -m pip show verilator; g++ --version; make --version; } > evidence/tools.txt
+
+      - name: Run the committed RTL and an isolated fault control
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          fault="$RUNNER_TEMP/snapshot-fault"
+          mkdir -p "$fault"
+          python - "$RTL" "$fault" <<'PY'
+          import sys
+          from pathlib import Path
+
+          rtl, dest = map(Path, sys.argv[1:])
+          source = rtl.read_text()
+          anchor = 'capture_words[22*32+:128] = padded_pending;'
+          if source.count(anchor) != 1:
+              raise SystemExit('Fault injection site changed')
+          fault = "if (CELLS > 16 && CELLS % 16 != 0) capture_words[22*32 + 2*(CELLS-1) +: 2] = '0;"
+          (dest / rtl.name).write_text(source.replace(anchor, anchor + '\n    ' + fault))
+          PY
+
+          for suite in nominal fault; do
+            out="$PWD/evidence/$suite"
+            obj="$RUNNER_TEMP/snapshot-obj-$suite"
+            mkdir -p "$out"
+            args=(-Irtl/m32 --coverage-line)
+            if [[ $suite == fault ]]; then args=("-I$fault"); fi
+            if ! "$VERILATOR_ROOT/bin/verilator" --binary --timing --assert -j 2 \
+              -MAKEFLAGS 'VK_PCH_I_FAST= VK_PCH_I_SLOW= OPT_FAST=-O1' \
+              "${args[@]}" --top-module "$TOP" --Mdir "$obj" "verification/m32/$TOP.sv" \
+              > "$out/build.log" 2>&1; then
+              tail -60 "$out/build.log"
+              exit 1
+            fi
+            rc=0
+            timeout 120s "$obj/V$TOP" "+verilator+coverage+file+$out/coverage.dat" \
+              > "$out/simulation.log" 2>&1 || rc=$?
+            cat "$out/simulation.log"
+            if [[ $suite == nominal ]]; then
+              test "$rc" = 0
+              expected='PASS M32_SNAPSHOT_PACKING widths=64 frames=128 comparisons=81920'
+              test "$(grep -c '^PASS ' "$out/simulation.log")" = 1
+              grep -Fxq "$expected" "$out/simulation.log"
+              grep -Fq 'Verilog $finish' "$out/simulation.log"
+            else
+              [[ $rc == 134 || $rc == 1 ]]
+              grep -F 'Assertion failed' "$out/simulation.log" | \
+                grep -F 'width=17 marker=16 addr=6c expected=00000003 got=00000000 ready=1 error=0'
+            fi
+          done
+          sha256sum -c evidence/sources.sha256
+
+      - name: Report instrumented points from the committed RTL
+        run: |
+          set -euo pipefail
+          PYTHONPATH=verification/m32 python - <<'PY'
+          import csv
+          import os
+          from pathlib import Path
+          from frp_m32_coverage_union import canonical, source_points
+
+          rtl = os.environ['RTL']
+          out = Path('evidence')
+          data = (out / 'nominal/coverage.dat').read_bytes()
+          sources = {rtl: Path(rtl).read_text().splitlines()}
+          rows = {}
+          for point, hits, _ in source_points(data, {rtl}, Path.cwd(), sources):
+              key = canonical(point)
+              rows[key] = (point, max(hits, rows[key][1]) if key in rows else hits)
+          report = ['Snapshot packing: 64 widths, 128 frames, 81920 comparisons passed.',
+                    'Fault control detected the lost pending route at width 17, CSR 0x6C.']
+          with (out / 'points.csv').open('w', newline='') as stream:
+              writer = csv.writer(stream)
+              writer.writerow(['source_point', 'max_hits', 'covered'])
+              for key, (point, hits) in sorted(rows.items()):
+                  writer.writerow([key, hits, int(hits >= int(point['s']))])
+          for kind in ('branch', 'line'):
+              selected = [(p, h) for p, h in rows.values() if p['t'] == kind]
+              if not selected:
+                  raise SystemExit(f'Missing {kind} instrumentation in {rtl}')
+              covered = sum(h >= int(p['s']) for p, h in selected)
+              report.append(f'{rtl} — {kind} points across all widths: {covered}/{len(selected)}.')
+          summary = '\n\n'.join(report) + '\n'
+          (out / 'summary.md').write_text(summary)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+              stream.write(summary)
+          PY
+
+      - name: Hash evidence
+        if: always() && hashFiles('evidence/commit.txt') != ''
+        working-directory: evidence
+        run: |
+          set -euo pipefail
+          find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          sha256sum -c SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        if: always() && hashFiles('evidence/commit.txt') != ''
+        with:
+          name: frp-161-snapshot-packing-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
