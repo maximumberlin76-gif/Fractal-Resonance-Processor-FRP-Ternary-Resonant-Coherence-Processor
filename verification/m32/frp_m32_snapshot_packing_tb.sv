@@ -10,7 +10,7 @@ module frp_m32_snapshot_packing_tb;
   logic [63:0] sample_count;
   wire [64:1] ready, error;
   wire [31:0] rdata [1:64];
-  int comparisons;
+  int comparisons, bus_checks;
 
   for (genvar n = 1; n <= 64; n++) begin : widths
     frp_m32_boundary_snapshot_csr #(.CELLS(n), .RECORDER_COUNT_BITS(n)) dut (
@@ -69,6 +69,43 @@ module frp_m32_snapshot_packing_tb;
     end
   endtask
 
+  task automatic transfer(input bit write_op, input logic [7:0] address,
+                          input logic [31:0] data, input bit expect_error,
+                          input logic [31:0] expect_data);
+    logic [31:0] expected;
+    wr = write_op; addr = address; wdata = data;
+    #1;
+    for (int n = 1; n <= 64; n++) begin
+      expected = expect_data;
+      if (!write_op && address == 8'h0c) expected = {16'(n), 16'(n)};
+      if (ready[n] !== 1'b1 || error[n] !== expect_error || rdata[n] !== expected)
+        $fatal(1, "CSR width=%0d write=%b addr=%h wdata=%h ready=%b error=%b/%b data=%h/%h",
+               n, wr, addr, wdata, ready[n], error[n], expect_error, rdata[n], expected);
+      bus_checks++;
+    end
+    tick();
+  endtask
+
+  // Read every byte address after a rejected write. The captured counter is 1.
+  task automatic check_map(input bit occupied);
+    bit readable;
+    logic [31:0] value, command;
+    for (int a = 0; a < 256; a++) begin
+      command = a == 0 ? 32'd3 : (a[2] ? 32'd1 : 32'd2);
+      transfer(1, 8'(a), command, 1, '0);
+      readable = (a == 4 || a == 8 || a == 12) ||
+                 (occupied && a >= 16 && a <= 116 && a % 4 == 0);
+      case (a)
+        4:  value = occupied ? 32'h0b : 0;
+        8:  value = 32'h46524201;
+        16: value = occupied ? 32'd1 : 0;
+        default: value = 0;
+      endcase
+      transfer(0, 8'(a), '0, !readable, value);
+    end
+    transfer(0, 8'h10, '0, !occupied, occupied ? 32'd1 : 0);
+  endtask
+
   initial begin
     int retained_lane;
     logic [1:0] retained_code, pending_code;
@@ -76,6 +113,17 @@ module frp_m32_snapshot_packing_tb;
     retained = '0; pending = '0; sample_count = '0; comparisons = 0;
     tick();
     rst_n = 1; valid = 1;
+    bus_checks = 0;
+    check_map(0);
+    sample_count = 1;
+    transfer(1, 8'h00, 1, 0, 0);
+    sample_count = 0;
+    check_map(1);
+    transfer(1, 8'h00, 2, 0, 0);
+    check_map(0);
+    if (bus_checks != 98624) $fatal(1, "Incomplete CSR matrix: %0d", bus_checks);
+    $display("CSR_MAP widths=64 addresses=256 phases=3 comparisons=%0d", bus_checks);
+
     for (int lane = 0; lane < 64; lane++) begin
       retained_lane = (lane + 17) % 64;
       for (int sign_id = 0; sign_id < 2; sign_id++) begin
