@@ -1,0 +1,151 @@
+name: 160 - M32 gamma source coverage
+on: workflow_dispatch
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      CXXFLAGS: '-std=c++20 -DVL_TIME_CONTEXT'
+      PYTHONDONTWRITEBYTECODE: '1'
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Record sources and install Verilator
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          git rev-parse HEAD | tee evidence/commit.txt
+          test "$(cat evidence/commit.txt)" = "$GITHUB_SHA"
+          sha256sum rtl/m32/frp_m32_gamma_target_source.sv \
+            rtl/m32/frp_m32_gamma_source_arbitration_tb.sv \
+            verification/m32/frp_m32_gamma_rounding_matrix_tb.sv \
+            verification/m32/frp_m32_coverage_union.py > evidence/sources.sha256
+          python -m pip install --only-binary=:all: 'verilator==5.38.0'
+          root=$(python -c 'from pathlib import Path; import verilator; print(Path(verilator.__file__).resolve().parent)')
+          test -x "$root/bin/verilator"
+          echo "VERILATOR_ROOT=$root" >> "$GITHUB_ENV"
+          { python --version; python -m pip show verilator; g++ --version; make --version; } > evidence/tools.txt
+
+      - name: Run both committed testbenches at each size
+        run: |
+          set -euo pipefail
+          for cells in 8 16 32 64; do
+            for suite in rounding arbitration; do
+              if [[ $suite == rounding ]]; then
+                tb=verification/m32/frp_m32_gamma_rounding_matrix_tb.sv
+              else
+                tb=rtl/m32/frp_m32_gamma_source_arbitration_tb.sv
+              fi
+              top=$(basename "$tb" .sv)
+              out="$PWD/evidence/$cells/$suite"
+              obj="$RUNNER_TEMP/gamma160-$cells-$suite"
+              mkdir -p "$out"
+              if ! "$VERILATOR_ROOT/bin/verilator" --binary --timing --assert --coverage-line \
+                -j 2 -MAKEFLAGS 'VK_PCH_I_FAST= VK_PCH_I_SLOW= OPT_FAST=-O1' \
+                -Irtl/m32 --top-module "$top" "-GCELLS=$cells" --Mdir "$obj" "$tb" > "$out/build.log" 2>&1; then
+                tail -60 "$out/build.log"
+                exit 1
+              fi
+              timeout 180s "$obj/V$top" +seed=76 "+verilator+coverage+file+$out/coverage.dat" \
+                2>&1 | tee "$out/simulation.log"
+            done
+          done
+
+      - name: Verify results and compare RTL coverage point by point
+        run: |
+          set -euo pipefail
+          PYTHONPATH=verification/m32 python - <<'PY'
+          import csv
+          import os
+          from pathlib import Path
+          from frp_m32_coverage_union import FAILURE, canonical, source_points
+
+          rtl = 'rtl/m32/frp_m32_gamma_target_source.sv'
+          sources = {rtl: Path(rtl).read_text().splitlines()}
+          out = Path('evidence')
+          summary = ['| Cells | Rounding | Arbitration | Combined | Branch | Line |',
+                     '|---:|---:|---:|---:|---:|---:|']
+          gaps = []
+          with (out / 'points.csv').open('w', newline='') as stream:
+              writer = csv.writer(stream)
+              writer.writerow(['cells', 'point_identity', 'rounding_hits', 'arbitration_hits', 'covered'])
+              for cells in (8, 16, 32, 64):
+                  counts = {}
+                  identities = {}
+                  for suite in ('rounding', 'arbitration'):
+                      folder = out / str(cells) / suite
+                      log = (folder / 'simulation.log').read_text()
+                      passes = [line for line in log.splitlines() if line.startswith('PASS ')]
+                      if len(passes) != 1 or FAILURE.search(log) or log.count('Verilog $finish') != 1:
+                          raise SystemExit(f'{cells}/{suite}: incomplete simulation')
+                      if suite == 'rounding':
+                          expected = f'PASS gamma_rounding cells={cells} boundaries=131072 targets=786432'
+                          valid = passes[0] == expected
+                      else:
+                          valid = passes[0].startswith(f'PASS GAMMA_SOURCE_ARBITRATION cells={cells} seed=76 ')
+                      if not valid:
+                          raise SystemExit(f'{cells}/{suite}: {passes[0]}')
+                      counts[suite] = hits = {}
+                      for point, count, _ in source_points((folder / 'coverage.dat').read_bytes(),
+                                                           {rtl}, Path.cwd(), sources):
+                          key = canonical(point)
+                          identities[key] = point
+                          hits[key] = max(hits.get(key, 0), count)
+                  totals = {'branch': 0, 'line': 0}
+                  covered = {'branch': 0, 'line': 0}
+                  suite_hits = dict.fromkeys(counts, 0)
+                  for key, point in sorted(identities.items()):
+                      kind, threshold = point['t'], int(point['s'])
+                      values = [counts[s].get(key) for s in ('rounding', 'arbitration')]
+                      hit = any(v is not None and v >= threshold for v in values)
+                      totals[kind] += 1
+                      covered[kind] += int(hit)
+                      for suite, hits in counts.items():
+                          suite_hits[suite] += int(hits.get(key, 0) >= threshold)
+                      writer.writerow([cells, key, *values, int(hit)])
+                  size = len(identities)
+                  both = sum(covered.values())
+                  summary.append(f"| {cells} | {suite_hits['rounding']}/{len(counts['rounding'])} | "
+                                 f"{suite_hits['arbitration']}/{len(counts['arbitration'])} | {both}/{size} | "
+                                 f"{covered['branch']}/{totals['branch']} | {covered['line']}/{totals['line']} |")
+                  if both != size or totals['branch'] < 30 or totals['line'] < 14:
+                      gaps.append(str(cells))
+          report = '\n'.join(summary) + '\n'
+          (out / 'summary.md').write_text(report)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+              stream.write(report)
+          print(report)
+          if gaps:
+              raise SystemExit('Incomplete gamma-source coverage at CELLS=' + ','.join(gaps))
+          PY
+
+      - name: Hash evidence
+        if: ${{ always() && hashFiles('evidence/commit.txt') != '' }}
+        working-directory: evidence
+        run: |
+          set -euo pipefail
+          find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          sha256sum -c SHA256SUMS
+
+      - name: Upload the consolidated artifact
+        if: ${{ always() && hashFiles('evidence/commit.txt') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: frp-160-gamma-source-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
