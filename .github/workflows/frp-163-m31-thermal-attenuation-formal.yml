@@ -35,6 +35,7 @@ jobs:
 
       - uses: YosysHQ/setup-oss-cad-suite@v4
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           version: '2026-11-20'
 
       - name: Check lane wiring and run formal tasks
