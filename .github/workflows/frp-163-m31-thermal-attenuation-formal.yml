@@ -1,0 +1,154 @@
+name: 163 - M31 thermal attenuation formal
+on: workflow_dispatch
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      TOP: frp_m31_thermal_attenuation_formal
+      DUT: frp_m31_local_thermal_attenuation
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Record sources and install XML frontend
+        run: |
+          set -euo pipefail
+          mkdir -p evidence work
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git rev-parse HEAD > evidence/commit.txt
+          sha256sum "formal/m31/$TOP.sv" "rtl/m31/$DUT.sv" \
+            rtl/m31/frp_m31_fixed_point_pkg.sv > evidence/sources.sha256
+          python -m pip install --only-binary=:all: verilator==5.38.0
+          root=$(python -c 'from pathlib import Path; import verilator; print(Path(verilator.__file__).resolve().parent)')
+          echo "XML_ROOT=$root" >> "$GITHUB_ENV"
+
+      - uses: YosysHQ/setup-oss-cad-suite@v4
+        with:
+          version: '2026-11-20'
+
+      - name: Check lane wiring and run formal tasks
+        shell: bash
+        run: |
+          set -euo pipefail
+          { yosys -V; sby --version; bitwuzla --version; python -m pip show verilator; } > evidence/tools.txt
+          python - <<'PY'
+          import hashlib, json, os, re, subprocess
+          import xml.etree.ElementTree as ET
+          from concurrent.futures import ThreadPoolExecutor
+          from pathlib import Path
+
+          sizes = (8, 9, 16, 32, 64, 128)
+          top, dut = os.environ["TOP"], os.environ["DUT"]
+          root = Path(os.environ["XML_ROOT"])
+          ports = {"thermal_overload_q16", "thermal_node_factor_q30",
+                   "next_thermal_node_factor_q30"}
+
+          def run(cmd, log, env=None):
+              with log.open("w") as stream:
+                  subprocess.run(cmd, stdout=stream, stderr=subprocess.STDOUT,
+                                 env=env, check=True)
+
+          def lane_digest(group, index):
+              group.set("name", "lane")
+              found = []
+              for node in group.iter("sel"):
+                  port = node[0].get("name")
+                  if port in ports:
+                      start = node[1]
+                      offset = int(start.attrib["name"].split("'h")[1], 16)
+                      if node.get("widthConst") != "32" or offset != 32 * index:
+                          raise ValueError(f"Unexpected {port} slice in lane {index}")
+                      start.set("name", "lane_offset")
+                      found.append(port)
+              if len(found) != 3 or set(found) != ports:
+                  raise ValueError(f"Missing or repeated bank connection in lane {index}")
+              text = ET.canonicalize(ET.tostring(group, encoding="unicode"), strip_text=True)
+              return hashlib.sha256(text.encode()).hexdigest()
+
+          def qualify(n):
+              out = Path("evidence", str(n))
+              work = Path("work", str(n))
+              out.mkdir()
+              work.mkdir()
+              xml = work / "dut.xml"
+              run([str(root / "bin/verilator"), "-Wno-DEPRECATED", "--xml-only",
+                   "--xml-output", str(xml), "--top-module", dut, f"-GCELLS={n}",
+                   "-Irtl/m31", f"rtl/m31/{dut}.sv"], out / "elaboration.log",
+                  dict(os.environ, VERILATOR_ROOT=str(root)))
+              module = ET.parse(xml).find(f".//netlist/module[@origName='{dut}']")
+              groups = [g for g in module.findall("begin")
+                        if re.fullmatch(r"g_cell\[\d+\]", g.get("name", ""))]
+              if len(groups) != n or module.find(".//varxref") is not None:
+                  raise ValueError(f"Unexpected lane structure for CELLS={n}")
+              digests = {}
+              for g in groups:
+                  i = int(g.attrib["name"][7:-1])
+                  module.remove(g)
+                  digests[i] = lane_digest(g, i)
+              if any(v.get("name") in ports for v in module.iter("varref")):
+                  raise ValueError(f"Bank access outside a lane for CELLS={n}")
+              if set(digests) != set(range(n)) or len(set(digests.values())) != 1:
+                  raise ValueError(f"Inequivalent lanes for CELLS={n}")
+              (out / "lanes.json").write_text(json.dumps(digests, indent=2) + "\n")
+
+              front = (f"read_slang --unroll-limit 65536 --top {top} -G CELLS={n} "
+                       f"-G PROBE_LANE={n-1} -Irtl/m31 formal/m31/{top}.sv")
+              model = work / "design.il"
+              run(["yosys", "-p", f"{front}; prep -top {top}; write_rtlil {model}"],
+                  out / "synthesis.log")
+              il = model.read_text()
+              if not re.search(r'(?m)^\s*(?:cell \$assert |parameter \\FLAVOR "assert"$)', il):
+                  raise ValueError(f"No safety assertions in model for CELLS={n}")
+              for mode in ("prove", "cover"):
+                  cfg = out / f"{mode}.sby"
+                  cfg.write_text(f"[options]\nmode {mode}\ndepth 6\ntimeout 600\n"
+                                 "[engines]\nsmtbmc bitwuzla\n"
+                                 f"[script]\nread_rtlil design.il\nprep -top {top}\n"
+                                 f"[files]\n{model}\n")
+                  job = work / mode
+                  run(["sby", "-f", "-d", str(job), str(cfg)], out / f"{mode}.log")
+                  if (job / "status").read_text().split()[0] != "PASS":
+                      raise ValueError(f"{mode} incomplete for CELLS={n}")
+              log = (work / "cover/engine_0/logfile.txt").read_text()
+              hits = set(re.findall(r"Reached cover statement in step \d+ at (.+)", log))
+              if len(hits) != 8:
+                  raise ValueError(f"CELLS={n}: reached {len(hits)} of 8 covers")
+              (out / "covers.txt").write_text("\n".join(sorted(hits)) + "\n")
+              return f"| {n} | {n} | {n-1} | PASS | 8/8 |"
+
+          with ThreadPoolExecutor(max_workers=2) as pool:
+              rows = list(pool.map(qualify, sizes))
+          report = ["| Cells | Identical lanes | Proved lane | Safety | Covers |",
+                    "|---:|---:|---:|:---:|:---:|", *rows]
+          Path("evidence/summary.md").write_text("\n".join(report) + "\n")
+          PY
+          cat evidence/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect traces and checksums
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          if [[ -d work ]]; then
+            (cd work && find . -type f \( -name status -o -name '*.vcd' -o -name '*.yw' -o -name logfile.txt \) \
+              -exec cp --parents {} "$GITHUB_WORKSPACE/evidence/" \;)
+          fi
+          (cd evidence && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 -r sha256sum > SHA256SUMS)
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frp-163-thermal-formal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
