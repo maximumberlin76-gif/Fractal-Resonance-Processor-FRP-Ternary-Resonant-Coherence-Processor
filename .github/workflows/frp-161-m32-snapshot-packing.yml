@@ -89,40 +89,60 @@ jobs:
           done
           sha256sum -c evidence/sources.sha256
 
-      - name: Report instrumented points from the committed RTL
+      - name: Require both matrices and full snapshot CSR coverage
         run: |
           set -euo pipefail
           PYTHONPATH=verification/m32 python - <<'PY'
           import csv
           import os
           from pathlib import Path
-          from frp_m32_coverage_union import canonical, source_points
+          from frp_m32_coverage_union import FAILURE, canonical, source_points
 
-          rtl = os.environ['RTL']
           out = Path('evidence')
+          rtl = os.environ['RTL']
+          log = (out / 'nominal/simulation.log').read_text()
+          checks = {
+              'CSR_MAP': 'CSR_MAP widths=64 addresses=256 phases=3 comparisons=98624',
+              'PASS': 'PASS M32_SNAPSHOT_PACKING widths=64 frames=128 comparisons=81920',
+          }
+          errors = []
+          report = ['## M32 snapshot qualification', f"Commit `{(out / 'commit.txt').read_text().strip()}`"]
+          for label, expected in checks.items():
+              found = [line for line in log.splitlines() if line.startswith(label + ' ')]
+              if found != [expected]:
+                  errors.append(f'Expected exactly one record: {expected}')
+              report.extend(f'`{line}`' for line in found)
+          if FAILURE.search(log) or log.count('Verilog $finish') != 1:
+              errors.append('Nominal simulation did not complete cleanly')
+          report.append('Fault control detected the lost pending route at width 17, CSR 0x6C.')
+
+          points = {}
           data = (out / 'nominal/coverage.dat').read_bytes()
           sources = {rtl: Path(rtl).read_text().splitlines()}
-          rows = {}
           for point, hits, _ in source_points(data, {rtl}, Path.cwd(), sources):
               key = canonical(point)
-              rows[key] = (point, max(hits, rows[key][1]) if key in rows else hits)
-          report = ['Snapshot packing: 64 widths, 128 frames, 81920 comparisons passed.',
-                    'Fault control detected the lost pending route at width 17, CSR 0x6C.']
+              if key not in points or hits > points[key][1]:
+                  points[key] = (point, hits)
           with (out / 'points.csv').open('w', newline='') as stream:
               writer = csv.writer(stream)
               writer.writerow(['source_point', 'max_hits', 'covered'])
-              for key, (point, hits) in sorted(rows.items()):
+              for key, (point, hits) in sorted(points.items()):
                   writer.writerow([key, hits, int(hits >= int(point['s']))])
-          for kind in ('branch', 'line'):
-              selected = [(p, h) for p, h in rows.values() if p['t'] == kind]
-              if not selected:
-                  raise SystemExit(f'Missing {kind} instrumentation in {rtl}')
+          for kind, minimum in [('branch', 8), ('line', 15)]:
+              selected = [(p, h) for p, h in points.values() if p['t'] == kind]
               covered = sum(h >= int(p['s']) for p, h in selected)
-              report.append(f'{rtl} — {kind} points across all widths: {covered}/{len(selected)}.')
+              total = len(selected)
+              report.append(f'`{rtl}` {kind} points across all widths: {covered}/{total}.')
+              if covered != total or total < minimum:
+                  errors.append(f'{kind}: {covered}/{total} covered; at least {minimum} points required')
+          report.extend(errors)
+          report.append('**FAIL**' if errors else '**PASS**')
           summary = '\n\n'.join(report) + '\n'
           (out / 'summary.md').write_text(summary)
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
               stream.write(summary)
+          if errors:
+              raise SystemExit('\n'.join(errors))
           PY
 
       - name: Hash evidence
