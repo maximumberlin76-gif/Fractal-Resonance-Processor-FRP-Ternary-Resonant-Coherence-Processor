@@ -1,0 +1,163 @@
+name: 162 - M32 gamma drift matrix
+on: workflow_dispatch
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      TOP: frp_m32_gamma_drift_matrix_tb
+      RTL: rtl/m31/frp_m31_local_gamma_drift.sv
+      CXXFLAGS: '-std=c++20 -DVL_TIME_CONTEXT'
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Record sources and install Verilator
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          git rev-parse HEAD | tee evidence/commit.txt
+          test "$(cat evidence/commit.txt)" = "$GITHUB_SHA"
+          sha256sum "$RTL" rtl/m31/frp_m31_fixed_point_pkg.sv \
+            "verification/m32/$TOP.sv" verification/m32/frp_m32_coverage_union.py \
+            > evidence/sources.sha256
+          python -m pip install --only-binary=:all: 'verilator==5.38.0'
+          root=$(python -c 'from pathlib import Path; import verilator; print(Path(verilator.__file__).resolve().parent)')
+          echo "VERILATOR_ROOT=$root" >> "$GITHUB_ENV"
+          { python --version; python -m pip show verilator; g++ --version; make --version; } > evidence/tools.txt
+
+      - name: Simulate six sizes and the previous-noise fault
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          fault_dir="$RUNNER_TEMP/gamma-fault"
+          mkdir -p "$fault_dir"
+          python - "$RTL" "$fault_dir" <<'PY'
+          import sys
+          from pathlib import Path
+          rtl, folder = map(Path, sys.argv[1:])
+          text = rtl.read_text()
+          expr = 'frp_m31_mul_q16(thermal_gain, noise_d)'
+          if text.count(expr) != 1:
+              raise SystemExit('Gamma drift fault site changed')
+          (folder / rtl.name).write_text(text.replace(expr, 'frp_m31_mul_q16(thermal_gain, noise_q)'))
+          PY
+
+          for suite in 8 9 16 32 64 128 fault; do
+            cells=$suite
+            args=(-Irtl/m31 --coverage-line)
+            if [[ $suite == fault ]]; then
+              cells=8
+              args=("-I$fault_dir" -Irtl/m31)
+            fi
+            obj="$RUNNER_TEMP/gamma-obj-$suite"
+            out="$PWD/evidence/$suite"
+            mkdir -p "$out"
+            if ! "$VERILATOR_ROOT/bin/verilator" --binary --timing --assert -j 2 \
+              -MAKEFLAGS 'VK_PCH_I_FAST= VK_PCH_I_SLOW= OPT_FAST=-O1' "${args[@]}" \
+              --top-module "$TOP" "-GCELLS=$cells" --Mdir "$obj" "verification/m32/$TOP.sv" \
+              > "$out/build.log" 2>&1; then
+              tail -60 "$out/build.log"
+              exit 1
+            fi
+            rc=0
+            timeout 240s "$obj/V$TOP" "+verilator+coverage+file+$out/coverage.dat" \
+              > "$out/simulation.log" 2>&1 || rc=$?
+            cat "$out/simulation.log"
+            if [[ $suite == fault ]]; then
+              [[ $rc == 134 || $rc == 1 ]]
+              grep -F 'Assertion failed' "$out/simulation.log" | \
+                grep -F 'Preview mismatch cells=8 lane=1 target=-65536 overload=32767 stage=0'
+            else
+              test "$rc" = 0
+            fi
+          done
+          sha256sum -c evidence/sources.sha256
+
+      - name: Verify the matrix and RTL coverage for each size
+        run: |
+          set -euo pipefail
+          PYTHONPATH=verification/m32 python - <<'PY'
+          import csv
+          import os
+          from pathlib import Path
+          from frp_m32_coverage_union import FAILURE, canonical, source_points
+
+          out = Path('evidence')
+          rtl = os.environ['RTL']
+          sources = {rtl: Path(rtl).read_text().splitlines()}
+          report = [f"Commit `{(out / 'commit.txt').read_text().strip()}`", '',
+                    '| Cells | Target/load pairs | Pair stages | Branch | Line |',
+                    '|---:|---:|---:|---:|---:|']
+          errors = []
+          with (out / 'points.csv').open('w', newline='') as stream:
+              writer = csv.writer(stream)
+              writer.writerow(['cells', 'source_point', 'max_hits', 'covered'])
+              for cells in (8, 9, 16, 32, 64, 128):
+                  folder = out / str(cells)
+                  log = (folder / 'simulation.log').read_text()
+                  pairs = 131073 * 5
+                  stages = pairs * 4
+                  expected = (f'PASS GAMMA_DRIFT_MATRIX cells={cells} targets=131073 '
+                              f'profiles=5 pairs={pairs} stages={stages}')
+                  passed = [line for line in log.splitlines() if line.startswith('PASS ')]
+                  valid = passed == [expected] and not FAILURE.search(log) and log.count('Verilog $finish') == 1
+                  if not valid:
+                      errors.append(f'CELLS={cells}: incomplete matrix or simulation failure')
+                  hits = {}
+                  data = (folder / 'coverage.dat').read_bytes()
+                  for point, count, _ in source_points(data, {rtl}, Path.cwd(), sources):
+                      key = canonical(point)
+                      if key not in hits or count > hits[key][1]:
+                          hits[key] = (point, count)
+                  totals = {'branch': 0, 'line': 0}
+                  covered = dict.fromkeys(totals, 0)
+                  for key, (point, count) in sorted(hits.items()):
+                      kind = point['t']
+                      reached = count >= int(point['s'])
+                      totals[kind] += 1
+                      covered[kind] += int(reached)
+                      writer.writerow([cells, key, count, int(reached)])
+                  for kind, minimum in [('branch', 4), ('line', 5)]:
+                      if totals[kind] < minimum or covered[kind] != totals[kind]:
+                          errors.append(f'CELLS={cells}: {kind} {covered[kind]}/{totals[kind]}')
+                  report.append(f"| {cells} | {pairs if valid else 'FAIL'} | {stages if valid else 'FAIL'} | "
+                                f"{covered['branch']}/{totals['branch']} | {covered['line']}/{totals['line']} |")
+          report += ['', 'Fault control detected the previous-noise substitution at stage 0.', *errors,
+                     '', '**FAIL**' if errors else '**PASS**']
+          summary = '\n'.join(report) + '\n'
+          (out / 'summary.md').write_text(summary)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+              stream.write(summary)
+          if errors:
+              raise SystemExit('\n'.join(errors))
+          PY
+
+      - name: Hash evidence
+        if: always() && hashFiles('evidence/commit.txt') != ''
+        working-directory: evidence
+        run: |
+          set -euo pipefail
+          find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          sha256sum -c SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        if: always() && hashFiles('evidence/commit.txt') != ''
+        with:
+          name: frp-162-gamma-drift-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
