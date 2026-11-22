@@ -1,0 +1,207 @@
+name: 165 - M31 writeback transition matrix formal
+on: workflow_dispatch
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Record revision and install Yosys
+        run: |
+          set -euo pipefail
+          mkdir -p evidence work
+          git rev-parse HEAD > evidence/commit.txt
+          test "$(cat evidence/commit.txt)" = "$GITHUB_SHA"
+          sha256sum formal/m31/frp_m31_writeback_transition_matrix_formal.sv \
+            rtl/m31/frp_m31_state_update.sv rtl/m31/frp_m31_pkg.sv \
+            .github/workflows/frp-165-m31-writeback-transition-matrix-formal.yml > evidence/sources.sha256
+          python -m pip install --only-binary=:all: pyosys==0.68
+          python -m pip show pyosys > evidence/tools.txt
+
+      - name: Prove writeback, replay neutral routes and check three mutations
+        shell: python
+        run: |
+          import json
+          import os
+          import subprocess
+          import sys
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+          from pathlib import Path
+
+          top = "frp_m31_writeback_transition_matrix_formal"
+          dut = "frp_m31_state_update"
+          harness = f"formal/m31/{top}.sv"
+          source = Path(f"rtl/m31/{dut}.sv")
+          evidence = Path("evidence")
+          sizes = (8, 9, 16, 32, 64, 128)
+          unobserved = """
+              accepted_changes switch_load_numerator state_write_events state_hold_events
+              state_reset_events accepted_change_events neutral_routed_commit_events
+              pending_completion_commit_events reserved_state_events actual_direct_events
+              state_domain_valid state_output_domain_valid state_update_valid state_write_capacity_valid
+              same_state_hold_valid active_neutral_writeback_valid pending_completion_writeback_valid
+              no_reserved_state_output no_actual_direct_events
+          """.split()
+
+          def yosys(script, log):
+              driver = "import sys; from pyosys import libyosys as y; y.run_pass(sys.argv[1], y.Design())"
+              with log.open("w") as stream:
+                  subprocess.run([sys.executable, "-c", driver, script], stdout=stream,
+                                 stderr=subprocess.STDOUT, timeout=600, check=True)
+              return log.read_text()
+
+          def prepare(n, extra="", includes="-I rtl/m31"):
+              return (f"read_slang --top {top} -G CELLS={n} {includes} {extra} {harness}; "
+                      f"proc; flatten; opt_clean; prep -top {top}; async2sync; chformal -lower; "
+                      "select -assert-count 1 t:$assume; select -assert-count 9 t:$assert; "
+                      "select -assert-count 18 t:$cover; chformal -cover -remove; opt_clean; ")
+
+          def samples(signal):
+              data = iter(signal.get("data", []))
+              values = []
+              for code in signal["wave"]:
+                  if code == ".":
+                      value = values[-1]
+                  elif code in "01":
+                      value = int(code)
+                  elif code in "=23456789":
+                      word = next(data, "")
+                      value = int(word, 2) if word else None
+                  else:
+                      value = None
+                  values.append(value)
+              return values[1:]
+
+          def replay(signals, n, bit):
+              names = ("rst_n", "tick_enable", "scheduler_code", "candidate", "capacity", "accepted",
+                       "neutral_route", "completion", "reserved_fault", "direct_fault")
+              rows = list(zip(*(samples(signals[k]) for k in names), strict=True))
+              lane = 1 << (n - 1)
+              start, goal = (3, 1) if bit == 0 else (1, 3)
+              q, routed, paused, completed = 0, False, False, False
+              if rows[0][0] != 0 or rows[-1][0] != 1:
+                  raise ValueError("Missing initial reset or final live sample")
+              for rst, tick, sched, target, cap, acc, neutral, comp, reserved, direct in rows[:-1]:
+                  if not rst:
+                      q, routed, paused, completed = 0, False, False, False
+                      continue
+                  target = (target >> (2 * (n - 1))) & 3
+                  grant = tick and (cap & acc & lane) and not ((reserved | direct) & lane)
+                  enter = q in (1, 3) and target == 0 and sched in (0, 1, 4) and not (comp & lane)
+                  leave = q == 0 and target in (1, 3) and sched in (0, 2, 3) and not (neutral & lane)
+                  completed = False
+                  if grant and (enter or leave):
+                      completed = paused and leave and target == goal and bool(comp & lane)
+                      routed = enter and q == start and bool(neutral & lane)
+                      paused, q = False, target
+                  elif routed and not tick and q == 0:
+                      paused = True
+              if not completed or q != goal:
+                  raise ValueError(f"Route {start}->0->{goal} failed independent replay")
+
+          def profile(n, mode):
+              label = f"{mode}-{n}"
+              out = evidence / label
+              out.mkdir()
+              extra = ""
+              if mode == "mapped":
+                  net = out / "netlist.v"
+                  drop = " ".join("w:" + port for port in unobserved)
+                  yosys(f"read_slang --top {dut} -G CELLS={n} -I rtl/m31 {source}; proc; flatten; "
+                        f"delete -output {drop}; opt -full; synth -top {dut} -noabc; "
+                        f"rename {dut} frp_m31_writeback_matrix_netlist; check -assert; "
+                        f"write_verilog -noattr {net}", out / "map.log")
+                  extra = f"-DFRP_M31_WRITEBACK_MATRIX_NETLIST {net}"
+              model = Path("work") / f"{label}.il"
+              yosys(prepare(n, extra) + f"check -assert; write_rtlil {model}", out / "prepare.log")
+              log = yosys(f"read_rtlil {model}; delete -output w:reach; opt_clean; "
+                          "sat -seq 1 -set-assumes -tempinduct -maxsteps 6 -prove-asserts "
+                          "-verify -timeout 100", out / "proof.log")
+              if "Base case for induction length" not in log or "Induction step proven: SUCCESS!" not in log:
+                  raise ValueError("Incomplete induction")
+              cover = [f"read_rtlil {model}; chformal -assert -remove; opt -full"]
+              for bit in range(18):
+                  depth = 7 if bit < 2 else 4
+                  cover.append(f"sat -seq {depth} -set-assumes -set-at {depth} reach[{bit}] 1 "
+                               f"-show-ports -dump_json {out}/trace-{bit}.json -timeout 90")
+              if yosys("; ".join(cover), out / "cover.log").count("SAT solving finished - model found:") != 18:
+                  raise ValueError("Missing SAT witnesses")
+              for bit in range(18):
+                  signals = {s["name"]: s for s in json.loads((out / f"trace-{bit}.json").read_text())["signal"]}
+                  if not samples(signals["reach"])[-1] & (1 << bit):
+                      raise ValueError(f"Missing final reach[{bit}]")
+                  if bit < 2:
+                      replay(signals, n, bit)
+              return {"induction": "PASS", "assertions": 9, "witnesses": 18, "route_replays": 2}
+
+          def control(name, old, new):
+              out = evidence / name
+              out.mkdir()
+              original = source.read_text()
+              if original.count(old) != 1:
+                  raise ValueError(f"Expected one mutation site for {name}")
+              (out / source.name).write_text(original.replace(old, new))
+              trace = out / "counterexample.json"
+              log = yosys(prepare(8, includes=f"-I {out} -I rtl/m31") +
+                          "delete -output w:reach; opt_clean; sat -seq 4 -set-assumes "
+                          f"-prove-asserts -falsify -show-ports -dump_json {trace} -timeout 90",
+                          out / "control.log")
+              if "SAT proof finished - model found: FAIL!" not in log or not json.loads(trace.read_text())["signal"]:
+                  raise ValueError("Missing counterexample")
+              return "DETECTED"
+
+          mutations = {
+              "ignore_capacity": ("&& capacity_accept_mask[element_index]", "&& 1'b1"),
+              "drop_completion": ("if (commit_allowed_w[element_index]) begin",
+                                  "if (commit_allowed_w[element_index] && !pending_completion_mask[element_index]) begin"),
+              "rotate_cells": ("state_q <= state_d;",
+                               "state_q <= {state_d[(2*CELLS)-3:0], state_d[(2*CELLS)-1 -: 2]};"),
+          }
+          profiles, controls, errors = {}, {}, {}
+          with ThreadPoolExecutor(max_workers=2) as pool:
+              jobs = {pool.submit(profile, n, m): (profiles, f"{m}-{n}")
+                      for n in sizes for m in ("rtl", "mapped")}
+              jobs.update({pool.submit(control, k, *v): (controls, k) for k, v in mutations.items()})
+              for job in as_completed(jobs):
+                  dest, key = jobs[job]
+                  try:
+                      dest[key] = job.result()
+                  except Exception as exc:
+                      errors[key] = str(exc)
+                      print(f"::error::{key}: {exc}", flush=True)
+          counts = (len(profiles), sum(r["witnesses"] for r in profiles.values()),
+                    sum(r["route_replays"] for r in profiles.values()), len(controls))
+          passed = counts == (12, 216, 24, 3) and not errors
+          report = dict(commit=os.environ["GITHUB_SHA"], passed=passed, profiles=profiles,
+                        detected_controls=controls, errors=errors)
+          (evidence / "results.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+          summary = ("M31 writeback: %d/12 complete profiles, %d/216 witnesses, "
+                     "%d/24 neutral-route replays, %d/3 detected controls." % counts)
+          print(summary)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
+              print(summary, file=stream)
+          sys.exit(0 if passed else 1)
+
+      - name: Record artifact checksums
+        if: always()
+        working-directory: evidence
+        shell: bash
+        run: find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 -r sha256sum > SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frp-165-m31-writeback-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
