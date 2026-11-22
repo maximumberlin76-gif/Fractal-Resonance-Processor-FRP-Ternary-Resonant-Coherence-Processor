@@ -1,0 +1,169 @@
+name: 164 - M32 target bank atomicity formal
+on: workflow_dispatch
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Record sources and install Yosys
+        run: |
+          set -euo pipefail
+          mkdir -p evidence work
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git rev-parse HEAD > evidence/commit.txt
+          sha256sum formal/m32/frp_m32_target_bank_atomicity_formal.sv \
+            rtl/m32/frp_m32_registered_target_boundary.sv rtl/m31/frp_m31_pkg.sv \
+            .github/workflows/frp-164-m32-target-bank-atomicity-formal.yml > evidence/sources.sha256
+          python -m pip install --only-binary=:all: pyosys==0.68
+          python -m pip show pyosys > evidence/tools.txt
+
+      - name: Prove safety, collect witnesses and run negative controls
+        shell: python
+        run: |
+          import json
+          import os
+          import subprocess
+          import sys
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+          from pathlib import Path
+
+          top = "frp_m32_target_bank_atomicity_formal"
+          dut = Path("rtl/m32/frp_m32_registered_target_boundary.sv")
+          evidence = Path("evidence")
+          work = Path("work")
+
+          def yosys(script, log):
+              driver = "import sys; from pyosys import libyosys as y; y.run_pass(sys.argv[1], y.Design())"
+              with log.open("w") as stream:
+                  subprocess.run([sys.executable, "-c", driver, script], stdout=stream,
+                                 stderr=subprocess.STDOUT, check=True, timeout=300)
+              return log.read_text()
+
+          def frontend(n, w, include):
+              return (f"read_slang --std 1800-2017 --top {top} -G CELLS={n} -G COUNTER_BITS={w} "
+                      f"-I rtl/m31 -I {include} formal/m32/{top}.sv; prep -flatten -top {top}; "
+                      "async2sync; chformal -lower; ")
+
+          def qualify(n, w, row):
+              out = evidence / f"{n}-{w}"
+              out.mkdir()
+              model = work / f"{n}-{w}.il"
+              bits = list(range(16)) if w <= 3 else [*range(12), 15]
+              yosys(frontend(n, w, dut.parent) +
+                    "select -assert-count 9 t:$assert; select -assert-count 1 t:$assume; " +
+                    f"select -assert-count {len(bits)} t:$cover; chformal -cover -remove; "
+                    f"check -assert; write_rtlil {model}", out / "prepare.log")
+              proof = yosys(f"read_rtlil {model}; delete -output w:reach; opt_clean; "
+                            "sat -seq 1 -tempinduct -initsteps 1 -maxsteps 6 -set-assumes "
+                            "-prove-asserts -verify -timeout 70", out / "proof.log")
+              if "Base case for induction length" not in proof or "Induction step proven: SUCCESS!" not in proof:
+                  raise ValueError("Incomplete induction proof")
+              row["induction"] = "PASS"
+              for bit in bits:
+                  depth = 5
+                  if bit in (12, 13):
+                      depth = 2**w + 3
+                  if bit == 14:
+                      depth = 2 * 2**w + 2
+                  trace = out / f"reach-{bit}.json"
+                  log = yosys(f"read_rtlil {model}; chformal -assert -remove; opt_clean; "
+                              f"sat -seq {depth} -set-assumes -set-at {depth} reach[{bit}] 1 "
+                              f"-show-ports -timeout 90 -dump_json {trace}", out / f"reach-{bit}.log")
+                  if "SAT solving finished - model found:" not in log:
+                      raise ValueError(f"Missing witness for reach[{bit}]")
+                  signals = json.loads(trace.read_text())["signal"]
+                  reach = next(s for s in signals if s["name"] == "reach")
+                  last = [v for v in reach["data"] if v][-1]
+                  if not (int(last, 2) & (1 << bit)):
+                      raise ValueError(f"Wrong witness for reach[{bit}]")
+                  row["witnesses"].append(bit)
+
+          def negative_control(name, old, new):
+              out = evidence / name
+              directory = work / name
+              out.mkdir()
+              directory.mkdir()
+              source = dut.read_text()
+              if source.count(old) != 1:
+                  raise ValueError(f"Expected one mutation site for {name}")
+              (directory / dut.name).write_text(source.replace(old, new))
+              trace = out / "counterexample.json"
+              log = yosys(frontend(8, 1, directory) +
+                          "chformal -cover -remove; delete -output w:reach; opt_clean; "
+                          "sat -seq 5 -set-assumes -prove-asserts -falsify -show-ports "
+                          f"-timeout 70 -dump_json {trace}", out / "control.log")
+              if "SAT proof finished - model found: FAIL!" not in log or not json.loads(trace.read_text())["signal"]:
+                  raise ValueError(f"Missing counterexample for {name}")
+
+          rows = [{"cells": n, "bits": w, "induction": "INCOMPLETE", "witnesses": [],
+                   "expected": 13 if w == 32 else 16}
+                  for n in (8, 9, 16, 32, 64, 128) for w in (1, 3, 32)]
+          controls = {
+              "ignore_last_lane": ("cell_index < CELLS;", "cell_index < CELLS-1;"),
+              "partial_write_on_reject": (
+                  "end else if (capture_accepted) begin",
+                  "end else if (capture_rejected) begin\n"
+                  "      registered_target_q[3:2] <= phase_target[3:2];\n"
+                  "    end else if (capture_accepted) begin"),
+              "counter_wrap": ("saturating_increment = value;", "saturating_increment = '0;")
+          }
+          detected = []
+          errors = {}
+          with ThreadPoolExecutor(max_workers=2) as pool:
+              jobs = {pool.submit(qualify, r["cells"], r["bits"], r): r for r in rows}
+              for job in as_completed(jobs):
+                  r = jobs[job]
+                  try:
+                      job.result()
+                  except Exception as exc:
+                      errors[f"{r['cells']}-{r['bits']}"] = str(exc)
+          for name, (old, new) in controls.items():
+              try:
+                  negative_control(name, old, new)
+                  detected.append(name)
+              except Exception as exc:
+                  errors[name] = str(exc)
+
+          report = {"commit": os.environ["GITHUB_SHA"], "profiles": rows,
+                    "detected_controls": detected, "errors": errors}
+          (evidence / "results.json").write_text(json.dumps(report, indent=2) + "\n")
+          lines = ["| Cells | Counter bits | Induction | Witnesses |", "|---:|---:|:---:|---:|"]
+          for r in rows:
+              lines.append(f"| {r['cells']} | {r['bits']} | {r['induction']} | "
+                           f"{len(r['witnesses'])}/{r['expected']} |")
+          proofs = sum(r["induction"] == "PASS" for r in rows)
+          count = sum(len(r["witnesses"]) for r in rows)
+          lines.extend(["", f"Proofs {proofs}/18. Witnesses {count}/270. Negative controls {len(detected)}/3."])
+          lines.extend(f"- {key}: {value}" for key, value in errors.items())
+          summary = "\n".join(lines) + "\n"
+          (evidence / "summary.md").write_text(summary)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
+              stream.write(summary)
+          sys.exit(int(bool(errors) or (proofs, count, len(detected)) != (18, 270, 3)))
+
+      - name: Record artifact checksums
+        if: always()
+        working-directory: evidence
+        run: |
+          set -euo pipefail
+          find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 -r sha256sum > SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frp-164-target-bank-formal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
