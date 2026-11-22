@@ -46,7 +46,7 @@ jobs:
           python - <<'PY'
           import hashlib, json, os, re, subprocess
           import xml.etree.ElementTree as ET
-          from concurrent.futures import ThreadPoolExecutor
+          from concurrent.futures import ThreadPoolExecutor, as_completed
           from pathlib import Path
 
           sizes = (8, 9, 16, 32, 64, 128)
@@ -106,35 +106,65 @@ jobs:
               front = (f"read_slang --unroll-limit 65536 --top {top} -G CELLS={n} "
                        f"-G PROBE_LANE={n-1} -Irtl/m31 formal/m31/{top}.sv")
               model = work / "design.il"
-              run(["yosys", "-p", f"{front}; prep -top {top}; write_rtlil {model}"],
-                  out / "synthesis.log")
+              passes = [front, f"hierarchy -check -top {top}", "proc", "flatten",
+                        "opt", "memory -nomap", "opt_clean", "memory_map -rom-only",
+                        "bmuxmap", "opt -full", "select -assert-none t:$mem_v2",
+                        "stat", f"write_rtlil {model}"]
+              run(["yosys", "-Q", "-p", "; ".join(passes)], out / "synthesis.log")
               il = model.read_text()
-              if not re.search(r'(?m)^\s*(?:cell \$assert |parameter \\FLAVOR "assert"$)', il):
-                  raise ValueError(f"No safety assertions in model for CELLS={n}")
-              for mode in ("prove", "cover"):
+              for kind, expected in (("assert", 10), ("cover", 8)):
+                  if il.count(f'parameter \\FLAVOR "{kind}"') != expected:
+                      raise ValueError(f"CELLS={n}: expected {expected} {kind} properties")
+              for mode in ("cover", "prove"):
                   cfg = out / f"{mode}.sby"
                   cfg.write_text(f"[options]\nmode {mode}\ndepth 6\ntimeout 600\n"
                                  "[engines]\nsmtbmc bitwuzla\n"
-                                 f"[script]\nread_rtlil design.il\nprep -top {top}\n"
+                                 f"[script]\nread_rtlil design.il\nhierarchy -check -top {top}\n"
                                  f"[files]\n{model}\n")
                   job = work / mode
                   run(["sby", "-f", "-d", str(job), str(cfg)], out / f"{mode}.log")
                   if (job / "status").read_text().split()[0] != "PASS":
                       raise ValueError(f"{mode} incomplete for CELLS={n}")
               log = (work / "cover/engine_0/logfile.txt").read_text()
-              hits = set(re.findall(r"Reached cover statement in step \d+ at (.+)", log))
-              if len(hits) != 8:
-                  raise ValueError(f"CELLS={n}: reached {len(hits)} of 8 covers")
+              expected = {"c_min", "c_max", "c_half", "c_clip_edge", "c_upper_clip",
+                          "c_hold_change", "c_commit_change", "c_reset_release"}
+              hits = set(re.findall(r"Reached cover statement in step \d+ at [^\n]*?"
+                                    r"g_check\.(c_\w+)", log))
+              if hits != expected:
+                  raise ValueError(f"CELLS={n}: cover labels differ: {sorted(hits)}")
               (out / "covers.txt").write_text("\n".join(sorted(hits)) + "\n")
-              return f"| {n} | {n} | {n-1} | PASS | 8/8 |"
 
+          report = ["| Cells | Identical lanes | Solver lane | Safety | Covers |",
+                    "|---:|---:|---:|:---:|:---:|"]
+          errors = {}
           with ThreadPoolExecutor(max_workers=2) as pool:
-              rows = list(pool.map(qualify, sizes))
-          report = ["| Cells | Identical lanes | Proved lane | Safety | Covers |",
-                    "|---:|---:|---:|:---:|:---:|", *rows]
-          Path("evidence/summary.md").write_text("\n".join(report) + "\n")
+              jobs = {pool.submit(qualify, n): n for n in sizes}
+              for job in as_completed(jobs):
+                  n = jobs[job]
+                  try:
+                      job.result()
+                  except Exception as exc:
+                      errors[n] = str(exc)
+                      print(f"CELLS={n}: {exc}", flush=True)
+
+          def status(n, mode):
+              path = Path("work", str(n), mode, "status")
+              return path.read_text().split()[0] if path.is_file() else "NO RESULT"
+
+          for n in sizes:
+              out = Path("evidence", str(n))
+              lanes = n if (out / "lanes.json").is_file() else "?"
+              covers = "8/8" if (out / "covers.txt").is_file() else status(n, "cover")
+              report.append(f"| {n} | {lanes} | {n-1} | {status(n,'prove')} | {covers} |")
+          if errors:
+              report += [""] + [f"- CELLS={n}: {errors[n]}" for n in sorted(errors)]
+          summary = "\n".join(report) + "\n"
+          Path("evidence/summary.md").write_text(summary)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
+              stream.write(summary)
+          if errors:
+              raise SystemExit(1)
           PY
-          cat evidence/summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Collect traces and checksums
         if: always()
