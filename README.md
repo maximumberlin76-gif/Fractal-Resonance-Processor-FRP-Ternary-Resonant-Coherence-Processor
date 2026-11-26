@@ -69,10 +69,17 @@ published M32 bundle.
 | `1/7` | 2 | 17 | 204 | 123 |
 
 One pair of scheduler runs reproduces 396 monitor records across 33 source
-ticks, including 238 active-zero cell observations. The current 34-file M32
-source inventory and four preserved publication artifacts pass exact
-identity checks. The run also verifies preservation of all 995 tracked
-source files.
+ticks, including 238 active-zero cell observations. The published
+[M32 trace manifest](artifacts/m32/manifests/m32-deterministic-rtl-trace-manifest.json)
+identifies 29 source files at `c0bc0fb`. Workflow 158 checked 34 M32
+source files and four publication artifacts in each of the two checkouts below.
+
+| Workflow 158 run | Source revision | Tracked files in the repository |
+|---|---|---:|
+| [44069652350](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/44069652350) | `97fd5fa` | 995 |
+| [44698737522](https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor/actions/runs/44698737522) | `1eaca5c` (v3.4.0-rc.2) | 996 |
+
+The release checkout adds one tracked path, [RELEASE_NOTES_v3_4_0_rc_2.md](RELEASE_NOTES_v3_4_0_rc_2.md).
 
 The single downloadable artifact, `frp-current-633-44069652350-1.zip`, contains
 the test inventory and individual results, build logs, four raw traces,
