@@ -1,0 +1,209 @@
+name: 169 - M32 gamma quantization formal
+on: workflow_dispatch
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Record sources and install Yosys
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/commit.txt
+          test "$(cat evidence/commit.txt)" = "$GITHUB_SHA"
+          files=(rtl/m32/frp_m32_gamma_target_source.sv
+                 formal/m32/frp_m32_gamma_quantization_formal.sv
+                 .github/workflows/frp-169-m32-gamma-quantization-formal.yml)
+          cp --parents "${files[@]}" evidence/
+          sha256sum "${files[@]}" > evidence/sources.sha256
+          python -m pip install --only-binary=:all: pyosys==0.68
+          python -m pip show pyosys > evidence/tools.txt
+
+      - name: Prove rounding and bank insertion, replay traces and detect mutations
+        shell: python
+        run: |
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          top = "frp_m32_gamma_target_source"
+          source = Path(f"rtl/m32/{top}.sv")
+          contract = "formal/m32/frp_m32_gamma_quantization_formal.sv"
+          out = Path("evidence")
+          mutations = {
+              "tie": ("54'd34359738368", "54'd34359738367"),
+              "slice": ("{fraction_high_q, tempered_word[31:6]}", "{fraction_high_q, tempered_word[30:5]}"),
+              "lane": ("completed_bank[lane_q*32", "completed_bank[(lane_q ^ 1'b1)*32"),
+          }
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def yosys(folder, name, commands):
+              script = folder / f"{name}.ys"
+              log = folder / f"{name}.log"
+              script.write_text("\n".join(commands) + "\n")
+              driver = ("import sys; from pathlib import Path; from pyosys import libyosys as y; "
+                        "y.run_pass('; '.join(Path(sys.argv[1]).read_text().splitlines()), y.Design())")
+              with log.open("w") as stream:
+                  p = subprocess.run([sys.executable, "-c", driver, str(script)], stdout=stream,
+                                     stderr=subprocess.STDOUT, timeout=360)
+              text = log.read_text(errors="replace")
+              require(p.returncode == 0, f"{log}\n{text[-1500:]}")
+              return text
+
+          def prepare(folder, n, case):
+              src = source
+              checks = [f"select -assert-count {6+2*n} t:$assert", "select -assert-count 10 t:$cover",
+                        "select -assert-none t:$assume"]
+              if case == "baseline":
+                  yosys(folder, "bind", [f"read_slang --top {top} -G CELLS={n} {src} {contract}",
+                                         "chformal -lower", *checks])
+              else:
+                  before, after = mutations[case]
+                  original = src.read_text()
+                  require(original.count(before) == 1, f"mutation anchor: {case}")
+                  src = folder / "mutation.sv"
+                  src.write_text(original.replace(before, after))
+              inputs = {"fraction_high_q": 27, "tempered_word": 32, "lane_q": n.bit_length()-1,
+                        "pending_bank_q": 32*n}
+              outputs = {"random_fraction": 53, "target_word": 32, "completed_bank": 32*n}
+              old_in = "clk rst_n load_begin checkpoint_index load_valid load_word request_valid bank_ready"
+              old_out = "load_ready configured load_error request_ready busy bank_valid gamma_targets_q16"
+              def wires(names):
+                  return " ".join("w:" + key for key in names)
+              cmd = [f"read_slang --top {top} -G CELLS={n} {src}", "opt -full",
+                     *(f"select -assert-count 1 w:{key}" for key in (*inputs, *outputs)),
+                     "expose -input " + wires(inputs), "expose " + wires(outputs),
+                     "delete -input " + wires(old_in.split()), "delete -output " + wires(old_out.split()),
+                     "opt -full", "memory_collect", "opt_clean -purge", "check -assert",
+                     f"rename {top} quantization_cone",
+                     "select -assert-none t:$*ff* t:$*latch* t:$mem* t:$any* t:$assume",
+                     f"write_json {folder}/interface.json", f"write_rtlil {folder}/rtl.il"]
+              if case == "baseline":
+                  cmd += ["synth -top quantization_cone", "check -assert", f"write_rtlil {folder}/gates.il"]
+              cmd += ["blackbox quantization_cone", f"write_verilog -blackboxes -noattr {folder}/ports.v"]
+              yosys(folder, "extract", cmd)
+              ports = json.loads((folder/"interface.json").read_text())["modules"]["quantization_cone"]["ports"]
+              for direction, expected in (("input", inputs), ("output", outputs)):
+                  actual = {k: len(v["bits"]) for k,v in ports.items() if v["direction"] == direction}
+                  require(actual == expected, f"wrong {direction} ports: {actual}")
+              bits = [b for k in inputs for b in ports[k]["bits"]]
+              require(all(type(b) is int for b in bits) and len(set(bits)) == len(bits), "input alias or constant")
+              # Use the committed bind on both cones. The shell inherits the exact cone port names.
+              stub = (folder/"ports.v").read_text()
+              require(stub.count("module quantization_cone(") == 1 and stub.count("endmodule") == 1, "port stub")
+              shell = stub.replace("module quantization_cone(", f"module {top}(")
+              (folder/"shell.sv").write_text(shell.replace("endmodule", "quantization_cone dut(.*);\nendmodule"))
+              return checks
+
+          def replay(path, n, case, index=None):
+              data = json.loads(path.read_text())["signal"]
+              v = {s["name"]: int(s["data"][0], 2) for s in data}
+              lane, old = v["lane_q"], v["pending_bank_q"]
+              actual = (v["random_fraction"], v["target_word"], v["completed_bank"])
+              mid, half, mask = 1 << 52, 1 << 35, (1 << 32)-1
+              def model(fault):
+                  shift = 5 if fault == "slice" else 6
+                  raw = (v["fraction_high_q"] << 26) | ((v["tempered_word"] >> shift) & ((1 << 26)-1))
+                  mag = (abs(raw-mid) + half - int(fault == "tie")) >> 36
+                  target = -mag if raw < mid else mag
+                  offset = 32 * (lane ^ int(fault == "lane"))
+                  bank = (old & ~(mask << offset)) | ((target & mask) << offset)
+                  return raw, target & mask, bank
+              require(actual == model(case), f"{path}: signal replay mismatch")
+              if case != "baseline":
+                  require(actual != model("baseline"), f"{path}: mutation escaped")
+                  return
+              raw, word, bank = actual
+              target = word - (1 << 32) if word >> 31 else word
+              flags = [
+                  raw == 0 and target == -65536, raw == 2*mid-1 and target == 65536,
+                  raw == mid-half and target == -1, raw == mid-half+1 and target == 0,
+                  raw == mid and target == 0, raw == mid+half-1 and target == 0,
+                  raw == mid+half and target == 1,
+                  lane == 0 and ((old ^ bank) & mask) != 0,
+                  lane == n-1 and ((old ^ bank) >> (32*(n-1))) != 0,
+                  lane == n//2 and old == bank and target != 0,
+              ]
+              require(flags[index] and sum(flag << i for i,flag in enumerate(flags)) == v["reach"],
+                      f"{path}: witness {index} mismatch")
+
+          def prove(folder, n, case, stage, checks):
+              cmd = [f"read_slang --top {top} --blackboxed-module quantization_cone "
+                     f"{folder}/ports.v {folder}/shell.sv {contract}",
+                     f"read_rtlil -overwrite {folder}/{stage}.il", f"hierarchy -check -top {top}",
+                     "flatten", "expose w:gamma_quantization_check.reach", f"cd {top}",
+                     "rename gamma_quantization_check.reach reach", "cd ..", "chformal -lower", *checks,
+                     "chformal -cover -remove", "opt -full", "check -assert"]
+              if case != "baseline":
+                  path = folder/"counterexample.json"
+                  log = yosys(folder, stage, cmd + [f"sat -falsify -prove-asserts -show-ports -dump_json {path} -timeout 120"])
+                  require("SAT proof finished - model found: FAIL!" in log, f"{case}: missing counterexample")
+                  replay(path, n, case)
+                  return
+              cmd += ["sat -verify -prove-asserts -timeout 120", "chformal -assert -remove", "opt_clean"]
+              paths = [folder/f"{stage}-cover-{i}.json" for i in range(10)]
+              cmd += [f"sat -set reach[{i}] 1 -show-ports -dump_json {p} -timeout 30" for i,p in enumerate(paths)]
+              log = yosys(folder, stage, cmd)
+              require("SAT proof finished - no model found: SUCCESS!" in log, f"{stage}: missing proof")
+              require(log.count("SAT solving finished - model found:") == 10, f"{stage}: cover count")
+              for i,p in enumerate(paths):
+                  replay(p, n, case, i)
+
+          report = dict(commit=os.environ["GITHUB_SHA"], proofs=0, replays=0, mutations=0, cases={})
+          cases = [(n, "baseline") for n in (8, 16, 32, 64)] + [(8, case) for case in mutations]
+          for n, case in cases:
+              key = f"n{n}-{case}"
+              folder = out/key
+              folder.mkdir()
+              try:
+                  checks = prepare(folder, n, case)
+                  for stage in (("rtl", "gates") if case == "baseline" else ("rtl",)):
+                      prove(folder, n, case, stage, checks)
+                      if case == "baseline":
+                          report["proofs"] += 1
+                          report["replays"] += 10
+                      else:
+                          report["mutations"] += 1
+                  report["cases"][key] = "PASS"
+              except Exception as error:
+                  report["cases"][key] = str(error)
+              print(key, report["cases"][key], flush=True)
+              (out/"summary.json").write_text(json.dumps(report, indent=2) + "\n")
+          line = f"Proofs {report['proofs']}/8 | Witness replays {report['replays']}/80 | Mutations detected {report['mutations']}/3"
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              print(line, file=summary)
+          require(all(v == "PASS" for v in report["cases"].values()), line)
+
+      - name: Hash evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd evidence
+          find . -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum > SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frp-169-m32-gamma-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          include-hidden-files: true
+          if-no-files-found: error
