@@ -22,6 +22,8 @@ The discrete processor domain is `-1/0/1`. State `0` is active: it performs
 mediation, routing, retention, balancing, transition staging, and controlled
 neutralization.
 
+[FRP in one page — architecture, active-zero trace and release evidence](docs/frp_in_one_page.md)
+
 ## Release status
 
 | Field | Current record |
