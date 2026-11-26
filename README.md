@@ -262,6 +262,34 @@ Opposite-polarity transitions are split into two tick-separated legs. The
 first leg enters active state `0`; the second leg may complete later under the
 scheduler, pending-route, and capacity boundaries.
 
+### From phase to retained state in one M32 cell
+
+Each neighbor contributes a weighted term proportional to
+`sin(θ_j − θ_i − γ_i)` to cell `i`'s coupling field. The ternary source
+target comes from a different observable, the local projection `sin(θ_i)`.
+It is `+1` above the positive threshold, `−1` below the negative threshold
+and `0` at or between the thresholds.
+[Phase RTL](rtl/m31/frp_m31_phase_interference.sv)
+
+In the eight-cell `7/1` test, the testbench explicitly loads phase word
+`0xC0000000` into cell 0 before source tick 8. Its Q30 projection is
+`−1073741824` (exactly `−1`). The trace samples the source and registered
+targets before the execution edge and the retained state and pending route
+after it.
+
+| Source tick | Source target | Registered target | Retained state | Pending target | Route leg |
+|---|---:|---:|---:|---|---|
+| 8 | −1 | +1 | +1 | inactive | — |
+| 9 | −1 | −1 | 0 | −1 | first |
+| 10–14 | −1 | −1 | 0 | −1 | — |
+| 15 | −1 | −1 | −1 | inactive | second |
+
+At tick 9 the cell enters active zero while retaining its destination. It
+holds both values through tick 14 and completes the transition at tick 15.
+[Published trace bundle](artifacts/m32/exports/m32-deterministic-rtl-trace-bundle.json) ·
+[7/1 stimulus](rtl/m32/frp_m32_mode_7_1_tb.sv) ·
+[Trace sampling](rtl/m32/frp_m32_mode_7_1_trace_tb.sv)
+
 ## Quick start
 
 Required Python version:
