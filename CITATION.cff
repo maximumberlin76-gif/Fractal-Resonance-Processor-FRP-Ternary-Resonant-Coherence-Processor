@@ -28,6 +28,7 @@ authors:
     country: "DE"
 type: software
 version: "v3.4.0-rc.2"
+doi: "10.5281/zenodo.24392460"
 license: "Apache-2.0"
 repository-code: "https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor"
 url: "https://github.com/maximumberlin76-gif/Fractal-Resonance-Processor-FRP-Ternary-Resonant-Coherence-Processor"
