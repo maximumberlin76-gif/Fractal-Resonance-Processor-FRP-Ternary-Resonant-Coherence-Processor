@@ -1,0 +1,227 @@
+name: 168 - M32 recorder epoch partition formal
+on: workflow_dispatch
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Record revision and install Yosys
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence work
+          git rev-parse HEAD > evidence/commit.txt
+          test "$(cat evidence/commit.txt)" = "$GITHUB_SHA"
+          sha256sum formal/m32/frp_m32_recorder_epoch_partition_formal.sv \
+            rtl/m32/frp_m32_boundary_recorder.sv \
+            .github/workflows/frp-168-m32-recorder-epoch-partition-formal.yml > evidence/sources.sha256
+          python -m pip install --only-binary=:all: pyosys==0.68
+          python -m pip show pyosys > evidence/tools.txt
+
+      - name: Prove partition invariants and replay witnesses
+        shell: python
+        run: |
+          import json
+          import os
+          import subprocess
+          import sys
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+          from pathlib import Path
+          from typing import NamedTuple
+
+          top = "frp_m32_recorder_epoch_partition_formal"
+          dut = "frp_m32_boundary_recorder"
+          source = Path(f"rtl/m32/{dut}.sv")
+          contract = f"formal/m32/{top}.sv"
+          evidence = Path("evidence")
+          sizes = [(8, 3), (9, 1), (16, 2), (32, 8), (64, 64), (128, 3)]
+
+          def yosys(script, log):
+              driver = "import sys; from pyosys import libyosys as y; y.run_pass(sys.argv[1], y.Design())"
+              with log.open("w") as stream:
+                  proc = subprocess.run([sys.executable, "-c", driver, script],
+                                        stdout=stream, stderr=subprocess.STDOUT, timeout=900)
+              if proc.returncode:
+                  raise RuntimeError(f"Yosys exit {proc.returncode}, see {log}")
+              return log.read_text()
+
+          def prepare(out, cells, width, inputs):
+              model = Path("work") / (out.name + ".il")
+              yosys(f"read_slang --top {top} -G CELLS={cells} -G COUNT_BITS={width} {inputs} {contract}; "
+                    f"prep -flatten -top {top}; async2sync; chformal -lower; "
+                    "select -assert-count 21 t:$assert; select -assert-count 1 t:$assume; "
+                    "select -assert-count 10 t:$cover; chformal -cover -remove; "
+                    f"opt -full; check -assert; write_rtlil {model}", out / "prepare.log")
+              return model
+
+          def decode(signal):
+              data = iter(signal.get("data", []))
+              values = []
+              for code in signal["wave"]:
+                  if code == ".":
+                      value = values[-1]
+                  elif code in "01":
+                      value = int(code)
+                  elif code in "=23456789":
+                      word = next(data, "")
+                      value = int(word, 2) if word else None
+                  else:
+                      value = None
+                  values.append(value)
+              return values[1:]
+
+          def signed(word):
+              return word - (1 << 32) if word >= (1 << 31) else word
+
+          class Event(NamedTuple):
+              tick: int
+              margin: int
+              load: int
+              payload: tuple
+
+          def flags(left, right, cut, pulse, s, width):
+              first = bool(right and right[0].margin <= 0)
+              earlier = next((e for e in left if e.margin <= 0), None)
+              later = next((e for e in right if e.margin <= 0), None)
+              both = bool(left and right)
+              bits = [False] * 10
+              bits[0] = left and earlier is None and first and pulse and left[-1].margin != 39322
+              bits[1] = earlier is not None and pulse and earlier != later
+              bits[6] = both and s["clear_epoch"] and s["sample_valid"] and s["split"]
+              bits[7] = cut and not left and pulse
+              bits[8] = both and not first and earlier is None and pulse
+              if both:
+                  low_a, low_b = (min(part, key=lambda e: e.margin) for part in (left, right))
+                  high_a, high_b = (max(part, key=lambda e: e.load) for part in (left, right))
+                  bits[2] = low_a.margin == low_b.margin and low_a.tick > low_b.tick
+                  bits[3] = high_a.load == high_b.load and high_a.tick > high_b.tick
+                  bits[4] = low_a.margin < low_b.margin and high_a.load < high_b.load
+                  bits[5] = low_b.margin < low_a.margin and high_b.load < high_a.load
+                  if width <= 3:
+                      limit = (1 << width) - 1
+                      bits[9] = max(len(left), len(right)) <= limit < len(left) + len(right)
+                  else:
+                      bits[9] = low_a.margin == -(1 << 31) and high_b.load == (1 << 31) - 1
+              return sum(1 << i for i, active in enumerate(bits) if active)
+
+          def replay(path, width, bit, depth):
+              waves = {sig["name"]: decode(sig) for sig in json.loads(path.read_text())["signal"]}
+              assert all(len(v) == depth for v in waves.values()) and waves["rst_n"][0] == 0
+              payload = ("scheduler_mode", "scheduler_state", "coherence_capacity_q16",
+                         "pressure_q16", "mean_heat_q16", "retained_state", "pending_route")
+              left, right = [], []
+              cut = pulse = False
+              for t in range(depth):
+                  s = {k: v[t] for k, v in waves.items()}
+                  expected = flags(left, right, cut, pulse, s, width) if s["rst_n"] else 0
+                  assert expected == s["reach"], (path, t, expected, s["reach"])
+                  if not s["rst_n"] or s["clear_epoch"]:
+                      left.clear()
+                      right.clear()
+                      cut = pulse = False
+                      continue
+                  cut = cut or s["split"]
+                  pulse = False
+                  if s["sample_valid"]:
+                      event = Event(s["source_tick"], signed(s["stability_margin_q16"]),
+                                    signed(s["switch_load_q16"]), tuple(s[k] for k in payload))
+                      pulse = cut and event.margin <= 0 and all(e.margin > 0 for e in right)
+                      (right if cut else left).append(event)
+              assert waves["reach"][-1] & (1 << bit), path
+
+          def profile(cells, width, mode):
+              out = evidence / f"{mode}-{cells}-{width}"
+              out.mkdir()
+              inputs = "-I rtl/m32"
+              if mode == "mapped":
+                  net = out / "mapped.v"
+                  yosys(f"read_slang --top {dut} -G CELLS={cells} -G COUNT_BITS={width} {source}; "
+                        f"synth -flatten -top {dut}; check -assert; write_verilog -noattr {net}",
+                        out / "synth.log")
+                  inputs = f"-DFRP_M32_RECORDER_PARTITION_NETLIST {net}"
+              model = prepare(out, cells, width, inputs)
+              proof = yosys(f"read_rtlil {model}; delete -output w:reach; opt_clean; "
+                            "sat -seq 1 -set-assumes -tempinduct -maxsteps 5 "
+                            "-prove-asserts -verify -timeout 120", out / "proof.log")
+              assert "Base case for induction length" in proof and "Induction step proven: SUCCESS!" in proof
+              cmds = [f"read_rtlil {model}; chformal -assert -remove; opt -full"]
+              depths = [5] * 10
+              if width <= 3:
+                  depths[9] = (1 << width) + 2
+              for bit, depth in enumerate(depths):
+                  cmds.append(f"sat -seq {depth} -set-assumes -set-at {depth} reach[{bit}] 1 "
+                              f"-show-ports -dump_json {out}/reach-{bit}.json -timeout 80")
+              log = yosys("; ".join(cmds), out / "witnesses.log")
+              assert log.count("SAT solving finished - model found:") == 10
+              for bit, depth in enumerate(depths):
+                  replay(out / f"reach-{bit}.json", width, bit, depth)
+              return dict(induction="PASS", cells=cells, counter_bits=width, assertions=21, witnesses=10, replays=10)
+
+          mutations = {
+              "replace_first_minimum_on_tie": ("stability_margin_q16 < minimum_margin_q16",
+                                               "stability_margin_q16 <= minimum_margin_q16"),
+              "reset_previous_margin_on_capture": ("boundary_previous_margin_q16 <= previous_margin_q16;",
+                                                   "boundary_previous_margin_q16 <= INITIAL_MARGIN_Q16;"),
+              "saturate_one_sample_early": ("sample_count_q == COUNT_MAX", "sample_count_q == (COUNT_MAX - 1'b1)"),
+          }
+
+          def control(name, old, new):
+              out = evidence / name
+              out.mkdir()
+              text = source.read_text()
+              assert text.count(old) == 1, f"Mutation site changed: {name}"
+              (out / source.name).write_text(text.replace(old, new))
+              model = prepare(out, 8, 2, f"-I {out}")
+              log = yosys(f"read_rtlil {model}; delete -output w:reach; opt_clean; "
+                          "sat -seq 6 -set-assumes -prove-asserts -falsify -show-ports "
+                          f"-dump_json {out}/counterexample.json -timeout 80", out / "control.log")
+              assert "SAT proof finished - model found: FAIL!" in log
+              assert json.loads((out / "counterexample.json").read_text())["signal"]
+              return "DETECTED"
+
+          profiles, controls, errors = {}, {}, {}
+          with ThreadPoolExecutor(max_workers=2) as pool:
+              jobs = {pool.submit(profile, n, w, mode): (profiles, f"{mode}-{n}-{w}")
+                      for n, w in sizes for mode in ("rtl", "mapped")}
+              jobs.update({pool.submit(control, name, *pair): (controls, name) for name, pair in mutations.items()})
+              for job in as_completed(jobs):
+                  dest, key = jobs[job]
+                  try:
+                      dest[key] = job.result()
+                  except Exception as exc:
+                      errors[key] = f"{type(exc).__name__}: {exc}"
+                      print(f"::error::{key}: {errors[key]}", flush=True)
+          counts = len(profiles), sum(p["replays"] for p in profiles.values()), len(controls)
+          passed = counts == (12, 120, 3) and not errors
+          report = dict(commit=os.environ["GITHUB_SHA"], passed=passed, profiles=profiles,
+                        detected_controls=controls, errors=errors)
+          (evidence / "results.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+          summary = "M32 epoch partition: %d/12 profiles, %d/120 replayed traces, %d/3 detected mutations." % counts
+          print(summary)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
+              print(summary, file=stream)
+          sys.exit(0 if passed else 1)
+
+      - name: Record checksums
+        if: always()
+        shell: bash
+        working-directory: evidence
+        run: find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 -r sha256sum > SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frp-168-m32-epoch-partition-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
