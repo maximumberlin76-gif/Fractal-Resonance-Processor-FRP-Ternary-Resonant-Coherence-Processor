@@ -1,0 +1,279 @@
+name: 170 - M32 gamma checkpoint formal
+on: workflow_dispatch
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Record revision and install proof tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/sources
+          git rev-parse HEAD > evidence/commit.txt
+          test "$(cat evidence/commit.txt)" = "$GITHUB_SHA"
+          cp --parents rtl/m32/frp_m32_gamma_target_source.sv \
+            formal/m32/frp_m32_gamma_checkpoint_formal.sv \
+            .github/workflows/frp-170-m32-gamma-checkpoint-formal.yml evidence/sources/
+          python -m pip install --only-binary=:all: pyosys==0.68 verilator==5.38.0
+          python -m pip show pyosys verilator > evidence/tools.txt
+
+      - name: Prepare checkpoint stimulus
+        shell: bash
+        run: |
+          cat > evidence/checkpoint_tb.sv <<'SV'
+          `timescale 1ns/1ps
+          module checkpoint_tb #(parameter int CELLS = 8);
+            bit clk, rst_n, load_begin, load_valid, request_valid, bank_ready;
+            bit [9:0] checkpoint_index;
+            bit [31:0] load_word;
+            wire load_ready, configured, load_error, request_ready, busy, bank_valid;
+            frp_m32_gamma_target_source #(.CELLS(CELLS)) dut (
+              .clk, .rst_n, .load_begin, .load_valid, .load_word, .checkpoint_index,
+              .request_valid, .bank_ready, .load_ready, .configured, .load_error,
+              .request_ready, .busy, .bank_valid, .gamma_targets_q16()
+            );
+            wire [15:0] hit = dut.checkpoint_check.reach;
+            int fd, cycle;
+            bit [15:0] covered;
+
+            task automatic tick();
+              #1;
+              $fdisplay(fd, "%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d",
+                cycle, rst_n, load_begin, checkpoint_index, load_valid, load_word,
+                request_valid, bank_ready, load_ready, configured, load_error, busy, bank_valid, hit);
+              $fflush(fd);
+              covered |= hit;
+              clk = 1; #1; clk = 0; #1; cycle++;
+            endtask
+            task automatic start_load(input bit [9:0] idx);
+              checkpoint_index = idx; load_begin = 1; tick(); load_begin = 0;
+            endtask
+            task automatic word(input bit [31:0] value);
+              load_valid = 1; load_word = value; tick();
+            endtask
+            task automatic stall();
+              load_valid = 0; load_word = '1; tick();
+            endtask
+            task automatic request_bank();
+              request_valid = 1; tick(); request_valid = 0;
+            endtask
+
+            initial begin
+              fd = $fopen("trace.csv", "w");
+              if (fd == 0) $fatal(1, "trace open failed");
+              $fdisplay(fd, "cycle,rst_n,begin,index,valid,word,request,ack,ready,configured,error,busy,bank_valid,reach");
+              tick(); rst_n = 1;
+              start_load(625); start_load(1023);
+              start_load(0); repeat (312) word(0); stall(); repeat (311) word(0); stall(); word(0);
+              start_load(624); repeat (623) word(0); word(32'h80000000); request_bank(); start_load(625);
+              start_load(0); word(1); repeat (623) word(0); request_bank(); start_load(624);
+              repeat (623) word(0); load_word = 32'hdeadbeef; start_load(0);
+              repeat (624) word(0);
+              start_load(0); word(32'h80000000); repeat (623) word(0); request_bank();
+              repeat (2*CELLS+2) tick();
+              start_load(0); word(1); repeat (16) word(0); rst_n = 0;
+              #1;
+              if (configured || load_error || busy || bank_valid) $fatal(1, "reset outputs");
+              tick(); rst_n = 1; start_load(0); repeat (623) word(0); word(2); tick();
+              if (covered != 16'hffff || !configured) $fatal(1, "checkpoint coverage or recovery");
+              $fclose(fd);
+              $display("CHECKPOINT_PASS cells=%0d cycles=%0d", CELLS, cycle);
+              $finish;
+            end
+          endmodule
+          SV
+
+      - name: Prove properties, replay coverage and detect mutations
+        shell: python
+        run: |
+          import csv
+          import json
+          import os
+          import re
+          import resource
+          import subprocess
+          import sys
+          from pathlib import Path
+          import verilator
+
+          out = Path("evidence")
+          top = "frp_m32_gamma_target_source"
+          checker = "frp_m32_gamma_checkpoint_formal"
+          src = Path(f"rtl/m32/{top}.sv")
+          contract = Path(f"formal/m32/{checker}.sv")
+          bench = out / "checkpoint_tb.sv"
+          files = f"{src} {contract}"
+          resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+          os.environ["VERILATOR_ROOT"] = str(Path(verilator.__file__).resolve().parent)
+          os.environ["CXXFLAGS"] = "-std=c++20 -DVL_TIME_CONTEXT"
+          vbin = Path(os.environ["VERILATOR_ROOT"]) / "bin/verilator"
+          report = dict(commit=os.environ["GITHUB_SHA"], proofs={}, simulations={}, mutations={}, errors={})
+
+          def need(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          def run(args, log, cwd=None, expect_failure=False):
+              with log.open("w") as stream:
+                  p = subprocess.run(args, cwd=cwd, stdout=stream, stderr=subprocess.STDOUT, timeout=360)
+              text = log.read_text(errors="replace")
+              need((p.returncode != 0) == expect_failure, f"{log}: exit {p.returncode}\n{text[-1000:]}")
+              return text
+
+          def yosys(folder, name, commands):
+              script = folder / f"{name}.ys"
+              script.write_text("\n".join(commands) + "\n")
+              launch = ("import sys; from pathlib import Path; from pyosys import libyosys as y; "
+                        "y.run_pass('; '.join(Path(sys.argv[1]).read_text().splitlines()), y.Design())")
+              return run([sys.executable, "-c", launch, str(script)], folder/f"{name}.log")
+
+          def proof(folder, n, stage):
+              opts = f"--top {top} -G CELLS={n}"
+              drop = "delete -output w:gamma_targets_q16"
+              if stage == "rtl":
+                  cmd = [f"read_slang {opts} {files}", "expose w:checkpoint_check.reach",
+                         drop, f"prep -flatten -top {top}"]
+              else:
+                  cmd = [f"read_slang {opts} --blackboxed-module {checker} {files}",
+                         f"select -assert-count 1 t:{checker}", f"setattr -set keep 1 t:{checker}", drop,
+                         f"synth -top {top}", f"select -assert-count 1 t:{checker}",
+                         f"write_rtlil {folder}/mapped.il", f"setparam -unset WORDS -unset k t:{checker}",
+                         f"read_rtlil -overwrite {out}/checker.il", f"hierarchy -check -top {top}", "flatten"]
+              cmd += ["async2sync", "chformal -lower", "select -assert-count 15 t:$assert",
+                      "select -assert-count 16 t:$cover", "select -assert-none t:$assume",
+                      "chformal -cover -remove", "opt -full", "check -assert",
+                      "sat -verify -tempinduct -seq 1 -maxsteps 6 -set-at 1 rst_n 0 -prove-asserts -timeout 90"]
+              log = yosys(folder, stage, cmd)
+              need("Base case for induction length" in log and "Induction step proven: SUCCESS!" in log,
+                   f"{stage}: incomplete induction")
+              report["proofs"][f"{n}-{stage}"] = "PASS"
+
+          def replay(path):
+              left = seen = ready_state = error = mask = count = 0
+              saved = 0
+              just = False
+              with path.open() as trace:
+                  rows = csv.reader(trace)
+                  need(next(rows)[-1] == "reach", f"{path}: trace header")
+                  for row in rows:
+                      cycle, reset_n, begin, idx, valid, word, req, ack, ready, cfg, err, busy, bank, hit = map(int, row)
+                      if not reset_n:
+                          left = seen = ready_state = error = 0
+                          just = False
+                      active = left > 0
+                      take = reset_n and not begin and active and valid
+                      need(cycle == count and ready == bool(reset_n and not begin and active)
+                           and cfg == ready_state and err == error, f"{path}: status at {cycle}")
+                      flags = [begin and idx == 624, begin and idx == 625, begin and idx == 1023,
+                               active and not begin and not valid and left == 312,
+                               take and left == 1 and not seen and not word,
+                               take and left == 1 and not seen and word,
+                               take and left == 1 and seen and not word,
+                               begin and left == 1 and valid, begin and busy and idx <= 624,
+                               begin and error and idx == 0, just and saved == 624, just and saved == 0,
+                               begin and bank and idx <= 624, begin and busy and idx > 624,
+                               take and left == 624 and word, left == 1 and not begin and not valid]
+                      expected = sum(1 << i for i, flag in enumerate(flags) if reset_n and flag)
+                      need(hit == expected, f"{path}: cover bits at {cycle}")
+                      mask |= hit
+                      count += 1
+                      just = False
+                      if reset_n and begin:
+                          saved = idx
+                          left = 624 if idx <= 624 else 0
+                          seen = ready_state = 0
+                          error = idx > 624
+                      elif take:
+                          seen |= bool(word)
+                          left -= 1
+                          if left == 0:
+                              ready_state, error, just = bool(seen), not seen, bool(seen)
+              need(mask == 65535 and ready_state, f"{path}: missing coverage or recovery")
+              return count
+
+          def simulate(folder, n, source, mutant=False):
+              build = Path("build170") / folder.name
+              build.mkdir(parents=True, exist_ok=True)
+              run([str(vbin), "--binary", "--timing", "--assert", "-j", "2", "--top-module",
+                   "checkpoint_tb", f"-GCELLS={n}", "--Mdir", str(build), str(source), str(contract),
+                   str(bench)], folder/"build.log")
+              log = run([str((build/"Vcheckpoint_tb").resolve())], folder/"sim.log", folder, mutant)
+              if mutant:
+                  failure = re.search(r"frp_m32_gamma_checkpoint_formal\.sv:\d+: Assertion failed in [^\n]*checkpoint_check", log)
+                  need(failure is not None, f"{folder}: no bound-contract assertion")
+                  report["mutations"][folder.name] = failure.group()
+              else:
+                  cycles = replay(folder/"trace.csv")
+                  need(f"CHECKPOINT_PASS cells={n} cycles={cycles}" in log, f"{folder}: truncated replay")
+                  report["simulations"][str(n)] = dict(covers=16, cycles=cycles)
+
+          faults = {
+              "reject624": ("(checkpoint_index <= 10'd624) ? LOADING", "(checkpoint_index < 10'd624) ? LOADING"),
+              "ignore_valid": ("LOADING: if (load_valid) begin", "LOADING: if (1'b1) begin"),
+              "early_finish": ("if (load_count_q == 10'd623)", "if (load_count_q == 10'd622)"),
+              "omit_final": ("configured <= |(load_or_q | load_word);", "configured <= |load_or_q;"),
+              "retain_or": ("load_or_q <= 32'd0;\n      twist_q <= 10'd0;", "load_or_q <= load_or_q;\n      twist_q <= 10'd0;"),
+          }
+
+          def mutation(folder, key):
+              old, new = faults[key]
+              original = src.read_text()
+              need(original.count(old) == 1, f"{key}: mutation anchor")
+              variant = folder / src.name
+              variant.write_text(original.replace(old, new))
+              simulate(folder, 8, variant, True)
+
+          def attempt(key, task, *args):
+              try:
+                  task(*args)
+                  print(f"{key} PASS", flush=True)
+              except Exception as error:
+                  report["errors"][key] = str(error)
+                  print(f"{key} FAIL {error}", flush=True)
+              (out/"summary.json").write_text(json.dumps(report, indent=2) + "\n")
+
+          attempt("checker", yosys, out, "checker",
+                  [f"read_slang --top {checker} {files}", f"write_rtlil {out}/checker.il"])
+          for n in (8, 16, 32, 64):
+              folder = out/f"n{n}"
+              folder.mkdir()
+              for stage in ("rtl", "gates"):
+                  attempt(f"{n}-{stage}", proof, folder, n, stage)
+              attempt(f"{n}-replay", simulate, folder, n, src)
+          for key in faults:
+              folder = out/key
+              folder.mkdir()
+              attempt(key, mutation, folder, key)
+          counts = (len(report["proofs"]), sum(s["covers"] for s in report["simulations"].values()), len(report["mutations"]))
+          line = "Proofs %d/8 | Covers replayed %d/64 | Mutations detected %d/5" % counts
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              print(line, file=summary)
+          need(counts == (8, 64, 5) and not report["errors"], line)
+
+      - name: Hash evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd evidence
+          find . -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum > SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frp-170-m32-checkpoint-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          include-hidden-files: true
+          if-no-files-found: error
